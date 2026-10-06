@@ -84,7 +84,7 @@ def draw(scale):
     ]
     d.polygon(head, fill=ACCENT + (240,))
 
-    title = "Drag Nebula Desktop into Applications"
+    title = "Drag Observatory into Applications"
     f = font(15 * scale, bold=True)
     tw = d.textlength(title, font=f)
     d.text(((w - tw) / 2, 312 * scale), title, font=f, fill=INK)

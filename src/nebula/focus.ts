@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { getState, setState, subscribe, type State } from "./store";
 import { sameSession, type SessionRef } from "./types";
 
-const KEY = "nebula-desktop.lastSessions";
+const KEY = "observatory.lastSessions";
 
 function load(): Record<string, SessionRef> {
   try {

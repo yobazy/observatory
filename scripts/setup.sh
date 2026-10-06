@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Set up nebula and Nebula Desktop in one go, on macOS.
+# Set up nebula and Observatory in one go, on macOS.
 #
 #   ./scripts/setup.sh              # from a clone of this repo
-#   curl -fsSL https://raw.githubusercontent.com/yobazy/nebula-desktop/main/scripts/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/yobazy/observatory/main/scripts/setup.sh | bash
 #
 # 1. Checks the build tools (Xcode command line tools, Node 20+, Rust),
 #    offering to install what's missing.
@@ -20,17 +20,17 @@
 #   --yes          answer yes to every question (for unattended installs)
 #
 # Environment:
-#   NEBULA_DESKTOP_DIR  where to clone the repo when run outside one
-#                       (default: ~/nebula-desktop)
+#   OBSERVATORY_DIR  where to clone the repo when run outside one
+#                       (default: ~/observatory)
 #   NEBULA_INSTALL_DIR  where the nebula binary goes (default: ~/.local/bin)
 #   APP_DIR             where the app goes (default: /Applications)
 set -euo pipefail
 
-REPO_URL="https://github.com/yobazy/nebula-desktop"
+REPO_URL="https://github.com/yobazy/observatory"
 NEBULA_REPO="AgentSystemLabs/nebula"
 INSTALL_DIR="${NEBULA_INSTALL_DIR:-$HOME/.local/bin}"
 APP_DIR="${APP_DIR:-/Applications}"
-APP_NAME="Nebula Desktop.app"
+APP_NAME="Observatory.app"
 
 CHECK=0 NEBULA_ONLY=0 OPEN=1 YES=0
 for arg in "$@"; do
@@ -61,7 +61,7 @@ ask() {
   [[ "$reply" =~ ^[Yy] ]]
 }
 
-[ "$(uname -s)" = Darwin ] || fail "Nebula Desktop is a macOS app. On Linux, nebula's TUI works on its own: https://github.com/$NEBULA_REPO#install"
+[ "$(uname -s)" = Darwin ] || fail "Observatory is a macOS app. On Linux, nebula's TUI works on its own: https://github.com/$NEBULA_REPO#install"
 
 # ---- the repo ----
 
@@ -70,7 +70,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 if [ -n "$here" ] && [ -f "$here/../src-tauri/Cargo.toml" ]; then
   ROOT="$(cd "$here/.." && pwd)"
 else
-  ROOT="${NEBULA_DESKTOP_DIR:-$HOME/nebula-desktop}"
+  ROOT="${OBSERVATORY_DIR:-$HOME/observatory}"
   step "Getting the source"
   if [ -d "$ROOT/.git" ]; then
     ok "already cloned at $ROOT"
@@ -89,7 +89,7 @@ fi
 if [ -n "$ROOT" ]; then
   PIN=$(sed -n 's/^nebula-core = .*tag = "v\([^"]*\)".*/\1/p' "$ROOT/src-tauri/Cargo.toml")
 else
-  PIN=$(curl -fsSL "https://raw.githubusercontent.com/yobazy/nebula-desktop/main/src-tauri/Cargo.toml" |
+  PIN=$(curl -fsSL "https://raw.githubusercontent.com/yobazy/observatory/main/src-tauri/Cargo.toml" |
     sed -n 's/^nebula-core = .*tag = "v\([^"]*\)".*/\1/p')
 fi
 [ -n "$PIN" ] || fail "couldn't read the pinned nebula version from src-tauri/Cargo.toml"
@@ -183,7 +183,7 @@ else
     newer=$(printf '%s\n%s\n' "$current" "$PIN" | sort -V | tail -1)
     if [ "$newer" = "$current" ]; then
       printf '    Your nebula is newer than this app. Update the app instead: pull the\n'
-      printf '    latest nebula-desktop, or bump the nebula-core tag in src-tauri/Cargo.toml\n'
+      printf '    latest Observatory, or bump the nebula-core tag in src-tauri/Cargo.toml\n'
       printf '    to v%s and run this again.\n' "$current"
       ask "Or replace nebula $current with $PIN (older) for now?" || fail "nothing changed"
     else
@@ -231,7 +231,7 @@ fi
 
 # ---- the app ----
 
-step "Building Nebula Desktop"
+step "Building Observatory"
 if [ "$CHECK" = 1 ]; then
   note "would build the app and install it to $APP_DIR/$APP_NAME"
   exit 0
@@ -239,7 +239,7 @@ fi
 cd "$ROOT"
 npm ci --no-audit --no-fund --loglevel=error
 printf '  %sthe first build compiles the Rust side and takes a few minutes%s\n' "$dim" "$off"
-log="$(mktemp -t nebula-desktop-build)"
+log="$(mktemp -t observatory-build)"
 if ! npm run tauri build -- --bundles app >"$log" 2>&1; then
   tail -30 "$log" >&2
   fail "the build failed; the full log is at $log"
@@ -259,6 +259,6 @@ else
 fi
 
 step "Done"
-ok "nebula $PIN and Nebula Desktop are set up"
+ok "nebula $PIN and Observatory are set up"
 printf '  The app connects to the nebula daemon, and offers to start it if it isn'"'"'t running.\n'
 if [ "$OPEN" = 1 ]; then open "$target"; fi

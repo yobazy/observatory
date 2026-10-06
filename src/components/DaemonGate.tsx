@@ -3,7 +3,7 @@ import { installNebula, nebulaStatus, reconnectNow, startDaemon, type NebulaStat
 import { useAppState } from "../nebula/store";
 import { openLink } from "./Run";
 
-const RELEASES = "https://github.com/yobazy/nebula-desktop/releases";
+const RELEASES = "https://github.com/yobazy/observatory/releases";
 
 /** -1, 0 or 1 as version `a` is older than, equal to or newer than `b`. */
 function compare(a: string, b: string): number {
@@ -78,7 +78,7 @@ export function DaemonGate() {
     title = "Set up nebula";
     body = (
       <p>
-        Nebula Desktop runs your coding agents through nebula, which isn’t installed yet. This
+        Observatory runs your coding agents through nebula, which isn’t installed yet. This
         installs nebula {pinned} into <code>~/.local/bin</code>, the same place nebula’s own installer
         uses, and starts it.
       </p>
@@ -102,11 +102,11 @@ export function DaemonGate() {
       </button>
     );
   } else if (status?.version && order > 0) {
-    title = "Nebula Desktop needs an update";
+    title = "Observatory needs an update";
     body = (
       <p>
         Your nebula is {status.version}, and this app is built for {pinned}. nebula only talks to apps
-        built for its own version, so get a newer Nebula Desktop.
+        built for its own version, so get a newer Observatory.
       </p>
     );
     action = (

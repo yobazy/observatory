@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Nebula Desktop",
+  "productName": "Observatory",
   "version": "0.3.0",
-  "identifier": "dev.bazil.nebula-desktop",
+  "identifier": "dev.bazil.observatory",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Nebula",
+        "title": "Observatory",
         "width": 1440,
         "height": 900,
         "minWidth": 1000,

@@ -14,7 +14,7 @@ export interface Queued {
   at: number;
 }
 
-const KEY = "nebula-desktop.queue";
+const KEY = "observatory.queue";
 
 function load(): Record<string, Queued[]> {
   try {

@@ -13,7 +13,7 @@ export const SIDEBAR: ColumnSpec = { key: "sidebar", label: "Resize projects sid
 export const SESSIONS: ColumnSpec = { key: "sessions", label: "Resize tasks column", initial: 340, min: 280, max: 640 };
 
 const clamp = (spec: ColumnSpec, w: number) => Math.round(Math.min(spec.max, Math.max(spec.min, w)));
-const storageKey = (spec: ColumnSpec) => `nebula-desktop.width.${spec.key}`;
+const storageKey = (spec: ColumnSpec) => `observatory.width.${spec.key}`;
 
 /** The terminal never gets squeezed below this by the columns beside it. */
 export const TERMINAL_MIN = 360;
@@ -125,7 +125,7 @@ export function Resizer({
 
 /** A column hidden or shown, remembered across launches. */
 export function useHidden(key: string): [boolean, (v: boolean | ((v: boolean) => boolean)) => void] {
-  const storage = `nebula-desktop.hidden.${key}`;
+  const storage = `observatory.hidden.${key}`;
   const [hidden, setHidden] = useState(() => {
     try {
       return localStorage.getItem(storage) === "1";

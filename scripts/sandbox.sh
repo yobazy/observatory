@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 ROOT="${NEBULA_SANDBOX:-$PWD/.sandbox}"
 # Unix socket paths are capped near 104 bytes on macOS, so the socket lives
 # in a short directory of its own.
-export NEBULA_RUNTIME_DIR=/tmp/nebula-desktop-sandbox
+export NEBULA_RUNTIME_DIR=/tmp/observatory-sandbox
 export NEBULA_DATA_DIR="$ROOT/data"
 export NEBULA_AGENT_CMD="$PWD/scripts/fake-agent.sh"
 

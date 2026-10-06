@@ -18,7 +18,7 @@ export interface FanOut {
   at: number;
 }
 
-const KEY = "nebula-desktop.fanouts";
+const KEY = "observatory.fanouts";
 
 function write(fanouts: Record<string, FanOut>) {
   setState({ fanouts });

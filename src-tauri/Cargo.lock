@@ -2262,24 +2262,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nebula-desktop"
-version = "0.3.0"
-dependencies = [
- "base64 0.22.1",
- "nebula-core",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tokio",
-]
-
-[[package]]
 name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2531,6 +2513,24 @@ dependencies = [
  "objc2-app-kit",
  "objc2-core-foundation",
  "objc2-foundation",
+]
+
+[[package]]
+name = "observatory"
+version = "0.3.0"
+dependencies = [
+ "base64 0.22.1",
+ "nebula-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tokio",
 ]
 
 [[package]]

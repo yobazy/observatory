@@ -59,9 +59,9 @@ fn menu(app: &AppHandle, state: Option<&TrayState>) -> tauri::Result<Menu<Wry>> 
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
     menu.append(&MenuItem::with_id(app, "capture", "New task…", true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "show", "Show Nebula", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "show", "Show Observatory", true, None::<&str>)?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(app, "quit", "Quit Nebula", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "quit", "Quit Observatory", true, None::<&str>)?)?;
     Ok(menu)
 }
 
@@ -70,7 +70,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<TrayIcon> {
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .icon_as_template(true)
-        .tooltip("Nebula")
+        .tooltip("Observatory")
         .menu(&menu(app, None)?)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| {
@@ -99,7 +99,7 @@ pub fn update_tray(app: AppHandle, state: TrayState) -> Result<(), String> {
     tray.set_title(if n > 0 { Some(n.to_string()) } else { None::<String> })
         .map_err(|e| e.to_string())?;
     let tip = match (n, state.working) {
-        (0, 0) => "Nebula".to_string(),
+        (0, 0) => "Observatory".to_string(),
         (0, w) => format!("Nebula: {w} working"),
         (n, 0) => format!("Nebula: {n} waiting on you"),
         (n, w) => format!("Nebula: {n} waiting on you, {w} working"),

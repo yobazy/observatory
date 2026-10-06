@@ -68,14 +68,14 @@ export interface State {
 
 function loadFanOuts(): Record<string, FanOut> {
   try {
-    const raw = JSON.parse(localStorage.getItem("nebula-desktop.fanouts") ?? "{}");
+    const raw = JSON.parse(localStorage.getItem("observatory.fanouts") ?? "{}");
     return raw && typeof raw === "object" ? raw : {};
   } catch {
     return {};
   }
 }
 
-const SELECTION_KEY = "nebula-desktop.selection";
+const SELECTION_KEY = "observatory.selection";
 
 function loadSelection(): Pick<State, "selectedProject" | "selectedSession"> {
   try {

@@ -41,7 +41,7 @@ export function budgetLevel(list: BudgetState[]): "over" | "near" | null {
   return null;
 }
 
-const ALERTS_KEY = "nebula-desktop.budget-alerts";
+const ALERTS_KEY = "observatory.budget-alerts";
 
 function today(): string {
   const d = new Date();

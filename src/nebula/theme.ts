@@ -73,7 +73,7 @@ export type ProjectIconChoice = { kind: "emoji"; value: string } | { kind: "imag
 export async function loadPrefs(): Promise<DesktopPrefs> {
   if (isPreview()) {
     try {
-      return JSON.parse(localStorage.getItem("nebula-desktop.prefs") ?? "{}");
+      return JSON.parse(localStorage.getItem("observatory.prefs") ?? "{}");
     } catch {
       return {};
     }
@@ -85,7 +85,7 @@ export async function savePrefs(prefs: DesktopPrefs): Promise<void> {
   setState({ prefs });
   if (isPreview()) {
     try {
-      localStorage.setItem("nebula-desktop.prefs", JSON.stringify(prefs));
+      localStorage.setItem("observatory.prefs", JSON.stringify(prefs));
     } catch {
       // The preview forgets; the app itself writes desktop.json.
     }

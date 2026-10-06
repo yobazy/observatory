@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="Nebula Desktop icon">
+  <img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="Observatory icon">
 </p>
 
-<h1 align="center">Nebula Desktop</h1>
+<h1 align="center">Observatory</h1>
 
 <p align="center">
   A macOS desktop client for <a href="https://github.com/AgentSystemLabs/nebula">nebula</a>, the
@@ -18,7 +18,7 @@ Close either one and your agents keep running.
 
 ## Install
 
-**[Download Nebula Desktop](https://github.com/yobazy/nebula-desktop/releases/latest/download/Nebula-Desktop.dmg)**
+**[Download Observatory](https://github.com/yobazy/observatory/releases/latest/download/Observatory.dmg)**
 (macOS, Apple Silicon and Intel), open it, and drag the app into Applications.
 
 The first time you open it, it installs [nebula](https://github.com/AgentSystemLabs/nebula) for you,
@@ -26,7 +26,7 @@ at the exact version the app is built for, and starts it. You'll also want an ag
 to run, such as [Claude Code](https://code.claude.com/docs/en/setup).
 
 > The app isn't notarized by Apple yet, so macOS blocks its first launch. Open **System Settings →
-> Privacy & Security**, find "Nebula Desktop was blocked", and click **Open Anyway**. You only do
+> Privacy & Security**, find "Observatory was blocked", and click **Open Anyway**. You only do
 > this once.
 
 ### Or build it yourself
@@ -34,7 +34,7 @@ to run, such as [Claude Code](https://code.claude.com/docs/en/setup).
 One command installs the build tools it needs, nebula, and the app:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/yobazy/nebula-desktop/main/scripts/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yobazy/observatory/main/scripts/setup.sh | bash
 ```
 
 Or from a clone: `./scripts/setup.sh`. It checks for Xcode's command line tools, Node 20+ and
@@ -176,8 +176,8 @@ handy for styling, and needs no daemon. The screenshots and the demo above are f
 
 ```sh
 npm run tauri build -- --target universal-apple-darwin --bundles dmg
-cp "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Nebula Desktop_X.Y.Z_universal.dmg" Nebula-Desktop.dmg
-gh release create vX.Y.Z Nebula-Desktop.dmg --generate-notes
+cp "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Observatory_X.Y.Z_universal.dmg" Observatory.dmg
+gh release create vX.Y.Z Observatory.dmg --generate-notes
 ```
 
-The asset must be named `Nebula-Desktop.dmg`: the README's download link points at it.
+The asset must be named `Observatory.dmg`: the README's download link points at it.

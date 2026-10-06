@@ -220,14 +220,14 @@ export default function App() {
 function useGridMode(): [boolean, (v: boolean | ((v: boolean) => boolean)) => void] {
   const [grid, setGrid] = useState(() => {
     try {
-      return localStorage.getItem("nebula-desktop.grid") === "1";
+      return localStorage.getItem("observatory.grid") === "1";
     } catch {
       return false;
     }
   });
   useEffect(() => {
     try {
-      localStorage.setItem("nebula-desktop.grid", grid ? "1" : "0");
+      localStorage.setItem("observatory.grid", grid ? "1" : "0");
     } catch {
       // A convenience: it resets to one terminal next launch.
     }
