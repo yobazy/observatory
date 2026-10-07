@@ -12,9 +12,15 @@
 #    staples the DMG around it, so a first launch passes Gatekeeper offline.
 # 3. Checks the result the way Gatekeeper will, and writes <App>.dmg at the
 #    repo root: the name the README's download link points at.
+# 4. Signs the update bundle (<App>.app.tar.gz) with the updater key and
+#    writes latest.json beside the DMG: what installed copies check for
+#    (tauri.conf.json, plugins.updater). Both go up with the release.
 #
 # The app-specific password (appleid.apple.com → Sign-In and Security) is
-# kept in your login keychain by --setup, never in a file or the shell.
+# kept in your login keychain by --setup, never in a file or the shell. The
+# updater key is ~/.tauri/<app>.key (UPDATER_KEY to use another), with its
+# password in the keychain too. Lose the key and installed copies can't
+# update any more: keep a backup of it and its password somewhere safe.
 #
 # Options:
 #   --setup     save your Apple ID and app-specific password to the keychain
@@ -27,7 +33,7 @@ for arg in "$@"; do
   case "$arg" in
     --setup) SETUP=1 ;;
     --publish) PUBLISH=1 ;;
-    -h | --help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -79,6 +85,13 @@ password="$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null
 [ -n "$apple_id" ] && [ -n "$password" ] || fail "no notary credentials saved. Run: $0 --setup"
 ok "notarizing as $apple_id (team $team_id)"
 
+UPDATER_KEY="${UPDATER_KEY:-$HOME/.tauri/$(tr '[:upper:]' '[:lower:]' <<<"$NAME").key}"
+[ -f "$UPDATER_KEY" ] || fail "no updater key at $UPDATER_KEY. Restore it from your backup; a new key can't
+  sign updates that installed copies will accept."
+updater_password="$(security find-generic-password -s "$(conf identifier).updater" -w 2>/dev/null || true)"
+[ -n "$updater_password" ] || fail "no password for the updater key in the keychain (\"$(conf identifier).updater\")"
+ok "updater key $UPDATER_KEY"
+
 for target in aarch64-apple-darwin x86_64-apple-darwin; do
   grep -qx "$target" <<<"$(rustup target list --installed)" \
     || fail "missing Rust target $target. Run: rustup target add $target"
@@ -101,6 +114,8 @@ fi
 
 step "Building $NAME $VERSION (universal)"
 export APPLE_SIGNING_IDENTITY="$identity" APPLE_ID="$apple_id" APPLE_PASSWORD="$password" APPLE_TEAM_ID="$team_id"
+TAURI_SIGNING_PRIVATE_KEY="$(cat "$UPDATER_KEY")"
+export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$updater_password"
 # The config's "-" (ad-hoc) keeps local builds working without a certificate;
 # override it here so the release is signed with the Developer ID.
 # Apple's timestamp server drops a request now and then, and Tauri gives up
@@ -119,7 +134,9 @@ rm -f "$log"
 bundle="src-tauri/target/universal-apple-darwin/release/bundle"
 app="$bundle/macos/$NAME.app"
 built_dmg="$bundle/dmg/${NAME}_${VERSION}_universal.dmg"
+update_tgz="$bundle/macos/$NAME.app.tar.gz"
 [ -d "$app" ] && [ -f "$built_dmg" ] || fail "the build didn't produce $app and $built_dmg"
+[ -f "$update_tgz" ] && [ -f "$update_tgz.sig" ] || fail "the build didn't produce the signed update bundle $update_tgz"
 
 # ---- the DMG: notarize and staple it too ----
 
@@ -144,12 +161,37 @@ xcrun stapler validate -q "$dmg" || fail "the DMG has no stapled ticket"
 spctl -a -t open --context context:primary-signature "$dmg" 2>/dev/null \
   || fail "Gatekeeper rejects the DMG: spctl -a -vvv -t open --context context:primary-signature $dmg"
 ok "$dmg: notarized and stapled"
+# The update bundle is what installed copies unpack over themselves, so it
+# has to hold the notarized app too, not one from before the staple.
+unpacked="$(mktemp -d)"
+tar -xzf "$update_tgz" -C "$unpacked"
+xcrun stapler validate -q "$unpacked/$NAME.app" || fail "the app in $update_tgz isn't the notarized one"
+rm -rf "$unpacked"
+ok "$(basename "$update_tgz"): notarized app, signed for the updater"
+
+# ---- latest.json: what installed copies check ----
+
+# Assets live at releases/download/v<version>/ in the repo the updater's
+# endpoint names; a universal app serves both architectures.
+releases="$(node -p "require('./src-tauri/tauri.conf.json').plugins.updater.endpoints[0].replace(/\/latest\/download\/.*$/, '')")"
+NAME="$NAME" VERSION="$VERSION" URL="$releases/download/v$VERSION/$(basename "$update_tgz")" SIG="$(cat "$update_tgz.sig")" node -e '
+  const { NAME, VERSION, URL, SIG } = process.env;
+  const target = { signature: SIG, url: URL };
+  const manifest = {
+    version: VERSION,
+    notes: `${NAME} ${VERSION}`,
+    pub_date: new Date().toISOString(),
+    platforms: { "darwin-aarch64": target, "darwin-x86_64": target },
+  };
+  require("fs").writeFileSync("latest.json", JSON.stringify(manifest, null, 2) + "\n");
+'
+ok "latest.json: $VERSION at $releases/download/v$VERSION/"
 
 # ---- publish ----
 
 if [ "$PUBLISH" = 1 ]; then
   step "Publishing v$VERSION"
-  gh release create "v$VERSION" "$dmg" --target "$commit" --title "$NAME $VERSION" --generate-notes
+  gh release create "v$VERSION" "$dmg" "$update_tgz" latest.json --target "$commit" --title "$NAME $VERSION" --generate-notes
   ok "released v$VERSION"
 else
   printf '\n%s is ready. Publish it with: %s --publish\n' "$dmg" "$0"

@@ -12,6 +12,7 @@ import { relativeTime } from "../nebula/status";
 import type { Agent, Project } from "../nebula/types";
 import { UsageChip } from "./Usage";
 import { Pet } from "./Pet";
+import { restartToUpdate, useUpdateState } from "../nebula/updates";
 import { QuickAnswer } from "./QuickAnswer";
 import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon";
 import { FlagGlyph, FollowUps } from "./Organize";
@@ -197,6 +198,7 @@ export function Sidebar({ onAddProject, onHide }: { onAddProject: () => void; on
 
       {projectMenu.element}
       <Pet on={state.prefs.pet !== false} />
+      <UpdateReady />
       <footer className="sidebar-foot">
         <UsageChip />
         <button
@@ -210,6 +212,21 @@ export function Sidebar({ onAddProject, onHide }: { onAddProject: () => void; on
         </button>
       </footer>
     </nav>
+  );
+}
+
+/** Once a new version is installed: restart into it. */
+function UpdateReady() {
+  const update = useUpdateState();
+  if (update.kind !== "ready") return null;
+  return (
+    <button
+      className="btn btn-primary update-ready"
+      onClick={() => void restartToUpdate()}
+      title="Your agents keep running while the app restarts."
+    >
+      Restart to update to {update.version}
+    </button>
   );
 }
 

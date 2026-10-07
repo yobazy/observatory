@@ -25,6 +25,10 @@ The first time you open it, it installs [nebula](https://github.com/AgentSystemL
 at the exact version the app is built for, and starts it. You'll also want an agent CLI for nebula
 to run, such as [Claude Code](https://code.claude.com/docs/en/setup).
 
+After that it keeps itself up to date: a new version downloads in the background, and **Restart to
+update** appears at the bottom of the sidebar. Your agents keep running while it restarts.
+Settings → General shows the version you're on and can check right away.
+
 ### Or build it yourself
 
 One command installs the build tools it needs, nebula, and the app:
@@ -183,3 +187,9 @@ appleid.apple.com.
 
 It writes `Observatory.dmg` at the repo root, the asset name the README's download link points at.
 Bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json` first.
+
+Each release also carries `Observatory.app.tar.gz`, signed with the updater key, and `latest.json`,
+which installed copies check (`plugins.updater` in `tauri.conf.json`). The key is
+`~/.tauri/observatory.key`, with its password in the login keychain under
+`dev.bazil.observatory.updater`. Back up both: without them, installed copies can't be updated, and
+a new key means everyone downloads the DMG again.

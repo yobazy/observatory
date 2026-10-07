@@ -1246,6 +1246,9 @@ body.is-resizing * {
 
 /* ---------- usage ---------- */
 
+.update-ready {
+  margin: 0 10px 8px;
+}
 .sidebar-foot {
   display: flex;
   align-items: center;

@@ -33,3 +33,6 @@ dist-ssr
 
 # Release downloads (see README, Releasing)
 *.dmg
+
+# Release update manifest (scripts/release.sh)
+latest.json

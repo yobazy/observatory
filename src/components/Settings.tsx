@@ -22,6 +22,9 @@ import { sortedProjects } from "../nebula/store";
 import { QUICK_CAPTURE_CHOICES, QUICK_CAPTURE_DEFAULT } from "../nebula/desktop";
 import { play } from "../nebula/delight";
 import { chosenEditor, useEditors } from "./Editor";
+import { getVersion } from "@tauri-apps/api/app";
+import { isPreview } from "../nebula/client";
+import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
 type Tab = (typeof TABS)[number];
@@ -85,7 +88,10 @@ export function SettingsView() {
           ) : tab === "Appearance" ? (
             <Appearance settings={settings} save={save} />
           ) : tab === "General" ? (
-            <Rows rows={GENERAL} settings={settings} save={save} />
+            <>
+              <Rows rows={GENERAL} settings={settings} save={save} />
+              <Updates />
+            </>
           ) : tab === "Sessions" ? (
             <Rows rows={SESSIONS} settings={settings} save={save} />
           ) : tab === "Agents" ? (
@@ -107,6 +113,49 @@ export function SettingsView() {
         </div>
       </div>
     </section>
+  );
+}
+
+function Updates() {
+  const update = useUpdateState();
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isPreview()) void getVersion().then(setVersion).catch(() => {});
+  }, []);
+  const status =
+    update.kind === "checking"
+      ? "Checking…"
+      : update.kind === "downloading"
+        ? `Downloading ${update.version}${update.percent != null ? ` (${update.percent}%)` : ""}…`
+        : update.kind === "ready"
+          ? `${update.version} is installed. Restart to use it; your agents keep running.`
+          : update.kind === "current"
+            ? "You're on the latest version."
+            : update.kind === "error"
+              ? `The last check failed: ${update.message}`
+              : "Checked soon after launch and every few hours.";
+  return (
+    <Group title="Updates">
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label">Observatory {version ?? ""}</span>
+          <span className="setting-hint">{status}</span>
+        </div>
+        {update.kind === "ready" ? (
+          <button className="btn btn-primary" onClick={() => void restartToUpdate()}>
+            Restart
+          </button>
+        ) : (
+          <button
+            className="btn"
+            disabled={update.kind === "checking" || update.kind === "downloading"}
+            onClick={() => void checkForUpdates(true)}
+          >
+            Check for updates
+          </button>
+        )}
+      </div>
+    </Group>
   );
 }
 

@@ -29,6 +29,7 @@ import { useDelight } from "./nebula/delight";
 import { useBudgetWatch } from "./nebula/budget";
 import { useFileDrop } from "./nebula/dropfiles";
 import { useFanOutPrune } from "./nebula/fanout";
+import { useUpdateCheck } from "./nebula/updates";
 import { Palette, type PaletteContext } from "./components/Palette";
 import { TextDialog, type TextDialogSpec } from "./components/Dialogs";
 
@@ -71,6 +72,7 @@ export default function App() {
   useBudgetWatch();
   useFileDrop();
   useFanOutPrune();
+  useUpdateCheck();
   useQueueRunner();
   useUsagePolling();
   useTheme();
