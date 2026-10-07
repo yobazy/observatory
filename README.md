@@ -25,10 +25,6 @@ The first time you open it, it installs [nebula](https://github.com/AgentSystemL
 at the exact version the app is built for, and starts it. You'll also want an agent CLI for nebula
 to run, such as [Claude Code](https://code.claude.com/docs/en/setup).
 
-> The app isn't notarized by Apple yet, so macOS blocks its first launch. Open **System Settings →
-> Privacy & Security**, find "Observatory was blocked", and click **Open Anyway**. You only do
-> this once.
-
 ### Or build it yourself
 
 One command installs the build tools it needs, nebula, and the app:
@@ -174,10 +170,16 @@ handy for styling, and needs no daemon. The screenshots and the demo above are f
 
 ## Releasing
 
+Releases are signed with a Developer ID Application certificate and notarized by Apple, so they
+open without the "Open Anyway" step. You need the certificate in your keychain (Xcode → Settings →
+Accounts → Manage Certificates → + → Developer ID Application) and an app-specific password from
+appleid.apple.com.
+
 ```sh
-npm run tauri build -- --target universal-apple-darwin --bundles dmg
-cp "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Observatory_X.Y.Z_universal.dmg" Observatory.dmg
-gh release create vX.Y.Z Observatory.dmg --generate-notes
+./scripts/release.sh --setup     # once: saves your Apple ID and app-specific password to the keychain
+./scripts/release.sh             # universal build, signed, notarized, stapled and verified
+./scripts/release.sh --publish   # the same, then gh release create v<version>
 ```
 
-The asset must be named `Observatory.dmg`: the README's download link points at it.
+It writes `Observatory.dmg` at the repo root, the asset name the README's download link points at.
+Bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json` first.
