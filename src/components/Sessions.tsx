@@ -23,6 +23,7 @@ import { openReview } from "../nebula/diff";
 import { setArchived, useRowMenu, type Seed } from "./RowMenu";
 import { PanelGlyph } from "./Sidebar";
 import { ProjectIcon, useProjectColorStyle } from "./ProjectIcon";
+import { locateProject } from "../nebula/relocate";
 import { sameSession, type Agent, type SessionRef, type TerminalTab, type Worktree } from "../nebula/types";
 import { isFollowUp, isPinned, moveTask, toggleFlag } from "../nebula/organize";
 import { FlagGlyph, PinGlyph, useTaskColorStyle } from "./Organize";
@@ -201,6 +202,18 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
           </button>
         </div>
       </header>
+
+      {state.missingProjects[project.id] && (
+        <div className="folder-missing" role="alert">
+          <span>
+            This project's folder isn't at <code>{project.repo_path.replace(/^\/Users\/[^/]+/, "~")}</code> any more.
+            Renamed or moved it? Point the project at its new place.
+          </span>
+          <button className="btn btn-sm" onClick={() => void locateProject(project)}>
+            Locate…
+          </button>
+        </div>
+      )}
 
       <div className="sessions-search">
         <input

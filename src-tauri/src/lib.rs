@@ -4,6 +4,7 @@ mod gh;
 mod git;
 mod icons;
 mod nebula_setup;
+mod relocate;
 mod settings;
 mod title;
 mod tray;
@@ -53,6 +54,8 @@ pub fn run() {
             settings::open_worktree,
             nebula_setup::nebula_status,
             nebula_setup::install_nebula,
+            relocate::missing_dirs,
+            relocate::carry_project_state,
             icons::read_icon,
             icons::project_logo,
             title::suggest_title,

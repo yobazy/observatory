@@ -422,6 +422,13 @@ body.is-resizing * {
   background: var(--st-waiting);
   color: var(--accent-ink);
 }
+.badge-missing {
+  background: var(--st-error);
+  color: var(--accent-ink);
+}
+.project-row.is-missing .project-name {
+  color: var(--muted);
+}
 .badge-unseen {
   background: rgb(95 212 176 / 0.18);
   color: var(--st-done);
@@ -482,6 +489,24 @@ body.is-resizing * {
   color: var(--faint);
 }
 
+.folder-missing {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 18px 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--st-error) 45%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--st-error) 10%, transparent);
+  font-size: 13px;
+}
+.folder-missing span {
+  flex: 1;
+  min-width: 0;
+}
+.folder-missing code {
+  overflow-wrap: anywhere;
+}
 .sessions-head {
   display: flex;
   flex-wrap: wrap;

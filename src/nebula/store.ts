@@ -64,6 +64,8 @@ export interface State {
   logos: Record<string, string | null>;
   /** A one-line flash at the bottom of the window, e.g. "x is already a project". */
   notice: string | null;
+  /** Projects whose folder is no longer on disk, by id (relocate.ts). */
+  missingProjects: Record<string, true>;
 }
 
 function loadFanOuts(): Record<string, FanOut> {
@@ -107,6 +109,7 @@ let state: State = {
   runUrls: {},
   limits: {},
   logos: {},
+  missingProjects: {},
   theme: "default",
   prefs: {},
   mode: "dark",
@@ -156,10 +159,11 @@ export function useAppState(): State {
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function flash(notice: string) {
+/** Show `notice` for `ms`; longer for a line that takes reading. */
+export function flash(notice: string, ms = 3500) {
   if (noticeTimer) clearTimeout(noticeTimer);
   setState({ notice });
-  noticeTimer = setTimeout(() => setState({ notice: null }), 3500);
+  noticeTimer = setTimeout(() => setState({ notice: null }), ms);
 }
 
 export function byId<T extends { id: string }>(rows: T[]): Record<string, T> {

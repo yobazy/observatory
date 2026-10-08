@@ -261,23 +261,29 @@ function ProjectRow({
     .filter(Boolean)
     .join(", ");
   const colorStyle = useProjectColorStyle(project);
+  const missing = !!useAppState().missingProjects[project.id];
 
   return (
     <button
-      className={`project-row${selected ? " is-selected" : ""}${colorStyle ? " has-color" : ""}`}
+      className={`project-row${selected ? " is-selected" : ""}${colorStyle ? " has-color" : ""}${missing ? " is-missing" : ""}`}
       style={colorStyle}
       onClick={() => setState({ selectedProject: project.id })}
       onContextMenu={(e) => onMenu(e, project)}
       onKeyDown={onKeyDown}
       aria-keyshortcuts={index !== null ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
       aria-current={selected ? "page" : undefined}
-      title={project.repo_path}
+      title={missing ? `Folder not found: ${project.repo_path}` : project.repo_path}
     >
       <span className="project-line">
         <ProjectIcon project={project} />
         <span className="project-name">{project.name}</span>
         {live && <span className="live-dot" title="Dev server running" aria-label="Dev server running" />}
         <span className="project-meta">
+          {missing && (
+            <span className="project-badge badge-missing" title="Folder not found. Right-click to locate it.">
+              !
+            </span>
+          )}
           {running > 0 && (
             <span className="project-working" title={`${running} in progress`}>
               <span className="orbit" aria-hidden />

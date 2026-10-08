@@ -13,6 +13,7 @@ import type { Project } from "../nebula/types";
 import { ContextMenu, type MenuItem } from "./Menu";
 import { ColorRow } from "./Organize";
 import { resetProjectOrder } from "../nebula/organize";
+import { locateProject } from "../nebula/relocate";
 
 export function ProjectIcon({ project, size = 18 }: { project: Project; size?: number }) {
   const { prefs, logos } = useAppState();
@@ -158,12 +159,16 @@ export function IconPicker({ project, onClose }: { project: Project; onClose: ()
 export function useProjectMenu() {
   const [menu, setMenu] = useState<{ items: MenuItem[]; x: number; y: number; label: string } | null>(null);
   const [picking, setPicking] = useState<Project | null>(null);
-  const { prefs } = useAppState();
+  const { prefs, missingProjects } = useAppState();
 
   const openFor = (e: React.MouseEvent, project: Project) => {
     e.preventDefault();
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const items: MenuItem[] = [{ label: "Icon & color…", run: () => setPicking(project) }];
+    const items: MenuItem[] = [];
+    if (missingProjects[project.id]) {
+      items.push({ label: "Locate folder…", run: () => void locateProject(project) });
+    }
+    items.push({ label: "Icon & color…", run: () => setPicking(project), separated: items.length > 0 });
     if (prefs.projectIcons?.[project.repo_path] || prefs.projectColors?.[project.repo_path]) {
       items.push({
         label: "Reset icon & color",
