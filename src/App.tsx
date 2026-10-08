@@ -31,6 +31,8 @@ import { useFileDrop } from "./nebula/dropfiles";
 import { useFanOutPrune } from "./nebula/fanout";
 import { useUpdateCheck } from "./nebula/updates";
 import { useFolderWatch } from "./nebula/relocate";
+import { usePreviewEvents } from "./nebula/preview";
+import { HoverCard, PreviewPane } from "./components/Preview";
 import { Palette, type PaletteContext } from "./components/Palette";
 import { TextDialog, type TextDialogSpec } from "./components/Dialogs";
 
@@ -75,6 +77,7 @@ export default function App() {
   useFanOutPrune();
   useUpdateCheck();
   useFolderWatch();
+  usePreviewEvents();
   useQueueRunner();
   useUsagePolling();
   useTheme();
@@ -84,7 +87,8 @@ export default function App() {
   useProjectLogos();
   useMinuteClock();
   useLeaveUsageOnSelect();
-  const view = useAppState().view;
+  const { view, preview, prefs } = useAppState();
+  const previewBeside = !!preview && prefs.previewPlacement === "beside";
   const [sidebarW, setSidebarW] = useColumnWidth(SIDEBAR);
   const [sessionsPref, setSessionsW] = useColumnWidth(SESSIONS);
   const [hideProjects, setHideProjects] = useHidden("projects");
@@ -186,7 +190,7 @@ export default function App() {
           </>
         )}
       </div>
-      <div className="column column-terminal" inert={view !== "sessions"}>
+      <div className={`column column-terminal${previewBeside ? " has-preview-beside" : ""}`} inert={view !== "sessions"}>
         {reveal.length > 0 && (
           <div className="reveal" style={{ left: revealLeft }}>
             {reveal.map((r) => (
@@ -197,6 +201,7 @@ export default function App() {
           </div>
         )}
         {grid ? <GridView onExit={() => setGrid(false)} /> : <TerminalPane onNewTask={() => openLaunch()} />}
+        <PreviewPane />
       </div>
       {view === "usage" && <UsageView />}
       {view === "settings" && <SettingsView />}
@@ -214,6 +219,7 @@ export default function App() {
       {addStep && <AddProjectDialog step={addStep} onDone={setAddStep} />}
       {palette && <Palette ctx={paletteCtx} onClose={() => setPalette(false)} />}
       {textDialog && <TextDialog d={textDialog} onClose={() => setTextDialog(null)} />}
+      <HoverCard />
       <Notice />
       <DaemonGate />
     </div>

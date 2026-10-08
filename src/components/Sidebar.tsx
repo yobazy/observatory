@@ -78,6 +78,12 @@ export function Sidebar({ onAddProject, onHide }: { onAddProject: () => void; on
       <div className="sidebar-top" data-tauri-drag-region>
         <span className="wordmark" data-tauri-drag-region>
           nebula
+          {/* A build run from the source, beside the installed app: say so. */}
+          {import.meta.env.DEV && (
+            <span className="dev-badge" title="Development build, run from the source">
+              DEV
+            </span>
+          )}
         </span>
         <span className="sidebar-actions">
           <LinkDot />

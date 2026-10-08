@@ -11,6 +11,7 @@ import { sessionKey, type Agent, type SessionRef } from "../nebula/types";
 import { enqueue, isIdle, noteTyped, unqueue } from "../nebula/queue";
 import { noteSize } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
+import { linkPaths, osc8Links } from "../nebula/termpaths";
 
 const THEME = {
   background: "#0f1524",
@@ -78,6 +79,9 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const [ready, setReady] = useState(false);
   const [exited, setExited] = useState<number | null | undefined>(undefined);
   const [dialog, setDialog] = useState<TextDialogSpec | null>(null);
+  // The session's checkout: what a relative path in its output is under.
+  const cwd = useRef<string | null>(null);
+  cwd.current = agent || tab ? (state.worktrees[(agent ?? tab)!.worktree_id]?.path ?? null) : null;
 
   // Follow the app's light/dark/black surfaces.
   useEffect(() => {
@@ -95,9 +99,11 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       allowProposedApi: true,
       cursorBlink: true,
       theme: terminalTheme(getState().mode),
+      linkHandler: osc8Links,
     });
     const f = new FitAddon();
     t.loadAddon(f);
+    const unlink = linkPaths(t, () => cwd.current);
     t.loadAddon(new Unicode11Addon());
     t.unicode.activeVersion = "11";
 
@@ -153,6 +159,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     return () => {
       disposed = true;
       observer.disconnect();
+      unlink();
       t.dispose();
       term.current = null;
     };

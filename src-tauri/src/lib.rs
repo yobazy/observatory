@@ -4,6 +4,7 @@ mod gh;
 mod git;
 mod icons;
 mod nebula_setup;
+mod preview;
 mod relocate;
 mod settings;
 mod title;
@@ -31,6 +32,8 @@ pub fn run() {
         })
         .manage(daemon::DaemonState::default())
         .manage(usage::UsageState::default())
+        .manage(preview::PreviewScope::default())
+        .register_uri_scheme_protocol("preview", preview::serve)
         .invoke_handler(tauri::generate_handler![
             daemon::connect,
             daemon::send,
@@ -55,6 +58,10 @@ pub fn run() {
             nebula_setup::nebula_status,
             nebula_setup::install_nebula,
             relocate::missing_dirs,
+            preview::resolve_paths,
+            preview::open_preview,
+            preview::read_preview_text,
+            preview::preview_modified,
             relocate::carry_project_state,
             icons::read_icon,
             icons::project_logo,

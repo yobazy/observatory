@@ -38,6 +38,14 @@ export function isPreview(): boolean {
 
 const statusListeners = new Set<(agent: Agent, from: Agent["status"]) => void>();
 
+const filesListeners = new Set<(paths: string[], agent: string) => void>();
+
+/** Called when an agent shows files with `nebula open` (preview.ts). */
+export function onFilesOpened(fn: (paths: string[], agent: string) => void): () => void {
+  filesListeners.add(fn);
+  return () => filesListeners.delete(fn);
+}
+
 /** Called on every agent status change, after the store has it. */
 export function onAgentStatus(fn: (agent: Agent, from: Agent["status"]) => void): () => void {
   statusListeners.add(fn);
@@ -291,6 +299,9 @@ function handle(event: ServerEvent) {
     } else {
       console.warn("[nebula]", message);
     }
+  } else if ("FilesOpened" in event) {
+    const { agent, paths } = event.FilesOpened;
+    filesListeners.forEach((l) => l(paths, agent));
   } else if ("EntityUpserted" in event) {
     const e = event.EntityUpserted.entity;
     if ("Project" in e) setState((s) => ({ projects: { ...s.projects, [e.Project.id]: e.Project } }));

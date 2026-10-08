@@ -10,6 +10,7 @@ import { terminalTheme } from "./TerminalPane";
 import type { Agent } from "../nebula/types";
 import { noteTyped } from "../nebula/queue";
 import { noteSize } from "../nebula/screen";
+import { linkPaths, osc8Links } from "../nebula/termpaths";
 
 export const GRID_MAX = 4;
 
@@ -101,7 +102,9 @@ function Tile({ agent, focused }: { agent: Agent; focused: boolean }) {
       scrollback: 3_000,
       allowProposedApi: true,
       theme: terminalTheme(getState().mode),
+      linkHandler: osc8Links,
     });
+    const unlink = linkPaths(t, () => getState().worktrees[agent.worktree_id]?.path ?? null);
     const fit = new FitAddon();
     t.loadAddon(fit);
     t.loadAddon(new Unicode11Addon());
@@ -159,6 +162,7 @@ function Tile({ agent, focused }: { agent: Agent; focused: boolean }) {
       offPty();
       offExit();
       void send("Detach", { session: ref }).catch(() => {});
+      unlink();
       t.dispose();
       term.current = null;
     };

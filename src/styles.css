@@ -3439,3 +3439,345 @@ button.attempt-status:hover span:nth-child(2) {
   font-family: var(--ui);
   margin-bottom: 2px;
 }
+
+/* ---------- file preview (Preview.tsx) ---------- */
+
+/* Over the terminal: it covers the whole column, header included. */
+.fpv {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--panel);
+  outline: none;
+}
+.fpv.is-over {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+/* Beside it: the column splits, terminal on the left. */
+.column-terminal.has-preview-beside {
+  flex-direction: row;
+}
+.column-terminal.has-preview-beside > .pane,
+.column-terminal.has-preview-beside > .grid-view {
+  flex: 1 1 50%;
+  min-width: 0;
+}
+.fpv.is-beside {
+  flex: 1 1 50%;
+  border-left: 1px solid var(--line);
+}
+.fpv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 12px 10px calc(16px + var(--reveal-pad, 0px));
+  border-bottom: 1px solid var(--line);
+  background: var(--night);
+}
+.fpv.is-beside .fpv-head {
+  padding-left: 12px;
+}
+.fpv-tabs {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.fpv-tab {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 72px;
+  max-width: 220px;
+  border-radius: var(--r-md);
+  color: var(--muted);
+}
+.fpv-tab.is-on {
+  background: var(--raised);
+  color: var(--text);
+}
+.fpv-tab > button {
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: 550;
+  padding: 6px 4px 6px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fpv-tab .fpv-tab-x {
+  flex: none;
+  padding: 4px 8px 4px 4px;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.6;
+}
+.fpv-tab .fpv-tab-x:hover {
+  opacity: 1;
+}
+.fpv-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.fpv-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  padding: 4px 12px 4px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.fpv-where {
+  flex: 1;
+  min-width: 0;
+  font: 12px var(--mono);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fpv-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.fpv-stage {
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  background:
+    repeating-conic-gradient(color-mix(in srgb, var(--line) 40%, transparent) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
+.fpv-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+.fpv-stage .fpv-frame:not([style]) {
+  box-shadow: none;
+}
+.fpv-stage .fpv-frame[style] {
+  flex: none;
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-pop);
+}
+.fpv-image {
+  align-items: center;
+  padding: 16px;
+}
+.fpv-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.fpv-text {
+  margin: 0;
+  padding: 16px 20px;
+  font: 12.5px/1.5 var(--mono);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.fpv-empty {
+  padding: 24px;
+  color: var(--muted);
+}
+
+/* Markdown, read like a document. */
+.md-doc {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.md-doc > :first-child {
+  margin-top: 0;
+}
+.md-doc h1,
+.md-doc h2,
+.md-doc h3 {
+  line-height: 1.25;
+  margin: 1.6em 0 0.5em;
+}
+.md-doc h1 {
+  font-size: 1.75em;
+}
+.md-doc h2 {
+  font-size: 1.3em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--line);
+}
+.md-doc h3 {
+  font-size: 1.1em;
+}
+.md-doc p,
+.md-doc ul,
+.md-doc ol,
+.md-doc pre,
+.md-doc table,
+.md-doc blockquote {
+  margin: 0 0 1em;
+}
+.md-doc ul,
+.md-doc ol {
+  padding-left: 1.5em;
+}
+.md-doc ul {
+  list-style: disc;
+}
+.md-doc ol {
+  list-style: decimal;
+}
+.md-doc li + li {
+  margin-top: 0.25em;
+}
+.md-doc a {
+  color: var(--accent);
+}
+.md-doc code {
+  font: 0.88em var(--mono);
+  background: var(--raised);
+  padding: 0.1em 0.35em;
+  border-radius: var(--r-sm);
+}
+.md-doc pre {
+  background: var(--term);
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  overflow-x: auto;
+}
+.md-doc pre code {
+  background: none;
+  padding: 0;
+}
+.md-doc blockquote {
+  padding-left: 14px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+.md-doc table {
+  border-collapse: collapse;
+}
+.md-doc th,
+.md-doc td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  text-align: left;
+}
+.md-doc img {
+  max-width: 100%;
+}
+.md-doc hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+/* The card a path shows while the pointer rests on it. */
+.fpv-card {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  cursor: pointer;
+}
+.fpv-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
+.fpv-card-body {
+  position: relative;
+  height: 212px;
+  overflow: hidden;
+  background: var(--night);
+}
+/* A page at desktop width, scaled down to the card. */
+.fpv-thumb {
+  width: 1280px;
+  height: 800px;
+  border: 0;
+  background: #fff;
+  transform: scale(0.265);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.fpv-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.md-doc-mini {
+  padding: 14px 16px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.fpv-text-mini {
+  padding: 12px 14px;
+  font-size: 10.5px;
+}
+.fpv-card-body::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 36px;
+  background: linear-gradient(transparent, var(--night));
+  pointer-events: none;
+}
+.fpv-card-foot {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 8px;
+  padding: 9px 12px 10px;
+  border-top: 1px solid var(--line);
+}
+.fpv-card-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fpv-card-dir {
+  grid-row: 2;
+  font: 11px var(--mono);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fpv-card-hint {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  align-self: center;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.dev-badge {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  background: var(--st-running);
+  color: var(--accent-ink);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: 2px;
+}

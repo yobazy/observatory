@@ -5,6 +5,7 @@ import type { DesktopPrefs } from "./theme";
 import type { PrState } from "./prs";
 import type { Queued } from "./queue";
 import type { FanOut } from "./fanout";
+import type { PreviewState } from "./preview";
 import type {
   Agent,
   AgentStatus,
@@ -66,6 +67,8 @@ export interface State {
   notice: string | null;
   /** Projects whose folder is no longer on disk, by id (relocate.ts). */
   missingProjects: Record<string, true>;
+  /** The files open in the preview, over or beside the terminal (preview.ts). */
+  preview: PreviewState | null;
 }
 
 function loadFanOuts(): Record<string, FanOut> {
@@ -110,6 +113,7 @@ let state: State = {
   limits: {},
   logos: {},
   missingProjects: {},
+  preview: null,
   theme: "default",
   prefs: {},
   mode: "dark",

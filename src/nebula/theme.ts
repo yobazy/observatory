@@ -60,6 +60,12 @@ export interface DesktopPrefs {
   /** Projects in the order dragged into, by repo path (`organize.ts`);
    *  any not listed follow in the daemon's order. */
   projectOrder?: string[];
+  /** Where a preview opens: over the terminal (unset) or beside it. */
+  previewPlacement?: "over" | "beside";
+  /** Hovering a path in a terminal shows its preview card; on unless off. */
+  previewOnHover?: boolean;
+  /** Files an agent shows with `nebula open` open in the preview; on unless off. */
+  previewShownFiles?: boolean;
   /** Tasks pinned to the top of their branch, in order, by worktree id. */
   pinnedTasks?: Record<string, string[]>;
   /** Colors picked for tasks, by agent id: a PROJECT_COLORS name. */

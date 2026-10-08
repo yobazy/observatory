@@ -62,6 +62,22 @@ it would do without changing anything, and `--help` lists the other options.
 - **Hide either column** with `⌘B` (projects) and `⌥⌘B` (tasks), or drag them to resize.
 - **New task** (`⌘N`): on an existing branch or a new worktree (the branch name is suggested from
   the task), with your choice of agent and preset.
+- **Moved a project's folder?** Its row says the folder is missing, and **Locate…** points the
+  project at the new place, carrying its icon, color, settings and Claude Code history with it
+  (this needs a nebula release with `SetProjectPath`; until then it says so). Right-click a
+  project to **Remove from list**; nothing on disk is touched.
+
+**Previews**
+
+- **Paths in a terminal light up.** Rest the pointer on one an agent printed (an HTML mockup, a
+  Markdown doc, an image, a PDF) for a preview card, and click to open it. Paths are absolute,
+  `~/`, or relative to the task's checkout, and a long path the agent's CLI broke across lines
+  still counts.
+- **The preview opens over the terminal, or beside it** (Settings › General › Previews). HTML
+  mockups render with their own CSS, images and scripts, at phone, tablet or full width; Markdown
+  reads as a document. When the agent edits the file, the preview updates on its own.
+- **`nebula open <file>`** from an agent opens the file there too.
+- Previews only reach files you open, and pages run sandboxed, away from the app.
 
 **Git and shipping**
 

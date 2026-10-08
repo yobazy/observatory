@@ -90,6 +90,7 @@ export function SettingsView() {
           ) : tab === "General" ? (
             <>
               <Rows rows={GENERAL} settings={settings} save={save} />
+              <Previews />
               <Updates />
             </>
           ) : tab === "Sessions" ? (
@@ -113,6 +114,73 @@ export function SettingsView() {
         </div>
       </div>
     </section>
+  );
+}
+
+const PLACEMENTS = [
+  { id: "over", label: "Over the terminal" },
+  { id: "beside", label: "Beside it" },
+] as const;
+
+/** Previews of files agents make (Preview.tsx): where they open, and what
+ *  opens them. */
+function Previews() {
+  const { prefs } = useAppState();
+  const placement = prefs.previewPlacement ?? "over";
+  return (
+    <Group title="Previews">
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label" id="preview-place-label">
+            Open previews
+          </span>
+          <span className="setting-hint">
+            Clicking a path in a terminal opens the file: an HTML mockup, a Markdown doc, an image.
+          </span>
+        </div>
+        <div className="segmented segmented-sm" role="radiogroup" aria-labelledby="preview-place-label">
+          {PLACEMENTS.map((p) => (
+            <button
+              key={p.id}
+              role="radio"
+              aria-checked={placement === p.id}
+              className={placement === p.id ? "is-on" : ""}
+              onClick={() => void savePrefs({ ...prefs, previewPlacement: p.id })}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-preview-hover">
+            Preview on hover
+          </label>
+          <span className="setting-hint">Resting the pointer on a path shows a small preview of the file.</span>
+        </div>
+        <Switch
+          id="set-preview-hover"
+          on={prefs.previewOnHover !== false}
+          onChange={(on) => void savePrefs({ ...prefs, previewOnHover: on })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-preview-shown">
+            Open files agents show
+          </label>
+          <span className="setting-hint">
+            When an agent runs <code>nebula open</code> on a file, it opens in the preview.
+          </span>
+        </div>
+        <Switch
+          id="set-preview-shown"
+          on={prefs.previewShownFiles !== false}
+          onChange={(on) => void savePrefs({ ...prefs, previewShownFiles: on })}
+        />
+      </div>
+    </Group>
   );
 }
 

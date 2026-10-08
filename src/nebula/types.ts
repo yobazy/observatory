@@ -108,6 +108,8 @@ export type ServerEvent =
       };
     }
   | { SessionExited: { session: SessionRef; exit_code: number | null } }
+  /** `nebula open <file>…` from an agent: files the user asked to see. */
+  | { FilesOpened: { agent: string; root: string; paths: string[] } }
   | {
       OutputTail: {
         req_id: number;
