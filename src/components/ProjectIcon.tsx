@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { isPreview } from "../nebula/client";
+import { isPreview, request } from "../nebula/client";
 import {
   colorOf,
   iconFor,
@@ -8,9 +8,10 @@ import {
   setProjectIcon,
   type ShownIcon,
 } from "../nebula/icons";
-import { flash, useAppState } from "../nebula/store";
+import { flash, getState, useAppState } from "../nebula/store";
 import type { Project } from "../nebula/types";
 import { ContextMenu, type MenuItem } from "./Menu";
+import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import { ColorRow } from "./Organize";
 import { resetProjectOrder } from "../nebula/organize";
 import { locateProject } from "../nebula/relocate";
@@ -159,6 +160,7 @@ export function IconPicker({ project, onClose }: { project: Project; onClose: ()
 export function useProjectMenu() {
   const [menu, setMenu] = useState<{ items: MenuItem[]; x: number; y: number; label: string } | null>(null);
   const [picking, setPicking] = useState<Project | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmDialogSpec | null>(null);
   const { prefs, missingProjects } = useAppState();
 
   const openFor = (e: React.MouseEvent, project: Project) => {
@@ -190,6 +192,12 @@ export function useProjectMenu() {
         await revealItemInDir(project.repo_path).catch((err) => flash(String(err)));
       },
     });
+    items.push({
+      label: "Remove from list…",
+      destructive: true,
+      separated: true,
+      run: () => setConfirm(removeSpec(project)),
+    });
     setMenu({ items, x: e.clientX || r.left + 24, y: e.clientY || r.bottom, label: `${project.name} actions` });
   };
 
@@ -197,9 +205,41 @@ export function useProjectMenu() {
     <>
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
       {picking && <IconPicker project={picking} onClose={() => setPicking(null)} />}
+      {confirm && <ConfirmDialog d={confirm} onClose={() => setConfirm(null)} />}
     </>
   );
   return { openFor, element };
+}
+
+/** The confirm before a project leaves nebula's list, as the TUI's: the
+ *  daemon forgets it and stops its sessions, and the folder stays. */
+function removeSpec(project: Project): ConfirmDialogSpec {
+  const s = getState();
+  const worktrees = new Set(
+    Object.values(s.worktrees)
+      .filter((w) => w.project_id === project.id)
+      .map((w) => w.id),
+  );
+  // Archived ones too: the daemon drops every task under the project.
+  const tasks = Object.values(s.agents).filter((a) => worktrees.has(a.worktree_id));
+  const running = tasks.filter((a) => a.alive).length;
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const stopped = !running
+    ? ""
+    : running === 1
+      ? ", and the session still open is stopped"
+      : `, and the ${running} sessions still open are stopped`;
+  const losing = tasks.length ? ` Its ${plural(tasks.length, "task goes", "tasks go")} with it${stopped}.` : "";
+  return {
+    kind: "confirm",
+    title: `Remove ${project.name}?`,
+    message: `Remove “${project.name}” from nebula? Nothing on disk is touched.${losing} You can add the folder again later.`,
+    confirm: "Remove",
+    onConfirm: async () => {
+      await request("RemoveProject", { id: project.id });
+      flash(`Removed ${project.name} from the list.`);
+    },
+  };
 }
 
 /** A project's color as CSS custom properties (`--pc`, the hue), or

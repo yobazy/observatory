@@ -101,7 +101,7 @@ export async function locateProject(project: Project): Promise<void> {
   const owner = Object.values(getState().projects).find((p) => p.repo_path === info.path && p.id !== project.id);
   if (owner) {
     return flash(
-      `${tilde(info.path)} is already the project “${owner.name}”. Remove that one from the list in nebula first.`,
+      `${tilde(info.path)} is already the project “${owner.name}”. Remove that one first: right-click it, Remove from list.`,
       8000,
     );
   }
