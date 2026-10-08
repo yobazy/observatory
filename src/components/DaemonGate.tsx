@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { installNebula, nebulaStatus, reconnectNow, startDaemon, type NebulaStatus } from "../nebula/client";
 import { useAppState } from "../nebula/store";
 import { openLink } from "./Run";
+import { Telescope } from "./Welcome";
 
 const RELEASES = "https://github.com/yobazy/observatory/releases";
 
@@ -123,6 +124,7 @@ export function DaemonGate() {
   return (
     <div className="gate" data-tauri-drag-region>
       <div className="gate-card">
+        <Telescope mode={busy ? "scan" : "rest"} size={150} />
         <h1>{title}</h1>
         {body}
         {error && (

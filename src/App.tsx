@@ -5,6 +5,7 @@ import { TerminalPane } from "./components/TerminalPane";
 import { LaunchDialog } from "./components/LaunchDialog";
 import type { Seed } from "./components/RowMenu";
 import { DaemonGate } from "./components/DaemonGate";
+import { Welcome } from "./components/Welcome";
 import { AddProjectDialog, Notice, addProject, type AddStep } from "./components/AddProject";
 import { start } from "./nebula/client";
 import { useGitPolling } from "./nebula/git";
@@ -222,6 +223,7 @@ export default function App() {
       <HoverCard />
       <Notice />
       <DaemonGate />
+      <Welcome />
     </div>
   );
 }

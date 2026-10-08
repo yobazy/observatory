@@ -1133,6 +1133,236 @@ body.is-resizing * {
   margin-top: 6px;
 }
 
+/* ---------- first-launch welcome + telescope ---------- */
+
+.welcome {
+  position: fixed;
+  inset: 0;
+  /* Over the startup gate, which it hands over to when it's done. */
+  z-index: 31;
+  background: var(--night);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  cursor: default;
+  animation: welcome-in 400ms ease-out;
+}
+.welcome-leaving {
+  animation: welcome-out 550ms ease-in forwards;
+}
+.welcome-text {
+  height: 34px;
+  display: grid;
+  place-items: center;
+}
+.welcome-line {
+  color: var(--muted);
+  font-size: 14px;
+  animation: welcome-line 1100ms ease-in-out both;
+}
+.welcome-hi {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  animation: welcome-hi 600ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+@keyframes welcome-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes welcome-out {
+  to {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+@keyframes welcome-line {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  20%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes welcome-hi {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+}
+
+.scope {
+  display: block;
+  overflow: visible;
+}
+.scope-star {
+  fill: var(--text);
+  opacity: 0.5;
+  animation: scope-twinkle 2.2s ease-in-out infinite;
+}
+.scope-ground {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.scope-legs line {
+  stroke: var(--muted);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.scope-mount {
+  fill: var(--raised);
+  stroke: var(--muted);
+  stroke-width: 2.5;
+}
+.scope-tube {
+  transform-box: view-box;
+  transform-origin: 100px 104px;
+  transform: rotate(-32deg);
+}
+.scope-body,
+.scope-hood {
+  fill: var(--accent);
+}
+.scope-hood {
+  filter: brightness(1.12);
+}
+.scope-band,
+.scope-eyepiece,
+.scope-finder {
+  fill: var(--accent-ink);
+  opacity: 0.35;
+}
+.scope-eyepiece,
+.scope-finder {
+  fill: var(--muted);
+  opacity: 1;
+}
+.scope-glint {
+  fill: #fff;
+  opacity: 0;
+}
+.scope-target {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.scope-target-star {
+  fill: #ffe7a3;
+}
+.scope-target-glow {
+  fill: #ffe7a3;
+  opacity: 0.18;
+}
+
+/* intro: hunt around the sky, then settle on the star as it lights up */
+.scope-intro .scope-tube {
+  animation: scope-hunt 3.3s ease-in-out both;
+}
+.scope-intro .scope-target {
+  animation:
+    scope-found 700ms 3.2s cubic-bezier(0.2, 1.6, 0.4, 1) both,
+    scope-pulse 2.4s 3.9s ease-in-out infinite;
+}
+.scope-intro .scope-glint {
+  animation: scope-glint 900ms 3.15s ease-out both;
+}
+
+/* scan: sweep for as long as something is setting up */
+.scope-scan .scope-tube {
+  animation: scope-sweep 2.6s ease-in-out infinite alternate;
+}
+.scope-scan .scope-target {
+  opacity: 0.25;
+}
+
+.scope-rest .scope-target {
+  animation: scope-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes scope-twinkle {
+  50% {
+    opacity: 0.12;
+  }
+}
+@keyframes scope-hunt {
+  0% {
+    transform: rotate(-6deg);
+  }
+  16% {
+    transform: rotate(-50deg);
+  }
+  34% {
+    transform: rotate(-16deg);
+  }
+  40% {
+    transform: rotate(-19deg);
+  }
+  58% {
+    transform: rotate(-46deg);
+  }
+  74% {
+    transform: rotate(-25deg);
+  }
+  88% {
+    transform: rotate(-35deg);
+  }
+  100% {
+    transform: rotate(-32deg);
+  }
+}
+@keyframes scope-sweep {
+  from {
+    transform: rotate(-18deg);
+  }
+  to {
+    transform: rotate(-48deg);
+  }
+}
+@keyframes scope-found {
+  from {
+    opacity: 0;
+    transform: scale(0) rotate(-90deg);
+  }
+}
+@keyframes scope-pulse {
+  50% {
+    transform: scale(1.15);
+  }
+}
+@keyframes scope-glint {
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.gate-card .scope {
+  align-self: center;
+  margin-bottom: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scope *,
+  .welcome,
+  .welcome * {
+    animation: none !important;
+  }
+}
+
 /* ---------- add project ---------- */
 
 .sidebar-actions {
