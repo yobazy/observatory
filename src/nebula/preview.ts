@@ -8,6 +8,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview, onFilesOpened } from "./client";
 import { flash, getState, setState } from "./store";
+import { addToShelf } from "./shelf";
 
 export type PreviewKind = "html" | "markdown" | "image" | "pdf" | "text";
 
@@ -16,6 +17,9 @@ export interface PreviewFile {
   kind: PreviewKind;
   size: number;
   modified: number;
+  /** The agent whose terminal or `nebula open` showed it: who comments on
+   *  it go to. Unset for a file opened some other way. */
+  from?: string;
 }
 
 export interface PreviewState {
@@ -29,9 +33,11 @@ export const dirName = (path: string) => tilde(path.slice(0, path.lastIndexOf("/
 
 /** The `preview://` URL a file is served at. Each segment is encoded on its
  *  own, so a page's relative links resolve against its folder. */
-export function previewUrl(path: string, rev = 0): string {
+export function previewUrl(path: string, rev = 0, pick = false): string {
   const url = "preview://localhost" + path.split("/").map(encodeURIComponent).join("/");
-  return rev ? `${url}?rev=${rev}` : url;
+  // `pick=1` has preview.rs add comment mode's script to the page.
+  const query = [rev ? `rev=${rev}` : "", pick ? "pick=1" : ""].filter(Boolean).join("&");
+  return query ? `${url}?${query}` : url;
 }
 
 function kindOf(path: string): PreviewKind {
@@ -57,11 +63,11 @@ export async function readText(path: string): Promise<string> {
 
 /** Open `paths` in the preview, the first of them in front. Files already
  *  open stay, so an agent showing three mockups in a row gets three tabs. */
-export async function openPreview(paths: string[]): Promise<void> {
+export async function openPreview(paths: string[], from?: string | null): Promise<void> {
   const opened: PreviewFile[] = [];
   for (const path of paths) {
     try {
-      opened.push(await describe(path));
+      opened.push({ ...(await describe(path)), ...(from ? { from } : {}) });
     } catch (e) {
       flash(`Couldn't preview ${tilde(path)}: ${e instanceof Error ? e.message : e}`, 6000);
     }
@@ -72,7 +78,8 @@ export async function openPreview(paths: string[]): Promise<void> {
     let active = -1;
     for (const f of opened) {
       const at = files.findIndex((g) => g.path === f.path);
-      if (at >= 0) files[at] = f;
+      // Opened again without a source: it keeps the one it had.
+      if (at >= 0) files[at] = { ...f, from: f.from ?? files[at].from };
       else files.push(f);
       if (active < 0) active = files.findIndex((g) => g.path === f.path);
     }
@@ -102,9 +109,10 @@ export function showPreviewFile(index: number) {
 export function usePreviewEvents() {
   useEffect(
     () =>
-      onFilesOpened((paths) => {
+      onFilesOpened((paths, agent) => {
+        addToShelf(agent, [...paths].reverse());
         if (getState().prefs.previewShownFiles === false) return;
-        void openPreview(paths);
+        void openPreview(paths, agent);
       }),
     [],
   );
@@ -114,6 +122,8 @@ export function usePreviewEvents() {
 
 export interface Hover {
   path: string;
+  /** The agent whose terminal or shelf it's on, if any. */
+  from?: string | null;
   /** Where the pointer was, in viewport px: the card sits beside it. */
   x: number;
   y: number;
@@ -143,12 +153,12 @@ export function useHover(): Hover | null {
 }
 
 /** The pointer is on a path: show its card after a moment. */
-export function hoverPath(path: string, x: number, y: number) {
+export function hoverPath(path: string, x: number, y: number, from?: string | null) {
   if (getState().prefs.previewOnHover === false) return;
   if (hideTimer) clearTimeout(hideTimer);
   if (showTimer) clearTimeout(showTimer);
   if (hover?.path === path) return;
-  showTimer = setTimeout(() => setHover({ path, x, y }), hover ? 0 : SHOW_MS);
+  showTimer = setTimeout(() => setHover({ path, x, y, from }), hover ? 0 : SHOW_MS);
 }
 
 /** The pointer left the path: hide the card, unless it went onto the card. */

@@ -27,7 +27,8 @@ to run, such as [Claude Code](https://code.claude.com/docs/en/setup).
 
 After that it keeps itself up to date: a new version downloads in the background, and **Restart to
 update** appears at the bottom of the sidebar. Your agents keep running while it restarts.
-Settings → General shows the version you're on and can check right away.
+Click **What's new** beside it for the release notes. Settings → General shows the version you're
+on and can check right away.
 
 ### Or build it yourself
 
@@ -77,6 +78,12 @@ it would do without changing anything, and `--help` lists the other options.
   mockups render with their own CSS, images and scripts, at phone, tablet or full width; Markdown
   reads as a document. When the agent edits the file, the preview updates on its own.
 - **`nebula open <file>`** from an agent opens the file there too.
+- **Comment on a mockup.** Click **Comment** (or press `C`) in an HTML or Markdown preview, click
+  what should change, and say how. Each comment gets a numbered pin. **Send** hands them all to the
+  agent that made the file as one prompt (queued if it's mid-turn), or to another task in the
+  project. Sent pins turn grey, so when the preview reloads you can check each one was handled.
+- **A shelf of files** above each task's terminal lists the mockups, docs and images it has shown,
+  newest first. Hover a chip for the preview card, click to open it.
 - Previews only reach files you open, and pages run sandboxed, away from the app.
 
 **Git and shipping**
@@ -203,6 +210,8 @@ appleid.apple.com.
 
 It writes `Observatory.dmg` at the repo root, the asset name the README's download link points at.
 Bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json` first.
+The release notes are the commit subjects since the previous tag (version bumps left out); they
+go on the GitHub release and into `latest.json`, where **What's new** reads them.
 
 Each release also carries `Observatory.app.tar.gz`, signed with the updater key, and `latest.json`,
 which installed copies check (`plugins.updater` in `tauri.conf.json`). The key is

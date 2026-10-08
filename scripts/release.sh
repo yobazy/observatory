@@ -15,6 +15,8 @@
 # 4. Signs the update bundle (<App>.app.tar.gz) with the updater key and
 #    writes latest.json beside the DMG: what installed copies check for
 #    (tauri.conf.json, plugins.updater). Both go up with the release.
+# 5. Writes release notes from the commit subjects since the last version's
+#    tag, for the GitHub release and latest.json (the app shows them).
 #
 # The app-specific password (appleid.apple.com → Sign-In and Security) is
 # kept in your login keychain by --setup, never in a file or the shell. The
@@ -33,7 +35,7 @@ for arg in "$@"; do
   case "$arg" in
     --setup) SETUP=1 ;;
     --publish) PUBLISH=1 ;;
-    -h | --help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -169,17 +171,30 @@ xcrun stapler validate -q "$unpacked/$NAME.app" || fail "the app in $update_tgz 
 rm -rf "$unpacked"
 ok "$(basename "$update_tgz"): notarized app, signed for the updater"
 
+# ---- release notes: what changed since the last version ----
+
+# The commit subjects since the previous release's tag, one bullet each;
+# "Version x.y.z" commits say nothing a reader needs. The same text goes on
+# the GitHub release and into latest.json, where the app shows it.
+git fetch --quiet --tags origin 2>/dev/null || true
+previous="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+notes_file="$(mktemp)"
+git log --no-merges --format='- %s' ${previous:+"$previous..HEAD"} \
+  | grep -vE '^- (Version|Release) v?[0-9]+\.[0-9]+' >"$notes_file" || true
+[ -s "$notes_file" ] || echo "- Fixes and improvements" >"$notes_file"
+ok "release notes: $(wc -l <"$notes_file" | tr -d ' ') changes since ${previous:-the first commit}"
+
 # ---- latest.json: what installed copies check ----
 
 # Assets live at releases/download/v<version>/ in the repo the updater's
 # endpoint names; a universal app serves both architectures.
 releases="$(node -p "require('./src-tauri/tauri.conf.json').plugins.updater.endpoints[0].replace(/\/latest\/download\/.*$/, '')")"
-NAME="$NAME" VERSION="$VERSION" URL="$releases/download/v$VERSION/$(basename "$update_tgz")" SIG="$(cat "$update_tgz.sig")" node -e '
-  const { NAME, VERSION, URL, SIG } = process.env;
+NOTES="$(cat "$notes_file")" VERSION="$VERSION" URL="$releases/download/v$VERSION/$(basename "$update_tgz")" SIG="$(cat "$update_tgz.sig")" node -e '
+  const { NOTES, VERSION, URL, SIG } = process.env;
   const target = { signature: SIG, url: URL };
   const manifest = {
     version: VERSION,
-    notes: `${NAME} ${VERSION}`,
+    notes: NOTES,
     pub_date: new Date().toISOString(),
     platforms: { "darwin-aarch64": target, "darwin-x86_64": target },
   };
@@ -191,8 +206,10 @@ ok "latest.json: $VERSION at $releases/download/v$VERSION/"
 
 if [ "$PUBLISH" = 1 ]; then
   step "Publishing v$VERSION"
-  gh release create "v$VERSION" "$dmg" "$update_tgz" latest.json --target "$commit" --title "$NAME $VERSION" --generate-notes
+  gh release create "v$VERSION" "$dmg" "$update_tgz" latest.json --target "$commit" --title "$NAME $VERSION" --notes-file "$notes_file"
   ok "released v$VERSION"
 else
+  printf '\nRelease notes:\n%s\n' "$(cat "$notes_file")"
   printf '\n%s is ready. Publish it with: %s --publish\n' "$dmg" "$0"
 fi
+rm -f "$notes_file"

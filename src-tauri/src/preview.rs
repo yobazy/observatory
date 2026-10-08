@@ -209,7 +209,16 @@ pub fn serve<R: Runtime>(ctx: UriSchemeContext<'_, R>, request: Request<Vec<u8>>
     if !scope.allows(&path) || !path.is_file() {
         return not_found();
     }
+    let picking = request
+        .uri()
+        .query()
+        .is_some_and(|q| q.split('&').any(|kv| kv == "pick=1"));
     match std::fs::read(&path) {
+        Ok(bytes) if picking && kind_of(&path) == "html" => Response::builder()
+            .header("Content-Type", mime(&path))
+            .header("Cache-Control", "no-store")
+            .body(Cow::Owned(with_picker(bytes)))
+            .unwrap(),
         Ok(bytes) => Response::builder()
             .header("Content-Type", mime(&path))
             // Live reload re-requests the same URL; it must not be cached.
@@ -218,6 +227,25 @@ pub fn serve<R: Runtime>(ctx: UriSchemeContext<'_, R>, request: Request<Vec<u8>>
             .unwrap(),
         Err(_) => not_found(),
     }
+}
+
+/// Comment mode's script (pick.js), for a page opened with `?pick=1`.
+const PICKER: &str = include_str!("pick.js");
+
+/// `page` with the comment-mode script added: before `</body>` when it has
+/// one, else at the end, where a browser still runs it.
+fn with_picker(page: Vec<u8>) -> Vec<u8> {
+    let tag = format!("<script>{PICKER}</script>");
+    let lower = page.to_ascii_lowercase();
+    let at = lower
+        .windows(7)
+        .rposition(|w| w == b"</body>")
+        .unwrap_or(page.len());
+    let mut out = Vec::with_capacity(page.len() + tag.len());
+    out.extend_from_slice(&page[..at]);
+    out.extend_from_slice(tag.as_bytes());
+    out.extend_from_slice(&page[at..]);
+    out
 }
 
 #[cfg(test)]
@@ -239,6 +267,16 @@ mod tests {
         assert!(scope.allows(Path::new("/tmp/mock/css/site.css")));
         assert!(!scope.allows(Path::new("/tmp/mockery/index.html")), "a sibling sharing a prefix");
         assert!(!scope.allows(Path::new("/tmp/other.html")));
+    }
+
+    #[test]
+    fn the_picker_goes_before_the_end_of_the_body() {
+        let page = with_picker(b"<html><body><p>hi</p></BODY></html>".to_vec());
+        let page = String::from_utf8(page).unwrap();
+        assert!(page.starts_with("<html><body><p>hi</p><script>"));
+        assert!(page.ends_with("</script></BODY></html>"));
+        let bare = String::from_utf8(with_picker(b"<p>no body</p>".to_vec())).unwrap();
+        assert!(bare.starts_with("<p>no body</p><script>") && bare.ends_with("</script>"));
     }
 
     #[test]

@@ -221,18 +221,38 @@ export function Sidebar({ onAddProject, onHide }: { onAddProject: () => void; on
   );
 }
 
-/** Once a new version is installed: restart into it. */
+/** Once a new version is installed: restart into it, and what's in it. */
 function UpdateReady() {
   const update = useUpdateState();
+  const [open, setOpen] = useState(false);
   if (update.kind !== "ready") return null;
   return (
-    <button
-      className="btn btn-primary update-ready"
-      onClick={() => void restartToUpdate()}
-      title="Your agents keep running while the app restarts."
-    >
-      Restart to update to {update.version}
-    </button>
+    <div className="update-ready">
+      {open && (
+        <ul className="update-notes" id="update-notes">
+          {update.notes.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      )}
+      <button
+        className="btn btn-primary"
+        onClick={() => void restartToUpdate()}
+        title="Your agents keep running while the app restarts."
+      >
+        Restart to update to {update.version}
+      </button>
+      {update.notes.length > 0 && (
+        <button
+          className="update-whats-new"
+          aria-expanded={open}
+          aria-controls="update-notes"
+          onClick={() => setOpen((o) => !o)}
+        >
+          {open ? "Hide what's new" : "What's new"}
+        </button>
+      )}
+    </div>
   );
 }
 

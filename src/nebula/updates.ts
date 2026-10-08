@@ -13,8 +13,8 @@ export type UpdateState =
   | { kind: "idle" }
   | { kind: "checking" }
   | { kind: "current" }
-  | { kind: "downloading"; version: string; percent: number | null }
-  | { kind: "ready"; version: string }
+  | { kind: "downloading"; version: string; notes: string[]; percent: number | null }
+  | { kind: "ready"; version: string; notes: string[] }
   | { kind: "error"; message: string };
 
 const FIRST_CHECK_MS = 15_000;
@@ -56,17 +56,18 @@ export async function checkForUpdates(manual = false): Promise<void> {
       return;
     }
     const version = update.version;
+    const notes = noteLines(update.body);
     let total = 0;
     let got = 0;
-    set({ kind: "downloading", version, percent: null });
+    set({ kind: "downloading", version, notes, percent: null });
     await update.downloadAndInstall((e) => {
       if (e.event === "Started") total = e.data.contentLength ?? 0;
       else if (e.event === "Progress") {
         got += e.data.chunkLength;
-        if (total) set({ kind: "downloading", version, percent: Math.min(100, Math.round((got / total) * 100)) });
+        if (total) set({ kind: "downloading", version, notes, percent: Math.min(100, Math.round((got / total) * 100)) });
       }
     });
-    set({ kind: "ready", version });
+    set({ kind: "ready", version, notes });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     set({ kind: "error", message });
@@ -74,6 +75,16 @@ export async function checkForUpdates(manual = false): Promise<void> {
     // the next one will try again.
     if (manual) flash(`Couldn't check for updates: ${message}`);
   }
+}
+
+/** A release's notes as their bullet points: the release script writes one
+ *  "- " line per change. Anything else (a release written by hand) is kept
+ *  a line at a time; a version-only placeholder says nothing and is dropped. */
+export function noteLines(body: string | undefined): string[] {
+  return (body ?? "")
+    .split("\n")
+    .map((l) => l.replace(/^\s*[-*]\s+/, "").trim())
+    .filter((l) => l && !/^Observatory \d+\.\d+/.test(l));
 }
 
 export async function restartToUpdate(): Promise<void> {
@@ -87,6 +98,15 @@ export async function restartToUpdate(): Promise<void> {
 /** Mount once: checks shortly after launch, then every few hours. */
 export function useUpdateCheck() {
   useEffect(() => {
+    // `?update=ready` in the browser preview: an update waiting to restart.
+    if (isPreview() && new URLSearchParams(location.search).get("update") === "ready") {
+      set({
+        kind: "ready",
+        version: "0.5.2",
+        notes: noteLines("- Comment on a mockup, and the agent fixes it\n- A shelf of the files each task has shown\n- Release notes when an update is ready"),
+      });
+      return;
+    }
     if (isPreview() || import.meta.env.DEV) return;
     const first = setTimeout(() => void checkForUpdates(), FIRST_CHECK_MS);
     const every = setInterval(() => void checkForUpdates(), CHECK_EVERY_MS);

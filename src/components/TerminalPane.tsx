@@ -12,6 +12,8 @@ import { enqueue, isIdle, noteTyped, unqueue } from "../nebula/queue";
 import { noteSize } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
+import { removeFromShelf, watchForFiles, type FileWatch, type ShelfItem } from "../nebula/shelf";
+import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
 
 const THEME = {
   background: "#0f1524",
@@ -81,6 +83,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const [dialog, setDialog] = useState<TextDialogSpec | null>(null);
   // The session's checkout: what a relative path in its output is under.
   const cwd = useRef<string | null>(null);
+  const files = useRef<FileWatch | null>(null);
   cwd.current = agent || tab ? (state.worktrees[(agent ?? tab)!.worktree_id]?.path ?? null) : null;
 
   // Follow the app's light/dark/black surfaces.
@@ -103,7 +106,23 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     });
     const f = new FitAddon();
     t.loadAddon(f);
-    const unlink = linkPaths(t, () => cwd.current);
+    const unlink = linkPaths(
+      t,
+      () => cwd.current,
+      () => {
+        const ref = current.current;
+        return ref && "Agent" in ref ? ref.Agent : null;
+      },
+    );
+    // Files the agent mentions land on its shelf.
+    files.current = watchForFiles(
+      t,
+      () => {
+        const ref = current.current;
+        return ref && "Agent" in ref ? ref.Agent : null;
+      },
+      () => cwd.current,
+    );
     t.loadAddon(new Unicode11Addon());
     t.unicode.activeVersion = "11";
 
@@ -160,6 +179,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       disposed = true;
       observer.disconnect();
       unlink();
+      files.current?.dispose();
+      files.current = null;
       t.dispose();
       term.current = null;
     };
@@ -185,6 +206,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
         t.reset();
         t.write(bytes);
         end = chunk.seq + bytes.length;
+        files.current?.rescan();
         debugLog(`replay ${key}: ${bytes.length} bytes at ${t.cols}x${t.rows}`);
         return;
       }
@@ -290,6 +312,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       )}
 
       {agent && <QueueStrip agent={agent} queued={state.queue[agent.id]} />}
+      {agent && <ShelfStrip agentId={agent.id} items={state.shelf[agent.id]} />}
       <div className="pane-body" data-drop-session={key ?? undefined}>
         <div ref={host} className={`xterm-host${exists ? "" : " is-hidden"}`} />
         {!exists && (
@@ -358,6 +381,50 @@ function QueueStrip({ agent, queued }: { agent: Agent; queued: { id: string; tex
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+const KIND_MARK: Record<string, string> = { html: "◧", htm: "◧", md: "¶", markdown: "¶", pdf: "⎘" };
+
+/** The files this task has shown: hover for the card, click to open. */
+function ShelfStrip({ agentId, items }: { agentId: string; items: ShelfItem[] | undefined }) {
+  if (!items?.length) return null;
+  return (
+    <div className="shelf-strip" aria-label="Files this task has shown">
+      <span className="queue-label">Files</span>
+      <ul>
+        {items.map((item) => {
+          const ext = item.path.slice(item.path.lastIndexOf(".") + 1).toLowerCase();
+          return (
+            <li key={item.path}>
+              <button
+                className="shelf-chip"
+                title={`${dirName(item.path)}/${baseName(item.path)}`}
+                onClick={() => {
+                  hideCard();
+                  void openPreview([item.path], agentId);
+                }}
+                onMouseEnter={(e) => hoverPath(item.path, e.clientX, e.clientY + 12, agentId)}
+                onMouseLeave={() => leavePath()}
+              >
+                <span className="shelf-mark" aria-hidden>
+                  {KIND_MARK[ext] ?? "▣"}
+                </span>
+                {baseName(item.path)}
+              </button>
+              <button
+                className="shelf-x"
+                aria-label={`Remove ${baseName(item.path)} from the shelf`}
+                title="Remove from the shelf"
+                onClick={() => removeFromShelf(agentId, item.path)}
+              >
+                ×
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

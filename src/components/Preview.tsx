@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
@@ -23,6 +23,11 @@ import {
 } from "../nebula/preview";
 import { currentEditor } from "./Editor";
 import { ContextMenu } from "./Menu";
+import { CommentBox, CommentPanel, type Spot } from "./Comments";
+import type { Target } from "../nebula/comments";
+// The browser preview has no preview.rs to add comment mode's script, so
+// it puts it into the demo page itself.
+import PICK_JS from "../../src-tauri/src/pick.js?raw";
 
 const WIDTHS = [
   { id: "phone", label: "Phone", px: 390 },
@@ -41,6 +46,16 @@ export function PreviewPane() {
   const [width, setWidth] = useState<Width>("full");
   const [rev, setRev] = useState(0);
   const file = preview ? preview.files[preview.active] : undefined;
+  const [commenting, setCommenting] = useState(false);
+  const [picked, setPicked] = useState<{ target: Target; spot: Spot } | null>(null);
+  const canComment = file?.kind === "html" || file?.kind === "markdown";
+  const onPick = useCallback((target: Target, spot: Spot) => setPicked({ target, spot }), []);
+  const stopCommenting = useCallback(() => {
+    setPicked(null);
+    setCommenting(false);
+  }, []);
+  // A different file starts out of comment mode.
+  useEffect(() => stopCommenting(), [file?.path, stopCommenting]);
 
   // Over the terminal, the keyboard comes here, so Esc closes the preview
   // rather than reaching the agent (where it would interrupt the turn).
@@ -76,9 +91,16 @@ export function PreviewPane() {
       aria-label="Preview"
       tabIndex={-1}
       onKeyDown={(e) => {
+        const typing = (e.target as HTMLElement).closest("textarea, input, select");
         if (e.key === "Escape") {
           e.stopPropagation();
-          close();
+          // One step at a time: the comment box, then comment mode, then the preview.
+          if (picked) setPicked(null);
+          else if (commenting) stopCommenting();
+          else close();
+        } else if (e.key === "c" && !typing && !e.metaKey && !e.ctrlKey && canComment) {
+          setCommenting((c) => !c);
+          setPicked(null);
         }
       }}
     >
@@ -101,6 +123,16 @@ export function PreviewPane() {
           ))}
         </div>
         <div className="fpv-actions">
+          {canComment && (
+            <button
+              className={`btn btn-sm${commenting ? " btn-primary" : ""}`}
+              aria-pressed={commenting}
+              onClick={() => (commenting ? stopCommenting() : setCommenting(true))}
+              title={commenting ? "Stop commenting (C)" : "Click parts of the page to comment on them (C)"}
+            >
+              {commenting ? "Done" : "Comment"}
+            </button>
+          )}
           <button className="icon-btn" onClick={() => setRev((r) => r + 1)} title="Reload" aria-label="Reload">
             ↻
           </button>
@@ -130,9 +162,33 @@ export function PreviewPane() {
           </div>
         )}
       </div>
+      {commenting && (
+        <p className="fpv-commenting">Click what should change. Esc when you're done.</p>
+      )}
       <div className="fpv-body">
-        <FileView key={file.path} file={file} rev={rev} width={WIDTHS.find((w) => w.id === width)!.px} />
+        <FileView
+          key={file.path}
+          file={file}
+          rev={rev}
+          width={WIDTHS.find((w) => w.id === width)!.px}
+          commenting={commenting}
+          onPick={onPick}
+          onEscape={stopCommenting}
+        />
       </div>
+      <CommentPanel file={file} />
+      {picked && (
+        <CommentBox
+          key={`${picked.spot.x},${picked.spot.y}`}
+          path={file.path}
+          target={picked.target}
+          spot={picked.spot}
+          onDone={() => {
+            setPicked(null);
+            root.current?.focus();
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -177,25 +233,18 @@ function OpenMenu({ file }: { file: PreviewFile }) {
   );
 }
 
-function FileView({ file, rev, width }: { file: PreviewFile; rev: number; width: number }) {
+interface Picking {
+  commenting: boolean;
+  onPick: (target: Target, spot: Spot) => void;
+  onEscape: () => void;
+}
+
+function FileView({ file, rev, width, ...picking }: { file: PreviewFile; rev: number; width: number } & Picking) {
   switch (file.kind) {
     case "html":
-      return (
-        <div className="fpv-stage">
-          <iframe
-            key={rev}
-            className="fpv-frame"
-            style={width ? { width } : undefined}
-            title={baseName(file.path)}
-            // Scripts run, as a mockup's would in a browser, but in an
-            // opaque origin: nothing of this app, its storage or its API.
-            sandbox="allow-scripts allow-forms allow-modals allow-popups"
-            {...(isPreview() ? { srcDoc: DEMO_HTML } : { src: previewUrl(file.path, rev) })}
-          />
-        </div>
-      );
+      return <HtmlView file={file} rev={rev} width={width} {...picking} />;
     case "markdown":
-      return <MarkdownView path={file.path} rev={rev} />;
+      return <MarkdownView path={file.path} from={file.from} rev={rev} {...picking} />;
     case "image":
       return (
         <div className="fpv-stage fpv-image">
@@ -207,6 +256,66 @@ function FileView({ file, rev, width }: { file: PreviewFile; rev: number; width:
     default:
       return <TextView path={file.path} rev={rev} />;
   }
+}
+
+/** A mockup, in a sandboxed frame. In comment mode the page comes with
+ *  pick.js, which reports what's clicked and draws the pins sent to it. */
+function HtmlView({
+  file,
+  rev,
+  width,
+  commenting,
+  onPick,
+  onEscape,
+}: { file: PreviewFile; rev: number; width: number } & Picking) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const comments = useAppState().comments[file.path];
+  const pins = JSON.stringify(
+    (comments ?? []).map((c, i) => ({ n: i + 1, selector: c.target.selector, sent: c.sent })),
+  );
+  const post = useCallback(
+    () => frame.current?.contentWindow?.postMessage({ observatory: true, type: "pins", pins: JSON.parse(pins) }, "*"),
+    [pins],
+  );
+  useEffect(() => {
+    if (!commenting) return;
+    post();
+    const onMessage = (e: MessageEvent) => {
+      // Only the page in this frame, and only what pick.js says.
+      if (e.source !== frame.current?.contentWindow || e.data?.observatory !== true) return;
+      if (e.data.type === "ready") post();
+      else if (e.data.type === "escape") onEscape();
+      else if (e.data.type === "pick") {
+        const at = frame.current!.getBoundingClientRect();
+        const { selector, tag, text, rect } = e.data;
+        onPick(
+          { selector: String(selector), tag: String(tag), text: String(text) },
+          { x: at.left + rect.x, y: at.top + rect.y, w: rect.width, h: rect.height },
+        );
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [commenting, post, onPick, onEscape]);
+
+  const page = isPreview()
+    ? { srcDoc: commenting ? DEMO_HTML.replace("</body>", `<script>${PICK_JS}</script></body>`) : DEMO_HTML }
+    : { src: previewUrl(file.path, rev, commenting) };
+  return (
+    <div className="fpv-stage">
+      <iframe
+        ref={frame}
+        key={`${rev}:${commenting}`}
+        className="fpv-frame"
+        style={width ? { width } : undefined}
+        title={baseName(file.path)}
+        // Scripts run, as a mockup's would in a browser, but in an
+        // opaque origin: nothing of this app, its storage or its API.
+        sandbox="allow-scripts allow-forms allow-modals allow-popups"
+        {...page}
+      />
+    </div>
+  );
 }
 
 function useText(path: string, rev: number): { text: string | null; error: string | null } {
@@ -247,26 +356,109 @@ function joinPath(dir: string, rel: string): string {
   return parts.join("/");
 }
 
-function MarkdownView({ path, rev }: { path: string; rev: number }) {
+/** The parts of a doc a comment can be about. */
+const BLOCKS = "h1, h2, h3, h4, h5, h6, li, tr, blockquote, pre, img, p";
+
+const textOf = (el: Element) => {
+  const t = (el.textContent || el.getAttribute("alt") || "").replace(/\s+/g, " ").trim();
+  return t.length > 80 ? t.slice(0, 77) + "…" : t;
+};
+
+/** The element a doc comment is pinned to: the first block of its kind that
+ *  still starts with the text it was made on. */
+function findBlock(root: HTMLElement, target: Target): Element | null {
+  const start = target.text.replace(/…$/, "");
+  return [...root.querySelectorAll(target.tag)].find((el) => textOf(el).replace(/…$/, "").startsWith(start)) ?? null;
+}
+
+function MarkdownView({
+  path,
+  from,
+  rev,
+  commenting,
+  onPick,
+}: { path: string; from?: string; rev: number } & Picking) {
   const { text, error } = useText(path, rev);
+  const doc = useRef<HTMLElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
+  const lit = useRef<Element | null>(null);
+  const comments = useAppState().comments[path];
+  const [pins, setPins] = useState<{ n: number; top: number; left: number; sent: boolean }[]>([]);
+  const html = text === null ? "" : renderMarkdown(text, path);
+
+  // Pins sit in the margin, at the top left of what each comment is on.
+  useLayoutEffect(() => {
+    const place = () => {
+      if (!doc.current || !wrap.current) return;
+      const base = wrap.current.getBoundingClientRect();
+      setPins(
+        (comments ?? []).flatMap((c, i) => {
+          const el = findBlock(doc.current!, c.target);
+          if (!el) return [];
+          const r = el.getBoundingClientRect();
+          return [{ n: i + 1, top: r.top - base.top + 2, left: Math.max(4, r.left - base.left - 28), sent: c.sent }];
+        }),
+      );
+    };
+    place();
+    const watch = new ResizeObserver(place);
+    if (wrap.current) watch.observe(wrap.current);
+    return () => watch.disconnect();
+  }, [comments, html]);
+
+  // Leaving comment mode clears the outline.
+  useEffect(() => {
+    if (commenting) return;
+    lit.current?.classList.remove("is-pick");
+    lit.current = null;
+  }, [commenting]);
+
   if (error) return <p className="fpv-empty">{error}</p>;
   if (text === null) return <p className="fpv-empty">Reading…</p>;
   return (
-    <article
-      className="md-doc"
-      dangerouslySetInnerHTML={{ __html: renderMarkdown(text, path) }}
-      onClick={(e) => {
-        const a = (e.target as HTMLElement).closest("a");
+    <div ref={wrap} className={`md-wrap${commenting ? " is-commenting" : ""}`}>
+      <article
+        ref={doc}
+        className="md-doc"
+        dangerouslySetInnerHTML={{ __html: html }}
+        onMouseOver={(e) => {
+          if (!commenting) return;
+          const el = (e.target as HTMLElement).closest(BLOCKS);
+          if (el === lit.current) return;
+          lit.current?.classList.remove("is-pick");
+          el?.classList.add("is-pick");
+          lit.current = el;
+        }}
+        onMouseLeave={() => {
+          lit.current?.classList.remove("is-pick");
+          lit.current = null;
+        }}
+        onClick={(e) => {
+          if (commenting) {
+            e.preventDefault();
+            const el = (e.target as HTMLElement).closest(BLOCKS);
+            if (!el) return;
+            const r = el.getBoundingClientRect();
+            onPick({ selector: "", tag: el.tagName.toLowerCase(), text: textOf(el) }, { x: r.left, y: r.top, w: r.width, h: r.height });
+            return;
+          }
+          const a = (e.target as HTMLElement).closest("a");
         const href = a?.getAttribute("href");
         if (!href || href.startsWith("#")) return;
         e.preventDefault();
         if (/^https?:/i.test(href)) {
           void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href)).catch(() => {});
         } else if (!/^[a-z]+:/i.test(href)) {
-          void openPreview([joinPath(path.slice(0, path.lastIndexOf("/")), href.split("#")[0])]);
+          void openPreview([joinPath(path.slice(0, path.lastIndexOf("/")), href.split("#")[0])], from);
         }
       }}
-    />
+      />
+      {pins.map((p) => (
+        <span key={p.n} className={`md-pin${p.sent ? " is-sent" : ""}`} style={{ top: p.top, left: p.left }}>
+          {p.n}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -323,7 +515,7 @@ export function HoverCard() {
       onMouseLeave={() => cardPointer(false)}
       onClick={() => {
         hideCard();
-        void openPreview([hover.path]);
+        void openPreview([hover.path], hover.from);
       }}
       role="button"
       aria-label={`Open ${baseName(hover.path)} in the preview`}

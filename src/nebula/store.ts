@@ -6,6 +6,8 @@ import type { PrState } from "./prs";
 import type { Queued } from "./queue";
 import type { FanOut } from "./fanout";
 import type { PreviewState } from "./preview";
+import type { ShelfItem } from "./shelf";
+import type { MockComment } from "./comments";
 import type {
   Agent,
   AgentStatus,
@@ -69,6 +71,10 @@ export interface State {
   missingProjects: Record<string, true>;
   /** The files open in the preview, over or beside the terminal (preview.ts). */
   preview: PreviewState | null;
+  /** Files each task has shown, newest first, by agent id (shelf.ts). */
+  shelf: Record<string, ShelfItem[]>;
+  /** Comments on previewed files, by path (comments.ts). */
+  comments: Record<string, MockComment[]>;
 }
 
 function loadFanOuts(): Record<string, FanOut> {
@@ -114,6 +120,8 @@ let state: State = {
   logos: {},
   missingProjects: {},
   preview: null,
+  shelf: {},
+  comments: {},
   theme: "default",
   prefs: {},
   mode: "dark",

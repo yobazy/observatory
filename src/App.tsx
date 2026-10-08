@@ -33,6 +33,7 @@ import { useFanOutPrune } from "./nebula/fanout";
 import { useUpdateCheck } from "./nebula/updates";
 import { useFolderWatch } from "./nebula/relocate";
 import { usePreviewEvents } from "./nebula/preview";
+import { useShelf } from "./nebula/shelf";
 import { HoverCard, PreviewPane } from "./components/Preview";
 import { Palette, type PaletteContext } from "./components/Palette";
 import { TextDialog, type TextDialogSpec } from "./components/Dialogs";
@@ -79,6 +80,7 @@ export default function App() {
   useUpdateCheck();
   useFolderWatch();
   usePreviewEvents();
+  useShelf();
   useQueueRunner();
   useUsagePolling();
   useTheme();

@@ -15,7 +15,8 @@ import { findPaths, logicalLine, WORTH, type Row } from "./pathtext";
 const cache = new Map<string, { abs: string | null; at: number }>();
 const TTL_MS = 10_000;
 
-async function resolve(candidates: string[], cwd: string | null): Promise<(string | null)[]> {
+/** Which of `candidates` are files, as absolute paths (else null), cached. */
+export async function resolve(candidates: string[], cwd: string | null): Promise<(string | null)[]> {
   if (isPreview()) return candidates.map((c) => (WORTH.test(c) ? c : null));
   const now = Date.now();
   const key = (c: string) => `${cwd ?? ""}\0${c}`;
@@ -48,7 +49,7 @@ function rowOf(t: Terminal, i: number): Row | undefined {
 
 /** Make paths in `t` hoverable and clickable. `cwd` is the session's
  *  checkout, for paths written relative to it. Returns the disposer. */
-export function linkPaths(t: Terminal, cwd: () => string | null): () => void {
+export function linkPaths(t: Terminal, cwd: () => string | null, owner: () => string | null = () => null): () => void {
   const provider = t.registerLinkProvider({
     provideLinks(row, callback) {
       const { text, at } = logicalLine((i) => rowOf(t, i), row - 1, t.cols);
@@ -72,9 +73,9 @@ export function linkPaths(t: Terminal, cwd: () => string | null): () => void {
             decorations: { underline: true, pointerCursor: true },
             activate: () => {
               hideCard();
-              void openPreview([path]);
+              void openPreview([path], owner());
             },
-            hover: (e) => hoverPath(path, e.clientX, e.clientY),
+            hover: (e) => hoverPath(path, e.clientX, e.clientY, owner()),
             leave: () => leavePath(),
           });
         });

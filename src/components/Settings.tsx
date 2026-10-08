@@ -208,6 +208,13 @@ function Updates() {
         <div className="setting-text">
           <span className="setting-label">Observatory {version ?? ""}</span>
           <span className="setting-hint">{status}</span>
+          {(update.kind === "ready" || update.kind === "downloading") && update.notes.length > 0 && (
+            <ul className="update-notes update-notes-settings">
+              {update.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
         </div>
         {update.kind === "ready" ? (
           <button className="btn btn-primary" onClick={() => void restartToUpdate()}>
