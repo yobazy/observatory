@@ -6,13 +6,30 @@ use nebula_core::{paths, ClientRequest, ServerEvent, PROTOCOL_VERSION};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut s = tokio::net::UnixStream::connect(paths::socket_path()).await?;
-    write_frame(&mut s, &ClientRequest::Hello { protocol_version: PROTOCOL_VERSION }).await?;
+    write_frame(
+        &mut s,
+        &ClientRequest::Hello {
+            protocol_version: PROTOCOL_VERSION,
+        },
+    )
+    .await?;
     println!("hello: {:?}", read_frame::<ServerEvent, _>(&mut s).await?);
     write_frame(&mut s, &ClientRequest::Subscribe).await?;
-    if let Some(ServerEvent::Snapshot { projects, worktrees, agents, terminals, .. }) =
-        read_frame::<ServerEvent, _>(&mut s).await?
+    if let Some(ServerEvent::Snapshot {
+        projects,
+        worktrees,
+        agents,
+        terminals,
+        ..
+    }) = read_frame::<ServerEvent, _>(&mut s).await?
     {
-        println!("{} projects, {} worktrees, {} agents, {} terminals", projects.len(), worktrees.len(), agents.len(), terminals.len());
+        println!(
+            "{} projects, {} worktrees, {} agents, {} terminals",
+            projects.len(),
+            worktrees.len(),
+            agents.len(),
+            terminals.len()
+        );
         for p in &projects {
             let n = worktrees.iter().filter(|w| w.project_id == p.id).count();
             println!("  {} ({n} worktrees)", p.name);

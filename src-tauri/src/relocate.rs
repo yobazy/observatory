@@ -13,7 +13,10 @@ use std::path::{Path, PathBuf};
 /// renamed, moved or deleted.
 #[tauri::command]
 pub fn missing_dirs(paths: Vec<String>) -> Vec<String> {
-    paths.into_iter().filter(|p| !Path::new(p).is_dir()).collect()
+    paths
+        .into_iter()
+        .filter(|p| !Path::new(p).is_dir())
+        .collect()
 }
 
 #[derive(Serialize)]
@@ -28,17 +31,25 @@ pub struct Carried {
 /// settings entry (`repo` is the old and new repo path), and each checkout's
 /// Claude Code history (`moves`, old and new checkout paths).
 #[tauri::command]
-pub fn carry_project_state(repo: (String, String), moves: Vec<(String, String)>) -> Result<Carried, String> {
+pub fn carry_project_state(
+    repo: (String, String),
+    moves: Vec<(String, String)>,
+) -> Result<Carried, String> {
     let settings = rekey_project_settings(&repo.0, &repo.1)?;
     let mut histories = 0;
     if let Some(root) = paths::claude_config_dir().map(|d| d.join("projects")) {
         for (old, new) in &moves {
-            if move_history(&root, old, new).map_err(|e| format!("Couldn't move Claude's history for {old}: {e}"))? {
+            if move_history(&root, old, new)
+                .map_err(|e| format!("Couldn't move Claude's history for {old}: {e}"))?
+            {
                 histories += 1;
             }
         }
     }
-    Ok(Carried { settings, histories })
+    Ok(Carried {
+        settings,
+        histories,
+    })
 }
 
 /// Move the `projects` entry for `old` to `new`, as the TUI's Project tab
@@ -121,17 +132,30 @@ mod tests {
 
         assert!(move_history(&root, "/code/acme", "/code/acme-web").unwrap());
         let new = root.join(history_dir_name("/code/acme-web"));
-        assert_eq!(std::fs::read_to_string(new.join("a.jsonl")).unwrap(), "old a");
+        assert_eq!(
+            std::fs::read_to_string(new.join("a.jsonl")).unwrap(),
+            "old a"
+        );
         assert!(!old.exists());
-        assert!(!move_history(&root, "/code/acme", "/code/acme-web").unwrap(), "nothing left to move");
+        assert!(
+            !move_history(&root, "/code/acme", "/code/acme-web").unwrap(),
+            "nothing left to move"
+        );
 
         // Claude already ran in the new folder: the old files join it.
         std::fs::create_dir_all(&old).unwrap();
         std::fs::write(old.join("a.jsonl"), "older a").unwrap();
         std::fs::write(old.join("b.jsonl"), "old b").unwrap();
         assert!(move_history(&root, "/code/acme", "/code/acme-web").unwrap());
-        assert_eq!(std::fs::read_to_string(new.join("a.jsonl")).unwrap(), "old a", "not overwritten");
-        assert_eq!(std::fs::read_to_string(new.join("b.jsonl")).unwrap(), "old b");
+        assert_eq!(
+            std::fs::read_to_string(new.join("a.jsonl")).unwrap(),
+            "old a",
+            "not overwritten"
+        );
+        assert_eq!(
+            std::fs::read_to_string(new.join("b.jsonl")).unwrap(),
+            "old b"
+        );
         assert!(old.join("a.jsonl").exists(), "the clash stays where it was");
 
         std::fs::remove_dir_all(&root).unwrap();

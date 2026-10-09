@@ -1,0 +1,29 @@
+name: Bug report
+description: Something in Observatory doesn't work the way it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a project with …
+        2. Click …
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Observatory's version (Settings → General) and `nebula --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs
