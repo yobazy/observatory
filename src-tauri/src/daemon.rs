@@ -49,9 +49,9 @@ pub async fn connect(app: AppHandle, state: State<'_, DaemonState>) -> Result<u3
     }
 
     let sock = paths::socket_path();
-    let mut stream = UnixStream::connect(&sock).await.map_err(|e| {
-        format!("No nebula daemon is listening on {} ({e}).", sock.display())
-    })?;
+    let mut stream = UnixStream::connect(&sock)
+        .await
+        .map_err(|e| format!("No nebula daemon is listening on {} ({e}).", sock.display()))?;
     write_frame(
         &mut stream,
         &ClientRequest::Hello {
@@ -64,12 +64,10 @@ pub async fn connect(app: AppHandle, state: State<'_, DaemonState>) -> Result<u3
         Ok(Some(ServerEvent::HelloOk { daemon_pid, .. })) => daemon_pid,
         Ok(Some(ServerEvent::Incompatible {
             daemon_protocol_version,
-        })) => {
-            return Err(format!(
-                "The daemon speaks protocol v{daemon_protocol_version}, this app v{PROTOCOL_VERSION}. \
+        })) => return Err(format!(
+            "The daemon speaks protocol v{daemon_protocol_version}, this app v{PROTOCOL_VERSION}. \
                  Rebuild the app against the nebula release you have installed."
-            ))
-        }
+        )),
         Ok(other) => return Err(format!("Unexpected handshake reply: {other:?}")),
         Err(e) => return Err(e.to_string()),
     };
@@ -130,10 +128,13 @@ fn forward(app: &AppHandle, event: ServerEvent) {
         // A run terminal's latest output (runs.ts reads its address off it).
         // Its bytes would serialize as a JSON array of numbers, so they go
         // as base64 like the PTY stream does.
-        ServerEvent::OutputTail { req_id, session, tail } => {
-            let tail = tail.map(|t| {
-                serde_json::json!({ "end_seq": t.end_seq, "data": B64.encode(t.data) })
-            });
+        ServerEvent::OutputTail {
+            req_id,
+            session,
+            tail,
+        } => {
+            let tail = tail
+                .map(|t| serde_json::json!({ "end_seq": t.end_seq, "data": B64.encode(t.data) }));
             let _ = app.emit(
                 EVENT,
                 serde_json::json!({ "OutputTail": { "req_id": req_id, "session": session, "tail": tail } }),
@@ -164,7 +165,11 @@ async fn sender(state: &State<'_, DaemonState>) -> Result<mpsc::Sender<ClientReq
 pub async fn send(request: serde_json::Value, state: State<'_, DaemonState>) -> Result<(), String> {
     let req: ClientRequest =
         serde_json::from_value(request).map_err(|e| format!("Malformed request: {e}"))?;
-    sender(&state).await?.send(req).await.map_err(|e| e.to_string())
+    sender(&state)
+        .await?
+        .send(req)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Keystrokes for an attached session, as the text xterm.js produced.
@@ -178,7 +183,11 @@ pub async fn send_input(
         session,
         data: data.into_bytes(),
     };
-    sender(&state).await?.send(req).await.map_err(|e| e.to_string())
+    sender(&state)
+        .await?
+        .send(req)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Start `nebula daemon` through the user's interactive login shell, so it

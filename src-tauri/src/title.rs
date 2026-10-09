@@ -53,8 +53,14 @@ fn ask_claude(input: String) -> Result<String, String> {
     };
     let out = String::from_utf8_lossy(&out.join().unwrap_or_default()).into_owned();
     if !status.success() {
-        let err = String::from_utf8_lossy(&err.join().unwrap_or_default()).trim().to_string();
-        let why = if err.is_empty() { out.trim().to_string() } else { err };
+        let err = String::from_utf8_lossy(&err.join().unwrap_or_default())
+            .trim()
+            .to_string();
+        let why = if err.is_empty() {
+            out.trim().to_string()
+        } else {
+            err
+        };
         return Err(format!("claude couldn't suggest a name: {why}"));
     }
     Ok(out)
@@ -62,7 +68,7 @@ fn ask_claude(input: String) -> Result<String, String> {
 
 /// The model's reply cut down to one clean title, or None if nothing's left.
 fn clean(reply: &str) -> Option<String> {
-    let line = reply.lines().map(str::trim).filter(|l| !l.is_empty()).last()?;
+    let line = reply.lines().map(str::trim).rfind(|l| !l.is_empty())?;
     let line = line.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | '*' | '.' | ':'));
     let title: String = line.split_whitespace().collect::<Vec<_>>().join(" ");
     let title: String = title.chars().take(MAX_TITLE).collect();
@@ -76,7 +82,10 @@ fn prompt_for(prompts: &[String], output: &str) -> String {
         input.push_str(&format!("- {}\n", p.trim()));
     }
     if !output.trim().is_empty() {
-        input.push_str(&format!("\nEnd of the task's terminal output:\n{}\n", output.trim()));
+        input.push_str(&format!(
+            "\nEnd of the task's terminal output:\n{}\n",
+            output.trim()
+        ));
     }
     input
 }
@@ -99,8 +108,14 @@ mod tests {
 
     #[test]
     fn cleans_replies() {
-        assert_eq!(clean("\"Fix Login Redirect.\"\n").as_deref(), Some("Fix Login Redirect"));
-        assert_eq!(clean("Sure!\n\n**Auto  Rename Tasks**").as_deref(), Some("Auto Rename Tasks"));
+        assert_eq!(
+            clean("\"Fix Login Redirect.\"\n").as_deref(),
+            Some("Fix Login Redirect")
+        );
+        assert_eq!(
+            clean("Sure!\n\n**Auto  Rename Tasks**").as_deref(),
+            Some("Auto Rename Tasks")
+        );
         assert_eq!(clean("  \n"), None);
     }
 }

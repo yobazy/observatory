@@ -38,30 +38,67 @@ fn menu(app: &AppHandle, state: Option<&TrayState>) -> tauri::Result<Menu<Wry>> 
     let menu = Menu::new(app)?;
     match state {
         Some(s) if !s.waiting.is_empty() => {
-            let head = MenuItem::with_id(app, "head", format!("Waiting on you ({})", s.waiting.len()), false, None::<&str>)?;
+            let head = MenuItem::with_id(
+                app,
+                "head",
+                format!("Waiting on you ({})", s.waiting.len()),
+                false,
+                None::<&str>,
+            )?;
             menu.append(&head)?;
             for t in s.waiting.iter().take(12) {
-                let item = MenuItem::with_id(app, format!("agent:{}", t.id), &t.label, true, None::<&str>)?;
+                let item = MenuItem::with_id(
+                    app,
+                    format!("agent:{}", t.id),
+                    &t.label,
+                    true,
+                    None::<&str>,
+                )?;
                 menu.append(&item)?;
             }
             menu.append(&PredefinedMenuItem::separator(app)?)?;
         }
         _ => {
-            let idle = MenuItem::with_id(app, "head", "Nothing waiting on you", false, None::<&str>)?;
+            let idle =
+                MenuItem::with_id(app, "head", "Nothing waiting on you", false, None::<&str>)?;
             menu.append(&idle)?;
             menu.append(&PredefinedMenuItem::separator(app)?)?;
         }
     }
     if let Some(s) = state.filter(|s| s.working > 0) {
         let n = s.working;
-        let working = MenuItem::with_id(app, "working", format!("{n} {} working", if n == 1 { "task" } else { "tasks" }), false, None::<&str>)?;
+        let working = MenuItem::with_id(
+            app,
+            "working",
+            format!("{n} {} working", if n == 1 { "task" } else { "tasks" }),
+            false,
+            None::<&str>,
+        )?;
         menu.append(&working)?;
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
-    menu.append(&MenuItem::with_id(app, "capture", "New task…", true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "show", "Show Observatory", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "capture",
+        "New task…",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "show",
+        "Show Observatory",
+        true,
+        None::<&str>,
+    )?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(app, "quit", "Quit Observatory", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "quit",
+        "Quit Observatory",
+        true,
+        None::<&str>,
+    )?)?;
     Ok(menu)
 }
 
@@ -96,8 +133,12 @@ pub fn update_tray(app: AppHandle, state: TrayState) -> Result<(), String> {
         return Ok(());
     };
     let n = state.waiting.len();
-    tray.set_title(if n > 0 { Some(n.to_string()) } else { None::<String> })
-        .map_err(|e| e.to_string())?;
+    tray.set_title(if n > 0 {
+        Some(n.to_string())
+    } else {
+        None::<String>
+    })
+    .map_err(|e| e.to_string())?;
     let tip = match (n, state.working) {
         (0, 0) => "Observatory".to_string(),
         (0, w) => format!("Nebula: {w} working"),

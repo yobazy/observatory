@@ -74,8 +74,14 @@ fn gh(dir: &Path, args: &[&str]) -> Result<String, String> {
     };
     let stdout = String::from_utf8_lossy(&out.join().unwrap_or_default()).into_owned();
     if !status.success() {
-        let stderr = String::from_utf8_lossy(&err.join().unwrap_or_default()).trim().to_string();
-        return Err(if stderr.is_empty() { stdout.trim().to_string() } else { stderr });
+        let stderr = String::from_utf8_lossy(&err.join().unwrap_or_default())
+            .trim()
+            .to_string();
+        return Err(if stderr.is_empty() {
+            stdout.trim().to_string()
+        } else {
+            stderr
+        });
     }
     Ok(stdout)
 }
@@ -114,7 +120,9 @@ fn lookup(dir: &Path) -> PrLookup {
 pub async fn gh_pr(path: PathBuf) -> PrLookup {
     tauri::async_runtime::spawn_blocking(move || lookup(&path))
         .await
-        .unwrap_or_else(|e| PrLookup::Unavailable { reason: e.to_string() })
+        .unwrap_or_else(|e| PrLookup::Unavailable {
+            reason: e.to_string(),
+        })
 }
 
 /// Open a pull request for the checkout's (pushed) branch, titled and

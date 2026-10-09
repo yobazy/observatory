@@ -74,7 +74,11 @@ pub async fn nebula_status() -> NebulaStatus {
         }
     })
     .await
-    .unwrap_or(NebulaStatus { pinned: PIN.into(), path: None, version: None })
+    .unwrap_or(NebulaStatus {
+        pinned: PIN.into(),
+        path: None,
+        version: None,
+    })
 }
 
 fn target() -> Result<&'static str, String> {
@@ -99,12 +103,28 @@ fn install_into(dir: &Path) -> Result<PathBuf, String> {
         if out.status.success() {
             Ok(())
         } else {
-            Err(format!("couldn't {what}: {}", String::from_utf8_lossy(&out.stderr).trim()))
+            Err(format!(
+                "couldn't {what}: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
         }
     };
     let result = (|| {
-        run(Command::new("curl").args(["-fsSL", "-o"]).arg(&tarball).arg(&url), "download nebula")?;
-        run(Command::new("tar").arg("-xzf").arg(&tarball).arg("-C").arg(&tmp), "unpack nebula")?;
+        run(
+            Command::new("curl")
+                .args(["-fsSL", "-o"])
+                .arg(&tarball)
+                .arg(&url),
+            "download nebula",
+        )?;
+        run(
+            Command::new("tar")
+                .arg("-xzf")
+                .arg(&tarball)
+                .arg("-C")
+                .arg(&tmp),
+            "unpack nebula",
+        )?;
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let dest = dir.join("nebula");
         // Replace by rename, so a running daemon keeps its old binary intact.
@@ -140,7 +160,10 @@ mod tests {
 
     #[test]
     fn pin_is_a_version() {
-        assert!(PIN.split('.').count() == 3 && PIN.split('.').all(|n| n.parse::<u32>().is_ok()), "{PIN}");
+        assert!(
+            PIN.split('.').count() == 3 && PIN.split('.').all(|n| n.parse::<u32>().is_ok()),
+            "{PIN}"
+        );
     }
 
     /// Downloads a real release: `cargo test -- --ignored installs_the_pinned_release`.

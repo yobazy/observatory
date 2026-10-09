@@ -51,10 +51,15 @@ fn mime(path: &Path) -> Option<&'static str> {
 }
 
 fn data_url(path: &Path) -> Result<String, String> {
-    let kind = mime(path).ok_or("that isn't an image this app can show (png, jpg, gif, webp, svg or ico)")?;
+    let kind = mime(path)
+        .ok_or("that isn't an image this app can show (png, jpg, gif, webp, svg or ico)")?;
     let len = std::fs::metadata(path).map_err(|e| e.to_string())?.len();
     if len > MAX_BYTES {
-        return Err(format!("that image is {} KB; icons can be up to {} KB", len / 1024, MAX_BYTES / 1024));
+        return Err(format!(
+            "that image is {} KB; icons can be up to {} KB",
+            len / 1024,
+            MAX_BYTES / 1024
+        ));
     }
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     Ok(format!("data:{kind};base64,{}", B64.encode(bytes)))
