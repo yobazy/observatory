@@ -64,10 +64,12 @@ pub async fn connect(app: AppHandle, state: State<'_, DaemonState>) -> Result<u3
         Ok(Some(ServerEvent::HelloOk { daemon_pid, .. })) => daemon_pid,
         Ok(Some(ServerEvent::Incompatible {
             daemon_protocol_version,
-        })) => return Err(format!(
+        })) => {
+            return Err(format!(
             "The daemon speaks protocol v{daemon_protocol_version}, this app v{PROTOCOL_VERSION}. \
                  Rebuild the app against the nebula release you have installed."
-        )),
+        ))
+        }
         Ok(other) => return Err(format!("Unexpected handshake reply: {other:?}")),
         Err(e) => return Err(e.to_string()),
     };
