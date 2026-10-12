@@ -3037,6 +3037,68 @@ td.task-last {
   margin: -4px 0 0;
 }
 
+/* ---------- project cards ---------- */
+
+.card-dialog {
+  max-height: 84vh;
+  overflow-y: auto;
+}
+.card-dialog > * {
+  flex-shrink: 0;
+}
+
+.field.field-top {
+  align-items: start;
+}
+.field-top > label {
+  padding-top: 8px;
+}
+.card-folder {
+  margin-top: -10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+.card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.card-stack .dialog-note {
+  margin: 0;
+}
+.task-box.card-desc,
+.task-box.card-sched {
+  min-height: 0;
+}
+.card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.card-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.field .card-cap input {
+  width: 56px;
+  padding: 5px 8px;
+}
+.segmented button:disabled {
+  opacity: 0.4;
+}
+.dialog-note.card-indent {
+  margin-left: 102px;
+}
+.dialog-note.card-flat {
+  margin: 0;
+}
+
 /* ---------- command palette ---------- */
 
 .scrim-palette {

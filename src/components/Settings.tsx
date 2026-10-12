@@ -486,9 +486,9 @@ function SettingRow({ row, v, save }: { row: Row; v: unknown; save: (k: string, 
   );
 }
 
-function Switch({ id, on, onChange }: { id: string; on: boolean; onChange: (on: boolean) => void }) {
+export function Switch({ id, on, onChange }: { id: string; on: boolean; onChange: (on: boolean) => void }) {
   return (
-    <button id={id} role="switch" aria-checked={on} className={`switch${on ? " is-on" : ""}`} onClick={() => onChange(!on)}>
+    <button type="button" id={id} role="switch" aria-checked={on} className={`switch${on ? " is-on" : ""}`} onClick={() => onChange(!on)}>
       <span className="switch-knob" aria-hidden />
     </button>
   );

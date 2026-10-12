@@ -12,6 +12,7 @@ import type {
   SessionRef,
 } from "./types";
 import { sessionKey } from "./types";
+import type { CardSources } from "./cards";
 import { disconnectedAgents, withSessionStatus } from "./sessionStatus";
 
 // ---- requests ----
@@ -168,11 +169,26 @@ export function inspectFolder(path: string): Promise<FolderInfo> {
   return invoke("inspect_folder", { path });
 }
 
+/** The files a project card is drafted from (see cards.ts), read by the
+ *  Rust side from the folder's root. */
+export function readCardSources(path: string): Promise<CardSources> {
+  if (mockSend) {
+    return Promise.resolve({
+      files: [
+        { path: "CLAUDE.md", text: "# Notes\n\nA preview project: the files a card is drafted from in the real app.\n" },
+        { path: ".claude/skills/apply/SKILL.md", text: "---\ndescription: Apply to a job posting\n---\n" },
+      ],
+      isGitRepo: !path.endsWith("/home"),
+    });
+  }
+  return invoke("read_card_sources", { path });
+}
+
 /** The native folder picker; null when cancelled. */
-export async function pickFolder(defaultPath?: string): Promise<string | null> {
-  if (mockSend) return "/Users/dev/code/new-idea";
+export async function pickFolder(defaultPath?: string, title = "Open a folder as a project"): Promise<string | null> {
+  if (mockSend) return title.includes("Home") ? "/Users/dev/home" : "/Users/dev/code/new-idea";
   const { open } = await import("@tauri-apps/plugin-dialog");
-  const picked = await open({ directory: true, defaultPath, title: "Open a folder as a project" });
+  const picked = await open({ directory: true, defaultPath, title });
   return typeof picked === "string" ? picked : null;
 }
 

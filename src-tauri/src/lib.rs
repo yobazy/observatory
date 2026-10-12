@@ -1,3 +1,4 @@
+mod cards;
 mod daemon;
 mod editor;
 mod gh;
@@ -43,6 +44,7 @@ pub fn run() {
             daemon::read_presets,
             daemon::debug_log,
             daemon::inspect_folder,
+            cards::read_card_sources,
             git::git_status,
             git::git_diff,
             git::delete_branch,

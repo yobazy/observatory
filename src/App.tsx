@@ -4,11 +4,13 @@ import { Sessions } from "./components/Sessions";
 import { TerminalPane } from "./components/TerminalPane";
 import { LaunchDialog } from "./components/LaunchDialog";
 import { DispatchDialog } from "./components/DispatchDialog";
+import { CardDialog, type CardTarget } from "./components/CardDialog";
 import type { Seed } from "./components/RowMenu";
 import { DaemonGate } from "./components/DaemonGate";
 import { Welcome } from "./components/Welcome";
 import { AddProjectDialog, Notice, addProject, type AddStep } from "./components/AddProject";
-import { start } from "./nebula/client";
+import { pickFolder, start } from "./nebula/client";
+import { homeCard, homeKeyFor, isFolderKey } from "./nebula/cards";
 import { useGitPolling } from "./nebula/git";
 import { fitColumns, Resizer, SESSIONS, SIDEBAR, useColumnWidth, useHidden, useWindowWidth } from "./components/Resizer";
 import { PanelGlyph } from "./components/Sidebar";
@@ -54,6 +56,29 @@ export default function App() {
   const openDispatch = useCallback((text = "") => {
     setLaunch(null);
     setDispatch({ text });
+  }, []);
+  // A project card, or Home's: Home is picked from the palette, and can be
+  // any folder, a project's or not.
+  const [card, setCard] = useState<CardTarget | null>(null);
+  const pickHome = useCallback(async () => {
+    const path = await pickFolder(homeCard()?.card.homeFolder ?? undefined, "Pick a folder as Home");
+    if (!path) return;
+    const projects = Object.values(getState().projects);
+    const key = homeKeyFor(path, projects);
+    const project = getState().projects[key];
+    setCard({
+      cardKey: key,
+      name: project?.name ?? path.split("/").filter(Boolean).pop() ?? path,
+      folder: project?.repo_path ?? path,
+      makeHome: true,
+    });
+  }, []);
+  const editHome = useCallback(() => {
+    const home = homeCard();
+    if (!home) return;
+    const project = getState().projects[home.key];
+    const folder = project?.repo_path ?? home.card.homeFolder ?? home.key;
+    setCard({ cardKey: home.key, name: project?.name ?? (isFolderKey(home.key) ? "Home" : folder), folder });
   }, []);
   // Quick capture (the global hotkey, the menu bar): from anywhere, so the
   // project is picked in the dialog, or the list goes to Dispatch. With no
@@ -121,13 +146,15 @@ export default function App() {
     () => ({
       newTask: () => openLaunch(),
       dispatch: () => openDispatch(),
+      pickHome: () => void pickHome().catch((e) => flash(`Couldn't open the folder picker: ${e instanceof Error ? e.message : String(e)}`)),
+      editHome,
       addProject: openAddProject,
       toggleProjects: () => setHideProjects((h) => !h),
       toggleTasks: () => setHideTasks((h) => !h),
       toggleGrid: () => setGrid((g) => !g),
       prompt: setTextDialog,
     }),
-    [openLaunch, openDispatch, openAddProject, setHideProjects, setHideTasks, setGrid],
+    [openLaunch, openDispatch, pickHome, editHome, openAddProject, setHideProjects, setHideTasks, setGrid],
   );
 
   const reveal = [
@@ -236,6 +263,7 @@ export default function App() {
           onClose={() => setLaunch(null)}
         />
       )}
+      {card && <CardDialog key={card.cardKey} target={card} onClose={() => setCard(null)} />}
       {dispatch && <DispatchDialog initialText={dispatch.text} onClose={() => setDispatch(null)} />}
       {addStep && <AddProjectDialog step={addStep} onDone={setAddStep} />}
       {palette && <Palette ctx={paletteCtx} onClose={() => setPalette(false)} />}

@@ -60,7 +60,7 @@ Acceptance criteria:
 - Given the Home card's `schedulingInstruction` is empty, then `canSchedule(home) === false`; given it is non-empty, then it returns `true` (unit test).
 - Given the user edits a card and reloads the app, then the edits persist (manual check).
 
-Status: todo
+Status: done
 
 ### S3: Routing review
 As a user, I want one headless LLM call to turn my list into a proposed plan that I can edit before anything starts, so that routing is fast but stays under my control.
