@@ -47,7 +47,7 @@ Acceptance criteria:
 - Given items were saved, when the store is reloaded from localStorage, then the same items come back with the same ids and checked state (unit test using a localStorage stub).
 - Given the app is running, when the user presses the quick-capture hotkey and chooses Dispatch (or opens Dispatch from the main UI), then the Dispatch dialog opens. Pasting a list shows one row per item, and ticking a row stays ticked after reloading the app (manual check in `npm run tauri dev`).
 
-Status: todo
+Status: done
 
 ### S2: Project cards with run policy and Home
 As a user, I want each project to have an editable card that describes what lives there and how tasks run, so that the router has something to route against.

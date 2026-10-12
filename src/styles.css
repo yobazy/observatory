@@ -4303,3 +4303,63 @@ button.attempt-status:hover span:nth-child(2) {
 .md-pin.is-sent {
   background: var(--faint);
 }
+
+/* ---------- dispatch ---------- */
+
+.dispatch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dispatch-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  column-gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+}
+.dispatch-item:hover {
+  background: var(--raised);
+}
+.dispatch-item label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.dispatch-item input {
+  accent-color: var(--accent);
+  flex: none;
+}
+.dispatch-text {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.dispatch-item.is-done .dispatch-text {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+.dispatch-context {
+  grid-column: 1;
+  list-style: none;
+  margin: 2px 0 0 30px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  user-select: text;
+}
+.dispatch-remove {
+  grid-column: 2;
+  grid-row: 1;
+  opacity: 0;
+}
+.dispatch-item:hover .dispatch-remove,
+.dispatch-remove:focus-visible {
+  opacity: 1;
+}

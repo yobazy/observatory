@@ -26,7 +26,15 @@ export function selectAgent(agent: Agent) {
   }));
 }
 
-export function Sidebar({ onAddProject, onHide }: { onAddProject: () => void; onHide: () => void }) {
+export function Sidebar({
+  onAddProject,
+  onHide,
+  onDispatch,
+}: {
+  onAddProject: () => void;
+  onHide: () => void;
+  onDispatch: () => void;
+}) {
   const state = useAppState();
   const [query, setQuery] = useState("");
   // Waiting rows opened to answer from here, by agent id.
@@ -207,6 +215,9 @@ export function Sidebar({ onAddProject, onHide }: { onAddProject: () => void; on
       <UpdateReady />
       <footer className="sidebar-foot">
         <UsageChip />
+        <button className="icon-btn foot-gear" onClick={onDispatch} aria-label="Dispatch" title="Dispatch: your to-do list (⇧⌘N)">
+          <ListGlyph />
+        </button>
         <button
           className={`icon-btn foot-gear${state.view === "settings" ? " is-on" : ""}`}
           onClick={() => setState({ view: state.view === "settings" ? "sessions" : "settings" })}
@@ -367,6 +378,15 @@ function GearGlyph() {
         strokeWidth="1.2"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+/** A checklist: Dispatch's to-do list. */
+function ListGlyph() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
+      <path d="m2 4 1.2 1.2L5.4 3M2 10l1.2 1.2L5.4 9M7.5 4.2h6.5M7.5 10.2h6.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

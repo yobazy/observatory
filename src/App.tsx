@@ -3,6 +3,7 @@ import { Sidebar, selectAgent } from "./components/Sidebar";
 import { Sessions } from "./components/Sessions";
 import { TerminalPane } from "./components/TerminalPane";
 import { LaunchDialog } from "./components/LaunchDialog";
+import { DispatchDialog } from "./components/DispatchDialog";
 import type { Seed } from "./components/RowMenu";
 import { DaemonGate } from "./components/DaemonGate";
 import { Welcome } from "./components/Welcome";
@@ -48,13 +49,22 @@ export default function App() {
     setLaunchKey((k) => k + 1);
     setLaunch({ worktree: worktree ?? null, seed });
   }, []);
+  // Dispatch, the day's to-do list; `text` is a list to paste in to begin with.
+  const [dispatch, setDispatch] = useState<{ text: string } | null>(null);
+  const openDispatch = useCallback((text = "") => {
+    setLaunch(null);
+    setDispatch({ text });
+  }, []);
   // Quick capture (the global hotkey, the menu bar): from anywhere, so the
-  // project is picked in the dialog.
+  // project is picked in the dialog, or the list goes to Dispatch. With no
+  // project to start a task in, Dispatch is all there is.
   const openCapture = useCallback(() => {
     setState({ view: "sessions" });
+    if (!Object.keys(getState().projects).length) return openDispatch();
+    setDispatch(null);
     setLaunchKey((k) => k + 1);
     setLaunch({ worktree: null, pickProject: true });
-  }, []);
+  }, [openDispatch]);
   const openAgent = useCallback((id: string) => {
     const a = getState().agents[id];
     if (a) selectAgent(a);
@@ -110,13 +120,14 @@ export default function App() {
   const paletteCtx = useMemo<PaletteContext>(
     () => ({
       newTask: () => openLaunch(),
+      dispatch: () => openDispatch(),
       addProject: openAddProject,
       toggleProjects: () => setHideProjects((h) => !h),
       toggleTasks: () => setHideTasks((h) => !h),
       toggleGrid: () => setGrid((g) => !g),
       prompt: setTextDialog,
     }),
-    [openLaunch, openAddProject, setHideProjects, setHideTasks, setGrid],
+    [openLaunch, openDispatch, openAddProject, setHideProjects, setHideTasks, setGrid],
   );
 
   const reveal = [
@@ -125,7 +136,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⌘O adds a project; ⌘U shows usage; ⌘, settings; ⌘J cycles through the sessions waiting on you.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘O adds a project; ⌘U shows usage; ⌘, settings; ⌘J cycles through the sessions waiting on you.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -135,6 +146,9 @@ export default function App() {
       } else if (e.key === "g") {
         e.preventDefault();
         setGrid((g) => !g);
+      } else if (e.code === "KeyN" && e.shiftKey) {
+        e.preventDefault();
+        openDispatch();
       } else if (e.key === "n") {
         e.preventDefault();
         if (Object.keys(getState().projects).length) openLaunch();
@@ -164,7 +178,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [openLaunch, openAddProject, setHideProjects, setHideTasks, setGrid]);
+  }, [openLaunch, openDispatch, openAddProject, setHideProjects, setHideTasks, setGrid]);
 
   return (
     <div
@@ -180,7 +194,7 @@ export default function App() {
       <div className="column column-sidebar" hidden={hideProjects}>
         {!hideProjects && (
           <>
-            <Sidebar onAddProject={openAddProject} onHide={() => setHideProjects(true)} />
+            <Sidebar onAddProject={openAddProject} onHide={() => setHideProjects(true)} onDispatch={() => openDispatch()} />
             <Resizer spec={SIDEBAR} width={sidebarCol} onWidth={setSidebarW} />
           </>
         )}
@@ -218,9 +232,11 @@ export default function App() {
           initialWorktree={launch.worktree}
           seed={launch.seed}
           pickProject={launch.pickProject}
+          onDispatch={launch.pickProject ? openDispatch : undefined}
           onClose={() => setLaunch(null)}
         />
       )}
+      {dispatch && <DispatchDialog initialText={dispatch.text} onClose={() => setDispatch(null)} />}
       {addStep && <AddProjectDialog step={addStep} onDone={setAddStep} />}
       {palette && <Palette ctx={paletteCtx} onClose={() => setPalette(false)} />}
       {textDialog && <TextDialog d={textDialog} onClose={() => setTextDialog(null)} />}

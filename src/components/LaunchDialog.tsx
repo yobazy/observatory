@@ -29,6 +29,7 @@ export function LaunchDialog({
   seed,
   onClose,
   pickProject = false,
+  onDispatch,
 }: {
   initialWorktree: string | null;
   /** Let the project be picked here, as quick capture does from anywhere. */
@@ -36,6 +37,8 @@ export function LaunchDialog({
   /** Duplicate's starting point: the task and harness to begin from. */
   seed?: { task: string; kind: AgentKind } | null;
   onClose: () => void;
+  /** Offer Dispatch instead, as quick capture does: what's typed so far goes with it. */
+  onDispatch?: (text: string) => void;
 }) {
   const state = useAppState();
   const projects = useMemo(() => sortedProjects(state), [state]);
@@ -208,6 +211,14 @@ export function LaunchDialog({
           rows={5}
           aria-label="Task"
         />
+        {onDispatch && (
+          <p className="dialog-note">
+            A list of things to do?{" "}
+            <button type="button" className="link-btn" onClick={() => onDispatch(task)} disabled={busy}>
+              Paste it into Dispatch
+            </button>
+          </p>
+        )}
 
         <div className="field">
           <label htmlFor="launch-where">Run on</label>

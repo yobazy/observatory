@@ -24,6 +24,7 @@ import type { Agent } from "../nebula/types";
 
 export interface PaletteContext {
   newTask: () => void;
+  dispatch: () => void;
   addProject: () => void;
   toggleProjects: () => void;
   toggleTasks: () => void;
@@ -57,6 +58,7 @@ function build(s: State, ctx: PaletteContext): Item[] {
     items.push({ id: `act:${id}`, group: "Actions", label, run, keys, detail });
 
   if (s.selectedProject) act("new", "New task", ctx.newTask, "⌘N");
+  act("dispatch", "Dispatch: paste a to-do list", ctx.dispatch, "⇧⌘N");
   const waiting = waitingAgents(s);
   if (waiting.length) act("waiting", "Next task waiting on you", () => selectAgent(waiting[0]), "⌘J", `${waiting.length} waiting`);
 
