@@ -7,4 +7,3 @@
 - Smarter file-contention handling in Shared projects beyond concurrency caps. Why: per-project caps (plus the project's own writer locks) cover the MVP risk.
 - Other input sources beyond paste (for example, pulling lists from Notion). Why: paste plus quick capture covers the core loop, and integrations go against the "nothing hardwired" principle unless they are done through agents.
 - Native plan mode for Claude tasks (`--permission-mode plan`) in place of the prompt postfix. Why: `CreateAgent` has no field for launch flags, so this needs a nebula-core protocol change. The postfix works for every harness in the meantime.
-- Rust checks fail on HEAD under the installed toolchain (rustc 1.98): `cargo fmt --check` wants to reformat several existing files and clippy flags `double_ended_iterator_last` in src-tauri/src/title.rs:65. Why: pre-existing and outside Dispatch; fix in its own commit (or pin a rust-toolchain).
