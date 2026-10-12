@@ -26,6 +26,7 @@ import { useProjectLogos } from "./nebula/icons";
 import { flash, getState, setState, subscribe, useAppState, waitingAgents } from "./nebula/store";
 import { usePrPolling } from "./nebula/prs";
 import { useQueueRunner } from "./nebula/queue";
+import { useBatchRunner } from "./nebula/batchRunner";
 import { ReviewView } from "./components/Review";
 import { CompareView } from "./components/Compare";
 import { GridView } from "./components/Grid";
@@ -118,6 +119,7 @@ export default function App() {
   usePreviewEvents();
   useShelf();
   useQueueRunner();
+  useBatchRunner();
   useUsagePolling();
   useTheme();
   useRunWatch();

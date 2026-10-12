@@ -24,6 +24,7 @@ import { play } from "../nebula/delight";
 import { chosenEditor, useEditors } from "./Editor";
 import { getVersion } from "@tauri-apps/api/app";
 import { isPreview } from "../nebula/client";
+import { DEFAULT_CAP, globalCap } from "../nebula/batch";
 import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
@@ -185,7 +186,8 @@ function Previews() {
   );
 }
 
-/** The agent CLI Dispatch routes a list with (router.rs). */
+/** The agent CLI Dispatch routes a list with (router.rs), and how many
+ *  sessions it runs at once (batch.ts). */
 function DispatchSettings() {
   const { prefs } = useAppState();
   return (
@@ -207,6 +209,30 @@ function DispatchSettings() {
           suggestions={["claude -p", "claude -p --model haiku", "codex exec --skip-git-repo-check"]}
           onCommit={(v) => void savePrefs({ ...prefs, routerCommand: v || undefined })}
         />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-dispatch-cap">
+            Sessions at once
+          </label>
+          <span className="setting-hint">
+            How many dispatched tasks run at the same time. The rest wait and start as these finish. A Shared
+            project's own limit applies too.
+          </span>
+        </div>
+        <select
+          id="set-dispatch-cap"
+          className="setting-input"
+          value={String(globalCap(prefs.dispatchCap))}
+          onChange={(e) => void savePrefs({ ...prefs, dispatchCap: Number(e.target.value) })}
+        >
+          {[1, 2, 3, 4, 5, 6, 8, 10, 12].map((n) => (
+            <option key={n} value={n}>
+              {n}
+              {n === DEFAULT_CAP ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
       </div>
     </Group>
   );

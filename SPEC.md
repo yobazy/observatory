@@ -89,7 +89,7 @@ Acceptance criteria:
 - Given a `you` task and a Home card with a scheduling instruction, then a Home session is created whose prompt includes the instruction and the task text. Given there is no instruction, then no session is created and the task stays on the list (unit test).
 - Given the app is restarted while tasks are pending, when it reloads, then pending tasks are still pending and keep launching as slots free up (unit test of persistence plus manual check).
 
-Status: todo
+Status: done
 
 ### S5: Dispatch board
 As a user, I want one board that shows every dispatched task and lets me act on it, so that I can unblock agents quickly and know when the batch is done.

@@ -16,6 +16,9 @@ export interface DispatchItem extends ParsedItem {
   checked: boolean;
   /** When it was pasted. */
   at: number;
+  /** The batch it was dispatched in (batch.ts), once it has been. Checking
+   *  it off stays the user's call. */
+  batchId?: string;
 }
 
 const KEY = "observatory.dispatch";
@@ -120,6 +123,12 @@ export function toggleItem(id: string) {
 
 export function removeItem(id: string) {
   write(dispatchItems().filter((i) => i.id !== id));
+}
+
+/** Mark items as dispatched in `batchId`. */
+export function linkItems(ids: string[], batchId: string) {
+  const set = new Set(ids);
+  write(dispatchItems().map((i) => (set.has(i.id) ? { ...i, batchId } : i)));
 }
 
 export function clearChecked() {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { runRouter } from "../nebula/client";
 import { useCards } from "../nebula/cards";
+import { dispatchPlan } from "../nebula/batch";
+import { kickBatches } from "../nebula/batchRunner";
 import type { DispatchItem } from "../nebula/dispatch";
 import {
   MODES,
@@ -72,10 +74,11 @@ function useRouteContext(items: DispatchItem[]): RouteContext {
 }
 
 /** The router's plan for the list, every task editable, before anything
- *  runs. Dispatch hands the confirmed plan on (`handOffPlan`); launching
- *  sessions from it is the next step's job, not this dialog's. */
+ *  runs. Dispatch turns the confirmed plan into a batch (batch.ts), which
+ *  batchRunner.ts launches within the caps. */
 export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[]; onBack: () => void; onClose: () => void }) {
   const state = useAppState();
+  const allCards = useCards();
   const ctx = useRouteContext(items);
   const [routing, setRouting] = useState<Routing>({ kind: "routing" });
   const [tasks, setTasks] = useState<PlanTask[]>([]);
@@ -119,8 +122,13 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
 
   function dispatch() {
     if (!check.canDispatch) return;
-    const routed = handOffPlan({ tasks });
-    flash(`${routed.tasks.length} ${routed.tasks.length === 1 ? "task" : "tasks"} ready to dispatch`);
+    const batch = dispatchPlan(handOffPlan({ tasks }), items, allCards);
+    const listed = batch.tasks.filter((t) => t.state === "listed").length;
+    const n = batch.tasks.length - listed;
+    flash(
+      `Dispatching ${n} ${n === 1 ? "task" : "tasks"}${listed ? `; ${listed} stay${listed === 1 ? "s" : ""} on your list` : ""}`,
+    );
+    kickBatches();
     onClose();
   }
 

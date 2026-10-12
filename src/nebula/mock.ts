@@ -263,6 +263,14 @@ export function startMock(handlers: Map<string, PtyHandler>) {
       const prompt = body.starting_prompt ? [String(body.starting_prompt)] : [];
       const a = agent(id, String(body.worktree), String(body.name), "running", 0, prompt, { kind: body.kind as Agent["kind"] });
       setState((s) => ({ agents: { ...s.agents, [id]: { ...a, status_changed_at: Date.now() } } }));
+      // Finish its turn a little later, so a Dispatch batch's next task can
+      // be seen taking the freed slot.
+      setTimeout(() => {
+        const cur = getState().agents[id];
+        if (cur?.status === "running") {
+          setState((s) => ({ agents: { ...s.agents, [id]: { ...cur, status: "finished", status_changed_at: Date.now() } } }));
+        }
+      }, 12_000 + Math.random() * 8_000);
       return { Agent: id };
     }
     if (variant === "DeleteWorktree" && body) {
@@ -295,6 +303,10 @@ export function startMock(handlers: Map<string, PtyHandler>) {
     }
     if (variant === "AddProject" && body) {
       const repo_path = String(body.path);
+      // The demo's git repos live under HOME; anything else is a plain folder.
+      if (!repo_path.startsWith(`${HOME}/`) && !body.create_missing) {
+        return { error: `${repo_path} is not a git repository` };
+      }
       const project: Project = {
         id: `p${Date.now()}`,
         name: repo_path.split("/").pop() || repo_path,

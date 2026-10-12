@@ -417,8 +417,8 @@ export interface RoutedPlan {
   at: number;
 }
 
-/** The plan the user confirmed, kept until launching takes it (S4: batch.ts
- *  reads it with `loadRoutedPlan`). Nothing is launched here. */
+/** The plan the user confirmed, kept until batch.ts turns it into a batch
+ *  (`dispatchPlan`) and clears it. Nothing is launched here. */
 export function handOffPlan(plan: Plan): RoutedPlan {
   const routed = { tasks: plan.tasks.map(({ needsChoice: _n, ...t }) => ({ ...t, needsChoice: false })), at: Date.now() };
   try {
@@ -435,6 +435,14 @@ export function loadRoutedPlan(): RoutedPlan | null {
     return raw && Array.isArray(raw.tasks) ? raw : null;
   } catch {
     return null;
+  }
+}
+
+export function clearRoutedPlan() {
+  try {
+    localStorage.removeItem(ROUTED_KEY);
+  } catch {
+    // Nothing to clear without storage.
   }
 }
 

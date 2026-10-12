@@ -8,7 +8,42 @@ import {
   useDispatchItems,
   type DispatchItem,
 } from "../nebula/dispatch";
+import { batchCounts, useBatches } from "../nebula/batch";
+import { useAppState } from "../nebula/store";
 import { RouteReview } from "./RouteReview";
+
+/** What's been dispatched, in a line, and why any task couldn't start.
+ *  (The board that tracks each task is S5's.) */
+function DispatchedSummary() {
+  const batches = useBatches();
+  const { agents } = useAppState();
+  const tasks = useMemo(() => batches.flatMap((b) => b.tasks), [batches]);
+  if (!tasks.length) return null;
+  const c = batchCounts(tasks, agents);
+  const parts = [
+    c.working && `${c.working} working`,
+    c.waiting && `${c.waiting} waiting for a slot`,
+    c.done && `${c.done} done`,
+    c.listed && `${c.listed} on your list`,
+    c.blocked && `${c.blocked} blocked`,
+    c.failed && `${c.failed} failed`,
+  ].filter(Boolean);
+  const stuck = tasks.filter((t) => (t.state === "blocked" || t.state === "failed") && t.note);
+  return (
+    <div className="dialog-note dispatched" role="status">
+      <p>Dispatched: {parts.join(" · ")}</p>
+      {stuck.length > 0 && (
+        <ul className="dispatch-context">
+          {stuck.map((t) => (
+            <li key={t.id}>
+              “{t.text}”: {t.note}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /** The day's to-do list: paste it in, check items off as they're done, and
  *  route what's left to projects (RouteReview). */
@@ -102,6 +137,8 @@ export function DispatchDialog({ initialText = "", onClose }: { initialText?: st
             ))}
           </ul>
         )}
+
+        <DispatchedSummary />
 
         <footer className="dialog-foot">
           {done > 0 ? (
