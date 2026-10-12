@@ -4527,3 +4527,156 @@ button.attempt-status:hover span:nth-child(2) {
 .route-unsure {
   color: var(--st-waiting);
 }
+
+/* ---------- dispatch board ---------- */
+
+.dispatch-tag {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0 5px;
+}
+.board-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.board-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.board-row.is-plan,
+.board-row.is-waiting {
+  border-color: color-mix(in srgb, var(--st-waiting) 45%, var(--line));
+}
+.board-row.is-done,
+.board-row.is-cancelled,
+.board-row.is-archived,
+.board-row.is-gone {
+  opacity: 0.65;
+}
+.board-row.is-done .board-text {
+  text-decoration: line-through;
+}
+.board-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.board-line input {
+  accent-color: var(--accent);
+  flex: none;
+  margin: 0;
+}
+.board-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
+  align-items: baseline;
+  gap: 12px;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+button.board-main:hover .board-text {
+  text-decoration: underline;
+}
+.board-text {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.board-target {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.board-status {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.board-status.is-plan,
+.board-status.is-waiting {
+  color: var(--st-waiting);
+}
+.board-status.is-failed,
+.board-status.is-stopped,
+.board-status.is-blocked {
+  color: var(--st-error);
+}
+.board-note,
+.board-activity,
+.board-changes {
+  margin: 0 0 0 18px;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  user-select: text;
+}
+.board-activity {
+  font-family: var(--mono);
+  font-size: 11px;
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.board-row .qa {
+  margin: 0 0 0 18px;
+}
+.board-plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.board-plan-actions .qa-reply {
+  flex: 1;
+}
+.dot-pending,
+.dot-listed,
+.dot-launching {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--st-idle);
+}
+.dot-failed,
+.dot-blocked {
+  background: var(--st-error);
+}
+.board-batches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.board-batches li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.board-batch-when {
+  color: var(--faint);
+}

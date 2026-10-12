@@ -22,7 +22,7 @@ import {
   type RouterWorktree,
   type Target,
 } from "../nebula/router";
-import { flash, sortedProjects, useAppState } from "../nebula/store";
+import { flash, setState, sortedProjects, useAppState } from "../nebula/store";
 
 const TARGET_LABEL: Record<Target, string> = { project: "Project", home: "Home", you: "You" };
 const MODE_LABEL: Record<Mode, string> = {
@@ -129,6 +129,7 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
       `Dispatching ${n} ${n === 1 ? "task" : "tasks"}${listed ? `; ${listed} stay${listed === 1 ? "s" : ""} on your list` : ""}`,
     );
     kickBatches();
+    setState({ view: "dispatch" });
     onClose();
   }
 

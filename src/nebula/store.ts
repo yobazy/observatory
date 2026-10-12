@@ -35,7 +35,7 @@ export interface State {
   /** Git state per worktree id, from `useGitPolling`. */
   git: Record<string, GitState>;
   /** Which main view fills the space right of the sidebar. */
-  view: "sessions" | "usage" | "settings" | "review" | "compare";
+  view: "sessions" | "usage" | "settings" | "review" | "compare" | "dispatch";
   /** The checkout the review view shows (Review.tsx). */
   review: string | null;
   /** Tasks fanned out over several worktrees, by group id (fanout.ts), and

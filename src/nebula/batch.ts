@@ -8,7 +8,7 @@
 // Value imports name their .ts files: the tests load this module in Node.
 import { useSyncExternalStore } from "react";
 import { canSchedule, homeCard, isFolderKey, type Cards } from "./cards.ts";
-import { linkItems } from "./dispatch.ts";
+import { linkItems, setItemsChecked, unlinkBatch, type DispatchItem } from "./dispatch.ts";
 import { clearRoutedPlan, type PlanTask, type RoutedPlan } from "./router.ts";
 import { freeName, suggestBranch } from "./branches.ts";
 import type { Agent, AgentKind, AgentStatus } from "./types";
@@ -44,12 +44,27 @@ export interface BatchTask extends Omit<PlanTask, "needsChoice"> {
    *  folder, a project now, a scheduling instruction) lets it try again. */
   blockedOnHome?: string;
   blockedAt?: number;
+  /** Its plan was approved on the board: no more stopping for an OK. */
+  planApproved?: boolean;
+  /** When the board last answered its plan another way (Redirect): the
+   *  plan it stops at after that is a new one. */
+  planAnsweredAt?: number;
+  /** Cancelled at its plan from the board (its session archived). */
+  cancelled?: boolean;
+  /** Checked off on the board; its source items are checked too. */
+  done?: boolean;
 }
 
 export interface Batch {
   id: string;
   at: number;
   tasks: BatchTask[];
+  /** Taken off the board. Its unchecked items can be routed again. */
+  dismissed?: boolean;
+  /** The batch's summary banner has fired since it last settled
+   *  (board.ts's `decideSummary`), and what it said. */
+  notifiedSettle?: boolean;
+  lastSummary?: string;
 }
 
 export const HOME_LANE = "home";
@@ -481,6 +496,59 @@ export function updateTask(batchId: string, taskId: string, patch: Partial<Batch
       b.id !== batchId ? b : { ...b, tasks: b.tasks.map((t) => (t.id === taskId ? { ...t, ...patch } : t)) },
     ),
   );
+}
+
+export function updateBatch(batchId: string, patch: Partial<Batch>) {
+  write(allBatches().map((b) => (b.id === batchId ? { ...b, ...patch } : b)));
+}
+
+function findTask(batchId: string, taskId: string): BatchTask | undefined {
+  return allBatches()
+    .find((b) => b.id === batchId)
+    ?.tasks.find((t) => t.id === taskId);
+}
+
+/** Put a failed task back in line to launch. Only from `failed`: anything
+ *  else may have a launch out (or a session), and launching it again could
+ *  start it twice. Returns whether it was. */
+export function retryTask(batchId: string, taskId: string): boolean {
+  if (findTask(batchId, taskId)?.state !== "failed") return false;
+  updateTask(batchId, taskId, {
+    state: "pending",
+    note: undefined,
+    agentId: undefined,
+    createdWorktreeId: undefined,
+    prompt: undefined,
+    launchingAt: undefined,
+    launchedAt: undefined,
+  });
+  return true;
+}
+
+/** Check a task off (or back on), and its source items in the list with it. */
+export function checkOffTask(batchId: string, taskId: string, done: boolean) {
+  const t = findTask(batchId, taskId);
+  if (!t) return;
+  updateTask(batchId, taskId, { done });
+  setItemsChecked(t.sourceItemIds, done);
+}
+
+/** Take a batch off the board. Its items are no longer dispatched, so
+ *  those still unchecked can be routed again. */
+export function dismissBatch(batchId: string) {
+  updateBatch(batchId, { dismissed: true });
+  unlinkBatch(batchId);
+}
+
+/** Whether an item is out in a batch still on the board: routing it again
+ *  could launch it twice. */
+export function isDispatched(item: Pick<DispatchItem, "batchId">, batches: Batch[]): boolean {
+  return !!item.batchId && batches.some((b) => b.id === item.batchId && !b.dismissed);
+}
+
+/** The items Route offers: unchecked, and not out in a batch. */
+export function routableItems<T extends Pick<DispatchItem, "checked" | "batchId">>(items: T[], batches: Batch[]): T[] {
+  return items.filter((i) => !i.checked && !isDispatched(i, batches));
 }
 
 /** Turn the plan handed off by the review (router.ts's `handOffPlan`) into a

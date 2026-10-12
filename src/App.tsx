@@ -4,6 +4,7 @@ import { Sessions } from "./components/Sessions";
 import { TerminalPane } from "./components/TerminalPane";
 import { LaunchDialog } from "./components/LaunchDialog";
 import { DispatchDialog } from "./components/DispatchDialog";
+import { DispatchBoard } from "./components/DispatchBoard";
 import { CardDialog, type CardTarget } from "./components/CardDialog";
 import type { Seed } from "./components/RowMenu";
 import { DaemonGate } from "./components/DaemonGate";
@@ -255,6 +256,7 @@ export default function App() {
       {view === "settings" && <SettingsView />}
       {view === "review" && <ReviewView key={getState().review ?? ""} />}
       {view === "compare" && <CompareView />}
+      {view === "dispatch" && <DispatchBoard onOpenList={() => openDispatch()} />}
       {launch && (
         <LaunchDialog
           key={launchKey}

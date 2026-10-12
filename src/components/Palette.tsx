@@ -63,6 +63,7 @@ function build(s: State, ctx: PaletteContext): Item[] {
 
   if (s.selectedProject) act("new", "New task", ctx.newTask, "⌘N");
   act("dispatch", "Dispatch: paste a to-do list", ctx.dispatch, "⇧⌘N");
+  act("dispatch-board", "Dispatch board", () => setState({ view: "dispatch" }));
   if (homeCard()) act("home-edit", "Edit Home card", ctx.editHome);
   act("home-pick", homeCard() ? "Move Home to another folder…" : "Set Home folder…", ctx.pickHome);
   const waiting = waitingAgents(s);

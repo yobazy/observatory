@@ -10,6 +10,9 @@ import { takenBranches } from "./fanout";
 import { enqueue, isIdle } from "./queue";
 import { loadPrefs, type DesktopPrefs } from "./theme";
 import { flash, getState, subscribe } from "./store";
+import { decideSummary } from "./board";
+import { notify } from "./notify";
+import { play } from "./delight";
 import {
   allBatches,
   batchCounts,
@@ -20,6 +23,7 @@ import {
   nextLaunchable,
   reconcile,
   shouldRetry,
+  updateBatch,
   updateTask,
   type BatchTask,
   type LaunchDeps,
@@ -120,8 +124,24 @@ async function launch(batchId: string, t: BatchTask) {
 
 let prefsLoaded: DesktopPrefs | null = null;
 
-/** One pass: settle launches cut short, retry what Home blocked, and start
- *  what the caps have room for. */
+/** Each batch's one banner, when every task in it has settled: "4 done,
+ *  1 needs you". Its sessions' own banners are held back (notify.ts). */
+function summarize(now: number) {
+  const s = getState();
+  const queued = (id: string) => s.queue[id]?.length ?? 0;
+  for (const b of allBatches()) {
+    const { fire, patch } = decideSummary(b, s.agents, queued, now);
+    if (patch) updateBatch(b.id, patch);
+    if (fire) {
+      // No banners in the browser preview: the line at the bottom says it.
+      void notify(fire, "Dispatch").catch(() => flash(`Dispatch: ${fire}`, 6000));
+      play("done");
+    }
+  }
+}
+
+/** One pass: settle launches cut short, retry what Home blocked, start
+ *  what the caps have room for, and report batches that have settled. */
 function tick() {
   const s = getState();
   if (!s.loaded || s.link.state !== "connected" || !prefsLoaded) return;
@@ -154,6 +174,7 @@ function tick() {
     const batchId = all.find((x) => x.t === t)!.batchId;
     void launch(batchId, t);
   }
+  summarize(now);
 }
 
 /** Mount once: launches pending tasks as slots free, including those left

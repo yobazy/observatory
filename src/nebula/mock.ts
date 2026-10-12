@@ -196,6 +196,19 @@ type PtyHandler = (
   bytes: Uint8Array,
 ) => void;
 
+/** Mock agents created this session, for which ones stop to ask. */
+let created = 0;
+
+/** End a mock agent's turn in `ms`, if it's still running then. */
+function turnEnds(id: string, status: AgentStatus, ms: number) {
+  setTimeout(() => {
+    const cur = getState().agents[id];
+    if (cur?.status === "running") {
+      setState((s) => ({ agents: { ...s.agents, [id]: { ...cur, status, status_changed_at: Date.now() } } }));
+    }
+  }, ms);
+}
+
 export function startMock(handlers: Map<string, PtyHandler>) {
   setState({
     link: { state: "connected", daemonPid: 0 },
@@ -264,14 +277,23 @@ export function startMock(handlers: Map<string, PtyHandler>) {
       const a = agent(id, String(body.worktree), String(body.name), "running", 0, prompt, { kind: body.kind as Agent["kind"] });
       setState((s) => ({ agents: { ...s.agents, [id]: { ...a, status_changed_at: Date.now() } } }));
       // Finish its turn a little later, so a Dispatch batch's next task can
-      // be seen taking the freed slot.
-      setTimeout(() => {
-        const cur = getState().agents[id];
-        if (cur?.status === "running") {
-          setState((s) => ({ agents: { ...s.agents, [id]: { ...cur, status: "finished", status_changed_at: Date.now() } } }));
-        }
-      }, 12_000 + Math.random() * 8_000);
+      // be seen taking the freed slot. Every third one stops to ask you
+      // something instead, for the board's inline answers.
+      const asks = ++created % 3 === 0;
+      turnEnds(id, asks ? "needs_feedback" : "finished", 12_000 + Math.random() * 8_000);
       return { Agent: id };
+    }
+    // Enter typed into an agent (a follow-up, a reply), or a choice picked
+    // when it's asking: it takes another turn, and finishes it.
+    if (variant === "SendInput" && body && "Agent" in (body.session as SessionRef)) {
+      const id = (body.session as { Agent: string }).Agent;
+      const cur = getState().agents[id];
+      const picked = cur?.status === "needs_feedback" && /^\d$/.test(String(body.data));
+      if (cur && cur.status !== "running" && (body.data === "\r" || picked)) {
+        setState((s) => ({ agents: { ...s.agents, [id]: { ...cur, status: "running", status_changed_at: Date.now() } } }));
+        turnEnds(id, "finished", 6_000 + Math.random() * 4_000);
+      }
+      return null;
     }
     if (variant === "DeleteWorktree" && body) {
       const id = String(body.id);

@@ -143,7 +143,10 @@ export function tailOutput(session: SessionRef, maxBytes: number, afterSeq: numb
 }
 
 export function sendInput(session: SessionRef, data: string): Promise<void> {
-  if (mockSend) return Promise.resolve();
+  if (mockSend) {
+    mockSend("SendInput", { session, data });
+    return Promise.resolve();
+  }
   return invoke("send_input", { session, data });
 }
 

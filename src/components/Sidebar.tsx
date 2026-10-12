@@ -18,6 +18,7 @@ import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon
 import { FlagGlyph, FollowUps } from "./Organize";
 import { moveProject } from "../nebula/organize";
 import { reorderKey, useReorder } from "./useReorder";
+import { useBatches } from "../nebula/batch";
 
 export function selectAgent(agent: Agent) {
   setState((s) => ({
@@ -36,6 +37,7 @@ export function Sidebar({
   onDispatch: () => void;
 }) {
   const state = useAppState();
+  const boardOn = useBatches().some((b) => !b.dismissed) || state.view === "dispatch";
   const [query, setQuery] = useState("");
   // Waiting rows opened to answer from here, by agent id.
   const [answering, setAnswering] = useState<Set<string>>(() => new Set());
@@ -218,6 +220,17 @@ export function Sidebar({
         <button className="icon-btn foot-gear" onClick={onDispatch} aria-label="Dispatch" title="Dispatch: your to-do list (⇧⌘N)">
           <ListGlyph />
         </button>
+        {boardOn && (
+          <button
+            className={`icon-btn foot-gear${state.view === "dispatch" ? " is-on" : ""}`}
+            onClick={() => setState({ view: state.view === "dispatch" ? "sessions" : "dispatch" })}
+            aria-pressed={state.view === "dispatch"}
+            aria-label="Dispatch board"
+            title="Dispatch board: every dispatched task"
+          >
+            <BoardGlyph />
+          </button>
+        )}
         <button
           className={`icon-btn foot-gear${state.view === "settings" ? " is-on" : ""}`}
           onClick={() => setState({ view: state.view === "settings" ? "sessions" : "settings" })}
@@ -378,6 +391,15 @@ function GearGlyph() {
         strokeWidth="1.2"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+/** Three columns of cards: the Dispatch board. */
+function BoardGlyph() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
+      <path d="M2.5 2.75h3v10.5h-3zM6.5 2.75h3v6.5h-3zM10.5 2.75h3v8.5h-3z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
     </svg>
   );
 }

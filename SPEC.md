@@ -100,7 +100,7 @@ Acceptance criteria:
 - Given a session stopped at its plan checkpoint, then the row shows Approve, Redirect (text input), and Cancel. Approve sends the approval follow-up, Redirect sends the entered text, and Cancel archives the session (`ArchiveAgent`) (manual check; the follow-up payloads are unit tested).
 - Given a waiting session, then QuickAnswer is rendered inline in its row (manual check).
 - Given a finished session, then the row shows the diff stat, and the PR link when one exists (manual check).
-- Given a batch of 5 tasks where 4 finish and 1 is needs_feedback, when the last one settles, then exactly one notification fires with the text "4 done, 1 needs you", and no per-task notification fires for batch sessions (unit test on `batchSummary()` and the notification suppression check).
+- Given a batch of 5 tasks where 4 finish and 1 is needs_feedback, when the last one settles, then exactly one notification fires with the text "4 done, 1 needs you", and no per-task notification fires for batch sessions, except "waiting on you": a batch session that needs you still gets its own banner, since holding that back until the batch settles would leave the agent stuck (unit test on `batchSummary()` and the notification suppression check).
 - Given `you` tasks, then they appear as rows with a checkbox, and checking them off persists across reloads (manual check plus unit test on storage).
 
-Status: todo
+Status: done

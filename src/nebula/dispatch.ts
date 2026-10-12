@@ -131,6 +131,17 @@ export function linkItems(ids: string[], batchId: string) {
   write(dispatchItems().map((i) => (set.has(i.id) ? { ...i, batchId } : i)));
 }
 
+/** Check (or uncheck) these items, e.g. when their task is checked off on the board. */
+export function setItemsChecked(ids: string[], checked: boolean) {
+  const set = new Set(ids);
+  write(dispatchItems().map((i) => (set.has(i.id) ? { ...i, checked } : i)));
+}
+
+/** Forget that items went out in `batchId` (it was taken off the board). */
+export function unlinkBatch(batchId: string) {
+  write(dispatchItems().map(({ batchId: b, ...i }) => (b === batchId ? i : { ...i, ...(b ? { batchId: b } : {}) })));
+}
+
 export function clearChecked() {
   write(dispatchItems().filter((i) => !i.checked));
 }

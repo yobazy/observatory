@@ -8,16 +8,16 @@ import {
   useDispatchItems,
   type DispatchItem,
 } from "../nebula/dispatch";
-import { batchCounts, useBatches } from "../nebula/batch";
-import { useAppState } from "../nebula/store";
+import { batchCounts, isDispatched, routableItems, useBatches } from "../nebula/batch";
+import { setState, useAppState } from "../nebula/store";
 import { RouteReview } from "./RouteReview";
 
-/** What's been dispatched, in a line, and why any task couldn't start.
- *  (The board that tracks each task is S5's.) */
-function DispatchedSummary() {
+/** What's been dispatched, in a line, and why any task couldn't start;
+ *  the board (DispatchBoard.tsx) tracks each task. */
+function DispatchedSummary({ onBoard }: { onBoard: () => void }) {
   const batches = useBatches();
   const { agents } = useAppState();
-  const tasks = useMemo(() => batches.flatMap((b) => b.tasks), [batches]);
+  const tasks = useMemo(() => batches.filter((b) => !b.dismissed).flatMap((b) => b.tasks), [batches]);
   if (!tasks.length) return null;
   const c = batchCounts(tasks, agents);
   const parts = [
@@ -31,7 +31,12 @@ function DispatchedSummary() {
   const stuck = tasks.filter((t) => (t.state === "blocked" || t.state === "failed") && t.note);
   return (
     <div className="dialog-note dispatched" role="status">
-      <p>Dispatched: {parts.join(" · ")}</p>
+      <p>
+        Dispatched: {parts.join(" · ")}{" "}
+        <button type="button" className="link-btn" onClick={onBoard}>
+          Open the board
+        </button>
+      </p>
       {stuck.length > 0 && (
         <ul className="dispatch-context">
           {stuck.map((t) => (
@@ -49,10 +54,18 @@ function DispatchedSummary() {
  *  route what's left to projects (RouteReview). */
 export function DispatchDialog({ initialText = "", onClose }: { initialText?: string; onClose: () => void }) {
   const items = useDispatchItems();
+  const batches = useBatches();
   const [text, setText] = useState(initialText);
   const pending = useMemo(() => parseList(text).length, [text]);
   const done = items.filter((i) => i.checked).length;
-  const open = items.length - done;
+  // Items out in a batch still on the board aren't routed again: that
+  // could launch them twice. Dismissing the batch frees the unchecked ones.
+  const routable = useMemo(() => routableItems(items, batches), [items, batches]);
+  const open = routable.length;
+  const openBoard = () => {
+    setState({ view: "dispatch" });
+    onClose();
+  };
   const box = useRef<HTMLTextAreaElement>(null);
   // The items being routed, as they were when Route was pressed.
   const [routing, setRouting] = useState<DispatchItem[] | null>(null);
@@ -116,6 +129,11 @@ export function DispatchDialog({ initialText = "", onClose }: { initialText?: st
                 <label>
                   <input type="checkbox" checked={i.checked} onChange={() => toggleItem(i.id)} />
                   <span className="dispatch-text">{i.text}</span>
+                  {!i.checked && isDispatched(i, batches) && (
+                    <span className="dispatch-tag" title="Out in a batch on the board; it won't be routed again until that batch is dismissed">
+                      Dispatched
+                    </span>
+                  )}
                 </label>
                 {i.context.length > 0 && (
                   <ul className="dispatch-context">
@@ -138,7 +156,7 @@ export function DispatchDialog({ initialText = "", onClose }: { initialText?: st
           </ul>
         )}
 
-        <DispatchedSummary />
+        <DispatchedSummary onBoard={openBoard} />
 
         <footer className="dialog-foot">
           {done > 0 ? (
@@ -158,8 +176,8 @@ export function DispatchDialog({ initialText = "", onClose }: { initialText?: st
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => setRouting(items.filter((i) => !i.checked))}
-              title="Propose where each item goes; nothing starts until you dispatch"
+              onClick={() => setRouting(routable)}
+              title="Propose where each item not yet dispatched goes; nothing starts until you dispatch"
             >
               Route {open === 1 ? "1 item" : `${open} items`}
             </button>
