@@ -91,6 +91,7 @@ export function SettingsView() {
             <>
               <Rows rows={GENERAL} settings={settings} save={save} />
               <Previews />
+              <DispatchSettings />
               <Updates />
             </>
           ) : tab === "Sessions" ? (
@@ -178,6 +179,33 @@ function Previews() {
           id="set-preview-shown"
           on={prefs.previewShownFiles !== false}
           onChange={(on) => void savePrefs({ ...prefs, previewShownFiles: on })}
+        />
+      </div>
+    </Group>
+  );
+}
+
+/** The agent CLI Dispatch routes a list with (router.rs). */
+function DispatchSettings() {
+  const { prefs } = useAppState();
+  return (
+    <Group title="Dispatch">
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-router">
+            Router
+          </label>
+          <span className="setting-hint">
+            The agent CLI that turns a pasted list into a plan, run headless with the prompt on stdin. Codex needs{" "}
+            <code>--skip-git-repo-check</code>.
+          </span>
+        </div>
+        <TextSetting
+          id="set-router"
+          value={prefs.routerCommand ?? ""}
+          placeholder="claude -p"
+          suggestions={["claude -p", "claude -p --model haiku", "codex exec --skip-git-repo-check"]}
+          onCommit={(v) => void savePrefs({ ...prefs, routerCommand: v || undefined })}
         />
       </div>
     </Group>

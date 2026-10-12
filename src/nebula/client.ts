@@ -184,6 +184,14 @@ export function readCardSources(path: string): Promise<CardSources> {
   return invoke("read_card_sources", { path });
 }
 
+/** Dispatch's router: the prompt (router.ts) to the user's agent CLI,
+ *  headless, from the Rust side (router.rs); its reply as text. The preview
+ *  has no CLI to run, so it answers with `previewReply` after a pause. */
+export function runRouter(prompt: string, previewReply: () => string): Promise<string> {
+  if (isPreview()) return new Promise((r) => setTimeout(() => r(previewReply()), 900));
+  return invoke("route_list", { prompt });
+}
+
 /** The native folder picker; null when cancelled. */
 export async function pickFolder(defaultPath?: string, title = "Open a folder as a project"): Promise<string | null> {
   if (mockSend) return title.includes("Home") ? "/Users/dev/home" : "/Users/dev/code/new-idea";

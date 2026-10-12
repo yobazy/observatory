@@ -1,17 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { clearChecked, parseList, pasteList, removeItem, toggleItem, useDispatchItems } from "../nebula/dispatch";
+import {
+  clearChecked,
+  parseList,
+  pasteList,
+  removeItem,
+  toggleItem,
+  useDispatchItems,
+  type DispatchItem,
+} from "../nebula/dispatch";
+import { RouteReview } from "./RouteReview";
 
-/** The day's to-do list: paste it in, check items off as they're done. */
+/** The day's to-do list: paste it in, check items off as they're done, and
+ *  route what's left to projects (RouteReview). */
 export function DispatchDialog({ initialText = "", onClose }: { initialText?: string; onClose: () => void }) {
   const items = useDispatchItems();
   const [text, setText] = useState(initialText);
   const pending = useMemo(() => parseList(text).length, [text]);
   const done = items.filter((i) => i.checked).length;
+  const open = items.length - done;
   const box = useRef<HTMLTextAreaElement>(null);
+  // The items being routed, as they were when Route was pressed.
+  const [routing, setRouting] = useState<DispatchItem[] | null>(null);
 
   useEffect(() => {
-    box.current?.focus();
-  }, []);
+    if (!routing) box.current?.focus();
+  }, [routing]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -21,6 +34,14 @@ export function DispatchDialog({ initialText = "", onClose }: { initialText?: st
 
   function add() {
     if (pasteList(text)) setText("");
+  }
+
+  if (routing) {
+    return (
+      <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+        <RouteReview items={routing} onBack={() => setRouting(null)} onClose={onClose} />
+      </div>
+    );
   }
 
   return (
@@ -96,9 +117,20 @@ export function DispatchDialog({ initialText = "", onClose }: { initialText?: st
           <button type="button" className="btn" onClick={onClose}>
             Close
           </button>
-          <button type="submit" className="btn btn-primary" disabled={!pending}>
-            {pending > 1 ? `Add ${pending} items` : "Add item"}
-          </button>
+          {open > 0 && !pending ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setRouting(items.filter((i) => !i.checked))}
+              title="Propose where each item goes; nothing starts until you dispatch"
+            >
+              Route {open === 1 ? "1 item" : `${open} items`}
+            </button>
+          ) : (
+            <button type="submit" className="btn btn-primary" disabled={!pending}>
+              {pending > 1 ? `Add ${pending} items` : "Add item"}
+            </button>
+          )}
         </footer>
       </form>
     </div>

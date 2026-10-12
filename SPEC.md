@@ -75,7 +75,7 @@ Acceptance criteria:
 - Given a plan, when the review dialog opens, then every task's text, target, project, mode, worktree or chat, and plan-checkpoint box can be edited. Router `question` fields appear inline, and nothing launches until the user clicks Dispatch (manual check).
 - Given the router is set to `codex exec` instead of `claude -p`, when routing runs, then a plan is produced (manual check).
 
-Status: todo
+Status: done
 
 ### S4: Dispatch with concurrency caps and plan checkpoint
 As a user, I want confirmed tasks to launch as sessions or follow-ups while staying within my limits, so that I can hand off a whole list at once without flooding my machine.

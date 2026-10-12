@@ -4425,3 +4425,105 @@ button.attempt-status:hover span:nth-child(2) {
 .dispatch-remove:focus-visible {
   opacity: 1;
 }
+
+/* The router's plan, under review before anything starts. */
+.dialog.route-review {
+  width: min(760px, calc(100vw - 32px));
+  max-height: 84vh;
+}
+.route-review > * {
+  flex-shrink: 0;
+}
+.route-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  padding: 18px 0;
+}
+.route-status.route-failed {
+  flex-direction: column;
+  align-items: start;
+  gap: 8px;
+}
+.route-failed .dialog-note {
+  margin: 0;
+}
+.route-tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex-shrink: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.route-task {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.route-task.has-issue {
+  border-color: color-mix(in srgb, var(--st-waiting) 55%, var(--line));
+}
+.task-box.route-text {
+  min-height: 0;
+  padding: 8px 10px;
+}
+.route-from {
+  color: var(--faint);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.route-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.route-select {
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 4px 8px;
+  max-width: 220px;
+  outline: none;
+}
+.route-select:focus {
+  border-color: var(--accent);
+}
+.route-meta {
+  font-size: 12px;
+}
+.route-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.route-check input {
+  accent-color: var(--accent);
+}
+.route-note {
+  color: var(--faint);
+  margin-right: auto;
+}
+.route-question,
+.route-unsure,
+.route-issue {
+  margin: 0;
+  font-size: 12px;
+}
+.route-question {
+  color: var(--accent);
+  user-select: text;
+}
+.route-unsure {
+  color: var(--st-waiting);
+}

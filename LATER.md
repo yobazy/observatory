@@ -7,3 +7,4 @@
 - Smarter file-contention handling in Shared projects beyond concurrency caps. Why: per-project caps (plus the project's own writer locks) cover the MVP risk.
 - Other input sources beyond paste (for example, pulling lists from Notion). Why: paste plus quick capture covers the core loop, and integrations go against the "nothing hardwired" principle unless they are done through agents.
 - Native plan mode for Claude tasks (`--permission-mode plan`) in place of the prompt postfix. Why: `CreateAgent` has no field for launch flags, so this needs a nebula-core protocol change. The postfix works for every harness in the meantime.
+- Router runs leave a saved `claude -p` session behind (the default command is plain `claude -p`); passing `--no-session-persistence --tools ""` by default would keep them out of history and usage scans. Why: the spec names `claude -p` as the default, and the user can already set flags in Settings.
