@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findPaths } from '../src/nebula/pathtext.ts';
+import { findPaths, findUrls } from '../src/nebula/pathtext.ts';
 
 const paths = (text) => findPaths(text).map((f) => f.text);
 
@@ -27,6 +27,30 @@ test('a bare file name counts only when it is worth previewing', () => {
 test('prose, versions and URLs are left alone', () => {
   assert.deepEqual(paths('v1.2 is out, e.g. today; README updated'), []);
   assert.deepEqual(paths('see https://example.com/docs/a.html for more'), []);
+});
+
+const urls = (text) => findUrls(text).map((f) => f.text);
+
+test('web URLs printed as plain text are found, without what is around them', () => {
+  assert.deepEqual(urls('Opened it for you: ⧉ Proposal (https://claude.ai/code/artifact/6754e537-da0e).'), [
+    'https://claude.ai/code/artifact/6754e537-da0e',
+  ]);
+  assert.deepEqual(urls('see https://example.com/docs?a=1&b=2#top, or <http://localhost:5173/>'), [
+    'https://example.com/docs?a=1&b=2#top',
+    'http://localhost:5173/',
+  ]);
+  assert.deepEqual(urls('"https://x.dev/a" and [https://x.dev/b]'), ['https://x.dev/a', 'https://x.dev/b']);
+});
+
+test("a bracket that is the URL's own stays in it", () => {
+  assert.deepEqual(urls('(https://en.wikipedia.org/wiki/Mercury_(planet))'), [
+    'https://en.wikipedia.org/wiki/Mercury_(planet)',
+  ]);
+});
+
+test('offsets point at the URL, and anything but a web URL is left alone', () => {
+  assert.equal(findUrls('go to https://a.dev now')[0].start, 6);
+  assert.deepEqual(urls('file:///tmp/a.html, ftp://x.org/f, https:// and plain text'), []);
 });
 
 import { logicalLine } from '../src/nebula/pathtext.ts';
@@ -62,4 +86,15 @@ test('a short row, or prose wrapped at a space, stays its own line', () => {
   const rows = screen(['see docs/a.md', '  and more text here', 'prose wrapped right to th', 'next.md']);
   assert.equal(line(rows, 0).text, 'see docs/a.md');
   assert.equal(line(rows, 3).text, 'next.md', 'a full row ending on a plain word');
+});
+
+test('a URL an app broke across rows is found whole', () => {
+  const rows = screen(['Opened: ⧉ Proposal', '  (https://claude.ai/cod', '  e/artifact/6754e537-da', '  0e-41a6)', '']);
+  for (const y of [1, 2, 3]) {
+    const { text, at } = line(rows, y);
+    const [u] = findUrls(text);
+    assert.equal(u.text, 'https://claude.ai/code/artifact/6754e537-da0e-41a6');
+    assert.deepEqual(at[u.start], { x: 4, y: 2 });
+    assert.deepEqual(at[u.start + u.text.length - 1], { x: 9, y: 4 });
+  }
 });

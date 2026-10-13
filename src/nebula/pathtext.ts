@@ -1,4 +1,5 @@
-// Finding paths in a line of terminal text (termpaths.ts makes them links).
+// Finding paths and web links in a line of terminal text (termpaths.ts makes
+// them links).
 // Kept free of the app so its tests run under plain Node.
 
 export interface Found {
@@ -28,6 +29,25 @@ export function findPaths(text: string): Found[] {
   return found;
 }
 
+/** The web links in `text`: http(s) URLs printed as plain text, as an agent
+ *  does when it ends a reply with one. A sentence's full stop and the
+ *  bracket or quote around the URL are left off. */
+export function findUrls(text: string): Found[] {
+  const found: Found[] = [];
+  for (const m of text.matchAll(/\bhttps?:\/\/[^\s<>"'`]+/gi)) {
+    let url = m[0].replace(/[.,;:!?]+$/, "");
+    // A closing bracket is the URL's own only when the URL opened it too,
+    // as in .../Mercury_(planet). One around it, "(https://x.dev/a)", isn't.
+    for (const [open, close] of [["(", ")"], ["[", "]"]]) {
+      while (url.endsWith(close) && url.split(close).length > url.split(open).length) {
+        url = url.slice(0, -1).replace(/[.,;:!?]+$/, "");
+      }
+    }
+    if (/^https?:\/\/[^/]/i.test(url)) found.push({ start: m.index!, text: url });
+  }
+  return found;
+}
+
 export const WORTH = /\.(html?|md|markdown|mdx|png|jpe?g|gif|webp|svg|pdf)$/i;
 
 // ---- lines a terminal app wrapped ----
@@ -48,12 +68,12 @@ export interface Logical {
 
 /** The rows at most this far from the right edge still count as full. */
 const EDGE = 4;
-const PATHISH = /[\w./~@%+=,-]/;
+const PATHISH = /[\w./~@%+=,:?&#-]/;
 
 /** The logical line row `y` belongs to. Rows the terminal wrapped join as
  *  they are. So do rows an app wrapped itself, as Claude Code does when a
- *  path is too long for the width: a row that runs to the right edge on a
- *  run with a `/` in it, followed by a row that goes on with a path
+ *  path or URL is too long for the width: a row that runs to the right edge
+ *  on a run with a `/` in it, followed by a row that goes on with a path
  *  character after its indent, is one line, the indent left out. Prose
  *  wrapped at a space ends on a plain word, so it stays apart. */
 export function logicalLine(row: (i: number) => Row | undefined, y: number, cols: number): Logical {
