@@ -104,3 +104,17 @@ Acceptance criteria:
 - Given `you` tasks, then they appear as rows with a checkbox, and checking them off persists across reloads (manual check plus unit test on storage).
 
 Status: done
+
+### S6: Hand a task to another project
+As a user, when an agent in one project finds work that belongs in another (say, an Observatory fix noticed while working in career-ops), I want that agent to start the task there for me to confirm, so that I don't have to switch projects and explain the context again.
+Notes: Observatory registers an `observatory://` URL scheme (`tauri-plugin-deep-link`, plus `tauri-plugin-single-instance` so a link reaches the running app). An agent hands off with `open "observatory://new-task?project=<name or path>&prompt=<brief>&from=$NEBULA_AGENT_ID"`; every nebula session has `NEBULA_AGENT_ID` set. Any agent CLI can run `open`, and nebula needs no change. The link only fills in the existing `LaunchDialog`; nothing starts until the user clicks Start. Agents learn the convention from a short instruction Observatory offers to copy from Settings, for the user's global `CLAUDE.md` / `AGENTS.md`: write a self-contained brief (what you found, where, why it matters, what done looks like) and open the link. Parsing and matching go in a new `src/nebula/handoff.ts`. Once nebula ships `nebula read` (AgentSystemLabs/nebula#163), the brief can tell the new task to read the source session for more context.
+Acceptance criteria:
+- Given `observatory://new-task?project=observatory&prompt=fix%20the%20thing&from=01K…`, when `parseHandoff()` runs, then it returns `{project:"observatory", prompt:"fix the thing", from:"01K…"}`. Given a link with no prompt, an unknown action, or a prompt over 20,000 characters, then it returns an error (unit test).
+- Given projects named `observatory` and `career-ops`, when `matchProject()` gets `"Observatory"`, a repo path, or a path inside the repo, then it returns that project. Given no match or several, then it returns null and the dialog asks the user to pick (unit test).
+- Given the app is running in the background, when the link opens, then Observatory comes to the front with the New task dialog filled in with the project, the prompt (editable), and the default agent kind, and no session has been created (manual check).
+- Given `from` names a live agent, then the dialog shows "From <task title> in <project>". Given `from` is missing or unknown, then it shows "From a link" instead, so a link opened by a web page can't pass as one of your agents (unit test on the label, plus manual check).
+- Given the user clicks Start, then a task starts in the target project the same way a New task from the dialog does. Given they dismiss it, then nothing is created (manual check).
+- Given the app isn't running, when the link opens, then the app launches and shows the same dialog once it has connected to the daemon (manual check).
+- Given an agent in another project is given the Settings instruction and asked to "hand this to Observatory", then it opens a link and the dialog shows a brief someone could act on without the original conversation (manual check with Claude and Codex).
+
+Status: todo
