@@ -33,7 +33,8 @@ pub fn write_setting(key: String, value: Value) -> Result<(), String> {
         let config_path = paths::config_path();
         if let Ok(Some(mut root)) = settings::read_object(&config_path) {
             if root.remove(*old).is_some() {
-                settings::write_json(&config_path, &Value::Object(root)).map_err(|e| e.to_string())?;
+                settings::write_json(&config_path, &Value::Object(root))
+                    .map_err(|e| e.to_string())?;
             }
         }
         if let Some(held) = local.as_mut() {
@@ -49,7 +50,8 @@ pub fn write_setting(key: String, value: Value) -> Result<(), String> {
             } else {
                 local.insert(key, value);
             }
-            return settings::write_json(&local_path, &Value::Object(local)).map_err(|e| e.to_string());
+            return settings::write_json(&local_path, &Value::Object(local))
+                .map_err(|e| e.to_string());
         }
     }
     let path = paths::config_path();
@@ -133,12 +135,14 @@ pub fn open_worktree(path: PathBuf, repo: String) -> Result<bool, String> {
         .map(String::from);
     let command = match set {
         Some(c) => c,
-        None => match project_file::lookup(&path, std::path::Path::new(&repo), ProjectCommand::Open)
-            .map_err(|e| e.to_string())?
-        {
-            Some(c) => c,
-            None => return Ok(false),
-        },
+        None => {
+            match project_file::lookup(&path, std::path::Path::new(&repo), ProjectCommand::Open)
+                .map_err(|e| e.to_string())?
+            {
+                Some(c) => c,
+                None => return Ok(false),
+            }
+        }
     };
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     Command::new(shell)

@@ -19,7 +19,11 @@ pub struct PreviewScope(Mutex<Vec<PathBuf>>);
 
 impl PreviewScope {
     fn allows(&self, path: &Path) -> bool {
-        self.0.lock().unwrap().iter().any(|root| path.starts_with(root))
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|root| path.starts_with(root))
     }
 
     fn allow(&self, root: PathBuf) {
@@ -194,7 +198,10 @@ fn mime(path: &Path) -> &'static str {
 /// `preview://localhost/<absolute path>`: a file opened for preview, or one
 /// beside a previewed page. Anything else is a 404, never a hint at what
 /// exists.
-pub fn serve<R: Runtime>(ctx: UriSchemeContext<'_, R>, request: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
+pub fn serve<R: Runtime>(
+    ctx: UriSchemeContext<'_, R>,
+    request: Request<Vec<u8>>,
+) -> Response<Cow<'static, [u8]>> {
     let not_found = || {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
@@ -202,7 +209,8 @@ pub fn serve<R: Runtime>(ctx: UriSchemeContext<'_, R>, request: Request<Vec<u8>>
             .unwrap()
     };
     let raw = percent_decode(request.uri().path());
-    let Ok(path) = std::fs::canonicalize(PathBuf::from(String::from_utf8_lossy(&raw).into_owned())) else {
+    let Ok(path) = std::fs::canonicalize(PathBuf::from(String::from_utf8_lossy(&raw).into_owned()))
+    else {
         return not_found();
     };
     let scope = ctx.app_handle().state::<PreviewScope>();
@@ -254,7 +262,10 @@ mod tests {
 
     #[test]
     fn percent_decoding_keeps_slashes_and_decodes_the_rest() {
-        assert_eq!(percent_decode("/Users/me/My%20Mock/index.html"), b"/Users/me/My Mock/index.html");
+        assert_eq!(
+            percent_decode("/Users/me/My%20Mock/index.html"),
+            b"/Users/me/My Mock/index.html"
+        );
         assert_eq!(percent_decode("/a/caf%C3%A9.md"), "/a/café.md".as_bytes());
         assert_eq!(percent_decode("/a/100%"), b"/a/100%");
     }
@@ -265,7 +276,10 @@ mod tests {
         scope.allow(PathBuf::from("/tmp/mock"));
         assert!(scope.allows(Path::new("/tmp/mock/index.html")));
         assert!(scope.allows(Path::new("/tmp/mock/css/site.css")));
-        assert!(!scope.allows(Path::new("/tmp/mockery/index.html")), "a sibling sharing a prefix");
+        assert!(
+            !scope.allows(Path::new("/tmp/mockery/index.html")),
+            "a sibling sharing a prefix"
+        );
         assert!(!scope.allows(Path::new("/tmp/other.html")));
     }
 

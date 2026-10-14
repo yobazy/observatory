@@ -218,3 +218,7 @@ which installed copies check (`plugins.updater` in `tauri.conf.json`). The key i
 `~/.tauri/observatory.key`, with its password in the login keychain under
 `dev.bazil.observatory.updater`. Back up both: without them, installed copies can't be updated, and
 a new key means everyone downloads the DMG again.
+
+## License
+
+[Apache 2.0](LICENSE)

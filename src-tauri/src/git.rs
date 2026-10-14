@@ -107,8 +107,14 @@ fn parse_status(out: &str, s: &mut GitStatus) {
         } else if let Some(ab) = entry.strip_prefix("# branch.ab ") {
             saw_ab = true;
             let mut it = ab.split(' ');
-            s.ahead = it.next().and_then(|a| a.trim_start_matches('+').parse().ok()).unwrap_or(0);
-            s.behind = it.next().and_then(|b| b.trim_start_matches('-').parse().ok()).unwrap_or(0);
+            s.ahead = it
+                .next()
+                .and_then(|a| a.trim_start_matches('+').parse().ok())
+                .unwrap_or(0);
+            s.behind = it
+                .next()
+                .and_then(|b| b.trim_start_matches('-').parse().ok())
+                .unwrap_or(0);
         } else if entry.starts_with("1 ") || entry.starts_with("2 ") {
             let xy = entry.as_bytes().get(2..4).unwrap_or(b"..");
             if xy[0] != b'.' {
@@ -133,7 +139,11 @@ fn parse_status(out: &str, s: &mut GitStatus) {
 fn parse_shortstat(out: &str, s: &mut GitStatus) {
     for part in out.split(',') {
         let part = part.trim();
-        let n = part.split(' ').next().and_then(|n| n.parse().ok()).unwrap_or(0);
+        let n = part
+            .split(' ')
+            .next()
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0);
         if part.contains("insertion") {
             s.insertions = n;
         } else if part.contains("deletion") {
@@ -144,7 +154,10 @@ fn parse_shortstat(out: &str, s: &mut GitStatus) {
 
 fn status(dir: &Path, base: Option<&str>) -> Result<GitStatus, String> {
     let mut s = GitStatus::default();
-    parse_status(&git(dir, &["status", "--porcelain=v2", "--branch", "-z"])?, &mut s);
+    parse_status(
+        &git(dir, &["status", "--porcelain=v2", "--branch", "-z"])?,
+        &mut s,
+    );
     // A repo with no commits has no HEAD to diff or log against.
     if let Ok(out) = git(dir, &["diff", "--shortstat", "HEAD"]) {
         parse_shortstat(&out, &mut s);
@@ -223,7 +236,12 @@ fn untracked(dir: &Path) -> (Vec<UntrackedFile>, bool) {
                 .flatten()
                 .filter(|b| !b[..b.len().min(8192)].contains(&0))
                 .map(|b| String::from_utf8_lossy(&b).into_owned());
-            UntrackedFile { path: p.to_string(), text, size, too_big: size > MAX_UNTRACKED_BYTES }
+            UntrackedFile {
+                path: p.to_string(),
+                text,
+                size,
+                too_big: size > MAX_UNTRACKED_BYTES,
+            }
         })
         .collect();
     (files, truncated)
@@ -282,7 +300,12 @@ fn diff(dir: &Path, base: Option<&str>) -> Result<Diff, String> {
         truncated = true;
     }
     let (untracked, more) = untracked(dir);
-    Ok(Diff { patch, untracked, truncated: truncated || more, against })
+    Ok(Diff {
+        patch,
+        untracked,
+        truncated: truncated || more,
+        against,
+    })
 }
 
 /// The changes in the checkout at `path`: uncommitted ones against HEAD, or
@@ -298,8 +321,11 @@ pub async fn git_diff(path: PathBuf, base: Option<String>) -> Result<Diff, Strin
 #[tauri::command]
 pub async fn local_branches(repo: PathBuf) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        git(&repo, &["for-each-ref", "--format=%(refname:short)", "refs/heads"])
-            .map(|out| out.lines().map(str::to_string).collect())
+        git(
+            &repo,
+            &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+        )
+        .map(|out| out.lines().map(str::to_string).collect())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -336,14 +362,20 @@ mod tests {
         assert_eq!(s.branch.as_deref(), Some("feat"));
         assert_eq!(s.upstream.as_deref(), Some("origin/feat"));
         assert_eq!((s.ahead, s.behind), (2, 1));
-        assert_eq!((s.staged, s.unstaged, s.untracked, s.conflicted), (2, 1, 1, 1));
+        assert_eq!(
+            (s.staged, s.unstaged, s.untracked, s.conflicted),
+            (2, 1, 1, 1)
+        );
         assert!(!s.upstream_gone);
     }
 
     #[test]
     fn upstream_without_ahead_behind_is_gone() {
         let mut s = GitStatus::default();
-        parse_status("# branch.head feat\0# branch.upstream origin/feat\0", &mut s);
+        parse_status(
+            "# branch.head feat\0# branch.upstream origin/feat\0",
+            &mut s,
+        );
         assert!(s.upstream_gone);
         let mut s = GitStatus::default();
         parse_status("# branch.head feat\0", &mut s);
@@ -353,7 +385,10 @@ mod tests {
     #[test]
     fn parses_shortstat() {
         let mut s = GitStatus::default();
-        parse_shortstat(" 3 files changed, 10 insertions(+), 2 deletions(-)\n", &mut s);
+        parse_shortstat(
+            " 3 files changed, 10 insertions(+), 2 deletions(-)\n",
+            &mut s,
+        );
         assert_eq!((s.insertions, s.deletions), (10, 2));
         parse_shortstat(" 1 file changed, 4 deletions(-)\n", &mut s);
         assert_eq!(s.deletions, 4);
@@ -381,7 +416,11 @@ mod tests {
         let d = diff(&dir, None).unwrap();
         assert_eq!(d.against, "HEAD");
         assert!(d.patch.contains("+three") && !d.patch.contains("-two"));
-        let names: Vec<_> = d.untracked.iter().map(|u| (u.path.as_str(), u.text.is_some())).collect();
+        let names: Vec<_> = d
+            .untracked
+            .iter()
+            .map(|u| (u.path.as_str(), u.text.is_some()))
+            .collect();
         assert!(names.contains(&("new.txt", true)) && names.contains(&("bin.dat", false)));
 
         let d = diff(&dir, Some("main")).unwrap();

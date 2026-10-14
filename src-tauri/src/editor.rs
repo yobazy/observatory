@@ -37,7 +37,9 @@ pub async fn list_editors() -> Vec<Editor> {
     KNOWN
         .iter()
         .filter(|n| installed(n))
-        .map(|n| Editor { name: n.to_string() })
+        .map(|n| Editor {
+            name: n.to_string(),
+        })
         .collect()
 }
 
@@ -58,7 +60,10 @@ pub async fn open_in_editor(path: PathBuf, app: String) -> Result<(), String> {
         if out.status.success() {
             Ok(())
         } else {
-            Err(format!("{app} didn't open: {}", String::from_utf8_lossy(&out.stderr).trim()))
+            Err(format!(
+                "{app} didn't open: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
         }
     })
     .await
