@@ -88,7 +88,7 @@ fn edits_in(line: &str) -> Vec<(String, i64)> {
 }
 
 /// A session id as Claude Code writes it; anything else could name a path.
-fn plain_id(id: &str) -> bool {
+pub(crate) fn plain_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
         && id
@@ -97,7 +97,7 @@ fn plain_id(id: &str) -> bool {
 }
 
 /// The session's own log: `<session>.jsonl` in whichever project folder has it.
-fn find_log(root: &Path, session: &str) -> Option<PathBuf> {
+pub(crate) fn find_log(root: &Path, session: &str) -> Option<PathBuf> {
     let name = format!("{session}.jsonl");
     std::fs::read_dir(root)
         .ok()?

@@ -11,6 +11,7 @@ import { sessionKey, type Agent, type SessionRef } from "../nebula/types";
 import { enqueue, isIdle, noteTyped, unqueue } from "../nebula/queue";
 import { noteSize } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
+import { TurnStrip } from "./TurnStrip";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { removeFromShelf, watchForFiles, type FileWatch, type ShelfItem } from "../nebula/shelf";
 import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
@@ -311,6 +312,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
         <header className="pane-head" data-tauri-drag-region />
       )}
 
+      {agent && <TurnStrip key={agent.id} agent={agent} worktree={wt} />}
       {agent && <QueueStrip agent={agent} queued={state.queue[agent.id]} />}
       {agent && <ShelfStrip agentId={agent.id} items={state.shelf[agent.id]} />}
       <div className="pane-body" data-drop-session={key ?? undefined}>

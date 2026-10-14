@@ -12,6 +12,7 @@ mod settings;
 mod thread_edits;
 mod title;
 mod tray;
+mod turns;
 mod usage;
 
 /// Show and focus the main window, e.g. for the quick-capture hotkey.
@@ -36,6 +37,7 @@ pub fn run() {
         .manage(daemon::DaemonState::default())
         .manage(usage::UsageState::default())
         .manage(thread_edits::EditsState::default())
+        .manage(turns::TurnsState::default())
         .manage(preview::PreviewScope::default())
         .register_uri_scheme_protocol("preview", preview::serve)
         .invoke_handler(tauri::generate_handler![
@@ -57,6 +59,7 @@ pub fn run() {
             gh::gh_pr_create,
             usage::usage_report,
             thread_edits::thread_edits,
+            turns::thread_turn,
             settings::write_setting,
             settings::write_project_setting,
             settings::read_desktop_prefs,
