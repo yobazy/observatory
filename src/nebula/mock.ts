@@ -6,6 +6,7 @@ import type { UsageBucket, UsageReport } from "./usage";
 import type { Agent, AgentStatus, EntityId, Project, SessionRef, Worktree } from "./types";
 import type { State } from "./store";
 import type { ThreadEdit } from "./threadfiles";
+import type { Step as TurnStep, Turn } from "./turnsummary";
 
 const now = Date.now();
 const min = 60_000;
@@ -576,3 +577,63 @@ export function mockThreadEdits(s: State, sessions: string[]): Record<string, Th
   return out;
 }
 
+
+/** A latest turn for the summary strip, for the threads the demo has a story for. */
+export function mockTurn(s: State, agentId: string): Turn | null {
+  const a = s.agents[agentId];
+  const root = s.worktrees[a?.worktree_id ?? ""]?.path ?? "";
+  const now = Math.floor(Date.now() / 1000);
+  const step = (tool: string, target: string, ok: boolean | null = true, note: string | null = null, ago = 60): TurnStep => ({
+    tool,
+    target,
+    note,
+    ok,
+    at: now - ago,
+  });
+  const turns: Record<string, Omit<Turn, "number" | "dropped" | "interrupted">> = {
+    a1: {
+      prompt: "why does search ignore synonyms like tee and t-shirt?",
+      started: now - 140,
+      last: now - 5,
+      steps: [
+        step("Grep", "synonym"),
+        step("Read", `${root}/src/search/analyzer.ts`),
+        step("Read", `${root}/src/search/index.ts`),
+        step("Edit", `${root}/src/search/analyzer.ts`),
+        step("Bash", "npm test -- search", null, "Run the search tests", 5),
+      ],
+      said: "The analyzer drops the synonym filter when the index is rebuilt. I've put it back and I'm running the search tests.",
+    },
+    a2: {
+      prompt: "make cart sync apply one update at a time",
+      started: now - 9 * 60,
+      last: now - 4 * 60,
+      steps: [
+        step("Read", `${root}/src/cart/sync.ts`),
+        step("Edit", `${root}/src/cart/sync.ts`),
+        step("Write", `${root}/src/cart/sync.test.ts`),
+        step("Bash", "npm test -- cart", true, "Run the cart tests"),
+        step("Bash", "npm run lint", false, "Lint the change"),
+        step("AskUserQuestion", "Lint flags the new worker's unused retry option. Remove it, or keep it for the backoff task?", null),
+      ],
+      said: "Lint flags the new worker's unused retry option. Remove it, or keep it for the backoff task?",
+    },
+    a3: {
+      prompt: "add exponential backoff when a cart sync fails",
+      started: now - 31 * 60,
+      last: now - 12 * 60,
+      steps: [
+        step("Read", `${root}/src/cart/sync.ts`),
+        step("Edit", `${root}/src/cart/sync.ts`),
+        step("Edit", `${root}/src/cart/backoff.ts`),
+        step("Bash", "npm test", false, "Run the tests"),
+        step("Edit", `${root}/src/cart/backoff.ts`),
+        step("Bash", "npm test", true, "Run the tests"),
+        step("Bash", "git commit -am 'Back off when a cart sync fails'", true, "Commit the change"),
+      ],
+      said: "Failed syncs now retry after 1s, 2s, 4s and so on, up to a minute, and the tests cover it. Committed on this branch; it isn't pushed yet.",
+    },
+  };
+  const t = turns[agentId];
+  return t ? { ...t, number: agentId === "a3" ? 3 : 1, dropped: 0, interrupted: false } : null;
+}
