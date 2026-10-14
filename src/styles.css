@@ -2004,6 +2004,31 @@ td.task-last {
   font-size: 12px;
   line-height: 1.45;
 }
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stepper .btn {
+  width: 28px;
+  justify-content: center;
+}
+.stepper-value {
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.term-sample {
+  margin: 4px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--term);
+  color: var(--text);
+  white-space: pre;
+  overflow: auto;
+  /* The terminal draws no ligatures; neither does its sample. */
+  font-variant-ligatures: none;
+}
 .setting-input {
   width: 200px;
   height: 28px;

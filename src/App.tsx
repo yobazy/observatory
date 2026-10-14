@@ -18,7 +18,8 @@ import { PanelGlyph } from "./components/Sidebar";
 import { UsageView } from "./components/Usage";
 import { SettingsView } from "./components/Settings";
 import { useUsagePolling } from "./nebula/usage";
-import { useTheme } from "./nebula/theme";
+import { savePrefs, useTheme } from "./nebula/theme";
+import { termFont, zoomed } from "./nebula/termfont";
 import { useRunWatch } from "./nebula/runs";
 import { useLimitWatch } from "./nebula/limits";
 import { useAutoFollowUps } from "./nebula/organize";
@@ -167,7 +168,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘O adds a project; ⌘U shows usage; ⌘, settings; ⌘J cycles through the sessions waiting on you.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘O adds a project; ⌘U shows usage; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -197,6 +198,13 @@ export default function App() {
       } else if (e.key === "o") {
         e.preventDefault();
         openAddProject();
+      } else if (e.key === "=" || e.key === "+" || e.key === "-" || (e.key === "0" && !e.shiftKey)) {
+        // Terminal text size; the rest of the app keeps its size.
+        e.preventDefault();
+        const prefs = getState().prefs;
+        const size = zoomed(prefs, e.key === "0" ? 0 : e.key === "-" ? -1 : 1);
+        if (size !== termFont(prefs).size) void savePrefs({ ...prefs, terminalFontSize: size });
+        flash(`Terminal text ${size} pt`, 1200);
       } else if (e.key === "j") {
         e.preventDefault();
         const s = getState();
