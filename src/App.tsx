@@ -29,6 +29,7 @@ import { usePrPolling } from "./nebula/prs";
 import { useQueueRunner } from "./nebula/queue";
 import { useBatchRunner } from "./nebula/batchRunner";
 import { ReviewView } from "./components/Review";
+import { UncommittedView } from "./components/Uncommitted";
 import { CompareView } from "./components/Compare";
 import { GridView } from "./components/Grid";
 import { useDesktopShell } from "./nebula/desktop";
@@ -255,6 +256,7 @@ export default function App() {
       {view === "usage" && <UsageView />}
       {view === "settings" && <SettingsView />}
       {view === "review" && <ReviewView key={getState().review ?? ""} />}
+      {view === "uncommitted" && <UncommittedView />}
       {view === "compare" && <CompareView />}
       {view === "dispatch" && <DispatchBoard onOpenList={() => openDispatch()} />}
       {launch && (

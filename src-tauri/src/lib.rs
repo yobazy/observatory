@@ -9,6 +9,7 @@ mod preview;
 mod relocate;
 mod router;
 mod settings;
+mod thread_edits;
 mod title;
 mod tray;
 mod usage;
@@ -34,6 +35,7 @@ pub fn run() {
         })
         .manage(daemon::DaemonState::default())
         .manage(usage::UsageState::default())
+        .manage(thread_edits::EditsState::default())
         .manage(preview::PreviewScope::default())
         .register_uri_scheme_protocol("preview", preview::serve)
         .invoke_handler(tauri::generate_handler![
@@ -54,6 +56,7 @@ pub fn run() {
             gh::gh_pr,
             gh::gh_pr_create,
             usage::usage_report,
+            thread_edits::thread_edits,
             settings::write_setting,
             settings::write_project_setting,
             settings::read_desktop_prefs,

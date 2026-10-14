@@ -4,6 +4,8 @@ import { byId, getState, setState } from "./store";
 import type { GitStatus } from "./git";
 import type { UsageBucket, UsageReport } from "./usage";
 import type { Agent, AgentStatus, EntityId, Project, SessionRef, Worktree } from "./types";
+import type { State } from "./store";
+import type { ThreadEdit } from "./threadfiles";
 
 const now = Date.now();
 const min = 60_000;
@@ -552,3 +554,25 @@ export function mockPr(worktreeId: string) {
       return { kind: "none" as const };
   }
 }
+
+/** Which files the preview's threads changed, for the uncommitted view: in
+ *  cart-sync, Sequential Cart Sync wrote the sync and its test, and Sync
+ *  Retry Backoff touched sync.ts earlier; the notes file is no thread's. */
+export function mockThreadEdits(s: State, sessions: string[]): Record<string, ThreadEdit[]> {
+  const now = Math.floor(Date.now() / 1000);
+  const at = (id: string) => s.worktrees[s.agents[id]?.worktree_id ?? ""]?.path ?? "";
+  const plan: Record<string, ThreadEdit[]> = {
+    a2: [
+      { path: `${at("a2")}/src/cart/sync.ts`, at: now - 4 * 60 },
+      { path: `${at("a2")}/src/cart/sync.test.ts`, at: now - 5 * 60 },
+    ],
+    a3: [{ path: `${at("a3")}/src/cart/sync.ts`, at: now - 12 * 60 }],
+    a8: [{ path: `${at("a8")}/src/cart/sync.ts`, at: now - 3 * 3600 }],
+  };
+  const out: Record<string, ThreadEdit[]> = {};
+  for (const a of Object.values(s.agents)) {
+    if (a.session_id && sessions.includes(a.session_id) && plan[a.id]) out[a.session_id] = plan[a.id];
+  }
+  return out;
+}
+
