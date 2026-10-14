@@ -3,12 +3,13 @@
 // and a click opens it in the preview (preview.ts). Only a path that is a
 // file on disk becomes a link: absolute, `~/`, or relative to the session's
 // checkout. A path the terminal wrapped onto the next row is still one path.
-// Links an agent's CLI marks itself (OSC 8 `file://`) go the same way.
+// Links an agent's CLI marks itself (OSC 8 `file://`) go the same way. Web
+// URLs, marked or printed as plain text, open in the browser.
 import type { IBufferRange, ILink, ILinkHandler, Terminal } from "@xterm/xterm";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "./client";
 import { hideCard, hoverPath, leavePath, openPreview } from "./preview";
-import { findPaths, logicalLine, WORTH, type Row } from "./pathtext";
+import { findPaths, findUrls, logicalLine, WORTH, type Row } from "./pathtext";
 
 // ---- existence, cached ----
 
@@ -47,26 +48,51 @@ function rowOf(t: Terminal, i: number): Row | undefined {
   return { cells, wrapped: line.isWrapped };
 }
 
-/** Make paths in `t` hoverable and clickable. `cwd` is the session's
- *  checkout, for paths written relative to it. Returns the disposer. */
+/** Open a web link in the browser (a new tab in the preview). */
+function openWeb(url: string) {
+  if (isPreview()) {
+    window.open(url, "_blank", "noopener");
+    return;
+  }
+  void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(url)).catch(() => {});
+}
+
+/** Make paths and web URLs in `t` hoverable and clickable. `cwd` is the
+ *  session's checkout, for paths written relative to it. Returns the
+ *  disposer. */
 export function linkPaths(t: Terminal, cwd: () => string | null, owner: () => string | null = () => null): () => void {
   const provider = t.registerLinkProvider({
     provideLinks(row, callback) {
       const { text, at } = logicalLine((i) => rowOf(t, i), row - 1, t.cols);
+      // Each row asks for its own links; a wrapped path or URL answers on
+      // every row it covers.
+      const rangeOf = (start: number, length: number): IBufferRange | null => {
+        const range = { start: at[start], end: at[start + length - 1] };
+        return range.end.y < row || range.start.y > row ? null : range;
+      };
+      const web: ILink[] = [];
+      for (const u of findUrls(text)) {
+        const range = rangeOf(u.start, u.text.length);
+        if (!range) continue;
+        web.push({
+          range,
+          text: u.text,
+          decorations: { underline: true, pointerCursor: true },
+          activate: () => openWeb(u.text),
+        });
+      }
       const found = findPaths(text);
-      if (!found.length) return callback(undefined);
+      if (!found.length) return callback(web.length ? web : undefined);
       void resolve(
         found.map((f) => f.text),
         cwd(),
       ).then((abs) => {
-        const links: ILink[] = [];
+        const links: ILink[] = [...web];
         found.forEach((f, i) => {
           const path = abs[i];
           if (!path) return;
-          const range: IBufferRange = { start: at[f.start], end: at[f.start + f.text.length - 1] };
-          // Each row asks for its own links; a wrapped path answers on
-          // every row it covers.
-          if (range.end.y < row || range.start.y > row) return;
+          const range = rangeOf(f.start, f.text.length);
+          if (!range) return;
           links.push({
             range,
             text: f.text,
@@ -96,7 +122,7 @@ export const osc8Links: ILinkHandler = {
       hideCard();
       void openPreview([path]);
     } else if (/^https?:\/\//i.test(uri)) {
-      void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(uri)).catch(() => {});
+      openWeb(uri);
     }
   },
   hover(e, uri) {
