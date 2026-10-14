@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "../nebula/client";
 import { openReview } from "../nebula/diff";
-import { getState } from "../nebula/store";
+import { getState, useAppState } from "../nebula/store";
+import { changedFiles } from "../nebula/git";
 import { relativeTime } from "../nebula/status";
 import { duration, summarize, type Turn } from "../nebula/turnsummary";
 import type { Agent, Worktree } from "../nebula/types";
@@ -26,7 +27,7 @@ function writeOpen(open: boolean) {
 }
 
 /** The thread's latest turn, read again as it moves. */
-function useTurn(agent: Agent): Turn | null {
+export function useTurn(agent: Agent): Turn | null {
   const [turn, setTurn] = useState<Turn | null>(null);
   const session = agent.kind === "claude" ? agent.session_id : null;
   const running = agent.status === "running";
@@ -75,6 +76,7 @@ function Mark({ ok }: { ok: boolean | null }) {
 export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktree | undefined }) {
   const turn = useTurn(agent);
   const [open, setOpen] = useState(readOpen);
+  const git = useAppState().git[worktree?.id ?? ""];
   if (!turn) return null;
   const working = agent.status === "running";
   const sum = summarize(turn, worktree?.path ?? "", agent.status === "needs_feedback");
@@ -85,24 +87,37 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
     writeOpen(!open);
   };
   const commands = sum.commands.slice(-12);
+  // A finished turn that left changes behind: reviewing them is the next step.
+  const reviewable = !working && sum.edited.length > 0 && !!git && !("error" in git) && changedFiles(git) > 0;
 
   return (
     <div className={`turn-strip${open ? " is-open" : ""}`}>
-      <button className="ts-line" onClick={toggle} aria-expanded={open} title={open ? "Hide this turn" : "Show this turn"}>
-        <span className="ts-lead">{working ? `Working · ${took}` : `Last turn · ${took}`}</span>
-        <span className="ts-parts">
-          {sum.headline.map((p, i) => (
-            <span key={p.text} className={`ts-part${p.tone ? ` is-${p.tone}` : ""}`}>
-              {i > 0 && <span className="ts-sep" aria-hidden>·</span>}
-              {p.text}
-            </span>
-          ))}
-        </span>
-        {!working && ago && <span className="ts-ago">{ago === "now" ? "just now" : `${ago} ago`}</span>}
-        <span className="ts-chev" aria-hidden>
-          {open ? "▴" : "▾"}
-        </span>
-      </button>
+      <div className="ts-row">
+        <button className="ts-line" onClick={toggle} aria-expanded={open} title={open ? "Hide this turn" : "Show this turn"}>
+          <span className="ts-lead">{working ? `Working · ${took}` : `Last turn · ${took}`}</span>
+          <span className="ts-parts">
+            {sum.headline.map((p, i) => (
+              <span key={p.text} className={`ts-part${p.tone ? ` is-${p.tone}` : ""}`}>
+                {i > 0 && <span className="ts-sep" aria-hidden>·</span>}
+                {p.text}
+              </span>
+            ))}
+          </span>
+          {!working && ago && <span className="ts-ago">{ago === "now" ? "just now" : `${ago} ago`}</span>}
+          <span className="ts-chev" aria-hidden>
+            {open ? "▴" : "▾"}
+          </span>
+        </button>
+        {reviewable && worktree && (
+          <button
+            className="btn btn-sm ts-review"
+            onClick={() => openReview(worktree.id, agent.id)}
+            title="Review the changes, comment, and send them back or commit"
+          >
+            Review changes
+          </button>
+        )}
+      </div>
       {open && (
         <div className="ts-body">
           <section>
@@ -120,7 +135,7 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
               <h4>
                 Changed {sum.edited.length} {sum.edited.length === 1 ? "file" : "files"}
                 {worktree && (
-                  <button className="link-btn ts-h-link" onClick={() => openReview(worktree.id)}>
+                  <button className="link-btn ts-h-link" onClick={() => openReview(worktree.id, agent.id)}>
                     Review diff
                   </button>
                 )}
@@ -166,5 +181,32 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
         </div>
       )}
     </div>
+  );
+}
+
+/** The top of a review: what the thread was asked and what its last turn
+ *  did, so the diff reads against what it was for. */
+export function TurnBrief({ agent, worktree }: { agent: Agent; worktree: Worktree }) {
+  const turn = useTurn(agent);
+  if (!turn) return null;
+  const sum = summarize(turn, worktree.path, agent.status === "needs_feedback");
+  return (
+    <section className="turn-brief" aria-label={`What ${agent.name} did`}>
+      <p className="tb-head">
+        <span className="tb-name">{agent.name}</span>
+        {sum.headline.map((p) => (
+          <span key={p.text} className={`ts-part${p.tone ? ` is-${p.tone}` : ""}`}>
+            <span className="ts-sep" aria-hidden>
+              ·
+            </span>
+            {p.text}
+          </span>
+        ))}
+      </p>
+      <p className="tb-asked">
+        <span className="tb-label">You asked</span> {turn.prompt}
+      </p>
+      {turn.said && <p className="ts-prose ts-clamp tb-said">{turn.said}</p>}
+    </section>
   );
 }

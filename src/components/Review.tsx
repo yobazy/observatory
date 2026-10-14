@@ -17,6 +17,7 @@ import {
   type ReviewComment,
 } from "../nebula/diff";
 import { ShipButton } from "./Sessions";
+import { TurnBrief } from "./TurnStrip";
 
 type Scope = "uncommitted" | "branch";
 
@@ -97,20 +98,30 @@ export function ReviewView() {
   }, [comments]);
 
   if (!wt) return null;
-  const taker = takerFor(state, wt.id);
+  // Opened from a thread on this checkout that's still around: the review
+  // goes back to it. Otherwise to whoever takes work here.
+  const from = state.reviewFrom ? state.agents[state.reviewFrom] : undefined;
+  const backTo = from && from.worktree_id === wt.id && !from.archived && from.alive ? from : undefined;
+  const branchTaker = takerFor(state, wt.id);
+  const busyNow = backTo && (backTo.status === "running" || backTo.status === "needs_feedback");
+  const taker: typeof branchTaker = backTo ? { kind: busyNow ? "busy" : "agent", agent: backTo } : branchTaker;
   const sendLabel =
     taker.kind === "agent"
       ? `Send to ${taker.agent.name}`
       : taker.kind === "busy"
         ? `Queue for ${taker.agent.name}`
         : "Start an agent on it";
+  // The thread it was opened from, else the one it goes back to; when its
+  // log says what it did.
+  const fromHere = from?.worktree_id === wt.id ? from : taker.kind !== "new" ? taker.agent : undefined;
+  const briefOf = fromHere?.kind === "claude" ? fromHere : null;
   const canSend = (comments.length > 0 || summary.trim().length > 0) && !sending && !composing;
 
   const send = async () => {
     if (!canSend) return;
     setSending(true);
     try {
-      const said = await handToBranch(wt.id, reviewPrompt(comments, summary), "address your review");
+      const said = await handToBranch(wt.id, reviewPrompt(comments, summary), "address your review", backTo);
       flash(said);
       setComments([]);
       setSummary("");
@@ -166,6 +177,7 @@ export function ReviewView() {
         </div>
       </header>
 
+      {briefOf && <TurnBrief key={briefOf.id} agent={briefOf} worktree={wt} />}
       {error ? (
         <p className="usage-empty">Couldn't read the diff: {error}</p>
       ) : !diff ? (
