@@ -7,7 +7,7 @@ import { onExit, onPty, send, sendInput } from "../nebula/client";
 import { getState, projectOfWorktree, setState, urgency, useAppState, type State } from "../nebula/store";
 import { statusLabel } from "../nebula/status";
 import { terminalTheme } from "./TerminalPane";
-import { gridFont } from "../nebula/termfont";
+import { gridFont, whenLoaded } from "../nebula/termfont";
 import type { Agent } from "../nebula/types";
 import { noteTyped } from "../nebula/queue";
 import { noteSize } from "../nebula/screen";
@@ -187,12 +187,19 @@ function Tile({ agent, focused }: { agent: Agent; focused: boolean }) {
   // Follow the type picked in Settings, or ⌘+/⌘−.
   const font = gridFont(state.prefs);
   useEffect(() => {
-    const t = term.current;
-    if (!t) return;
-    t.options.fontFamily = font.family;
-    t.options.fontSize = font.size;
-    t.options.lineHeight = font.lineHeight;
-    refit.current();
+    let live = true;
+    // A bundled face measured before it loads would be measured as the fallback.
+    void whenLoaded(font).then(() => {
+      const t = term.current;
+      if (!live || !t) return;
+      t.options.fontFamily = font.family;
+      t.options.fontSize = font.size;
+      t.options.lineHeight = font.lineHeight;
+      refit.current();
+    });
+    return () => {
+      live = false;
+    };
   }, [font.family, font.size, font.lineHeight]);
 
   // The selected tile takes the keyboard, and reading it marks it seen.

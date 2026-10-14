@@ -338,33 +338,23 @@ function Group({ title, note, children }: { title: string; note?: string; childr
   );
 }
 
-/** The terminal's type, with a sample set in it. */
+/** What each face is shown setting: a Claude Code turn in miniature, with
+ *  the characters that tell faces apart (0O 1lI {} =>). */
+const FONT_SAMPLE = `> why are synonyms ignored?
+
+● Read(src/search/analyzer.ts)
+  ⎿  Read 168 lines
+● Rebuild drops the filter:
+  if (opts.rebuild) f = [];
+  0O 1lI {} => !== +12 −3`;
+
+/** The terminal's type, picked by seeing each face set the same text. */
 function TerminalType() {
   const { prefs } = useAppState();
   const font = termFont(prefs);
   const face = TERM_FONTS.find((f) => f.family === font.family) ?? TERM_FONTS[0];
   return (
     <Group title="Terminal text">
-      <div className="setting">
-        <div className="setting-text">
-          <label className="setting-label" htmlFor="set-term-font">
-            Font
-          </label>
-          <span className="setting-hint">JetBrains Mono comes with the app; SF Mono is the one Terminal uses.</span>
-        </div>
-        <select
-          id="set-term-font"
-          className="setting-input"
-          value={face.id}
-          onChange={(e) => void savePrefs({ ...prefs, terminalFont: e.target.value })}
-        >
-          {TERM_FONTS.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label}
-            </option>
-          ))}
-        </select>
-      </div>
       <div className="setting">
         <div className="setting-text">
           <label className="setting-label" htmlFor="set-term-size">
@@ -414,13 +404,37 @@ function TerminalType() {
           ))}
         </div>
       </div>
-      <pre
-        className="term-sample"
-        aria-label="Sample"
-        style={{ fontFamily: font.family, fontSize: font.size, lineHeight: font.lineHeight }}
-      >
-        {"> make cart sync apply one update at a time\n\n● Sync applies every update with Promise.all,\n  so they race. 0O 1lI {} [] => !== ~/code"}
-      </pre>
+      <div className="setting setting-stack">
+        <div className="setting-text">
+          <span className="setting-label" id="term-font-label">
+            Font
+          </span>
+          <span className="setting-hint">Each is set in your size and spacing. Picking one changes the terminal now.</span>
+        </div>
+        <div className="font-picks" role="radiogroup" aria-labelledby="term-font-label">
+          {TERM_FONTS.map((f) => (
+            <button
+              key={f.id}
+              role="radio"
+              aria-checked={face.id === f.id}
+              className={`font-pick${face.id === f.id ? " is-on" : ""}`}
+              onClick={() => void savePrefs({ ...prefs, terminalFont: f.id })}
+            >
+              <span className="font-pick-head">
+                <span className="font-pick-name">{f.label}</span>
+                <span className="font-pick-note">{f.note}</span>
+              </span>
+              <span
+                className="font-pick-sample"
+                style={{ fontFamily: f.family, fontSize: font.size, lineHeight: font.lineHeight }}
+                aria-hidden
+              >
+                {FONT_SAMPLE}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
     </Group>
   );
 }

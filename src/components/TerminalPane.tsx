@@ -13,7 +13,7 @@ import { noteSize } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
 import { TurnStrip } from "./TurnStrip";
 import { Reader } from "./Reader";
-import { termFont } from "../nebula/termfont";
+import { termFont, whenLoaded } from "../nebula/termfont";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { removeFromShelf, watchForFiles, type FileWatch, type ShelfItem } from "../nebula/shelf";
 import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
@@ -94,12 +94,19 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   // change the rows and columns, so the session hears about it.
   const font = termFont(state.prefs);
   useEffect(() => {
-    const t = term.current;
-    if (!t) return;
-    t.options.fontFamily = font.family;
-    t.options.fontSize = font.size;
-    t.options.lineHeight = font.lineHeight;
-    refit.current();
+    let live = true;
+    // A bundled face measured before it loads would be measured as the fallback.
+    void whenLoaded(font).then(() => {
+      const t = term.current;
+      if (!live || !t) return;
+      t.options.fontFamily = font.family;
+      t.options.fontSize = font.size;
+      t.options.lineHeight = font.lineHeight;
+      refit.current();
+    });
+    return () => {
+      live = false;
+    };
   }, [ready, font.family, font.size, font.lineHeight]);
 
   // Follow the app's light/dark/black surfaces.
@@ -159,7 +166,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       void sendInput(ref, data);
     });
 
-    document.fonts.load('13px "JetBrains Mono"').finally(() => {
+    void whenLoaded(font).finally(() => {
       if (disposed || !host.current) return;
       t.open(host.current);
       // WebGL in the app; the browser preview keeps the DOM renderer, which
