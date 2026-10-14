@@ -72,6 +72,9 @@ export interface DesktopPrefs {
   taskColors?: Record<string, string>;
   /** Tasks marked to come back to, by agent id: when they were marked (ms). */
   followUps?: Record<string, number>;
+  /** Which of those the app flagged itself, when a turn ended while you
+   *  weren't looking (followupRules.ts); they clear once you act. */
+  autoFollowUps?: Record<string, true>;
 }
 
 export type ProjectIconChoice = { kind: "emoji"; value: string } | { kind: "image"; value: string };

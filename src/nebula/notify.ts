@@ -19,7 +19,7 @@ async function canNotify(): Promise<boolean> {
 }
 
 /** Whether the user is already looking at this agent's terminal. */
-function isWatching(agent: Agent): boolean {
+export function isWatching(agent: Agent): boolean {
   const sel = getState().selectedSession;
   return document.hasFocus() && !!sel && "Agent" in sel && sel.Agent === agent.id;
 }

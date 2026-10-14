@@ -12,14 +12,17 @@
   --accent: #9db4ff;
   --accent-ink: #0f1524;
 
-  /* Status is the only loud color in the app. */
+  /* Status is the only loud color in the app, and only what needs you is
+     loud: working sits back in a quiet blue and says so by moving. */
   --st-waiting: #ff7a6b;
-  --st-running: #f2b84b;
+  --st-running: #8fa2d6;
   --st-done: #5fd4b0;
   --st-idle: #6b7591;
   --st-error: #d9668d;
   /* A merged pull request: GitHub's purple, kept for the one word it marks. */
   --st-merged: #b58cff;
+  /* Git's modified and CI's pending, in the yellow everyone reads them in. */
+  --amber: #f2b84b;
 
   --ui: "Onest Variable", -apple-system, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -53,11 +56,12 @@
   --muted: #555e72;
   --faint: #7f889c;
   --st-waiting: #d4442f;
-  --st-running: #a86a00;
+  --st-running: #5468a8;
   --st-done: #1f8a67;
   --st-idle: #8a93a8;
   --st-error: #c2386b;
   --st-merged: #7c4dd6;
+  --amber: #a86a00;
   --shadow-pop: 0 14px 40px rgb(27 34 51 / 0.16);
 }
 
@@ -200,10 +204,13 @@ body.is-resizing * {
 
 .dot-running {
   background: var(--st-running);
+  animation: breathe 2.4s ease-in-out infinite;
 }
+/* Done and seen is settled: only a finished turn you haven't seen keeps
+   its green, since that one is ready for you. */
 .dot-finished {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--st-done);
+  box-shadow: inset 0 0 0 1.5px var(--st-idle);
 }
 .dot-finished.is-unseen {
   background: var(--st-done);
@@ -227,6 +234,12 @@ body.is-resizing * {
   border: 1.5px dashed transparent;
 }
 
+@keyframes breathe {
+  50% {
+    opacity: 0.4;
+  }
+}
+
 @keyframes beckon {
   50% {
     box-shadow: 0 0 0 5px rgb(255 122 107 / 0.08);
@@ -234,7 +247,8 @@ body.is-resizing * {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot-needs_feedback {
+  .dot-needs_feedback,
+  .dot-running {
     animation: none;
   }
 }
@@ -453,7 +467,7 @@ body.is-resizing * {
   background: var(--st-waiting);
 }
 .seg-finished {
-  background: rgb(95 212 176 / 0.35);
+  background: color-mix(in srgb, var(--st-idle) 45%, transparent);
 }
 .seg-finished.is-unseen {
   background: var(--st-done);
@@ -594,9 +608,9 @@ body.is-resizing * {
 }
 
 .band + .band {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
 }
 
 .band-head {
@@ -1438,7 +1452,7 @@ body.is-resizing * {
   color: var(--muted);
 }
 .git-push {
-  color: var(--accent);
+  color: var(--muted);
 }
 .git-warn {
   color: var(--st-waiting);
@@ -1473,12 +1487,14 @@ body.is-resizing * {
   align-items: center;
   gap: 5px;
   margin-right: 4px;
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--muted);
+  border-color: var(--line);
+  background: transparent;
 }
 .btn-ship:hover:not([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .btn-ship[aria-disabled="true"] {
   opacity: 0.5;
@@ -2371,12 +2387,12 @@ td.task-last {
 /* A letter on a color of its own, soft enough to sit beside the name. */
 .picon-mono {
   font-weight: 700;
-  color: hsl(var(--hue) 55% 88%);
-  background: hsl(var(--hue) 38% 32%);
+  color: hsl(var(--hue) 35% 80%);
+  background: hsl(var(--hue) 22% 26%);
 }
 :root[data-mode="light"] .picon-mono {
-  color: hsl(var(--hue) 50% 28%);
-  background: hsl(var(--hue) 60% 88%);
+  color: hsl(var(--hue) 35% 32%);
+  background: hsl(var(--hue) 30% 91%);
 }
 .sessions-title h1 {
   display: flex;
@@ -2568,7 +2584,7 @@ td.task-last {
   font-size: 11px;
   font-weight: 700;
   text-align: center;
-  color: var(--st-running);
+  color: var(--amber);
 }
 .mark-added,
 .mark-untracked {
@@ -2830,7 +2846,7 @@ td.task-last {
   color: var(--st-done);
 }
 .checks-pending {
-  color: var(--st-running);
+  color: var(--amber);
 }
 .checks-failing {
   color: var(--st-waiting);
@@ -2857,6 +2873,10 @@ td.task-last {
 .git-review {
   font-size: 12px;
   font-weight: 600;
+  color: var(--muted);
+}
+.git-review:hover {
+  color: var(--accent);
 }
 
 /* ---------- answering from the waiting list ---------- */

@@ -2,7 +2,11 @@
 // tasks pinned to the top of their branch, task colors, and tasks marked to
 // come back to. All of it lives in the desktop prefs beside the project
 // icons; the daemon (and so the TUI) keeps its own order.
-import { flash, getState, sortedProjects, worktreeAgents, type State } from "./store";
+import { useEffect } from "react";
+import { onAgentStatus } from "./client";
+import { afterStatus, settled } from "./followupRules";
+import { isWatching } from "./notify";
+import { flash, getState, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
 import { savePrefs, type DesktopPrefs } from "./theme";
 import type { Agent } from "./types";
 
@@ -34,6 +38,7 @@ function pruned(s: State, prefs: DesktopPrefs): DesktopPrefs {
     pinnedTasks,
     taskColors: keep(prefs.taskColors),
     followUps: keep(prefs.followUps),
+    autoFollowUps: keep(prefs.autoFollowUps),
   };
 }
 
@@ -125,9 +130,12 @@ export function isFollowUp(s: State, agentId: string): boolean {
 export function toggleFollowUp(agentId: string) {
   return save((prefs) => {
     const followUps = { ...prefs.followUps };
+    const autoFollowUps = { ...prefs.autoFollowUps };
+    // Either way the flag is yours now, so it won't clear on its own.
+    delete autoFollowUps[agentId];
     if (followUps[agentId] !== undefined) delete followUps[agentId];
     else followUps[agentId] = Date.now();
-    return { ...prefs, followUps };
+    return { ...prefs, followUps, autoFollowUps };
   });
 }
 
@@ -144,3 +152,38 @@ export function followUpAgents(s: State): { agent: Agent; at: number }[] {
     .flatMap(([id, at]) => (s.agents[id] ? [{ agent: s.agents[id], at }] : []))
     .sort((a, b) => a.at - b.at);
 }
+
+/** Whether the app flagged this task itself, when a turn ended unseen. */
+export function isAutoFollowUp(s: State, agentId: string): boolean {
+  return !!s.prefs.autoFollowUps?.[agentId];
+}
+
+/** Mount once: flags a task for follow-up when its turn ends while you
+ *  aren't looking, and drops those flags once you've acted on the task. */
+export function useAutoFollowUps() {
+  useEffect(() => {
+    // One write at a time, each worked out again from the prefs as they are
+    // by then, so two turns ending together both get flagged.
+    let chain = Promise.resolve();
+    const write = (change: (prefs: DesktopPrefs) => DesktopPrefs | null) => {
+      if (!change(getState().prefs)) return;
+      chain = chain.then(async () => {
+        const next = change(getState().prefs);
+        if (next) await save(() => next);
+      });
+    };
+    const off = onAgentStatus((agent, from) => {
+      const watching = isWatching(agent);
+      const at = Date.now();
+      write((prefs) => afterStatus(prefs, agent, from, watching, at));
+    });
+    const unsub = subscribe(() => {
+      if (getState().loaded) write((prefs) => settled(prefs, getState().agents));
+    });
+    return () => {
+      off();
+      unsub();
+    };
+  }, []);
+}
+

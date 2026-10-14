@@ -17,6 +17,7 @@ import { useUsagePolling } from "./nebula/usage";
 import { useTheme } from "./nebula/theme";
 import { useRunWatch } from "./nebula/runs";
 import { useLimitWatch } from "./nebula/limits";
+import { useAutoFollowUps } from "./nebula/organize";
 import { useProjectSessions } from "./nebula/focus";
 import { useProjectLogos } from "./nebula/icons";
 import { flash, getState, setState, subscribe, useAppState, waitingAgents } from "./nebula/store";
@@ -86,6 +87,7 @@ export default function App() {
   useTheme();
   useRunWatch();
   useLimitWatch();
+  useAutoFollowUps();
   useProjectSessions();
   useProjectLogos();
   useMinuteClock();
