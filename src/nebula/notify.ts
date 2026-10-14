@@ -6,6 +6,8 @@ import {
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getState, projectOfWorktree, waitingAgents } from "./store";
 import { isQuietNow } from "./quiet";
+import { allBatches } from "./batch";
+import { suppressTaskNotification } from "./board";
 import type { Agent, AgentStatus } from "./types";
 
 let permitted: boolean | null = null;
@@ -35,6 +37,9 @@ function where(agent: Agent): string {
 export async function onStatusChanged(agent: Agent, from: AgentStatus) {
   updateBadge();
   if (agent.archived || isWatching(agent) || isQuietNow()) return;
+  // A Dispatch batch's sessions report once, as a batch (batchRunner.ts),
+  // except when one is waiting on you.
+  if (suppressTaskNotification(agent.id, agent.status, allBatches())) return;
 
   let title: string | null = null;
   if (agent.status === "needs_feedback")

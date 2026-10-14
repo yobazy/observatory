@@ -3037,6 +3037,68 @@ td.task-last {
   margin: -4px 0 0;
 }
 
+/* ---------- project cards ---------- */
+
+.card-dialog {
+  max-height: 84vh;
+  overflow-y: auto;
+}
+.card-dialog > * {
+  flex-shrink: 0;
+}
+
+.field.field-top {
+  align-items: start;
+}
+.field-top > label {
+  padding-top: 8px;
+}
+.card-folder {
+  margin-top: -10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+.card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.card-stack .dialog-note {
+  margin: 0;
+}
+.task-box.card-desc,
+.task-box.card-sched {
+  min-height: 0;
+}
+.card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.card-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.field .card-cap input {
+  width: 56px;
+  padding: 5px 8px;
+}
+.segmented button:disabled {
+  opacity: 0.4;
+}
+.dialog-note.card-indent {
+  margin-left: 102px;
+}
+.dialog-note.card-flat {
+  margin: 0;
+}
+
 /* ---------- command palette ---------- */
 
 .scrim-palette {
@@ -4302,4 +4364,319 @@ button.attempt-status:hover span:nth-child(2) {
 }
 .md-pin.is-sent {
   background: var(--faint);
+}
+
+/* ---------- dispatch ---------- */
+
+.dispatch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dispatch-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  column-gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+}
+.dispatch-item:hover {
+  background: var(--raised);
+}
+.dispatch-item label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.dispatch-item input {
+  accent-color: var(--accent);
+  flex: none;
+}
+.dispatch-text {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.dispatch-item.is-done .dispatch-text {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+.dispatch-context {
+  grid-column: 1;
+  list-style: none;
+  margin: 2px 0 0 30px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  user-select: text;
+}
+.dispatch-remove {
+  grid-column: 2;
+  grid-row: 1;
+  opacity: 0;
+}
+.dispatch-item:hover .dispatch-remove,
+.dispatch-remove:focus-visible {
+  opacity: 1;
+}
+
+/* The router's plan, under review before anything starts. */
+.dialog.route-review {
+  width: min(760px, calc(100vw - 32px));
+  max-height: 84vh;
+}
+.route-review > * {
+  flex-shrink: 0;
+}
+.route-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  padding: 18px 0;
+}
+.route-status.route-failed {
+  flex-direction: column;
+  align-items: start;
+  gap: 8px;
+}
+.route-failed .dialog-note {
+  margin: 0;
+}
+.route-tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex-shrink: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.route-task {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.route-task.has-issue {
+  border-color: color-mix(in srgb, var(--st-waiting) 55%, var(--line));
+}
+.task-box.route-text {
+  min-height: 0;
+  padding: 8px 10px;
+}
+.route-from {
+  color: var(--faint);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.route-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.route-select {
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 4px 8px;
+  max-width: 220px;
+  outline: none;
+}
+.route-select:focus {
+  border-color: var(--accent);
+}
+.route-meta {
+  font-size: 12px;
+}
+.route-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.route-check input {
+  accent-color: var(--accent);
+}
+.route-note {
+  color: var(--faint);
+  margin-right: auto;
+}
+.route-question,
+.route-unsure,
+.route-issue {
+  margin: 0;
+  font-size: 12px;
+}
+.route-question {
+  color: var(--accent);
+  user-select: text;
+}
+.route-unsure {
+  color: var(--st-waiting);
+}
+
+/* ---------- dispatch board ---------- */
+
+.dispatch-tag {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0 5px;
+}
+.board-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.board-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.board-row.is-plan,
+.board-row.is-waiting {
+  border-color: color-mix(in srgb, var(--st-waiting) 45%, var(--line));
+}
+.board-row.is-done,
+.board-row.is-cancelled,
+.board-row.is-archived,
+.board-row.is-gone {
+  opacity: 0.65;
+}
+.board-row.is-done .board-text {
+  text-decoration: line-through;
+}
+.board-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.board-line input {
+  accent-color: var(--accent);
+  flex: none;
+  margin: 0;
+}
+.board-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
+  align-items: baseline;
+  gap: 12px;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+button.board-main:hover .board-text {
+  text-decoration: underline;
+}
+.board-text {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.board-target {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.board-status {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.board-status.is-plan,
+.board-status.is-waiting {
+  color: var(--st-waiting);
+}
+.board-status.is-failed,
+.board-status.is-stopped,
+.board-status.is-blocked {
+  color: var(--st-error);
+}
+.board-note,
+.board-activity,
+.board-changes {
+  margin: 0 0 0 18px;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  user-select: text;
+}
+.board-activity {
+  font-family: var(--mono);
+  font-size: 11px;
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.board-row .qa {
+  margin: 0 0 0 18px;
+}
+.board-plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.board-plan-actions .qa-reply {
+  flex: 1;
+}
+.dot-pending,
+.dot-listed,
+.dot-launching {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--st-idle);
+}
+.dot-failed,
+.dot-blocked {
+  background: var(--st-error);
+}
+.board-batches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.board-batches li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.board-batch-when {
+  color: var(--faint);
 }

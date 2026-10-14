@@ -3,6 +3,7 @@ import { readPresets, readSettings, request } from "../nebula/client";
 import { createAgent, defaultKind, HARNESSES } from "../nebula/actions";
 import { flash, projectWorktrees, setState, sortedProjects, useAppState } from "../nebula/store";
 import { attemptBranches, fanOut, openCompare } from "../nebula/fanout";
+import { suggestBranch } from "../nebula/branches";
 import { KIND_LABEL, settingsStem } from "../nebula/status";
 import type { AgentKind, AgentPreset } from "../nebula/types";
 
@@ -13,22 +14,12 @@ const MAX_ATTEMPTS = 6;
 
 type Settings = Record<string, unknown>;
 
-/** A branch name from the task's first words: "Fix login redirect" → fix-login-redirect. */
-function suggestBranch(task: string): string {
-  return task
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 5)
-    .join("-");
-}
-
 export function LaunchDialog({
   initialWorktree,
   seed,
   onClose,
   pickProject = false,
+  onDispatch,
 }: {
   initialWorktree: string | null;
   /** Let the project be picked here, as quick capture does from anywhere. */
@@ -36,6 +27,8 @@ export function LaunchDialog({
   /** Duplicate's starting point: the task and harness to begin from. */
   seed?: { task: string; kind: AgentKind } | null;
   onClose: () => void;
+  /** Offer Dispatch instead, as quick capture does: what's typed so far goes with it. */
+  onDispatch?: (text: string) => void;
 }) {
   const state = useAppState();
   const projects = useMemo(() => sortedProjects(state), [state]);
@@ -208,6 +201,14 @@ export function LaunchDialog({
           rows={5}
           aria-label="Task"
         />
+        {onDispatch && (
+          <p className="dialog-note">
+            A list of things to do?{" "}
+            <button type="button" className="link-btn" onClick={() => onDispatch(task)} disabled={busy}>
+              Paste it into Dispatch
+            </button>
+          </p>
+        )}
 
         <div className="field">
           <label htmlFor="launch-where">Run on</label>

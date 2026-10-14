@@ -23,13 +23,17 @@ export function defaultKind(settings: Settings): AgentKind {
   return kind ?? "claude";
 }
 
-/** Start an agent in `worktree` and select it. Resolves with its id. */
+/** Start an agent in `worktree` and select it — unless `select: false`, for
+ *  launches the user didn't make one by one (Dispatch's batches), which
+ *  mustn't pull the terminal away from what they're looking at. Resolves
+ *  with its id. */
 export async function createAgent(opts: {
   worktree: string;
   kind: AgentKind;
   settings: Settings;
   prompt: string | null;
   preset?: AgentPreset;
+  select?: boolean;
 }): Promise<string | null> {
   const { worktree, settings, preset } = opts;
   const kind = preset?.kind ?? opts.kind;
@@ -54,7 +58,7 @@ export async function createAgent(opts: {
     issue_url: null,
   });
   if (created && "Agent" in created) {
-    setState({ selectedSession: { Agent: created.Agent } });
+    if (opts.select !== false) setState({ selectedSession: { Agent: created.Agent } });
     return created.Agent;
   }
   return null;

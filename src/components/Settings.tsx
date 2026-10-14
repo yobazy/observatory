@@ -24,6 +24,7 @@ import { play } from "../nebula/delight";
 import { chosenEditor, useEditors } from "./Editor";
 import { getVersion } from "@tauri-apps/api/app";
 import { isPreview } from "../nebula/client";
+import { DEFAULT_CAP, globalCap } from "../nebula/batch";
 import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
@@ -91,6 +92,7 @@ export function SettingsView() {
             <>
               <Rows rows={GENERAL} settings={settings} save={save} />
               <Previews />
+              <DispatchSettings />
               <Updates />
             </>
           ) : tab === "Sessions" ? (
@@ -179,6 +181,58 @@ function Previews() {
           on={prefs.previewShownFiles !== false}
           onChange={(on) => void savePrefs({ ...prefs, previewShownFiles: on })}
         />
+      </div>
+    </Group>
+  );
+}
+
+/** The agent CLI Dispatch routes a list with (router.rs), and how many
+ *  sessions it runs at once (batch.ts). */
+function DispatchSettings() {
+  const { prefs } = useAppState();
+  return (
+    <Group title="Dispatch">
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-router">
+            Router
+          </label>
+          <span className="setting-hint">
+            The agent CLI that turns a pasted list into a plan, run headless with the prompt on stdin. Codex needs{" "}
+            <code>--skip-git-repo-check</code>.
+          </span>
+        </div>
+        <TextSetting
+          id="set-router"
+          value={prefs.routerCommand ?? ""}
+          placeholder="claude -p"
+          suggestions={["claude -p", "claude -p --model haiku", "codex exec --skip-git-repo-check"]}
+          onCommit={(v) => void savePrefs({ ...prefs, routerCommand: v || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-dispatch-cap">
+            Sessions at once
+          </label>
+          <span className="setting-hint">
+            How many dispatched tasks run at the same time. The rest wait and start as these finish. A Shared
+            project's own limit applies too.
+          </span>
+        </div>
+        <select
+          id="set-dispatch-cap"
+          className="setting-input"
+          value={String(globalCap(prefs.dispatchCap))}
+          onChange={(e) => void savePrefs({ ...prefs, dispatchCap: Number(e.target.value) })}
+        >
+          {[1, 2, 3, 4, 5, 6, 8, 10, 12].map((n) => (
+            <option key={n} value={n}>
+              {n}
+              {n === DEFAULT_CAP ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
       </div>
     </Group>
   );
@@ -486,9 +540,9 @@ function SettingRow({ row, v, save }: { row: Row; v: unknown; save: (k: string, 
   );
 }
 
-function Switch({ id, on, onChange }: { id: string; on: boolean; onChange: (on: boolean) => void }) {
+export function Switch({ id, on, onChange }: { id: string; on: boolean; onChange: (on: boolean) => void }) {
   return (
-    <button id={id} role="switch" aria-checked={on} className={`switch${on ? " is-on" : ""}`} onClick={() => onChange(!on)}>
+    <button type="button" id={id} role="switch" aria-checked={on} className={`switch${on ? " is-on" : ""}`} onClick={() => onChange(!on)}>
       <span className="switch-knob" aria-hidden />
     </button>
   );

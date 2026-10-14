@@ -1,3 +1,4 @@
+mod cards;
 mod daemon;
 mod editor;
 mod gh;
@@ -6,6 +7,7 @@ mod icons;
 mod nebula_setup;
 mod preview;
 mod relocate;
+mod router;
 mod settings;
 mod title;
 mod tray;
@@ -43,6 +45,8 @@ pub fn run() {
             daemon::read_presets,
             daemon::debug_log,
             daemon::inspect_folder,
+            cards::read_card_sources,
+            router::route_list,
             git::git_status,
             git::git_diff,
             git::delete_branch,

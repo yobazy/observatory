@@ -3,11 +3,15 @@ import { Sidebar, selectAgent } from "./components/Sidebar";
 import { Sessions } from "./components/Sessions";
 import { TerminalPane } from "./components/TerminalPane";
 import { LaunchDialog } from "./components/LaunchDialog";
+import { DispatchDialog } from "./components/DispatchDialog";
+import { DispatchBoard } from "./components/DispatchBoard";
+import { CardDialog, type CardTarget } from "./components/CardDialog";
 import type { Seed } from "./components/RowMenu";
 import { DaemonGate } from "./components/DaemonGate";
 import { Welcome } from "./components/Welcome";
 import { AddProjectDialog, Notice, addProject, type AddStep } from "./components/AddProject";
-import { start } from "./nebula/client";
+import { pickFolder, start } from "./nebula/client";
+import { homeCard, homeKeyFor, isFolderKey } from "./nebula/cards";
 import { useGitPolling } from "./nebula/git";
 import { fitColumns, Resizer, SESSIONS, SIDEBAR, useColumnWidth, useHidden, useWindowWidth } from "./components/Resizer";
 import { PanelGlyph } from "./components/Sidebar";
@@ -23,6 +27,7 @@ import { useProjectLogos } from "./nebula/icons";
 import { flash, getState, setState, subscribe, useAppState, waitingAgents } from "./nebula/store";
 import { usePrPolling } from "./nebula/prs";
 import { useQueueRunner } from "./nebula/queue";
+import { useBatchRunner } from "./nebula/batchRunner";
 import { ReviewView } from "./components/Review";
 import { CompareView } from "./components/Compare";
 import { GridView } from "./components/Grid";
@@ -48,13 +53,45 @@ export default function App() {
     setLaunchKey((k) => k + 1);
     setLaunch({ worktree: worktree ?? null, seed });
   }, []);
+  // Dispatch, the day's to-do list; `text` is a list to paste in to begin with.
+  const [dispatch, setDispatch] = useState<{ text: string } | null>(null);
+  const openDispatch = useCallback((text = "") => {
+    setLaunch(null);
+    setDispatch({ text });
+  }, []);
+  // A project card, or Home's: Home is picked from the palette, and can be
+  // any folder, a project's or not.
+  const [card, setCard] = useState<CardTarget | null>(null);
+  const pickHome = useCallback(async () => {
+    const path = await pickFolder(homeCard()?.card.homeFolder ?? undefined, "Pick a folder as Home");
+    if (!path) return;
+    const projects = Object.values(getState().projects);
+    const key = homeKeyFor(path, projects);
+    const project = getState().projects[key];
+    setCard({
+      cardKey: key,
+      name: project?.name ?? path.split("/").filter(Boolean).pop() ?? path,
+      folder: project?.repo_path ?? path,
+      makeHome: true,
+    });
+  }, []);
+  const editHome = useCallback(() => {
+    const home = homeCard();
+    if (!home) return;
+    const project = getState().projects[home.key];
+    const folder = project?.repo_path ?? home.card.homeFolder ?? home.key;
+    setCard({ cardKey: home.key, name: project?.name ?? (isFolderKey(home.key) ? "Home" : folder), folder });
+  }, []);
   // Quick capture (the global hotkey, the menu bar): from anywhere, so the
-  // project is picked in the dialog.
+  // project is picked in the dialog, or the list goes to Dispatch. With no
+  // project to start a task in, Dispatch is all there is.
   const openCapture = useCallback(() => {
     setState({ view: "sessions" });
+    if (!Object.keys(getState().projects).length) return openDispatch();
+    setDispatch(null);
     setLaunchKey((k) => k + 1);
     setLaunch({ worktree: null, pickProject: true });
-  }, []);
+  }, [openDispatch]);
   const openAgent = useCallback((id: string) => {
     const a = getState().agents[id];
     if (a) selectAgent(a);
@@ -83,6 +120,7 @@ export default function App() {
   usePreviewEvents();
   useShelf();
   useQueueRunner();
+  useBatchRunner();
   useUsagePolling();
   useTheme();
   useRunWatch();
@@ -110,13 +148,16 @@ export default function App() {
   const paletteCtx = useMemo<PaletteContext>(
     () => ({
       newTask: () => openLaunch(),
+      dispatch: () => openDispatch(),
+      pickHome: () => void pickHome().catch((e) => flash(`Couldn't open the folder picker: ${e instanceof Error ? e.message : String(e)}`)),
+      editHome,
       addProject: openAddProject,
       toggleProjects: () => setHideProjects((h) => !h),
       toggleTasks: () => setHideTasks((h) => !h),
       toggleGrid: () => setGrid((g) => !g),
       prompt: setTextDialog,
     }),
-    [openLaunch, openAddProject, setHideProjects, setHideTasks, setGrid],
+    [openLaunch, openDispatch, pickHome, editHome, openAddProject, setHideProjects, setHideTasks, setGrid],
   );
 
   const reveal = [
@@ -125,7 +166,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⌘O adds a project; ⌘U shows usage; ⌘, settings; ⌘J cycles through the sessions waiting on you.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘O adds a project; ⌘U shows usage; ⌘, settings; ⌘J cycles through the sessions waiting on you.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -135,6 +176,9 @@ export default function App() {
       } else if (e.key === "g") {
         e.preventDefault();
         setGrid((g) => !g);
+      } else if (e.code === "KeyN" && e.shiftKey) {
+        e.preventDefault();
+        openDispatch();
       } else if (e.key === "n") {
         e.preventDefault();
         if (Object.keys(getState().projects).length) openLaunch();
@@ -164,7 +208,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [openLaunch, openAddProject, setHideProjects, setHideTasks, setGrid]);
+  }, [openLaunch, openDispatch, openAddProject, setHideProjects, setHideTasks, setGrid]);
 
   return (
     <div
@@ -180,7 +224,7 @@ export default function App() {
       <div className="column column-sidebar" hidden={hideProjects}>
         {!hideProjects && (
           <>
-            <Sidebar onAddProject={openAddProject} onHide={() => setHideProjects(true)} />
+            <Sidebar onAddProject={openAddProject} onHide={() => setHideProjects(true)} onDispatch={() => openDispatch()} />
             <Resizer spec={SIDEBAR} width={sidebarCol} onWidth={setSidebarW} />
           </>
         )}
@@ -212,15 +256,19 @@ export default function App() {
       {view === "settings" && <SettingsView />}
       {view === "review" && <ReviewView key={getState().review ?? ""} />}
       {view === "compare" && <CompareView />}
+      {view === "dispatch" && <DispatchBoard onOpenList={() => openDispatch()} />}
       {launch && (
         <LaunchDialog
           key={launchKey}
           initialWorktree={launch.worktree}
           seed={launch.seed}
           pickProject={launch.pickProject}
+          onDispatch={launch.pickProject ? openDispatch : undefined}
           onClose={() => setLaunch(null)}
         />
       )}
+      {card && <CardDialog key={card.cardKey} target={card} onClose={() => setCard(null)} />}
+      {dispatch && <DispatchDialog initialText={dispatch.text} onClose={() => setDispatch(null)} />}
       {addStep && <AddProjectDialog step={addStep} onDone={setAddStep} />}
       {palette && <Palette ctx={paletteCtx} onClose={() => setPalette(false)} />}
       {textDialog && <TextDialog d={textDialog} onClose={() => setTextDialog(null)} />}

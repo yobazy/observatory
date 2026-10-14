@@ -5,6 +5,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview, request } from "./client";
 import { createAgent } from "./actions";
+import { freeName } from "./branches";
 import { useEffect } from "react";
 import { getState, setState, subscribe, type State } from "./store";
 import type { AgentKind } from "./types";
@@ -57,7 +58,7 @@ export function attemptBranches(base: string, kinds: AgentKind[], copies: number
 
 /** Branch names already taken in the project: local branches, and the
  *  daemon's worktrees (in case git can't be asked). */
-async function takenBranches(projectId: string): Promise<Set<string>> {
+export async function takenBranches(projectId: string): Promise<Set<string>> {
   const s = getState();
   const taken = new Set(Object.values(s.worktrees).filter((w) => w.project_id === projectId).map((w) => w.branch));
   const project = s.projects[projectId];
@@ -66,12 +67,6 @@ async function takenBranches(projectId: string): Promise<Set<string>> {
     local.forEach((b) => taken.add(b));
   }
   return taken;
-}
-
-/** `name`, or `name-2`, `name-3`… — the first one not taken. */
-function freeName(name: string, taken: Set<string>): string {
-  if (!taken.has(name)) return name;
-  for (let n = 2; ; n++) if (!taken.has(`${name}-${n}`)) return `${name}-${n}`;
 }
 
 /** Start the task on a new worktree per attempt, each on a branch that

@@ -15,6 +15,8 @@ import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import { ColorRow } from "./Organize";
 import { resetProjectOrder } from "../nebula/organize";
 import { locateProject } from "../nebula/relocate";
+import { useCards } from "../nebula/cards";
+import { CardDialog, type CardTarget } from "./CardDialog";
 
 export function ProjectIcon({ project, size = 18 }: { project: Project; size?: number }) {
   const { prefs, logos } = useAppState();
@@ -161,7 +163,9 @@ export function useProjectMenu() {
   const [menu, setMenu] = useState<{ items: MenuItem[]; x: number; y: number; label: string } | null>(null);
   const [picking, setPicking] = useState<Project | null>(null);
   const [confirm, setConfirm] = useState<ConfirmDialogSpec | null>(null);
+  const [card, setCard] = useState<CardTarget | null>(null);
   const { prefs, missingProjects } = useAppState();
+  const cards = useCards();
 
   const openFor = (e: React.MouseEvent, project: Project) => {
     e.preventDefault();
@@ -170,7 +174,12 @@ export function useProjectMenu() {
     if (missingProjects[project.id]) {
       items.push({ label: "Locate folder…", run: () => void locateProject(project) });
     }
-    items.push({ label: "Icon & color…", run: () => setPicking(project), separated: items.length > 0 });
+    items.push({
+      label: cards[project.id]?.isHome ? "Project card (Home)…" : "Project card…",
+      run: () => setCard({ cardKey: project.id, name: project.name, folder: project.repo_path }),
+      separated: items.length > 0,
+    });
+    items.push({ label: "Icon & color…", run: () => setPicking(project) });
     if (prefs.projectIcons?.[project.repo_path] || prefs.projectColors?.[project.repo_path]) {
       items.push({
         label: "Reset icon & color",
@@ -206,6 +215,7 @@ export function useProjectMenu() {
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
       {picking && <IconPicker project={picking} onClose={() => setPicking(null)} />}
       {confirm && <ConfirmDialog d={confirm} onClose={() => setConfirm(null)} />}
+      {card && <CardDialog target={card} onClose={() => setCard(null)} />}
     </>
   );
   return { openFor, element };

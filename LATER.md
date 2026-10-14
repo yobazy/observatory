@@ -1,0 +1,12 @@
+# Later
+
+- Cross-project tasks as linked subtasks: one subtask per project, each in its own worktree, grouped under a parent row. Plans are approved together, and each subtask gets its sibling's approved plan as a contract. Optional ordering: a dependent subtask starts after the other finishes and receives its diff summary. The parent is done when all children are done. Why: valuable, but MVP routing works fine with single-project tasks.
+- Persistent rolling to-do list: unfinished items carry over from day to day. Why: moves Dispatch toward replacing a scheduling app, which is not needed to prove routing and dispatch.
+- Cheap Haiku progress summaries per running task. Why: the last screen line is enough for "what it's doing now" in the MVP.
+- Learning from routing corrections: offer to update a project card when the user re-routes a task. Why: needs real correction data first; cards can be edited by hand in the meantime.
+- Smarter file-contention handling in Shared projects beyond concurrency caps. Why: per-project caps (plus the project's own writer locks) cover the MVP risk.
+- Other input sources beyond paste (for example, pulling lists from Notion). Why: paste plus quick capture covers the core loop, and integrations go against the "nothing hardwired" principle unless they are done through agents.
+- Native plan mode for Claude tasks (`--permission-mode plan`) in place of the prompt postfix. Why: `CreateAgent` has no field for launch flags, so this needs a nebula-core protocol change. The postfix works for every harness in the meantime.
+- Router runs leave a saved `claude -p` session behind (the default command is plain `claude -p`); passing `--no-session-persistence --tools ""` by default would keep them out of history and usage scans. Why: the spec names `claude -p` as the default, and the user can already set flags in Settings.
+- Home as a plain (non-git) folder: nebula's AddProject only takes a git repo (or `git init`s one with `create_missing`, which needs the user's OK), so Home and `you` tasks there stay blocked with "Home needs to be a git folder for now". Why: letting Home sessions run outside a repo needs a daemon change, or an explicit "make it a git repo" confirm in the app.
+- The Dispatch dialog's one-line summary (batchCounts) counts a session stopped at its plan as done; the board's batchSummary says "needs you". Why: the board is where tasks are tracked now; the dialog line could reuse batchSummary.

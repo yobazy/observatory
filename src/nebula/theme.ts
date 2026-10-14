@@ -75,6 +75,11 @@ export interface DesktopPrefs {
   /** Which of those the app flagged itself, when a turn ended while you
    *  weren't looking (followupRules.ts); they clear once you act. */
   autoFollowUps?: Record<string, true>;
+  /** The agent CLI Dispatch routes a list with, headless (router.rs);
+   *  `claude -p` when unset. */
+  routerCommand?: string;
+  /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
+  dispatchCap?: number;
 }
 
 export type ProjectIconChoice = { kind: "emoji"; value: string } | { kind: "image"; value: string };

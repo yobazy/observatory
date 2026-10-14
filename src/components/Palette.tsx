@@ -21,9 +21,14 @@ import { currentEditor, openInEditor } from "./Editor";
 import { selectAgent } from "./Sidebar";
 import type { TextDialogSpec } from "./Dialogs";
 import type { Agent } from "../nebula/types";
+import { homeCard } from "../nebula/cards";
 
 export interface PaletteContext {
   newTask: () => void;
+  dispatch: () => void;
+  /** Pick a folder to be Home, where errands and scheduling run. */
+  pickHome: () => void;
+  editHome: () => void;
   addProject: () => void;
   toggleProjects: () => void;
   toggleTasks: () => void;
@@ -57,6 +62,10 @@ function build(s: State, ctx: PaletteContext): Item[] {
     items.push({ id: `act:${id}`, group: "Actions", label, run, keys, detail });
 
   if (s.selectedProject) act("new", "New task", ctx.newTask, "⌘N");
+  act("dispatch", "Dispatch: paste a to-do list", ctx.dispatch, "⇧⌘N");
+  act("dispatch-board", "Dispatch board", () => setState({ view: "dispatch" }));
+  if (homeCard()) act("home-edit", "Edit Home card", ctx.editHome);
+  act("home-pick", homeCard() ? "Move Home to another folder…" : "Set Home folder…", ctx.pickHome);
   const waiting = waitingAgents(s);
   if (waiting.length) act("waiting", "Next task waiting on you", () => selectAgent(waiting[0]), "⌘J", `${waiting.length} waiting`);
 
