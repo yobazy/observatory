@@ -16,7 +16,9 @@
 #    writes latest.json beside the DMG: what installed copies check for
 #    (tauri.conf.json, plugins.updater). Both go up with the release.
 # 5. Writes release notes from the commit subjects since the last version's
-#    tag, for the GitHub release and latest.json (the app shows them).
+#    tag: the plain list for latest.json (the app shows it), and a release
+#    page around it for GitHub, with the icon, a download link, the demo
+#    and how to install.
 #
 # The app-specific password (appleid.apple.com → Sign-In and Security) is
 # kept in your login keychain by --setup, never in a file or the shell. The
@@ -202,14 +204,32 @@ NOTES="$(cat "$notes_file")" VERSION="$VERSION" URL="$releases/download/v$VERSIO
 '
 ok "latest.json: $VERSION at $releases/download/v$VERSION/"
 
+# ---- the GitHub release page: the same notes, dressed for a first visit ----
+
+# Images come from the release's own tag, so the page shows what shipped.
+repo="${releases#https://github.com/}"
+repo="${repo%/releases}"
+raw="https://raw.githubusercontent.com/$repo/v$VERSION"
+page_file="$(mktemp)"
+{
+  printf '<p align="center">\n  <img src="%s/src-tauri/icons/128x128@2x.png" width="96" height="96" alt="%s icon">\n</p>\n\n' "$raw" "$NAME"
+  printf '<p align="center">\n  <a href="%s/download/v%s/%s"><b>Download %s</b></a> · macOS, Apple Silicon and Intel\n</p>\n\n' "$releases" "$VERSION" "$dmg" "$dmg"
+  printf "## What's new\n\n"
+  cat "$notes_file"
+  printf '\n## Install\n\n'
+  printf 'Open %s and drag %s into Applications. The first time you open it, it installs nebula for you. Already using %s? It updates itself; this version will be offered the next time it checks.\n\n' "$dmg" "$NAME" "$NAME"
+  printf '<img src="%s/docs/demo.gif" width="880" alt="%s in use">\n' "$raw" "$NAME"
+} >"$page_file"
+ok "release page: icon, download link, $(wc -l <"$notes_file" | tr -d ' ') changes, install steps"
+
 # ---- publish ----
 
 if [ "$PUBLISH" = 1 ]; then
   step "Publishing v$VERSION"
-  gh release create "v$VERSION" "$dmg" "$update_tgz" latest.json --target "$commit" --title "$NAME $VERSION" --notes-file "$notes_file"
+  gh release create "v$VERSION" "$dmg" "$update_tgz" latest.json --target "$commit" --title "$NAME $VERSION" --notes-file "$page_file"
   ok "released v$VERSION"
 else
   printf '\nRelease notes:\n%s\n' "$(cat "$notes_file")"
   printf '\n%s is ready. Publish it with: %s --publish\n' "$dmg" "$0"
 fi
-rm -f "$notes_file"
+rm -f "$notes_file" "$page_file"
