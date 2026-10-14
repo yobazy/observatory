@@ -15,6 +15,8 @@ export interface BranchWork {
   worktree: Worktree;
   project: Project | undefined;
   groups: Group<DiffFile>[];
+  /** Why this checkout's changes couldn't be read; the others still show. */
+  error?: string;
 }
 
 /** Dirty checkouts by the polled git state: what the sidebar counts. */
@@ -48,15 +50,21 @@ export async function loadUncommitted(s: State): Promise<BranchWork[]> {
   const dirty = dirtyWorktrees(s).map((d) => d.worktree);
   const edits = await editsByAgent(s, dirty.flatMap((w) => threadsOf(s, w.id)));
   const work = await Promise.all(
-    dirty.map(async (worktree) => {
-      const diff = await loadDiff(worktree, "uncommitted");
+    dirty.map(async (worktree): Promise<BranchWork> => {
+      const project = projectOfWorktree(s, worktree.id);
+      let diff;
+      try {
+        diff = await loadDiff(worktree, "uncommitted");
+      } catch (e) {
+        return { worktree, project, groups: [], error: e instanceof Error ? e.message : String(e) };
+      }
       const g = s.git[worktree.id];
       const since = g && !("error" in g) ? (g.lastCommit?.time ?? null) : null;
       const mine = Object.fromEntries(threadsOf(s, worktree.id).flatMap((a) => (edits[a.id] ? [[a.id, edits[a.id]]] : [])));
-      return { worktree, project: projectOfWorktree(s, worktree.id), groups: byThread(diff.files, worktree.path, mine, since) };
+      return { worktree, project, groups: byThread(diff.files, worktree.path, mine, since) };
     }),
   );
-  return work.filter((w) => w.groups.length > 0);
+  return work.filter((w) => w.groups.length > 0 || w.error);
 }
 
 /** What to tell a thread when asked to commit its share of the changes. */

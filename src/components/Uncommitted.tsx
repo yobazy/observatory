@@ -66,7 +66,7 @@ export function UncommittedView() {
         <p className="usage-empty">Everything is committed.</p>
       ) : (
         <div className="usage-body">
-          {work.map(({ worktree, project, groups }) => (
+          {work.map(({ worktree, project, groups, error: failed }) => (
             <section key={worktree.id} className="uc-branch" aria-label={`${project?.name ?? ""} ${worktree.branch}`}>
               <h2 className="uc-branch-head">
                 <ProjectDot project={project} />
@@ -77,6 +77,11 @@ export function UncommittedView() {
                   Review all
                 </button>
               </h2>
+              {failed && (
+                <p className="uc-muted uc-failed" role="alert">
+                  Couldn't read this branch's changes: {failed}
+                </p>
+              )}
               {groups.map((g) => {
                 const agent = g.agentId ? state.agents[g.agentId] : undefined;
                 const busy = agent && (agent.status === "running" || agent.status === "needs_feedback");

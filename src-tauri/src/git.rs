@@ -269,11 +269,20 @@ fn fork_point(dir: &Path, base: &str) -> Result<String, String> {
     }
 }
 
+/// HEAD, or in a repo with no commits yet git's empty tree, so everything
+/// staged there still shows as added.
+fn head_or_empty(dir: &Path) -> Result<String, String> {
+    if git(dir, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok() {
+        return Ok("HEAD".to_string());
+    }
+    git(dir, &["hash-object", "-t", "tree", "/dev/null"]).map(|s| s.trim().to_string())
+}
+
 fn diff(dir: &Path, base: Option<&str>) -> Result<Diff, String> {
     // The whole branch: everything since it left `base`, committed or not.
     let against = match base {
         Some(b) => fork_point(dir, b)?,
-        None => "HEAD".to_string(),
+        None => head_or_empty(dir)?,
     };
     let mut patch = git(
         dir,
@@ -425,6 +434,22 @@ mod tests {
 
         let d = diff(&dir, Some("main")).unwrap();
         assert!(d.patch.contains("-two") && d.patch.contains("+three"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn diffs_a_repo_with_no_commits() {
+        let dir = std::env::temp_dir().join(format!("nebula-diff-empty-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&dir, &["init", "-q", "-b", "main"]).unwrap();
+        std::fs::write(dir.join("staged.txt"), "a\n").unwrap();
+        git(&dir, &["add", "staged.txt"]).unwrap();
+        std::fs::write(dir.join("new.txt"), "b\n").unwrap();
+
+        let d = diff(&dir, None).unwrap();
+        assert!(d.patch.contains("+a"));
+        assert!(d.untracked.iter().any(|u| u.path == "new.txt"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

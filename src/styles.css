@@ -4739,6 +4739,9 @@ button.board-main:hover .board-text {
   font-weight: 400;
   color: var(--muted);
 }
+.uc-failed {
+  margin: 0;
+}
 .uc-thread {
   display: flex;
   flex-direction: column;
