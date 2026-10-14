@@ -16,6 +16,7 @@ import { restartToUpdate, useUpdateState } from "../nebula/updates";
 import { QuickAnswer } from "./QuickAnswer";
 import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon";
 import { FlagGlyph, FollowUps } from "./Organize";
+import { UncommittedEntry } from "./Uncommitted";
 import { moveProject } from "../nebula/organize";
 import { reorderKey, useReorder } from "./useReorder";
 import { useBatches } from "../nebula/batch";
@@ -157,6 +158,7 @@ export function Sidebar({
       )}
 
       <FollowUps />
+      <UncommittedEntry />
 
       <div className="project-search">
         <input

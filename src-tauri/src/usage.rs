@@ -128,7 +128,7 @@ struct CacheCreation {
     ephemeral_1h_input_tokens: u64,
 }
 
-fn logs_root() -> Option<PathBuf> {
+pub(crate) fn logs_root() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR") {
         return Some(PathBuf::from(dir).join("projects"));
     }
@@ -170,7 +170,7 @@ fn collect(dir: &Path, depth: u8, out: &mut Vec<PathBuf>) -> Vec<String> {
 }
 
 /// "2026-09-26T08:35:44.008Z" → Unix seconds (UTC; the logs always write Z).
-fn parse_time(ts: &str) -> Option<i64> {
+pub(crate) fn parse_time(ts: &str) -> Option<i64> {
     let b = ts.as_bytes();
     if b.len() < 19 {
         return None;
