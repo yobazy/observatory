@@ -7,6 +7,7 @@ import { DispatchDialog } from "./components/DispatchDialog";
 import { DispatchBoard } from "./components/DispatchBoard";
 import { CardDialog, type CardTarget } from "./components/CardDialog";
 import type { Seed } from "./components/RowMenu";
+import { useHandoffLinks, type Handoff } from "./nebula/handoffLinks";
 import { DaemonGate } from "./components/DaemonGate";
 import { Welcome } from "./components/Welcome";
 import { AddProjectDialog, Notice, addProject, type AddStep } from "./components/AddProject";
@@ -47,7 +48,12 @@ import { Palette, type PaletteContext } from "./components/Palette";
 import { TextDialog, type TextDialogSpec } from "./components/Dialogs";
 
 export default function App() {
-  const [launch, setLaunch] = useState<{ worktree: string | null; seed?: Seed; pickProject?: boolean } | null>(null);
+  const [launch, setLaunch] = useState<{
+    worktree: string | null;
+    seed?: Seed;
+    pickProject?: boolean;
+    handoff?: Handoff;
+  } | null>(null);
   // Each opening is a new dialog (see the key below), never an update to one
   // that is already mounted.
   const [launchKey, setLaunchKey] = useState(0);
@@ -55,6 +61,13 @@ export default function App() {
     setLaunchKey((k) => k + 1);
     setLaunch({ worktree: worktree ?? null, seed });
   }, []);
+  // A task handed over by an observatory:// link, once the projects are in.
+  useHandoffLinks(
+    useCallback((handoff: Handoff) => {
+      setLaunchKey((k) => k + 1);
+      setLaunch({ worktree: null, handoff });
+    }, []),
+  );
   // Dispatch, the day's to-do list; `text` is a list to paste in to begin with.
   const [dispatch, setDispatch] = useState<{ text: string } | null>(null);
   const openDispatch = useCallback((text = "") => {
@@ -273,6 +286,7 @@ export default function App() {
           initialWorktree={launch.worktree}
           seed={launch.seed}
           pickProject={launch.pickProject}
+          handoff={launch.handoff}
           onDispatch={launch.pickProject ? openDispatch : undefined}
           onClose={() => setLaunch(null)}
         />

@@ -19,6 +19,7 @@ import {
 } from "../nebula/settings";
 import { ACCENTS, MODES, resolvedMode, savePrefs, themeName } from "../nebula/theme";
 import { LINE_HEIGHTS, SIZE_MAX, SIZE_MIN, TERM_FONTS, termFont } from "../nebula/termfont";
+import { HANDOFF_INSTRUCTION } from "../nebula/handoff";
 import { sortedProjects } from "../nebula/store";
 import { QUICK_CAPTURE_CHOICES, QUICK_CAPTURE_DEFAULT } from "../nebula/desktop";
 import { play } from "../nebula/delight";
@@ -101,6 +102,7 @@ export function SettingsView() {
           ) : tab === "Agents" ? (
             <>
               <Rows rows={AGENTS_HEAD} settings={settings} save={save} />
+              <Handoffs />
               {harnessRows().map((h) => (
                 <Group key={h.title} title={h.title}>
                   <Rows rows={h.rows} settings={settings} save={save} />
@@ -124,6 +126,41 @@ const PLACEMENTS = [
   { id: "over", label: "Over the terminal" },
   { id: "beside", label: "Beside it" },
 ] as const;
+
+/** How an agent hands a task to another project: the lines to give it. */
+function Handoffs() {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Group title="Handing tasks between projects">
+      <div className="setting setting-stack">
+        <div className="setting-text">
+          <span className="setting-label">Let agents start tasks in other projects</span>
+          <span className="setting-hint">
+            Put this in your global <code>~/.claude/CLAUDE.md</code> or <code>AGENTS.md</code>. An agent that finds work for
+            another project opens a link, and it shows here as a New task for you to check and start.
+          </span>
+        </div>
+        <pre className="handoff-text">{HANDOFF_INSTRUCTION}</pre>
+        <div>
+          <button
+            className="btn btn-sm"
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(HANDOFF_INSTRUCTION)
+                .then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1800);
+                })
+                .catch(() => flash("Couldn't copy it; select the text instead."))
+            }
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+      </div>
+    </Group>
+  );
+}
 
 /** Previews of files agents make (Preview.tsx): where they open, and what
  *  opens them. */
