@@ -399,7 +399,21 @@ async function tryConnect() {
     setState((s) => ({ epoch: s.epoch + 1 }));
   } catch (e) {
     const reason = String(e);
-    if (reason === "already connected") return;
+    // The window reloaded (the error screen's Reload, or a dev reload) while
+    // the app stayed connected: start over on a new connection to get the
+    // projects again.
+    if (reason === "already connected") {
+      if (!getState().loaded) {
+        await invoke<number>("connect", { replace: true }).then(
+          () => setState((s) => ({ epoch: s.epoch + 1 })),
+          (e2) => {
+            setLink({ state: "disconnected", reason: String(e2) });
+            scheduleRetry();
+          },
+        );
+      }
+      return;
+    }
     setLink({ state: "disconnected", reason });
     scheduleRetry();
   }
