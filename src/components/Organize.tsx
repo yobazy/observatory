@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PROJECT_COLORS } from "../nebula/icons";
-import { followUpAgents, setTaskColor, toggleFlag } from "../nebula/organize";
+import { followUpAgents, isAutoFollowUp, setTaskColor, toggleFlag } from "../nebula/organize";
 import { relativeTime } from "../nebula/status";
 import { flash, projectOfWorktree, useAppState } from "../nebula/store";
 import type { Agent } from "../nebula/types";
@@ -81,8 +81,10 @@ export function TaskColorDialog({ agent, onClose }: { agent: Agent; onClose: () 
 /** How many flagged tasks show before "Show all". */
 const FOLLOW_UP_ROWS = 5;
 
-/** Tasks flagged to come back to, across projects. Those waiting on you
- *  are left to the list above, which already shows them. */
+/** Tasks flagged to come back to, across projects: those you flagged, and
+ *  those whose turn ended while you were away, until you act on them.
+ *  Those waiting on you are left to the list above, which already shows
+ *  them. */
 export function FollowUps() {
   const state = useAppState();
   const [all, setAll] = useState(false);
@@ -108,7 +110,10 @@ export function FollowUps() {
                     {project?.name}
                     {agent.archived && " · archived"}
                   </span>
-                  <span className="followup-age" title={`Flagged ${new Date(at).toLocaleString()}`}>
+                  <span
+                    className="followup-age"
+                    title={`${isAutoFollowUp(state, agent.id) ? "Finished while you were away," : "Flagged"} ${new Date(at).toLocaleString()}`}
+                  >
                     {relativeTime(at)}
                   </span>
                 </span>
