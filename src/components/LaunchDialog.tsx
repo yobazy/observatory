@@ -20,8 +20,11 @@ export function LaunchDialog({
   onClose,
   pickProject = false,
   onDispatch,
+  handoff,
 }: {
   initialWorktree: string | null;
+  /** A task another project's agent handed over by link (handoff.ts). */
+  handoff?: { projectId: string | null; named: string | null; prompt: string; from: string } | null;
   /** Let the project be picked here, as quick capture does from anywhere. */
   pickProject?: boolean;
   /** Duplicate's starting point: the task and harness to begin from. */
@@ -34,7 +37,10 @@ export function LaunchDialog({
   const projects = useMemo(() => sortedProjects(state), [state]);
   // Derived on every render rather than frozen at mount, so a selection that
   // changes (or was stale when the dialog opened) can't leave it blank.
-  const [pickedProject, setPickedProject] = useState<string | null>(null);
+  const [pickedProject, setPickedProject] = useState<string | null>(handoff?.projectId ?? null);
+  // A handed-over task whose project didn't match waits for you to pick one,
+  // rather than starting in whichever project happens to be open.
+  const unpicked = !!handoff && !handoff.projectId && !pickedProject && projects.length > 1;
   const projectId =
     [pickedProject, state.selectedProject].find((id) => id && state.projects[id]) ?? projects[0]?.id ?? null;
   const project = projectId ? state.projects[projectId] : undefined;
@@ -52,7 +58,7 @@ export function LaunchDialog({
   const [kinds, setKinds] = useState<AgentKind[]>([]);
   const [copies, setCopies] = useState(1);
   const [preset, setPreset] = useState<string>("");
-  const [task, setTask] = useState(seed?.task ?? "");
+  const [task, setTask] = useState(seed?.task ?? handoff?.prompt ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const taskBox = useRef<HTMLTextAreaElement>(null);
@@ -90,6 +96,10 @@ export function LaunchDialog({
 
   async function launch() {
     if (!projectId || busy) return;
+    if (unpicked) {
+      setError("Pick the project this task belongs in.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -160,7 +170,14 @@ export function LaunchDialog({
           void launch();
         }}
       >
-        {pickProject && projects.length > 1 ? (
+        {handoff && (
+          <p className="dialog-note handoff-from">
+            {handoff.from}
+            {!handoff.projectId &&
+              (handoff.named ? `. It named “${handoff.named}”, which isn't one project here: pick it.` : ". Pick the project.")}
+          </p>
+        )}
+        {(pickProject || handoff) && projects.length > 1 ? (
           <h2 id="launch-title" className="launch-title-pick">
             New task in{" "}
             <select
@@ -343,7 +360,12 @@ export function LaunchDialog({
           <button type="button" className="btn" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary" disabled={busy || (fanning && (!attempts.length || attempts.length > MAX_ATTEMPTS))}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={busy || unpicked || (fanning && (!attempts.length || attempts.length > MAX_ATTEMPTS))}
+            title={unpicked ? "Pick the project first" : undefined}
+          >
             {busy ? "Starting…" : fanning ? `Start ${attempts.length} attempts` : "Start task"}
           </button>
         </footer>

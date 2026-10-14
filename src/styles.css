@@ -2089,6 +2089,22 @@ td.task-last {
   /* The terminal draws no ligatures; neither does its sample. */
   font-variant-ligatures: none;
 }
+.handoff-text {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--term);
+  color: var(--muted);
+  font: 12px/1.5 var(--mono);
+  white-space: pre-wrap;
+  user-select: text;
+}
+.handoff-from {
+  margin: 0 0 8px;
+  color: var(--accent);
+}
 .setting-input {
   width: 200px;
   height: 28px;

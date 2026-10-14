@@ -117,4 +117,4 @@ Acceptance criteria:
 - Given the app isn't running, when the link opens, then the app launches and shows the same dialog once it has connected to the daemon (manual check).
 - Given an agent in another project is given the Settings instruction and asked to "hand this to Observatory", then it opens a link and the dialog shows a brief someone could act on without the original conversation (manual check with Claude and Codex).
 
-Status: todo
+Status: done. Not yet checked by hand: a link opened while the app is closed, and briefs written by Claude and Codex from the Settings instruction.
