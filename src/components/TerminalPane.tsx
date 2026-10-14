@@ -6,7 +6,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { debugLog, onExit, onPty, request, send, sendInput } from "../nebula/client";
 import { flash, getState, projectOfWorktree, setState, useAppState } from "../nebula/store";
-import { agentSpec, statusLabel } from "../nebula/status";
+import { agentSpec, harnessLabel, statusLabel, usualHarness } from "../nebula/status";
 import { sessionKey, type Agent, type SessionRef } from "../nebula/types";
 import { enqueue, isIdle, noteTyped, unqueue } from "../nebula/queue";
 import { noteSize } from "../nebula/screen";
@@ -281,8 +281,13 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
               }
             />
             <span className="pane-meta">
-              {agent && <span className={`pill pill-${agent.status}`}>{statusLabel(agent)}</span>}
-              <span>{agent ? agentSpec(agent) : "Shell"}</span>
+              {agent && (
+                <span className={`pill pill-${agent.status}`} title={agentSpec(agent)}>
+                  {statusLabel(agent)}
+                </span>
+              )}
+              {!agent && <span>Shell</span>}
+              {agent && harnessLabel(agent) !== usualHarness(Object.values(state.agents)) && <span>{harnessLabel(agent)}</span>}
               {project && (
                 <span>
                   {project.name}
@@ -317,11 +322,11 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
                 >
                   {isIdle(agent) ? "Follow up" : "Queue next"}
                 </button>
-                <button className="btn" onClick={() => request("RestartAgent", { id: agent.id })}>
+                <button className="btn btn-rare" onClick={() => request("RestartAgent", { id: agent.id })}>
                   Restart
                 </button>
                 <button
-                  className="btn"
+                  className="btn btn-rare"
                   onClick={() => {
                     void request("ArchiveAgent", { id: agent.id });
                     setState({ selectedSession: null });

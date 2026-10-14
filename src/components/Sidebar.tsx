@@ -40,6 +40,7 @@ export function Sidebar({
   const state = useAppState();
   const boardOn = useBatches().some((b) => !b.dismissed) || state.view === "dispatch";
   const [query, setQuery] = useState("");
+  const [needsOnly, setNeedsOnly] = useNeedsOnly();
   // Waiting rows opened to answer from here, by agent id.
   const [answering, setAnswering] = useState<Set<string>>(() => new Set());
   const toggleAnswer = (id: string) =>
@@ -51,18 +52,26 @@ export function Sidebar({
   const search = useRef<HTMLInputElement>(null);
   const projectMenu = useProjectMenu();
   // Dragging reorders the whole list, so not while it's filtered.
-  const reorder = useReorder((repo, to) => void moveProject(repo, to), !query);
+  const filtered = !!query || needsOnly;
+  const reorder = useReorder((repo, to) => void moveProject(repo, to), !filtered);
 
   const projects = useMemo(() => sortedProjects(state), [state]);
   const waiting = useMemo(() => waitingAgents(state), [state]);
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q
-      ? projects.filter(
-          (p) => p.name.toLowerCase().includes(q) || p.repo_path.toLowerCase().includes(q),
-        )
-      : projects;
-  }, [projects, query]);
+    if (q)
+      return projects.filter((p) => p.name.toLowerCase().includes(q) || p.repo_path.toLowerCase().includes(q));
+    // Needs you: what's waiting, working or unread, and the project you're in.
+    if (needsOnly)
+      return projects.filter(
+        (p) =>
+          p.id === state.selectedProject ||
+          state.missingProjects[p.id] ||
+          projectAgents(state, p.id).some((a) => a.status === "needs_feedback" || a.status === "running" || a.unseen),
+      );
+    return projects;
+  }, [projects, query, needsOnly, state]);
+  const hiddenCount = projects.length - shown.length;
 
   // ⌘P jumps to the project filter; ⌘1–9 picks a project.
   useEffect(() => {
@@ -160,7 +169,7 @@ export function Sidebar({
       <FollowUps />
       <UncommittedEntry />
 
-      <div className="project-search">
+      <div className="project-search has-toggle">
         <input
           ref={search}
           value={query}
@@ -177,9 +186,18 @@ export function Sidebar({
           }}
           placeholder={`Filter ${projects.length} projects`}
           aria-label="Filter projects"
+          aria-keyshortcuts="Meta+P"
+          title="Filter projects (⌘P)"
           spellCheck={false}
         />
-        <kbd>⌘P</kbd>
+        <button
+          className="needs-toggle"
+          aria-pressed={needsOnly}
+          onClick={() => setNeedsOnly(!needsOnly)}
+          title={needsOnly ? "Show every project" : "Show only projects with something waiting, working or unread"}
+        >
+          Needs you
+        </button>
       </div>
 
       <ul className="project-list" ref={reorder.list}>
@@ -187,18 +205,25 @@ export function Sidebar({
           <li key={p.id} {...reorder.item(p.repo_path)}>
             <ProjectRow
               project={p}
-              index={query ? null : i}
+              index={filtered ? null : i}
               agents={projectAgents(state, p.id)}
               live={Object.values(state.terminals).some(
                 (t) => t.alive && t.run_command !== null && state.worktrees[t.worktree_id]?.project_id === p.id,
               )}
               selected={p.id === state.selectedProject}
               onMenu={projectMenu.openFor}
-              onKeyDown={(e) => !query && reorderKey(e, i, shown.length, (to) => void moveProject(p.repo_path, to))}
+              onKeyDown={(e) => !filtered && reorderKey(e, i, shown.length, (to) => void moveProject(p.repo_path, to))}
             />
           </li>
         ))}
-        {shown.length === 0 && state.loaded && (
+        {needsOnly && !query && hiddenCount > 0 && (
+          <li className="project-quiet">
+            <button className="link-btn" onClick={() => setNeedsOnly(false)}>
+              {hiddenCount} quiet {hiddenCount === 1 ? "project" : "projects"}
+            </button>
+          </li>
+        )}
+        {shown.length === 0 && state.loaded && !needsOnly && (
           <li className="project-empty">
             {query ? (
               `No project matches “${query}”.`
@@ -245,6 +270,30 @@ export function Sidebar({
       </footer>
     </nav>
   );
+}
+
+const NEEDS_KEY = "observatory.sidebar.needsOnly";
+
+/** Whether the project list shows only what needs you; remembered per Mac. */
+function useNeedsOnly(): [boolean, (on: boolean) => void] {
+  const [on, setOn] = useState(() => {
+    try {
+      return localStorage.getItem(NEEDS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  return [
+    on,
+    (next) => {
+      setOn(next);
+      try {
+        localStorage.setItem(NEEDS_KEY, next ? "1" : "0");
+      } catch {
+        // Remembering it is a nicety.
+      }
+    },
+  ];
 }
 
 /** Once a new version is installed: restart into it, and what's in it. */

@@ -41,6 +41,19 @@ export function agentSpec(a: Agent): string {
   return [harness, a.model, a.effort].filter(Boolean).join(", ");
 }
 
+export function harnessLabel(a: Agent): string {
+  return a.custom_harness ?? KIND_LABEL[a.kind];
+}
+
+/** The harness most tasks use: the one not worth naming on every row. */
+export function usualHarness(agents: Agent[]): string | null {
+  const counts = new Map<string, number>();
+  for (const a of agents) counts.set(harnessLabel(a), (counts.get(harnessLabel(a)) ?? 0) + 1);
+  let best: string | null = null;
+  for (const [h, n] of counts) if (best === null || n > counts.get(best)!) best = h;
+  return best;
+}
+
 export function lastPrompt(a: Agent): string | null {
   return a.recent_prompts.length ? a.recent_prompts[a.recent_prompts.length - 1].text : null;
 }
