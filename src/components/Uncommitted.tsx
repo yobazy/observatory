@@ -126,7 +126,7 @@ export function UncommittedView() {
                           Open thread
                         </button>
                       )}
-                      <button className="btn btn-sm" onClick={() => openReview(worktree.id)}>
+                      <button className="btn btn-sm" onClick={() => openReview(worktree.id, agent?.id ?? null)}>
                         Review diff
                       </button>
                       {agent &&

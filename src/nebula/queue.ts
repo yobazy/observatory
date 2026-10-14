@@ -107,10 +107,10 @@ export async function enqueue(agent: Agent, text: string): Promise<"sent" | "que
 }
 
 /** Hand `prompt` to the branch's agent like runOnWorktree does, except that
- *  an agent still mid-turn gets it queued rather than refused. Resolves with
- *  a line saying what happened. */
-export async function handToBranch(worktreeId: string, prompt: string, what: string): Promise<string> {
-  const taker = takerFor(getState(), worktreeId);
+ *  an agent still mid-turn gets it queued rather than refused; or to `to`,
+ *  a thread picked by hand. Resolves with a line saying what happened. */
+export async function handToBranch(worktreeId: string, prompt: string, what: string, to?: Agent): Promise<string> {
+  const taker: ReturnType<typeof takerFor> = to ? { kind: "agent", agent: to } : takerFor(getState(), worktreeId);
   if (taker.kind === "new") {
     const settings = await readSettings();
     await createAgent({ worktree: worktreeId, kind: defaultKind(settings), settings, prompt });

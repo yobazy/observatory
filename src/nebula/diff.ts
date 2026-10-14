@@ -157,9 +157,10 @@ function untrackedFile(u: RawDiff["untracked"][number]): DiffFile {
   };
 }
 
-/** Show the review view for a checkout. */
-export function openReview(worktreeId: string) {
-  setState({ view: "review", review: worktreeId });
+/** Show the review view for a checkout; `fromAgent` is the thread it was
+ *  opened from, when it was. */
+export function openReview(worktreeId: string, fromAgent: string | null = null) {
+  setState({ view: "review", review: worktreeId, reviewFrom: fromAgent });
 }
 
 /** The main checkout's branch: what "the whole branch" is measured from. */

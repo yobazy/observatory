@@ -38,6 +38,8 @@ export interface State {
   view: "sessions" | "usage" | "settings" | "review" | "compare" | "dispatch" | "uncommitted";
   /** The checkout the review view shows (Review.tsx). */
   review: string | null;
+  /** The thread a review was opened from, whose turn tops it. */
+  reviewFrom: string | null;
   /** Tasks fanned out over several worktrees, by group id (fanout.ts), and
    *  the group the compare view shows. */
   fanouts: Record<string, FanOut>;
@@ -111,6 +113,7 @@ let state: State = {
   git: {},
   view: "sessions",
   review: null,
+  reviewFrom: null,
   fanouts: loadFanOuts(),
   compare: null,
   prs: {},
