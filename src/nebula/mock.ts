@@ -7,6 +7,7 @@ import type { Agent, AgentStatus, EntityId, Project, SessionRef, Worktree } from
 import type { State } from "./store";
 import type { ThreadEdit } from "./threadfiles";
 import type { Step as TurnStep, Turn } from "./turnsummary";
+import type { Entry as TranscriptEntry, Transcript } from "./transcript";
 
 const now = Date.now();
 const min = 60_000;
@@ -636,4 +637,24 @@ export function mockTurn(s: State, agentId: string): Turn | null {
   };
   const t = turns[agentId];
   return t ? { ...t, number: agentId === "a3" ? 3 : 1, dropped: 0, interrupted: false } : null;
+}
+
+/** The reader's conversation, made from the demo's latest turns. */
+export function mockTranscript(s: State, agentId: string): Transcript | null {
+  const turn = mockTurn(s, agentId);
+  if (!turn) return null;
+  const entries: TranscriptEntry[] = [];
+  const add = (kind: TranscriptEntry["kind"], text = "", steps: TranscriptEntry["steps"] = []) =>
+    entries.push({ n: entries.length, kind, text, at: turn.started, steps });
+  add("you", turn.prompt);
+  add("claude", "I'll read the sync code first, then make the change and run the tests.");
+  const half = Math.ceil(turn.steps.length / 2);
+  add("steps", "", turn.steps.slice(0, half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok })));
+  add(
+    "claude",
+    "Sync applied every update with `Promise.all`, so they **raced**. Now a worker applies the next update when the current one settles:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\n- Updates apply in order\n- A failure stops the queue instead of being lost",
+  );
+  add("steps", "", turn.steps.slice(half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok })));
+  if (turn.said) add("claude", turn.said);
+  return { entries, dropped: 0 };
 }

@@ -85,7 +85,7 @@ struct Message {
     content: Option<serde_json::Value>,
 }
 
-fn clip(s: &str) -> String {
+pub(crate) fn clip(s: &str) -> String {
     let s = s.trim();
     match s.char_indices().nth(MAX_TEXT) {
         Some((i, _)) => format!("{}…", &s[..i]),
@@ -98,7 +98,7 @@ fn text_of(v: &serde_json::Value, key: &str) -> Option<String> {
 }
 
 /// What a tool call acted on, by the inputs each kind of tool takes.
-fn target_of(input: &serde_json::Value) -> String {
+pub(crate) fn target_of(input: &serde_json::Value) -> String {
     for key in [
         "file_path",
         "notebook_path",
@@ -122,7 +122,7 @@ fn target_of(input: &serde_json::Value) -> String {
 
 /// A prompt you typed, as opposed to what the harness adds as a user message:
 /// command output, task notifications, skill text, another session's message.
-fn typed_prompt(content: &serde_json::Value) -> Option<String> {
+pub(crate) fn typed_prompt(content: &serde_json::Value) -> Option<String> {
     let text = match content {
         serde_json::Value::String(s) => s.clone(),
         serde_json::Value::Array(blocks) => {
