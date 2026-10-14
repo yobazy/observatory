@@ -8,7 +8,7 @@ import {
   worktreeAgents,
   worktreeTerminals,
 } from "../nebula/store";
-import { agentSpec, KIND_LABEL, lastPrompt, relativeTime, statusLabel } from "../nebula/status";
+import { agentSpec, harnessLabel, KIND_LABEL, lastPrompt, relativeTime, statusLabel, usualHarness } from "../nebula/status";
 import { request } from "../nebula/client";
 import { changedFiles, neverPushed, shipKind, type GitState, type GitStatus } from "../nebula/git";
 import { runOnWorktree, SHIP_LABEL, shipPrompt, shipWhat, takerFor } from "../nebula/actions";
@@ -632,6 +632,7 @@ function AgentRow({
   const colorStyle = useTaskColorStyle(agent);
   const picks = useContext(PicksContext);
   const isPicked = picks?.ids.has(agent.id) ?? false;
+  const usual = useMemo(() => usualHarness(Object.values(state.agents)), [state.agents]);
   return (
     <button
       className={`row row-${agent.status}${selected ? " is-selected" : ""}${isPicked ? " is-picked" : ""}${agent.unseen ? " is-unseen" : ""}${colorStyle ? " has-color" : ""}`}
@@ -657,16 +658,15 @@ function AgentRow({
       />
       <span className="row-main">
         <span className="row-name">{agent.name}</span>
-        <span className="row-detail">
-          <span className="row-agent" title={agentSpec(agent)}>
-            {agent.custom_harness ?? KIND_LABEL[agent.kind]}
-          </span>
-          {detail && (
+        <span className="row-detail" title={agentSpec(agent)}>
+          {/* The usual harness goes without saying; another one is named. */}
+          {usual !== harnessLabel(agent) && (
             <>
-              <span className="row-detail-separator" aria-hidden>·</span>
-              <span className="row-prompt">{detail}</span>
+              <span className="row-agent">{harnessLabel(agent)}</span>
+              {detail && <span className="row-detail-separator" aria-hidden>·</span>}
             </>
           )}
+          {detail && <span className="row-prompt">{detail}</span>}
         </span>
       </span>
       <span className="row-age">

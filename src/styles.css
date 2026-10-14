@@ -355,6 +355,30 @@ body.is-resizing * {
   position: relative;
   margin: 0 10px 6px;
 }
+.project-search.has-toggle input {
+  padding-right: 92px;
+}
+.needs-toggle {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+.needs-toggle:hover {
+  color: var(--text);
+}
+.needs-toggle[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 .project-search input {
   width: 100%;
   background: var(--panel);
@@ -475,6 +499,19 @@ body.is-resizing * {
 .seg-terminated {
   background: var(--st-error);
 }
+/* The badges say the same in words, so the bar shows on the open project
+   and on hover, not down the whole list. */
+.project-row:not(.is-selected):not(:hover):not(:focus-visible) .spectrum {
+  opacity: 0;
+}
+.spectrum {
+  transition: opacity 120ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spectrum {
+    transition: none;
+  }
+}
 .spectrum-empty {
   width: 28px;
   border-radius: 2px;
@@ -482,6 +519,13 @@ body.is-resizing * {
   opacity: 0.5;
 }
 
+.project-quiet {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.project-quiet .link-btn {
+  color: var(--faint);
+}
 .project-empty {
   color: var(--faint);
   padding: 12px 10px;
@@ -906,6 +950,18 @@ body.is-resizing * {
   display: flex;
   gap: 6px;
   flex: none;
+}
+/* Restart and Archive are rare: quiet until the header is pointed at. */
+.pane-actions .btn-rare {
+  color: var(--faint);
+  border-color: transparent;
+  background: transparent;
+  transition: color 100ms, border-color 100ms;
+}
+.pane-head:hover .pane-actions .btn-rare,
+.pane-actions .btn-rare:focus-visible {
+  color: var(--text);
+  border-color: var(--line);
 }
 
 .pane-body {
@@ -1473,6 +1529,10 @@ body.is-resizing * {
 }
 .git-age {
   margin-left: 6px;
+}
+/* The subject of the last commit is for when you look for it. */
+.band:not(:hover):not(:focus-within) .git-last {
+  opacity: 0;
 }
 
 /* Matches .icon-btn's 24px so the band head keeps one height. */
