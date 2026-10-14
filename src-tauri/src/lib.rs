@@ -11,6 +11,7 @@ mod router;
 mod settings;
 mod thread_edits;
 mod title;
+mod transcript;
 mod tray;
 mod turns;
 mod usage;
@@ -38,6 +39,7 @@ pub fn run() {
         .manage(usage::UsageState::default())
         .manage(thread_edits::EditsState::default())
         .manage(turns::TurnsState::default())
+        .manage(transcript::TranscriptState::default())
         .manage(preview::PreviewScope::default())
         .register_uri_scheme_protocol("preview", preview::serve)
         .invoke_handler(tauri::generate_handler![
@@ -60,6 +62,7 @@ pub fn run() {
             usage::usage_report,
             thread_edits::thread_edits,
             turns::thread_turn,
+            transcript::thread_transcript,
             settings::write_setting,
             settings::write_project_setting,
             settings::read_desktop_prefs,

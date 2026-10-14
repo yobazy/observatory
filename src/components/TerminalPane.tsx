@@ -12,6 +12,7 @@ import { enqueue, isIdle, noteTyped, unqueue } from "../nebula/queue";
 import { noteSize } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
 import { TurnStrip } from "./TurnStrip";
+import { Reader } from "./Reader";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { removeFromShelf, watchForFiles, type FileWatch, type ShelfItem } from "../nebula/shelf";
 import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
@@ -237,6 +238,14 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     if (agent?.unseen && document.hasFocus()) void send("MarkAgentSeen", { id: agent.id });
   }, [agent?.unseen, agent?.id]);
 
+  const [mode, setMode] = usePaneMode();
+  const canRead = !!agent && agent.kind === "claude" && !!agent.session_id;
+  const reading = canRead && mode === "read";
+  const toTerminal = () => {
+    setMode("terminal");
+    requestAnimationFrame(() => term.current?.focus());
+  };
+
   const project = agent || tab ? projectOfWorktree(state, (agent ?? tab)!.worktree_id) : undefined;
   const wt = agent || tab ? state.worktrees[(agent ?? tab)!.worktree_id] : undefined;
 
@@ -267,6 +276,22 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
             </span>
           </div>
           <div className="pane-actions">
+            {canRead && (
+              <div className="segmented segmented-sm pane-mode" role="radiogroup" aria-label="Show the thread as">
+                <button role="radio" aria-checked={!reading} className={reading ? "" : "is-on"} onClick={toTerminal}>
+                  Terminal
+                </button>
+                <button
+                  role="radio"
+                  aria-checked={reading}
+                  className={reading ? "is-on" : ""}
+                  onClick={() => setMode("read")}
+                  title="Read the thread as a conversation"
+                >
+                  Read
+                </button>
+              </div>
+            )}
             {agent && !agent.archived && (
               <>
                 <button
@@ -317,6 +342,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       {agent && <ShelfStrip agentId={agent.id} items={state.shelf[agent.id]} />}
       <div className="pane-body" data-drop-session={key ?? undefined}>
         <div ref={host} className={`xterm-host${exists ? "" : " is-hidden"}`} />
+        {reading && agent && <Reader key={agent.id} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} />}
         {!exists && (
           <div className="pane-empty">
             <p>Open a session from the list, or start something new.</p>
@@ -348,6 +374,30 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       {dialog && <TextDialog d={dialog} onClose={() => setDialog(null)} />}
     </section>
   );
+}
+
+const MODE_KEY = "observatory.paneMode";
+
+/** Terminal or reader: how threads show, remembered on this Mac. */
+function usePaneMode(): ["terminal" | "read", (m: "terminal" | "read") => void] {
+  const [mode, setMode] = useState<"terminal" | "read">(() => {
+    try {
+      return localStorage.getItem(MODE_KEY) === "read" ? "read" : "terminal";
+    } catch {
+      return "terminal";
+    }
+  });
+  return [
+    mode,
+    (m) => {
+      setMode(m);
+      try {
+        localStorage.setItem(MODE_KEY, m);
+      } catch {
+        // Remembering it is a nicety.
+      }
+    },
+  ];
 }
 
 function queueDialog(agent: Agent): TextDialogSpec {
