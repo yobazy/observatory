@@ -18,6 +18,7 @@ import {
   type Settings,
 } from "../nebula/settings";
 import { ACCENTS, MODES, resolvedMode, savePrefs, themeName } from "../nebula/theme";
+import { LINE_HEIGHTS, SIZE_MAX, SIZE_MIN, TERM_FONTS, termFont } from "../nebula/termfont";
 import { sortedProjects } from "../nebula/store";
 import { QUICK_CAPTURE_CHOICES, QUICK_CAPTURE_DEFAULT } from "../nebula/desktop";
 import { play } from "../nebula/delight";
@@ -300,6 +301,93 @@ function Group({ title, note, children }: { title: string; note?: string; childr
   );
 }
 
+/** The terminal's type, with a sample set in it. */
+function TerminalType() {
+  const { prefs } = useAppState();
+  const font = termFont(prefs);
+  const face = TERM_FONTS.find((f) => f.family === font.family) ?? TERM_FONTS[0];
+  return (
+    <Group title="Terminal text">
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-term-font">
+            Font
+          </label>
+          <span className="setting-hint">JetBrains Mono comes with the app; SF Mono is the one Terminal uses.</span>
+        </div>
+        <select
+          id="set-term-font"
+          className="setting-input"
+          value={face.id}
+          onChange={(e) => void savePrefs({ ...prefs, terminalFont: e.target.value })}
+        >
+          {TERM_FONTS.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-term-size">
+            Size
+          </label>
+          <span className="setting-hint">⌘+ and ⌘− change it from anywhere; ⌘0 puts it back.</span>
+        </div>
+        <div className="stepper">
+          <button
+            className="btn btn-sm"
+            aria-label="Smaller"
+            disabled={font.size <= SIZE_MIN}
+            onClick={() => void savePrefs({ ...prefs, terminalFontSize: font.size - 1 })}
+          >
+            −
+          </button>
+          <output id="set-term-size" className="stepper-value" aria-live="polite">
+            {font.size} pt
+          </output>
+          <button
+            className="btn btn-sm"
+            aria-label="Larger"
+            disabled={font.size >= SIZE_MAX}
+            onClick={() => void savePrefs({ ...prefs, terminalFontSize: font.size + 1 })}
+          >
+            +
+          </button>
+        </div>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label" id="term-line-label">
+            Line spacing
+          </span>
+        </div>
+        <div className="segmented segmented-sm" role="radiogroup" aria-labelledby="term-line-label">
+          {LINE_HEIGHTS.map((l) => (
+            <button
+              key={l.value}
+              role="radio"
+              aria-checked={font.lineHeight === l.value}
+              className={font.lineHeight === l.value ? "is-on" : ""}
+              onClick={() => void savePrefs({ ...prefs, terminalLineHeight: l.value })}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <pre
+        className="term-sample"
+        aria-label="Sample"
+        style={{ fontFamily: font.family, fontSize: font.size, lineHeight: font.lineHeight }}
+      >
+        {"> make cart sync apply one update at a time\n\n● Sync applies every update with Promise.all,\n  so they race. 0O 1lI {} [] => !== ~/code"}
+      </pre>
+    </Group>
+  );
+}
+
 function Appearance({ settings, save }: { settings: Settings; save: (k: string, v: unknown) => void }) {
   const { prefs } = useAppState();
   const theme = themeName(settings.theme);
@@ -395,6 +483,7 @@ function Appearance({ settings, save }: { settings: Settings; save: (k: string, 
           </div>
         </div>
       </Group>
+      <TerminalType />
       <SoundsAndEditor />
       <Group title="Terminal app" note="only changes how the TUI looks">
         <Rows rows={TUI_APPEARANCE} settings={settings} save={save} />
@@ -665,6 +754,7 @@ const SHORTCUTS: [string, string][] = [
   ["⌘J", "Next session waiting on you"],
   ["⌘U", "Agent usage"],
   ["⌘,", "Settings"],
+  ["⌘+ ⌘− ⌘0", "Terminal text: larger, smaller, back to normal"],
   ["⌘B", "Hide or show the projects sidebar"],
   ["⌥⌘B", "Hide or show the tasks column"],
   ["⌘G", "Watch up to four tasks in a grid"],

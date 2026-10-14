@@ -13,6 +13,7 @@ import { noteSize } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
 import { TurnStrip } from "./TurnStrip";
 import { Reader } from "./Reader";
+import { termFont } from "../nebula/termfont";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { removeFromShelf, watchForFiles, type FileWatch, type ShelfItem } from "../nebula/shelf";
 import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
@@ -85,8 +86,21 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const [dialog, setDialog] = useState<TextDialogSpec | null>(null);
   // The session's checkout: what a relative path in its output is under.
   const cwd = useRef<string | null>(null);
+  const refit = useRef<() => void>(() => {});
   const files = useRef<FileWatch | null>(null);
   cwd.current = agent || tab ? (state.worktrees[(agent ?? tab)!.worktree_id]?.path ?? null) : null;
+
+  // Follow the type picked in Settings, or ⌘+/⌘−; the new cell size can
+  // change the rows and columns, so the session hears about it.
+  const font = termFont(state.prefs);
+  useEffect(() => {
+    const t = term.current;
+    if (!t) return;
+    t.options.fontFamily = font.family;
+    t.options.fontSize = font.size;
+    t.options.lineHeight = font.lineHeight;
+    refit.current();
+  }, [ready, font.family, font.size, font.lineHeight]);
 
   // Follow the app's light/dark/black surfaces.
   useEffect(() => {
@@ -96,10 +110,11 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   // One xterm for the app's lifetime; sessions swap in and out of it.
   useEffect(() => {
     let disposed = false;
+    const font = termFont(getState().prefs);
     const t = new Terminal({
-      fontFamily: '"JetBrains Mono", ui-monospace, Menlo, monospace',
-      fontSize: 13,
-      lineHeight: 1.15,
+      fontFamily: font.family,
+      fontSize: font.size,
+      lineHeight: font.lineHeight,
       scrollback: 10_000,
       allowProposedApi: true,
       cursorBlink: true,
@@ -165,7 +180,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       setReady(true);
     });
 
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver(() => refit.current());
+    refit.current = () => {
       if (!term.current || !fit.current) return;
       const { cols, rows } = term.current;
       fit.current.fit();
@@ -174,7 +190,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
         void send("Resize", { session: current.current, cols: t2.cols, rows: t2.rows });
         if ("Agent" in current.current) noteSize(current.current.Agent, t2.cols, t2.rows);
       }
-    });
+    };
     if (host.current) observer.observe(host.current);
 
     return () => {

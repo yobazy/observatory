@@ -7,6 +7,7 @@ import { onExit, onPty, send, sendInput } from "../nebula/client";
 import { getState, projectOfWorktree, setState, urgency, useAppState, type State } from "../nebula/store";
 import { statusLabel } from "../nebula/status";
 import { terminalTheme } from "./TerminalPane";
+import { gridFont } from "../nebula/termfont";
 import type { Agent } from "../nebula/types";
 import { noteTyped } from "../nebula/queue";
 import { noteSize } from "../nebula/screen";
@@ -84,6 +85,7 @@ function Tile({ agent, focused }: { agent: Agent; focused: boolean }) {
   const state = useAppState();
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
+  const refit = useRef<() => void>(() => {});
   const [exited, setExited] = useState(false);
   const project = useMemo(() => projectOfWorktree(state, agent.worktree_id), [state, agent.worktree_id]);
   const wt = state.worktrees[agent.worktree_id];
@@ -96,10 +98,11 @@ function Tile({ agent, focused }: { agent: Agent; focused: boolean }) {
   useEffect(() => {
     if (!host.current || !connected) return;
     const ref = { Agent: agent.id };
+    const font = gridFont(getState().prefs);
     const t = new Terminal({
-      fontFamily: '"JetBrains Mono", ui-monospace, Menlo, monospace',
-      fontSize: 11.5,
-      lineHeight: 1.1,
+      fontFamily: font.family,
+      fontSize: font.size,
+      lineHeight: font.lineHeight,
       scrollback: 3_000,
       allowProposedApi: true,
       theme: terminalTheme(getState().mode),
@@ -155,14 +158,15 @@ function Tile({ agent, focused }: { agent: Agent; focused: boolean }) {
     void send("Attach", { session: ref, from_seq: null, cols: t.cols, rows: t.rows });
     noteSize(agent.id, t.cols, t.rows);
 
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver(() => refit.current());
+    refit.current = () => {
       const { cols, rows } = t;
       fit.fit();
       if (t.cols !== cols || t.rows !== rows) {
         void send("Resize", { session: ref, cols: t.cols, rows: t.rows });
         noteSize(agent.id, t.cols, t.rows);
       }
-    });
+    };
     observer.observe(host.current);
 
     return () => {
@@ -176,8 +180,20 @@ function Tile({ agent, focused }: { agent: Agent; focused: boolean }) {
       files.dispose();
       t.dispose();
       term.current = null;
+      refit.current = () => {};
     };
   }, [agent.id, connected, state.epoch]);
+
+  // Follow the type picked in Settings, or ⌘+/⌘−.
+  const font = gridFont(state.prefs);
+  useEffect(() => {
+    const t = term.current;
+    if (!t) return;
+    t.options.fontFamily = font.family;
+    t.options.fontSize = font.size;
+    t.options.lineHeight = font.lineHeight;
+    refit.current();
+  }, [font.family, font.size, font.lineHeight]);
 
   // The selected tile takes the keyboard, and reading it marks it seen.
   useEffect(() => {
