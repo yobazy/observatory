@@ -44,7 +44,7 @@ const clip = (s: string, n = 140) => {
 };
 
 /** What the agent wants, or what its turn did, in a line: the menu on its
- *  screen, else its log's latest turn (Claude Code only). Null when neither
+ *  screen, else its log's latest turn (Claude Code or Codex). Null when neither
  *  says anything, or reading takes too long to be worth the wait. */
 export async function what(agent: Agent): Promise<string | null> {
   const read = async () => {
@@ -52,10 +52,10 @@ export async function what(agent: Agent): Promise<string | null> {
       const q = findQuestion((await readScreen(agent).catch(() => null)) ?? []);
       if (q?.prompt) return clip(q.prompt);
     }
-    if (agent.kind !== "claude" || !agent.session_id) return null;
+    if ((agent.kind !== "claude" && agent.kind !== "codex") || !agent.session_id) return null;
     const turn = isPreview()
       ? (await import("./mock")).mockTurn(getState(), agent.id)
-      : await invoke<Turn | null>("thread_turn", { session: agent.session_id });
+      : await invoke<Turn | null>("thread_turn", { session: agent.session_id, kind: agent.kind });
     if (!turn) return null;
     const sum = summarize(turn, getState().worktrees[agent.worktree_id]?.path ?? "", agent.status === "needs_feedback");
     if (agent.status === "needs_feedback") return sum.asking ? clip(sum.asking) : null;
