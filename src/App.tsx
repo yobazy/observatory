@@ -12,6 +12,7 @@ import { DaemonGate } from "./components/DaemonGate";
 import { Welcome } from "./components/Welcome";
 import { AddProjectDialog, Notice, addProject, type AddStep } from "./components/AddProject";
 import { pickFolder, start } from "./nebula/client";
+import { watchAway } from "./nebula/away";
 import { homeCard, homeKeyFor, isFolderKey } from "./nebula/cards";
 import { useGitPolling } from "./nebula/git";
 import { fitColumns, Resizer, SESSIONS, SIDEBAR, useColumnWidth, useHidden, useWindowWidth } from "./components/Resizer";
@@ -123,6 +124,7 @@ export default function App() {
 
   useEffect(() => {
     void start();
+    watchAway();
   }, []);
   useGitPolling();
   usePrPolling();

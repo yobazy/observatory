@@ -14,6 +14,7 @@ import { UsageChip } from "./Usage";
 import { Pet } from "./Pet";
 import { restartToUpdate, useUpdateState } from "../nebula/updates";
 import { QuickAnswer } from "./QuickAnswer";
+import { AwayDigest } from "./AwayDigest";
 import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon";
 import { FlagGlyph, FollowUps } from "./Organize";
 import { UncommittedEntry } from "./Uncommitted";
@@ -166,6 +167,7 @@ export function Sidebar({
         </section>
       )}
 
+      <AwayDigest onOpen={selectAgent} />
       <FollowUps />
       <UncommittedEntry />
 

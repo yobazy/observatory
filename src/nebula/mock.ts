@@ -247,6 +247,11 @@ export function startMock(handlers: Map<string, PtyHandler>) {
       setState((s) => ({ agents: { ...s.agents, [agentId]: { ...s.agents[agentId], name: String(body!.name) } } }));
       return null;
     }
+    // Opening a thread whose turn ended unseen marks it seen, as the daemon does.
+    if (variant === "MarkAgentSeen" && agentId && getState().agents[agentId]?.unseen) {
+      setState((s) => ({ agents: { ...s.agents, [agentId]: { ...s.agents[agentId], unseen: false } } }));
+      return null;
+    }
     if ((variant === "ArchiveAgent" || variant === "UnarchiveAgent") && agentId) {
       const archived = variant === "ArchiveAgent";
       setState((s) => ({ agents: { ...s.agents, [agentId]: { ...s.agents[agentId], archived } } }));
