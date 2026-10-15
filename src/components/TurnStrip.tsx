@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "../nebula/client";
 import { openReview } from "../nebula/diff";
@@ -25,6 +25,38 @@ function writeOpen(open: boolean) {
   } catch {
     // Remembering it is a nicety.
   }
+}
+
+// Hidden altogether, for every thread, until the header's Summary button
+// brings it back; remembered on this Mac.
+const HIDDEN_KEY = "observatory.turnStrip.hidden";
+let hidden = (() => {
+  try {
+    return localStorage.getItem(HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+})();
+const hiddenListeners = new Set<() => void>();
+
+export function useTurnLineHidden(): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      hiddenListeners.add(l);
+      return () => hiddenListeners.delete(l);
+    },
+    () => hidden,
+  );
+}
+
+export function setTurnLineHidden(next: boolean) {
+  hidden = next;
+  try {
+    localStorage.setItem(HIDDEN_KEY, next ? "1" : "0");
+  } catch {
+    // Remembering it is a nicety.
+  }
+  hiddenListeners.forEach((l) => l());
 }
 
 /** Whether the thread keeps a log this app reads: Claude Code's, or Codex's
@@ -88,7 +120,8 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
   const [height, setHeight] = useColumnWidth(TURN_STRIP);
   const body = useRef<HTMLDivElement>(null);
   const git = useAppState().git[worktree?.id ?? ""];
-  if (!turn) return null;
+  const off = useTurnLineHidden();
+  if (!turn || off) return null;
   // However tall you dragged it, the terminal keeps some room below.
   const room = Math.max(TURN_STRIP.min, Math.min(height, window.innerHeight - 220));
   const working = agent.status === "running";
@@ -131,6 +164,14 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
             Review changes
           </button>
         )}
+        <button
+          className="icon-btn ts-hide"
+          onClick={() => setTurnLineHidden(true)}
+          aria-label="Hide the turn summary"
+          title="Hide this summary on every thread. Summary, at the top of a thread, brings it back."
+        >
+          ×
+        </button>
       </div>
       {open && (
         <div className="ts-body" ref={body} style={{ maxHeight: room }}>
