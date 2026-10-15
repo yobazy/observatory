@@ -191,6 +191,28 @@ body.is-resizing * {
   cursor: col-resize !important;
   user-select: none;
 }
+.resizer.is-rows {
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  width: auto;
+  height: 8px;
+  cursor: row-resize;
+}
+.resizer.is-rows::after {
+  top: 3px;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 2px;
+}
+body.is-resizing-rows,
+body.is-resizing-rows * {
+  cursor: row-resize !important;
+  user-select: none;
+}
 
 /* ---------- status dots and segments ---------- */
 
@@ -3135,6 +3157,7 @@ td.task-last {
 
 /* ---------- turn summary ---------- */
 .turn-strip {
+  position: relative;
   border-bottom: 1px solid var(--line);
   font-size: 12.5px;
 }
@@ -3203,8 +3226,8 @@ td.task-last {
 }
 .ts-body {
   display: grid;
+  align-content: start;
   gap: 14px;
-  max-height: 42vh;
   overflow: auto;
   padding: 4px 20px 16px;
 }

@@ -11,6 +11,8 @@ export interface ColumnSpec {
 
 export const SIDEBAR: ColumnSpec = { key: "sidebar", label: "Resize projects sidebar", initial: 252, min: 190, max: 420 };
 export const SESSIONS: ColumnSpec = { key: "sessions", label: "Resize tasks column", initial: 340, min: 280, max: 640 };
+/** Not a column: the height of a turn's details above the terminal. */
+export const TURN_STRIP: ColumnSpec = { key: "turnStrip", label: "Resize the turn's details", initial: 260, min: 96, max: 1200 };
 
 const clamp = (spec: ColumnSpec, w: number) => Math.round(Math.min(spec.max, Math.max(spec.min, w)));
 const storageKey = (spec: ColumnSpec) => `observatory.width.${spec.key}`;
@@ -58,24 +60,30 @@ export function useColumnWidth(spec: ColumnSpec): [number, (w: number) => void] 
   return [width, (w) => setWidth(clamp(spec, w))];
 }
 
-/** The drag handle on a column's right edge. Arrow keys nudge it, and a
- *  double-click puts it back. */
+/** The drag handle on a column's right edge, or with `rows` on a panel's
+ *  bottom edge. Arrow keys nudge it, and a double-click puts it back. */
 export function Resizer({
   spec,
   width,
   onWidth,
+  rows = false,
+  measure,
 }: {
   spec: ColumnSpec;
   width: number;
   onWidth: (w: number) => void;
+  rows?: boolean;
+  /** The size as laid out, when that can be less than `width`. */
+  measure?: () => number | undefined;
 }) {
   const [dragging, setDragging] = useState(false);
+  const busy = rows ? "is-resizing-rows" : "is-resizing";
 
   return (
     <div
-      className={`resizer${dragging ? " is-dragging" : ""}`}
+      className={`resizer${rows ? " is-rows" : ""}${dragging ? " is-dragging" : ""}`}
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={rows ? "horizontal" : "vertical"}
       aria-label={spec.label}
       aria-valuenow={width}
       aria-valuemin={spec.min}
@@ -83,8 +91,9 @@ export function Resizer({
       tabIndex={0}
       onPointerDown={(e) => {
         e.preventDefault();
-        const startX = e.clientX;
-        const startW = width;
+        const at = (ev: { clientX: number; clientY: number }) => (rows ? ev.clientY : ev.clientX);
+        const start = at(e);
+        const startW = measure?.() ?? width;
         const el = e.currentTarget;
         // Capture keeps the release even when it lands outside the window;
         // the window listeners below cover a webview that refuses it.
@@ -93,14 +102,14 @@ export function Resizer({
         } catch {
           // Keep going on the window listeners alone.
         }
-        document.body.classList.add("is-resizing");
+        document.body.classList.add(busy);
         setDragging(true);
         // On the window, so a drag that outruns the 8px handle — or crosses
         // the terminal's canvas — stays attached.
-        const move = (ev: PointerEvent) => onWidth(startW + ev.clientX - startX);
+        const move = (ev: PointerEvent) => onWidth(startW + at(ev) - start);
         const up = () => {
           setDragging(false);
-          document.body.classList.remove("is-resizing");
+          document.body.classList.remove(busy);
           window.removeEventListener("pointermove", move);
           window.removeEventListener("pointerup", up);
           window.removeEventListener("pointercancel", up);
@@ -112,8 +121,8 @@ export function Resizer({
       onDoubleClick={() => onWidth(spec.initial)}
       onKeyDown={(e) => {
         const step = e.shiftKey ? 40 : 10;
-        if (e.key === "ArrowLeft") onWidth(width - step);
-        else if (e.key === "ArrowRight") onWidth(width + step);
+        if (e.key === (rows ? "ArrowUp" : "ArrowLeft")) onWidth(width - step);
+        else if (e.key === (rows ? "ArrowDown" : "ArrowRight")) onWidth(width + step);
         else if (e.key === "Home") onWidth(spec.min);
         else if (e.key === "End") onWidth(spec.max);
         else return;
