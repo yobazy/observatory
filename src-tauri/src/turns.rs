@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
+use crate::codex_log;
 use crate::thread_edits::{find_log, plain_id};
 use crate::usage::{logs_root, parse_time};
 
@@ -28,6 +29,8 @@ pub struct TurnsState(Arc<Mutex<HashMap<String, Reading>>>);
 #[derive(Default)]
 struct Reading {
     log: PathBuf,
+    /// A Codex rollout, read through `codex_log`.
+    codex: bool,
     /// Bytes of the log already read (always up to a line break).
     offset: u64,
     turn: Option<Turn>,
@@ -270,6 +273,7 @@ impl Reading {
         if len < self.offset {
             *self = Reading {
                 log: self.log.clone(),
+                codex: self.codex,
                 ..Reading::default()
             };
         }
@@ -298,18 +302,24 @@ impl Reading {
             let Ok(text) = std::str::from_utf8(&line) else {
                 continue;
             };
-            if text.contains("\"message\"") {
+            if self.codex {
+                for l in codex_log::as_claude(text) {
+                    self.read_line(&l);
+                }
+            } else if text.contains("\"message\"") {
                 self.read_line(text);
             }
         }
     }
 }
 
-/// The latest turn of `session` (a Claude Code session id), or none when it
-/// has no log on this machine or no prompt yet.
+/// The latest turn of `session` (a Claude Code session id, or a Codex one
+/// when `kind` is "codex"), or none when it has no log on this machine or no
+/// prompt yet.
 #[tauri::command]
 pub async fn thread_turn(
     session: String,
+    kind: Option<String>,
     state: State<'_, TurnsState>,
 ) -> Result<Option<Turn>, String> {
     let readings = state.0.clone();
@@ -319,14 +329,21 @@ pub async fn thread_turn(
         }
         let mut readings = readings.lock().map_err(|e| e.to_string())?;
         if !readings.contains_key(&session) {
-            let root = logs_root().ok_or("no home folder to find Claude Code's logs in")?;
-            let Some(log) = find_log(&root, &session) else {
+            let codex = kind.as_deref() == Some("codex");
+            let log = if codex {
+                codex_log::find_log(&session)
+            } else {
+                let root = logs_root().ok_or("no home folder to find Claude Code's logs in")?;
+                find_log(&root, &session)
+            };
+            let Some(log) = log else {
                 return Ok(None);
             };
             readings.insert(
                 session.clone(),
                 Reading {
                     log,
+                    codex,
                     ..Reading::default()
                 },
             );
@@ -427,5 +444,46 @@ mod tests {
         let ask = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"q","name":"AskUserQuestion","input":{"questions":[{"question":"Which port?"}]}}]}}"#;
         let t = read(&[PROMPT, ask]).turn.unwrap();
         assert_eq!(t.steps[0].target, "Which port?");
+    }
+
+    #[test]
+    fn a_codex_thread_reads_as_a_turn() {
+        let item = |at: &str, item: &str| {
+            format!(
+                r#"{{"timestamp":"{at}","type":"event_msg","payload":{{"type":"item_completed","item":{item}}}}}"#
+            )
+        };
+        let mut r = Reading {
+            codex: true,
+            ..Reading::default()
+        };
+        for raw in [
+            item(
+                "2026-10-14T01:00:00Z",
+                r#"{"type":"UserMessage","content":[{"type":"text","text":"fix the build"}]}"#,
+            ),
+            item(
+                "2026-10-14T01:00:04Z",
+                r#"{"type":"CommandExecution","id":"e1","command":["zsh","-lc","npm test"],"parsed_cmd":[{"type":"unknown","cmd":"npm test"}],"status":"failed","exit_code":1}"#,
+            ),
+            item(
+                "2026-10-14T01:00:09Z",
+                r#"{"type":"FileChange","id":"f1","changes":{"/r/a.ts":{"type":"update"}}}"#,
+            ),
+            item(
+                "2026-10-14T01:00:12Z",
+                r#"{"type":"AgentMessage","content":[{"type":"Text","text":"Fixed it."}]}"#,
+            ),
+        ] {
+            for l in codex_log::as_claude(&raw) {
+                r.read_line(&l);
+            }
+        }
+        let turn = r.turn.expect("a turn");
+        assert_eq!(turn.prompt, "fix the build");
+        assert_eq!(turn.said.as_deref(), Some("Fixed it."));
+        let steps: Vec<_> = turn.steps.iter().map(|s| (s.tool.as_str(), s.ok)).collect();
+        assert_eq!(steps, [("Bash", Some(false)), ("Edit", Some(true))]);
+        assert_eq!(turn.last - turn.started, 12);
     }
 }

@@ -17,7 +17,7 @@ import {
   type ReviewComment,
 } from "../nebula/diff";
 import { ShipButton } from "./Sessions";
-import { TurnBrief } from "./TurnStrip";
+import { hasLog, TurnBrief } from "./TurnStrip";
 
 type Scope = "uncommitted" | "branch";
 
@@ -114,7 +114,7 @@ export function ReviewView() {
   // The thread it was opened from, else the one it goes back to; when its
   // log says what it did.
   const fromHere = from?.worktree_id === wt.id ? from : taker.kind !== "new" ? taker.agent : undefined;
-  const briefOf = fromHere?.kind === "claude" ? fromHere : null;
+  const briefOf = fromHere && hasLog(fromHere) ? fromHere : null;
   const canSend = (comments.length > 0 || summary.trim().length > 0) && !sending && !composing;
 
   const send = async () => {
