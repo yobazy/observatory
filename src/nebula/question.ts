@@ -87,8 +87,14 @@ export function looksLikePicker(lines: string[]): boolean {
   // Not a bare ❯ or ›: Claude Code and Codex draw their ordinary input line
   // with one. A marked numbered row, or two numbered rows, is a menu — or
   // a numbered list, where sending you to the terminal is the safe miss.
+  // Choices on one row, like an MCP server's "❯ Accept    Decline", count
+  // too: a mark on one of several words spaced apart.
   const rows = lines.slice(-10).map((l) => l.replace(EDGE, ""));
-  return rows.some((l) => /^[❯›▶>]\s*\d{1,2}[.)]\s/.test(l)) || rows.filter((l) => /^\d{1,2}[.)]\s/.test(l)).length >= 2;
+  return (
+    rows.some((l) => /^[❯›▶>]\s*\d{1,2}[.)]\s/.test(l)) ||
+    rows.filter((l) => /^\d{1,2}[.)]\s/.test(l)).length >= 2 ||
+    rows.some((l) => /^[❯›▶]\s*\S+(?: \S+)?\s{3,}\S/.test(l) || /\S\s{3,}[❯›▶]\s*\S/.test(l))
+  );
 }
 
 /** The screen's last few meaningful rows, for a preview. */
