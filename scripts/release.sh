@@ -19,7 +19,9 @@
 #    tag: the plain list for latest.json (the app shows it), and a release
 #    page for GitHub that leads with a download button, a screenshot and
 #    docs/release/whats-new.md (what's worth trying, written for each
-#    release), then how to install, with the full list folded away.
+#    release, a picture beside a highlight where one helps), then how to
+#    install, with the full list folded away. The pictures load from each
+#    release's tag, so the releases show the app as it changed.
 #
 # The app-specific password (appleid.apple.com → Sign-In and Security) is
 # kept in your login keychain by --setup, never in a file or the shell. The
@@ -126,6 +128,12 @@ if [ -n "$previous" ] && git cat-file -e "$previous:$whats_new" 2>/dev/null \
   fail "$whats_new is the same as in $previous: rewrite it for v$VERSION, then commit it"
 fi
 ok "what's new: $whats_new"
+# The main screenshot leads every page, so the releases show the app as it
+# changes: a stale one is worth a word, though not worth stopping for.
+if [ -n "$previous" ] && git cat-file -e "$previous:docs/release/cover.jpg" 2>/dev/null \
+  && git diff --quiet "$previous" HEAD -- docs/release/cover.jpg; then
+  note "docs/release/cover.jpg is the one from $previous; retake it if the app looks different now"
+fi
 
 # ---- build: Tauri signs, notarizes and staples the .app ----
 
