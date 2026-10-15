@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "../nebula/client";
 import { openReview } from "../nebula/diff";
@@ -6,6 +6,7 @@ import { getState, useAppState } from "../nebula/store";
 import { changedFiles } from "../nebula/git";
 import { relativeTime } from "../nebula/status";
 import { duration, summarize, type Turn } from "../nebula/turnsummary";
+import { Resizer, TURN_STRIP, useColumnWidth } from "./Resizer";
 import type { Agent, Worktree } from "../nebula/types";
 
 const OPEN_KEY = "observatory.turnStrip.open";
@@ -76,8 +77,12 @@ function Mark({ ok }: { ok: boolean | null }) {
 export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktree | undefined }) {
   const turn = useTurn(agent);
   const [open, setOpen] = useState(readOpen);
+  const [height, setHeight] = useColumnWidth(TURN_STRIP);
+  const body = useRef<HTMLDivElement>(null);
   const git = useAppState().git[worktree?.id ?? ""];
   if (!turn) return null;
+  // However tall you dragged it, the terminal keeps some room below.
+  const room = Math.max(TURN_STRIP.min, Math.min(height, window.innerHeight - 220));
   const working = agent.status === "running";
   const sum = summarize(turn, worktree?.path ?? "", agent.status === "needs_feedback");
   const ago = relativeTime(turn.last * 1000);
@@ -120,10 +125,10 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
         )}
       </div>
       {open && (
-        <div className="ts-body">
+        <div className="ts-body" ref={body} style={{ maxHeight: room }}>
           <section>
             <h4>You asked</h4>
-            <p className="ts-prose ts-clamp">{turn.prompt}</p>
+            <p className="ts-prose">{turn.prompt}</p>
           </section>
           {sum.asking && (
             <section>
@@ -153,7 +158,7 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
           {turn.said && turn.said.trim() !== sum.asking && (
             <section>
               <h4>{working ? "Latest from Claude" : "Claude's last words"}</h4>
-              <p className="ts-prose ts-clamp">{turn.said}</p>
+              <p className="ts-prose">{turn.said}</p>
             </section>
           )}
           {commands.length > 0 && (
@@ -181,6 +186,9 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
             </p>
           )}
         </div>
+      )}
+      {open && (
+        <Resizer spec={TURN_STRIP} width={room} onWidth={setHeight} rows measure={() => body.current?.offsetHeight} />
       )}
     </div>
   );
