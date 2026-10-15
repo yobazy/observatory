@@ -39,3 +39,22 @@ test('choices that skip a number, or start past 1, are not a question', () => {
   assert.equal(findQuestion(['Pick', '❯ 1. A', '  3. C']), null);
   assert.equal(findQuestion(['Pick', '❯ 2. B', '  3. C']), null);
 });
+
+test('choices on one row are a menu to answer in the terminal', () => {
+  const screen = [
+    '  MCP server “claude.ai Supabase” requests your input',
+    '',
+    '  This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
+    '  Run it on project qdczbudnpdvuxpjmhpnk?',
+    '',
+    '  ❯ Accept    Decline',
+  ];
+  assert.equal(findQuestion(screen), null);
+  assert.equal(looksLikePicker(screen), true, 'so a typed reply is never sent into it');
+  assert.equal(looksLikePicker(['  Accept    ❯ Decline']), true);
+});
+
+test("the ordinary input line is not a menu", () => {
+  assert.equal(looksLikePicker(['⏺ Done.', '', '❯ ', '  ? for shortcuts']), false);
+  assert.equal(looksLikePicker(['❯ fix the build please']), false);
+});
