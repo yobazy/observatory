@@ -29,6 +29,14 @@ test('a hint line under the choices is fine', () => {
   assert.equal(q.choices.length, 2);
 });
 
+test('a prompt partway down a tall pane, over blank rows, is still read', () => {
+  const blank = Array(12).fill('');
+  const q = findQuestion([...claudeEdit, ...blank]);
+  assert.equal(q.prompt, 'Do you want to make this edit to sync.ts?');
+  assert.equal(q.choices.length, 3);
+  assert.equal(looksLikePicker(['Run it on project x?', '❯ Accept    Decline', ...blank]), true);
+});
+
 test('a numbered list in a reply is not a question', () => {
   const screen = ['Plan:', '1. Read the code', '2. Fix it', '', '> '];
   assert.equal(findQuestion(screen), null);

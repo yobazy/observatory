@@ -19,11 +19,20 @@ export interface Question {
 const EDGE = /^[\s│┃|╭╰╮╯─]+|[\s│┃|╭╰╮╯─]+$/g;
 const CHOICE = /^([❯›>▶●]\s*)?(\d{1,2})[.)]\s+(.+)$/;
 
+/** The screen without the blank rows under its last text: a short session
+ *  draws its prompt partway down a tall pane, not on the bottom row. */
+function upToText(lines: string[]): string[] {
+  let n = lines.length;
+  while (n > 0 && !lines[n - 1].replace(EDGE, "")) n--;
+  return lines.slice(0, n);
+}
+
 /** The numbered choices at the bottom of a screen, as Claude Code, Codex and
  *  friends draw a permission prompt: "❯ 1. Yes", "2. No, and tell me…". Only
  *  a run numbered 1, 2, 3… in the last rows counts, so a numbered list in
  *  the agent's prose above doesn't. */
-export function findQuestion(lines: string[]): Question | null {
+export function findQuestion(screen: string[]): Question | null {
+  const lines = upToText(screen);
   const rows = lines.map((l) => l.replace(EDGE, ""));
   let end = rows.length - 1;
   // Footer hints ("Esc to cancel · Tab to amend") may sit under the choices.
@@ -89,7 +98,7 @@ export function looksLikePicker(lines: string[]): boolean {
   // a numbered list, where sending you to the terminal is the safe miss.
   // Choices on one row, like an MCP server's "❯ Accept    Decline", count
   // too: a mark on one of several words spaced apart.
-  const rows = lines.slice(-10).map((l) => l.replace(EDGE, ""));
+  const rows = upToText(lines).slice(-10).map((l) => l.replace(EDGE, ""));
   return (
     rows.some((l) => /^[❯›▶>]\s*\d{1,2}[.)]\s/.test(l)) ||
     rows.filter((l) => /^\d{1,2}[.)]\s/.test(l)).length >= 2 ||
