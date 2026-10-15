@@ -79,7 +79,7 @@ export function TaskColorDialog({ agent, onClose }: { agent: Agent; onClose: () 
 }
 
 /** How many flagged tasks show before "Show all". */
-const FOLLOW_UP_ROWS = 5;
+const FOLLOW_UP_ROWS = 3;
 
 /** Tasks flagged to come back to, across projects: those you flagged, and
  *  those whose turn ended while you were away, until you act on them.

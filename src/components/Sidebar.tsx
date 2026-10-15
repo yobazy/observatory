@@ -122,124 +122,128 @@ export function Sidebar({
         </span>
       </div>
 
-      {waiting.length > 0 && (
-        <section className="waiting" aria-label="Sessions waiting on you">
-          <h2 className="waiting-title">
-            Waiting on you <span className="waiting-count">{waiting.length}</span>
-          </h2>
-          <ul>
-            {waiting.map((a) => {
-              const open = answering.has(a.id);
-              return (
-                <li key={a.id} className={open ? "is-answering" : undefined}>
-                  <button className="waiting-row" onClick={() => selectAgent(a)}>
-                    <span className="sdot dot-needs_feedback" aria-hidden />
-                    <span className="waiting-name">
-                      {a.name}
-                      {state.prefs.followUps?.[a.id] !== undefined && (
-                        <span className="waiting-flag" role="img" aria-label="Flagged for follow-up" title="Flagged for follow-up">
-                          <FlagGlyph />
-                        </span>
-                      )}
-                    </span>
-                    <span className="waiting-where">
-                      <span>
-                        <ProjectDot project={projectOfWorktree(state, a.worktree_id)} />
-                        {projectOfWorktree(state, a.worktree_id)?.name}
+      {/* The cards and the projects scroll as one, so a long list of what
+          finished never leaves the projects out of reach. */}
+      <div className="sidebar-scroll">
+        {waiting.length > 0 && (
+          <section className="waiting" aria-label="Sessions waiting on you">
+            <h2 className="waiting-title">
+              Waiting on you <span className="waiting-count">{waiting.length}</span>
+            </h2>
+            <ul>
+              {waiting.map((a) => {
+                const open = answering.has(a.id);
+                return (
+                  <li key={a.id} className={open ? "is-answering" : undefined}>
+                    <button className="waiting-row" onClick={() => selectAgent(a)}>
+                      <span className="sdot dot-needs_feedback" aria-hidden />
+                      <span className="waiting-name">
+                        {a.name}
+                        {state.prefs.followUps?.[a.id] !== undefined && (
+                          <span className="waiting-flag" role="img" aria-label="Flagged for follow-up" title="Flagged for follow-up">
+                            <FlagGlyph />
+                          </span>
+                        )}
                       </span>
-                      <span className="waiting-age">{relativeTime(a.status_changed_at)}</span>
-                    </span>
+                      <span className="waiting-where">
+                        <span>
+                          <ProjectDot project={projectOfWorktree(state, a.worktree_id)} />
+                          {projectOfWorktree(state, a.worktree_id)?.name}
+                        </span>
+                        <span className="waiting-age">{relativeTime(a.status_changed_at)}</span>
+                      </span>
+                    </button>
+                    <button
+                      className={`waiting-answer${open ? " is-on" : ""}`}
+                      onClick={() => toggleAnswer(a.id)}
+                      aria-expanded={open}
+                      aria-label={`${open ? "Hide" : "Answer"} ${a.name} here`}
+                      title={open ? "Hide" : "Answer without opening it"}
+                    >
+                      {open ? "Hide" : "Answer"}
+                    </button>
+                    {open && <QuickAnswer agent={a} onOpen={() => selectAgent(a)} />}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        <AwayDigest onOpen={selectAgent} />
+        <FollowUps />
+        <UncommittedEntry />
+
+        <div className="project-search has-toggle">
+          <input
+            ref={search}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && shown[0]) {
+                setState({ selectedProject: shown[0].id });
+                setQuery("");
+                e.currentTarget.blur();
+              } else if (e.key === "Escape") {
+                setQuery("");
+                e.currentTarget.blur();
+              }
+            }}
+            placeholder={`Filter ${projects.length} projects`}
+            aria-label="Filter projects"
+            aria-keyshortcuts="Meta+P"
+            title="Filter projects (⌘P)"
+            spellCheck={false}
+          />
+          <button
+            className="needs-toggle"
+            aria-pressed={needsOnly}
+            onClick={() => setNeedsOnly(!needsOnly)}
+            title={needsOnly ? "Show every project" : "Show only projects with something waiting, working or unread"}
+          >
+            Needs you
+          </button>
+        </div>
+
+        <ul className="project-list" ref={reorder.list}>
+          {shown.map((p, i) => (
+            <li key={p.id} {...reorder.item(p.repo_path)}>
+              <ProjectRow
+                project={p}
+                index={filtered ? null : i}
+                agents={projectAgents(state, p.id)}
+                live={Object.values(state.terminals).some(
+                  (t) => t.alive && t.run_command !== null && state.worktrees[t.worktree_id]?.project_id === p.id,
+                )}
+                selected={p.id === state.selectedProject}
+                onMenu={projectMenu.openFor}
+                onKeyDown={(e) => !filtered && reorderKey(e, i, shown.length, (to) => void moveProject(p.repo_path, to))}
+              />
+            </li>
+          ))}
+          {needsOnly && !query && hiddenCount > 0 && (
+            <li className="project-quiet">
+              <button className="link-btn" onClick={() => setNeedsOnly(false)}>
+                {hiddenCount} quiet {hiddenCount === 1 ? "project" : "projects"}
+              </button>
+            </li>
+          )}
+          {shown.length === 0 && state.loaded && !needsOnly && (
+            <li className="project-empty">
+              {query ? (
+                `No project matches “${query}”.`
+              ) : (
+                <>
+                  <p>No projects yet.</p>
+                  <button className="btn" onClick={onAddProject}>
+                    Add a project <kbd>⌘O</kbd>
                   </button>
-                  <button
-                    className={`waiting-answer${open ? " is-on" : ""}`}
-                    onClick={() => toggleAnswer(a.id)}
-                    aria-expanded={open}
-                    aria-label={`${open ? "Hide" : "Answer"} ${a.name} here`}
-                    title={open ? "Hide" : "Answer without opening it"}
-                  >
-                    {open ? "Hide" : "Answer"}
-                  </button>
-                  {open && <QuickAnswer agent={a} onOpen={() => selectAgent(a)} />}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      <AwayDigest onOpen={selectAgent} />
-      <FollowUps />
-      <UncommittedEntry />
-
-      <div className="project-search has-toggle">
-        <input
-          ref={search}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && shown[0]) {
-              setState({ selectedProject: shown[0].id });
-              setQuery("");
-              e.currentTarget.blur();
-            } else if (e.key === "Escape") {
-              setQuery("");
-              e.currentTarget.blur();
-            }
-          }}
-          placeholder={`Filter ${projects.length} projects`}
-          aria-label="Filter projects"
-          aria-keyshortcuts="Meta+P"
-          title="Filter projects (⌘P)"
-          spellCheck={false}
-        />
-        <button
-          className="needs-toggle"
-          aria-pressed={needsOnly}
-          onClick={() => setNeedsOnly(!needsOnly)}
-          title={needsOnly ? "Show every project" : "Show only projects with something waiting, working or unread"}
-        >
-          Needs you
-        </button>
-      </div>
-
-      <ul className="project-list" ref={reorder.list}>
-        {shown.map((p, i) => (
-          <li key={p.id} {...reorder.item(p.repo_path)}>
-            <ProjectRow
-              project={p}
-              index={filtered ? null : i}
-              agents={projectAgents(state, p.id)}
-              live={Object.values(state.terminals).some(
-                (t) => t.alive && t.run_command !== null && state.worktrees[t.worktree_id]?.project_id === p.id,
+                </>
               )}
-              selected={p.id === state.selectedProject}
-              onMenu={projectMenu.openFor}
-              onKeyDown={(e) => !filtered && reorderKey(e, i, shown.length, (to) => void moveProject(p.repo_path, to))}
-            />
-          </li>
-        ))}
-        {needsOnly && !query && hiddenCount > 0 && (
-          <li className="project-quiet">
-            <button className="link-btn" onClick={() => setNeedsOnly(false)}>
-              {hiddenCount} quiet {hiddenCount === 1 ? "project" : "projects"}
-            </button>
-          </li>
-        )}
-        {shown.length === 0 && state.loaded && !needsOnly && (
-          <li className="project-empty">
-            {query ? (
-              `No project matches “${query}”.`
-            ) : (
-              <>
-                <p>No projects yet.</p>
-                <button className="btn" onClick={onAddProject}>
-                  Add a project <kbd>⌘O</kbd>
-                </button>
-              </>
-            )}
-          </li>
-        )}
-      </ul>
+            </li>
+          )}
+        </ul>
+      </div>
 
       {projectMenu.element}
       <Pet on={state.prefs.pet !== false} />
