@@ -17,8 +17,11 @@
 #    (tauri.conf.json, plugins.updater). Both go up with the release.
 # 5. Writes release notes from the commit subjects since the last version's
 #    tag: the plain list for latest.json (the app shows it), and a release
-#    page around it for GitHub, with the icon, a download link, the demo
-#    and how to install.
+#    page for GitHub that leads with a download button, a screenshot and
+#    docs/release/whats-new.md (what's worth trying, written for each
+#    release, a picture beside a highlight where one helps), then how to
+#    install, with the full list folded away. The pictures load from each
+#    release's tag, so the releases show the app as it changed.
 #
 # The app-specific password (appleid.apple.com → Sign-In and Security) is
 # kept in your login keychain by --setup, never in a file or the shell. The
@@ -114,6 +117,24 @@ if [ "$PUBLISH" = 1 ]; then
   ok "tagging v$VERSION at $(git rev-parse --short HEAD) on $(git rev-parse --abbrev-ref HEAD)"
 fi
 
+# What's new is written by hand for each release; a page that repeats the
+# last one's would be wrong, so say so before the long build, not after.
+whats_new=docs/release/whats-new.md
+[ -f "$whats_new" ] || fail "no $whats_new: write what's new in this version first"
+git fetch --quiet --tags origin 2>/dev/null || true
+previous="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+if [ -n "$previous" ] && git cat-file -e "$previous:$whats_new" 2>/dev/null \
+  && git diff --quiet "$previous" HEAD -- "$whats_new"; then
+  fail "$whats_new is the same as in $previous: rewrite it for v$VERSION, then commit it"
+fi
+ok "what's new: $whats_new"
+# The main screenshot leads every page, so the releases show the app as it
+# changes: a stale one is worth a word, though not worth stopping for.
+if [ -n "$previous" ] && git cat-file -e "$previous:docs/release/cover.jpg" 2>/dev/null \
+  && git diff --quiet "$previous" HEAD -- docs/release/cover.jpg; then
+  note "docs/release/cover.jpg is the one from $previous; retake it if the app looks different now"
+fi
+
 # ---- build: Tauri signs, notarizes and staples the .app ----
 
 step "Building $NAME $VERSION (universal)"
@@ -178,8 +199,6 @@ ok "$(basename "$update_tgz"): notarized app, signed for the updater"
 # The commit subjects since the previous release's tag, one bullet each;
 # "Version x.y.z" commits say nothing a reader needs. The same text goes on
 # the GitHub release and into latest.json, where the app shows it.
-git fetch --quiet --tags origin 2>/dev/null || true
-previous="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
 notes_file="$(mktemp)"
 git log --no-merges --format='- %s' ${previous:+"$previous..HEAD"} \
   | grep -vE '^- (Version|Release) v?[0-9]+\.[0-9]+' >"$notes_file" || true
@@ -206,21 +225,36 @@ ok "latest.json: $VERSION at $releases/download/v$VERSION/"
 
 # ---- the GitHub release page: the same notes, dressed for a first visit ----
 
-# Images come from the release's own tag, so the page shows what shipped.
+# A visitor wants the download first, then a reason to try it: the button,
+# a screenshot, what's new in this version with its pictures, then how to
+# install. Every commit is still there, folded away at the end. Images come
+# from the release's own tag, so the page shows what shipped; what's new
+# names them as repo paths (docs/release/…), made absolute here.
 repo="${releases#https://github.com/}"
 repo="${repo%/releases}"
 raw="https://raw.githubusercontent.com/$repo/v$VERSION"
+download="$releases/download/v$VERSION/$dmg"
+changes="$(wc -l <"$notes_file" | tr -d ' ')"
 page_file="$(mktemp)"
 {
   printf '<p align="center">\n  <img src="%s/src-tauri/icons/128x128@2x.png" width="96" height="96" alt="%s icon">\n</p>\n\n' "$raw" "$NAME"
-  printf '<p align="center">\n  <a href="%s/download/v%s/%s"><b>Download %s</b></a> · macOS, Apple Silicon and Intel\n</p>\n\n' "$releases" "$VERSION" "$dmg" "$dmg"
-  printf "## What's new\n\n"
-  cat "$notes_file"
+  printf '<h3 align="center">Run all your coding agents at once, and only look at the ones that need you.</h3>\n\n'
+  printf '<p align="center">\n  <a href="%s"><img src="%s/docs/release/download.png" width="271" alt="Download %s for macOS"></a>\n</p>\n\n' "$download" "$raw" "$NAME"
+  printf '<p align="center"><sub>%s · Apple Silicon and Intel · free and open source</sub></p>\n\n' "$dmg"
+  printf '<img src="%s/docs/release/cover.jpg" width="880" alt="%s: a session waiting on a permission prompt, its choices as buttons above the terminal">\n\n' "$raw" "$NAME"
+  printf "## What's new in %s\n\n" "$VERSION"
+  # Drop the file's own comment, and point its images at this tag.
+  sed -e '/^<!--/,/-->$/d' -e "s#\(src=\"\)docs/#\1$raw/docs/#g" -e "s#\](docs/#]($raw/docs/#g" "$whats_new" | sed -e '/./,$!d'
   printf '\n## Install\n\n'
-  printf 'Open %s and drag %s into Applications. The first time you open it, it installs nebula for you. Already using %s? It updates itself; this version will be offered the next time it checks.\n\n' "$dmg" "$NAME" "$NAME"
-  printf '<img src="%s/docs/demo.gif" width="880" alt="%s in use">\n' "$raw" "$NAME"
+  printf '1. Download **[%s](%s)**.\n' "$dmg" "$download"
+  printf '2. Open it and drag %s into Applications.\n' "$NAME"
+  printf '3. Open %s. The first time, it installs [nebula](https://github.com/AgentSystemLabs/nebula) for you and starts it. You also want an agent CLI for it to run, such as [Claude Code](https://code.claude.com/docs/en/setup).\n\n' "$NAME"
+  printf 'Already using %s? It updates itself: this version downloads in the background, and **Restart to update** appears at the bottom of the sidebar. Your agents keep running while it restarts.\n\n' "$NAME"
+  printf '<details>\n<summary>Every change in this version (%s)</summary>\n\n' "$changes"
+  cat "$notes_file"
+  printf '\n</details>\n'
 } >"$page_file"
-ok "release page: icon, download link, $(wc -l <"$notes_file" | tr -d ' ') changes, install steps"
+ok "release page: download button, what's new, install steps, $changes changes"
 
 # ---- publish ----
 
