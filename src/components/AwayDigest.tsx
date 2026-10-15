@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { dismissAway, useAwaySince } from "../nebula/away";
 import { lastPrompt, relativeTime } from "../nebula/status";
 import { projectOfWorktree, useAppState } from "../nebula/store";
@@ -5,8 +6,8 @@ import { summarize } from "../nebula/turnsummary";
 import type { Agent } from "../nebula/types";
 import { useTurn } from "./TurnStrip";
 
-/** Rows shown; the rest are counted. */
-const MAX_ROWS = 6;
+/** Rows shown before "Show all". */
+const MAX_ROWS = 3;
 
 /** One finished thread: its name, and what its turn did in a line. */
 function Row({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
@@ -37,6 +38,7 @@ function Row({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
 export function AwayDigest({ onOpen }: { onOpen: (agent: Agent) => void }) {
   const since = useAwaySince();
   const { agents } = useAppState();
+  const [all, setAll] = useState(false);
   if (since === null) return null;
   const done = Object.values(agents)
     .filter(
@@ -57,11 +59,15 @@ export function AwayDigest({ onOpen }: { onOpen: (agent: Agent) => void }) {
         </button>
       </h2>
       <ul>
-        {done.slice(0, MAX_ROWS).map((a) => (
+        {(all ? done : done.slice(0, MAX_ROWS)).map((a) => (
           <Row key={a.id} agent={a} onOpen={() => onOpen(a)} />
         ))}
       </ul>
-      {done.length > MAX_ROWS && <p className="away-more">and {done.length - MAX_ROWS} more in their projects</p>}
+      {done.length > MAX_ROWS && (
+        <button className="link-btn away-more" onClick={() => setAll((v) => !v)}>
+          {all ? "Show fewer" : `Show all ${done.length}`}
+        </button>
+      )}
     </section>
   );
 }
