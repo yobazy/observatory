@@ -476,15 +476,24 @@ function queueDialog(agent: Agent): TextDialogSpec {
 
 /** Prompts lined up for this agent's next turns, each removable. */
 function QueueStrip({ agent, queued }: { agent: Agent; queued: { id: string; text: string }[] | undefined }) {
+  // The one message opened to its full text, if any.
+  const [open, setOpen] = useState<string | null>(null);
   if (!queued?.length) return null;
   return (
     <div className="queue-strip" aria-label={`Queued for ${agent.name}`}>
       <span className="queue-label">Up next</span>
       <ol>
         {queued.map((q, i) => (
-          <li key={q.id} title={q.text}>
+          <li key={q.id}>
             <span className="queue-n">{i + 1}</span>
-            <span className="queue-text">{q.text}</span>
+            <button
+              className={`queue-text${open === q.id ? " is-open" : ""}`}
+              aria-expanded={open === q.id}
+              title={open === q.id ? "Show less" : "Show the whole message"}
+              onClick={() => setOpen(open === q.id ? null : q.id)}
+            >
+              {q.text}
+            </button>
             <button className="icon-btn" onClick={() => unqueue(agent.id, q.id)} aria-label="Remove from the queue" title="Remove">
               ×
             </button>

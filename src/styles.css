@@ -3194,13 +3194,17 @@ td.task-last {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+/* Parts wrap whole onto a second line rather than one getting cut off. */
 .ts-parts {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 2px;
   color: var(--text);
+}
+.ts-part {
+  white-space: nowrap;
 }
 .ts-sep {
   margin: 0 7px;
@@ -3592,7 +3596,7 @@ td.task-last {
 }
 .queue-strip li {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
 }
@@ -3601,11 +3605,24 @@ td.task-last {
   font-variant-numeric: tabular-nums;
 }
 .queue-text {
+  all: unset;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  cursor: default;
+}
+.queue-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.queue-text.is-open {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 30vh;
+  overflow: auto;
+  line-height: 1.45;
 }
 .queue-strip .icon-btn {
   width: 20px;
