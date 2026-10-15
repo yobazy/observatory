@@ -221,12 +221,12 @@ export interface NebulaStatus {
 }
 
 /** The preview's stand-in for the startup screen's states: `?gate=missing`,
- *  `older`, `newer` or `stopped` in the URL. */
+ *  `older`, `newer`, `incompatible` or `stopped` in the URL. */
 export const PREVIEW_GATE = PREVIEW ? new URLSearchParams(location.search).get("gate") : null;
 
 export function nebulaStatus(): Promise<NebulaStatus> {
   if (isPreview()) {
-    const fakes: Record<string, string | null> = { missing: null, older: "0.39.0", newer: "0.41.0" };
+    const fakes: Record<string, string | null> = { missing: null, older: "0.39.0", newer: "0.41.0", incompatible: "0.45.0" };
     const version = PREVIEW_GATE && PREVIEW_GATE in fakes ? fakes[PREVIEW_GATE] : "0.40.2";
     return Promise.resolve({ pinned: "0.40.2", path: version ? "~/.local/bin/nebula" : null, version });
   }
@@ -431,7 +431,13 @@ export async function start() {
     const { startMock } = await import("./mock");
     mockSend = startMock(ptyHandlers);
     // Show the startup screen in one of its states instead of the demo.
-    if (PREVIEW_GATE) setState({ loaded: false, link: { state: "disconnected", reason: "No nebula daemon is listening." } });
+    if (PREVIEW_GATE) {
+      const reason =
+        PREVIEW_GATE === "incompatible"
+          ? "The daemon speaks protocol v50, this app v44. Update whichever of the two is older."
+          : "No nebula daemon is listening.";
+      setState({ loaded: false, link: { state: "disconnected", reason } });
+    }
     return;
   }
   await listen<ServerEvent>("nebula://event", (e) => handle(e.payload));

@@ -83,7 +83,7 @@ pub async fn connect(
         })) => {
             return Err(format!(
             "The daemon speaks protocol v{daemon_protocol_version}, this app v{PROTOCOL_VERSION}. \
-                 Rebuild the app against the nebula release you have installed."
+                 Update whichever of the two is older."
         ))
         }
         Ok(other) => return Err(format!("Unexpected handshake reply: {other:?}")),

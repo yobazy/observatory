@@ -102,12 +102,14 @@ export function DaemonGate() {
         {busy === "install" ? "Updating…" : `Update nebula to ${pinned}`}
       </button>
     );
-  } else if (status?.version && order > 0) {
+  } else if (status?.version && order > 0 && mismatch) {
+    // Newer only matters when it changed the protocol: a newer nebula that
+    // speaks this app's protocol just needs starting.
     title = "Observatory needs an update";
     body = (
       <p>
-        Your nebula is {status.version}, and this app is built for {pinned}. nebula only talks to apps
-        built for its own version, so get a newer Observatory.
+        Your nebula is {status.version}, and this app is built for {pinned}. This nebula talks a
+        newer protocol than this app knows, so get a newer Observatory.
       </p>
     );
     action = (
