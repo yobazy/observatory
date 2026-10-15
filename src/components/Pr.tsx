@@ -5,7 +5,7 @@ import { flash, getState, useAppState } from "../nebula/store";
 import { changedFiles, type GitStatus } from "../nebula/git";
 import { needsForce, takerFor } from "../nebula/actions";
 import { handToBranch } from "../nebula/queue";
-import { createPr, fixCiPrompt, refreshPrs, type PullRequest } from "../nebula/prs";
+import { createPr, fixCiPrompt, mergePr, refreshPrs, type PullRequest } from "../nebula/prs";
 import { openLink } from "./Run";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import type { Worktree } from "../nebula/types";
@@ -102,6 +102,25 @@ export function PrLine({ worktree, git }: { worktree: Worktree; git: GitStatus }
       },
     });
 
+  // Merging is the last step on GitHub; cleaning up the checkout is the
+  // next one here, so it's offered straight after when nothing would be lost.
+  const confirmMerge = (p: PullRequest) =>
+    setDialog({
+      kind: "confirm",
+      title: `Merge #${p.number}?`,
+      message: `“${p.title}” merges into its base on GitHub, as a squash where the repository allows one. It won't merge if the branch has moved on GitHub since this app last checked.`,
+      confirm: "Merge",
+      safe: true,
+      onConfirm: async () => {
+        const how = await mergePr(worktree, p);
+        flash(`Merged #${p.number} (${how})`);
+        if (!dirty && git.head === p.headOid) {
+          confirmCleanUp(false, "landed");
+          return false;
+        }
+      },
+    });
+
   const cleanUpButton = (kind: Kind) => (
     <button
       className="btn btn-sm"
@@ -175,6 +194,16 @@ export function PrLine({ worktree, git }: { worktree: Worktree; git: GitStatus }
             }
           >
             Fix CI
+          </button>
+        )}
+        {p.state === "open" && p.checks !== "failing" && p.checks !== "pending" && !p.conflicts && p.review !== "changes" && (
+          <button
+            className="btn btn-sm btn-ship"
+            disabled={busy || p.review === "required"}
+            onClick={() => confirmMerge(p)}
+            title={p.review === "required" ? "It needs an approving review first" : `Merge #${p.number} on GitHub`}
+          >
+            Merge
           </button>
         )}
         {p.state === "merged" && !!git.head && !!p.headOid && git.head !== p.headOid && (

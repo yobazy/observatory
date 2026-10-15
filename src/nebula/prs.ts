@@ -182,6 +182,18 @@ export async function createPr(wt: Worktree, draft = false): Promise<string> {
   return url;
 }
 
+/** Merge the PR as its repo allows (squash first), only if GitHub still has
+ *  it at the commit this app last saw. Resolves with the method used. */
+export async function mergePr(wt: Worktree, pr: PullRequest): Promise<string> {
+  if (isPreview()) {
+    setState((s) => ({ prs: { ...s.prs, [wt.id]: { kind: "found", pr: { ...pr, state: "merged" }, at: Date.now() } } }));
+    return "squash";
+  }
+  const how = await invoke<string>("gh_pr_merge", { path: wt.path, number: pr.number, head: pr.headOid });
+  await refreshPrs([wt.id]);
+  return how;
+}
+
 /** The prompt that hands a red CI run to an agent. */
 export function fixCiPrompt(pr: PullRequest, branch: string): string {
   const which = pr.failing.length ? ` (${pr.failing.slice(0, 8).join(", ")})` : "";

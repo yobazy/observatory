@@ -61,6 +61,7 @@ pub fn run() {
             git::local_branches,
             gh::gh_pr,
             gh::gh_pr_create,
+            gh::gh_pr_merge,
             usage::usage_report,
             thread_edits::thread_edits,
             turns::thread_turn,
