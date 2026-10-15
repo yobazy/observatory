@@ -3535,6 +3535,36 @@ td.task-last {
   color: var(--st-waiting);
 }
 
+.ask-strip {
+  display: grid;
+  gap: 7px;
+  padding: 9px 16px 10px 20px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--st-waiting) 7%, var(--night));
+}
+.ask-q,
+.rd-ask .rd-wait {
+  margin: 0;
+  font-size: 13px;
+  color: var(--st-waiting);
+  overflow-wrap: anywhere;
+}
+.ask-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 12px;
+}
+.ask-choices .qa-choice {
+  max-width: 100%;
+}
+.rd-ask {
+  display: grid;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+
 .queue-strip {
   display: flex;
   align-items: flex-start;

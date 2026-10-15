@@ -7,6 +7,8 @@ import { flash, getState } from "../nebula/store";
 import { enqueue, isIdle } from "../nebula/queue";
 import { merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
+import type { Choice, Question } from "../nebula/screen";
+import { AskChoices } from "./AskStrip";
 
 /** The thread's conversation, read again as it moves. */
 function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | null {
@@ -83,7 +85,19 @@ function Steps({ entry, root }: { entry: Entry; root: string }) {
 /** The thread as something to read: your prompts, Claude's replies set as
  *  prose, and the work between them folded to a line each. Replies go in
  *  from the box at the bottom. */
-export function Reader({ agent, root, onTerminal }: { agent: Agent; root: string; onTerminal: () => void }) {
+export function Reader({
+  agent,
+  root,
+  onTerminal,
+  question,
+  onPick,
+}: {
+  agent: Agent;
+  root: string;
+  onTerminal: () => void;
+  question: Question | null;
+  onPick: (c: Choice) => void;
+}) {
   const t = useTranscript(agent);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -143,7 +157,12 @@ export function Reader({ agent, root, onTerminal }: { agent: Agent; root: string
         </div>
       </div>
       <div className="rd-compose">
-        {waiting ? (
+        {waiting && question ? (
+          <div className="rd-ask">
+            {question.prompt && <p className="rd-wait">{question.prompt}</p>}
+            <AskChoices question={question} onPick={onPick} />
+          </div>
+        ) : waiting ? (
           <p className="rd-wait">
             It's waiting on a choice in the terminal.{" "}
             <button className="link-btn" onClick={onTerminal}>

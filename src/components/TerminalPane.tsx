@@ -9,10 +9,11 @@ import { flash, getState, projectOfWorktree, setState, useAppState } from "../ne
 import { agentSpec, harnessLabel, statusLabel, usualHarness } from "../nebula/status";
 import { sessionKey, type Agent, type SessionRef } from "../nebula/types";
 import { enqueue, isIdle, noteTyped, unqueue } from "../nebula/queue";
-import { noteSize } from "../nebula/screen";
+import { findQuestion, noteSize, type Choice, type Question } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
 import { TurnStrip } from "./TurnStrip";
 import { Reader } from "./Reader";
+import { AskStrip } from "./AskStrip";
 import { termFont, whenLoaded } from "../nebula/termfont";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { removeFromShelf, watchForFiles, type FileWatch, type ShelfItem } from "../nebula/shelf";
@@ -83,6 +84,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const current = useRef<SessionRef | null>(null);
   const [ready, setReady] = useState(false);
   const [exited, setExited] = useState<number | null | undefined>(undefined);
+  // The numbered menu at the bottom of the screen, if there is one.
+  const [menu, setMenu] = useState<Question | null>(null);
   const [dialog, setDialog] = useState<TextDialogSpec | null>(null);
   // The session's checkout: what a relative path in its output is under.
   const cwd = useRef<string | null>(null);
@@ -226,6 +229,18 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     // `end` is the seq just past the last byte written, so replayed and
     // live output that overlap are written once.
     let end = 0;
+    setMenu(null);
+    let scan: ReturnType<typeof setTimeout> | undefined;
+    const rescan = () => {
+      clearTimeout(scan);
+      scan = setTimeout(() => {
+        const b = t.buffer.active;
+        const lines: string[] = [];
+        for (let y = b.baseY; y < b.baseY + t.rows; y++) lines.push(b.getLine(y)?.translateToString(true) ?? "");
+        const next = findQuestion(lines);
+        setMenu((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+      }, 120);
+    };
     const offPty = onPty(ref, (chunk, bytes) => {
       if (chunk.replay) {
         t.reset();
@@ -233,11 +248,12 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
         end = chunk.seq + bytes.length;
         files.current?.rescan();
         debugLog(`replay ${key}: ${bytes.length} bytes at ${t.cols}x${t.rows}`);
+        t.write("", rescan);
         return;
       }
       const stop = chunk.seq + bytes.length;
       if (stop <= end) return;
-      t.write(chunk.seq < end ? bytes.subarray(end - chunk.seq) : bytes);
+      t.write(chunk.seq < end ? bytes.subarray(end - chunk.seq) : bytes, rescan);
       end = stop;
     });
     const offExit = onExit(ref, (code) => setExited(code));
@@ -248,6 +264,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     t.focus();
 
     return () => {
+      clearTimeout(scan);
       offPty();
       offExit();
       current.current = null;
@@ -267,6 +284,18 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const toTerminal = () => {
     setMode("terminal");
     requestAnimationFrame(() => term.current?.focus());
+  };
+
+  // Offered only while the session says it's waiting, so a menu left on
+  // screen after it moved on isn't.
+  const asking = agent?.status === "needs_feedback" ? menu : null;
+  // The pick is read off this very screen, so unlike the sidebar's quick
+  // answers there's no need to read it again first.
+  const answer = (c: Choice) => {
+    const ref = current.current;
+    if (!ref || !asking) return;
+    setMenu(null);
+    void sendInput(ref, c.key);
   };
 
   const project = agent || tab ? projectOfWorktree(state, (agent ?? tab)!.worktree_id) : undefined;
@@ -366,11 +395,12 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       )}
 
       {agent && <TurnStrip key={agent.id} agent={agent} worktree={wt} />}
+      {asking && !reading && <AskStrip question={asking} onPick={answer} />}
       {agent && <QueueStrip agent={agent} queued={state.queue[agent.id]} />}
       {agent && <ShelfStrip agentId={agent.id} items={state.shelf[agent.id]} />}
       <div className="pane-body" data-drop-session={key ?? undefined}>
         <div ref={host} className={`xterm-host${exists ? "" : " is-hidden"}`} />
-        {reading && agent && <Reader key={agent.id} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} />}
+        {reading && agent && <Reader key={agent.id} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} question={asking} onPick={answer} />}
         {!exists && (
           <div className="pane-empty">
             <p>Open a session from the list, or start something new.</p>
