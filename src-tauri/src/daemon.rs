@@ -20,6 +20,8 @@ pub const LINK: &str = "nebula://link";
 #[derive(Default)]
 pub struct DaemonState {
     tx: Mutex<Option<mpsc::Sender<ClientRequest>>>,
+    /// The connection's reader, to stop when a new connection replaces it.
+    reader: std::sync::Mutex<Option<tokio::task::AbortHandle>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -39,13 +41,27 @@ struct PtyChunk {
     data: String,
 }
 
-/// Connect (a no-op when already connected), handshake and subscribe. The
-/// Snapshot and every delta after it arrive on `nebula://event`.
+/// Connect, handshake and subscribe. The Snapshot and every delta after it
+/// arrive on `nebula://event`. Already connected, it refuses, unless asked to
+/// `replace` the connection: a reloaded webview missed the Snapshot, and
+/// subscribing again on the same connection would send every delta twice.
 #[tauri::command]
-pub async fn connect(app: AppHandle, state: State<'_, DaemonState>) -> Result<u32, String> {
+pub async fn connect(
+    app: AppHandle,
+    state: State<'_, DaemonState>,
+    replace: Option<bool>,
+) -> Result<u32, String> {
     let mut slot = state.tx.lock().await;
     if slot.as_ref().is_some_and(|tx| !tx.is_closed()) {
-        return Err("already connected".into());
+        if !replace.unwrap_or(false) {
+            return Err("already connected".into());
+        }
+        // Stopping the reader first keeps it from reporting this as a lost
+        // connection; dropping the sender ends the writer and the socket.
+        if let Some(reader) = state.reader.lock().map_err(|e| e.to_string())?.take() {
+            reader.abort();
+        }
+        *slot = None;
     }
 
     let sock = paths::socket_path();
@@ -86,7 +102,7 @@ pub async fn connect(app: AppHandle, state: State<'_, DaemonState>) -> Result<u3
     });
 
     let reader_app = app.clone();
-    tokio::spawn(async move {
+    let reader = tokio::spawn(async move {
         let reason = loop {
             match read_frame::<ServerEvent, _>(&mut read_half).await {
                 Ok(Some(event)) => forward(&reader_app, event),
@@ -100,6 +116,8 @@ pub async fn connect(app: AppHandle, state: State<'_, DaemonState>) -> Result<u3
         }
         let _ = reader_app.emit(LINK, LinkState::Disconnected { reason });
     });
+
+    *state.reader.lock().map_err(|e| e.to_string())? = Some(reader.abort_handle());
 
     tx.send(ClientRequest::Subscribe)
         .await
