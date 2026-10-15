@@ -4,14 +4,14 @@ import { gridFont, termFont, zoomed, SIZE_DEFAULT, SIZE_MAX, SIZE_MIN } from '..
 
 test('unset prefs give the bundled face at the default size', () => {
   const f = termFont({});
-  assert.match(f.family, /^"JetBrains Mono"/);
+  assert.match(f.family, /^"IBM Plex Mono"/);
   assert.equal(f.size, SIZE_DEFAULT);
   assert.equal(f.lineHeight, 1.15);
 });
 
 test('odd values fall back instead of breaking the terminal', () => {
   const f = termFont({ terminalFont: 'comic', terminalFontSize: 400, terminalLineHeight: 7 });
-  assert.match(f.family, /JetBrains/);
+  assert.match(f.family, /IBM Plex/);
   assert.equal(f.size, SIZE_MAX);
   assert.equal(f.lineHeight, 1.15);
   assert.equal(termFont({ terminalFontSize: Number.NaN }).size, SIZE_DEFAULT);

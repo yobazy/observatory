@@ -10,14 +10,14 @@ export interface TermFontPrefs {
 
 const stack = (name: string) => `"${name}", ui-monospace, Menlo, monospace`;
 
-/** The faces to pick from. All but SF Mono and Menlo come with the app
+/** The faces to pick from, the default first. All but SF Mono and Menlo come with the app
  *  (main.tsx), so they look the same on every Mac; `note` is what sets each
  *  apart, for the picker. */
 export const TERM_FONTS = [
+  { id: "plex", label: "IBM Plex Mono", family: stack("IBM Plex Mono"), note: "Warm, a little typewriter" },
   { id: "jetbrains", label: "JetBrains Mono", family: stack("JetBrains Mono"), note: "Tall and narrow, made for code" },
   { id: "system", label: "SF Mono", family: "ui-monospace, Menlo, monospace", note: "Apple's, as in Terminal and Xcode" },
   { id: "menlo", label: "Menlo", family: "Menlo, monospace", note: "The classic Mac terminal face" },
-  { id: "plex", label: "IBM Plex Mono", family: stack("IBM Plex Mono"), note: "Warm, a little typewriter" },
   { id: "geist", label: "Geist Mono", family: stack("Geist Mono"), note: "Clean and modern, Vercel's" },
   { id: "commit", label: "Commit Mono", family: stack("Commit Mono"), note: "Neutral, made to disappear" },
   { id: "iosevka", label: "Iosevka", family: stack("Iosevka"), note: "Very narrow: more fits on a line" },
