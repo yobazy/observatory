@@ -2078,15 +2078,62 @@ td.task-last {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.term-sample {
-  margin: 4px 0 0;
-  padding: 12px 14px;
+.font-picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+.font-pick {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--term);
+  cursor: default;
+}
+.font-pick:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.font-pick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.font-pick.is-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.font-pick-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--ui);
+}
+.font-pick-name {
+  font-size: 12.5px;
+  font-weight: 600;
   color: var(--text);
+  white-space: nowrap;
+}
+.font-pick-note {
+  font-size: 11.5px;
+  color: var(--faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.font-pick-sample {
+  display: block;
   white-space: pre;
-  overflow: auto;
-  /* The terminal draws no ligatures; neither does its sample. */
+  overflow: hidden;
+  color: var(--text);
+  /* The terminal draws no ligatures; neither do its samples. */
   font-variant-ligatures: none;
 }
 .handoff-text {
