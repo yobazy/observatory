@@ -145,3 +145,62 @@ pub async fn gh_pr_create(path: PathBuf, draft: bool) -> Result<String, String> 
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// The merge `gh` should do, from `gh repo view`'s JSON: a squash where the
+/// repo allows one, else a merge commit, else a rebase.
+fn merge_flag(repo: &serde_json::Value) -> Option<&'static str> {
+    [
+        ("squashMergeAllowed", "--squash"),
+        ("mergeCommitAllowed", "--merge"),
+        ("rebaseMergeAllowed", "--rebase"),
+    ]
+    .into_iter()
+    .find(|(key, _)| repo.get(key).and_then(|v| v.as_bool()) == Some(true))
+    .map(|(_, flag)| flag)
+}
+
+/// Merge pull request `number` the way its repo allows, but only while its
+/// branch on GitHub is still at `head`: a commit pushed since you looked
+/// stops it. The branches are left alone; Clean up handles the local ones.
+/// Resolves with the method used ("squash", "merge" or "rebase").
+#[tauri::command]
+pub async fn gh_pr_merge(path: PathBuf, number: u64, head: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = gh(
+            &path,
+            &[
+                "repo",
+                "view",
+                "--json",
+                "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed",
+            ],
+        )?;
+        let repo: serde_json::Value = serde_json::from_str(&repo).map_err(|e| e.to_string())?;
+        let flag = merge_flag(&repo).ok_or("This repository doesn't allow any kind of merge")?;
+        let number = number.to_string();
+        gh(
+            &path,
+            &["pr", "merge", &number, flag, "--match-head-commit", &head],
+        )?;
+        Ok(flag.trim_start_matches('-').to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_merge_squashes_where_it_can() {
+        let all = json!({"squashMergeAllowed": true, "mergeCommitAllowed": true, "rebaseMergeAllowed": true});
+        assert_eq!(merge_flag(&all), Some("--squash"));
+        let no_squash = json!({"squashMergeAllowed": false, "mergeCommitAllowed": true, "rebaseMergeAllowed": true});
+        assert_eq!(merge_flag(&no_squash), Some("--merge"));
+        let rebase = json!({"squashMergeAllowed": false, "mergeCommitAllowed": false, "rebaseMergeAllowed": true});
+        assert_eq!(merge_flag(&rebase), Some("--rebase"));
+        assert_eq!(merge_flag(&json!({})), None);
+    }
+}
