@@ -1,0 +1,67 @@
+import { dismissAway, useAwaySince } from "../nebula/away";
+import { lastPrompt, relativeTime } from "../nebula/status";
+import { projectOfWorktree, useAppState } from "../nebula/store";
+import { summarize } from "../nebula/turnsummary";
+import type { Agent } from "../nebula/types";
+import { useTurn } from "./TurnStrip";
+
+/** Rows shown; the rest are counted. */
+const MAX_ROWS = 6;
+
+/** One finished thread: its name, and what its turn did in a line. */
+function Row({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
+  const state = useAppState();
+  const turn = useTurn(agent);
+  const project = projectOfWorktree(state, agent.worktree_id);
+  const failed = agent.status === "terminated";
+  const did = turn
+    ? summarize(turn, state.worktrees[agent.worktree_id]?.path ?? "").headline.map((p) => p.text).join(" · ")
+    : lastPrompt(agent);
+  return (
+    <li>
+      <button className="waiting-row away-row" onClick={onOpen}>
+        <span className={`sdot dot-${agent.status}`} aria-hidden />
+        <span className="waiting-name">{agent.name}</span>
+        <span className="away-did">{failed ? "Stopped with an error" : did}</span>
+        <span className="waiting-where">
+          <span>{project?.name}</span>
+          <span className="waiting-age">{relativeTime(agent.status_changed_at)}</span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/** What finished, or failed, while you were away and you haven't looked at
+ *  yet. A thread leaves once you open it; × puts the whole list away. */
+export function AwayDigest({ onOpen }: { onOpen: (agent: Agent) => void }) {
+  const since = useAwaySince();
+  const { agents } = useAppState();
+  if (since === null) return null;
+  const done = Object.values(agents)
+    .filter(
+      (a) =>
+        !a.archived &&
+        a.unseen &&
+        (a.status === "finished" || a.status === "terminated") &&
+        a.status_changed_at >= since,
+    )
+    .sort((a, b) => b.status_changed_at - a.status_changed_at);
+  if (!done.length) return null;
+  return (
+    <section className="waiting away" aria-label="Finished while you were away">
+      <h2 className="waiting-title">
+        While you were away <span className="waiting-count">{done.length}</span>
+        <button className="icon-btn away-close" onClick={dismissAway} aria-label="Dismiss" title="Dismiss">
+          ×
+        </button>
+      </h2>
+      <ul>
+        {done.slice(0, MAX_ROWS).map((a) => (
+          <Row key={a.id} agent={a} onOpen={() => onOpen(a)} />
+        ))}
+      </ul>
+      {done.length > MAX_ROWS && <p className="away-more">and {done.length - MAX_ROWS} more in their projects</p>}
+    </section>
+  );
+}

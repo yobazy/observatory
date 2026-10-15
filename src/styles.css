@@ -373,6 +373,37 @@ body.is-resizing-rows * {
   font-variant-numeric: tabular-nums;
 }
 
+/* The same card as Waiting on you, in the finished green. */
+.waiting.away {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--st-done) 12%, transparent), color-mix(in srgb, var(--st-done) 4%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-done) 26%, transparent);
+}
+.away .waiting-title {
+  color: var(--st-done);
+}
+.away-close {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+.away-row:hover {
+  background: color-mix(in srgb, var(--st-done) 10%, transparent);
+}
+.away-more {
+  margin: 2px 8px 2px 25px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.away-did {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .project-search {
   position: relative;
   margin: 0 10px 6px;
