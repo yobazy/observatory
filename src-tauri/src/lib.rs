@@ -1,4 +1,5 @@
 mod cards;
+mod codex_log;
 mod daemon;
 mod editor;
 mod gh;

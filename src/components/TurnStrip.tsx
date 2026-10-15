@@ -27,10 +27,16 @@ function writeOpen(open: boolean) {
   }
 }
 
+/** Whether the thread keeps a log this app reads: Claude Code's, or Codex's
+ *  (both in turns.rs). */
+export function hasLog(agent: Agent): boolean {
+  return (agent.kind === "claude" || agent.kind === "codex") && !!agent.session_id;
+}
+
 /** The thread's latest turn, read again as it moves. */
 export function useTurn(agent: Agent): Turn | null {
   const [turn, setTurn] = useState<Turn | null>(null);
-  const session = agent.kind === "claude" ? agent.session_id : null;
+  const session = hasLog(agent) ? agent.session_id : null;
   const running = agent.status === "running";
   useEffect(() => {
     if (!session) return;
@@ -39,7 +45,7 @@ export function useTurn(agent: Agent): Turn | null {
       try {
         const t = isPreview()
           ? (await import("../nebula/mock")).mockTurn(getState(), agent.id)
-          : await invoke<Turn | null>("thread_turn", { session });
+          : await invoke<Turn | null>("thread_turn", { session, kind: agent.kind });
         if (live) setTurn(t);
       } catch {
         // No log to read: the strip just doesn't show.
@@ -55,6 +61,8 @@ export function useTurn(agent: Agent): Turn | null {
   }, [session, agent.id, running, agent.status, agent.status_changed_at]);
   return turn;
 }
+
+const harness = (agent: Agent) => (agent.kind === "codex" ? "Codex" : "Claude");
 
 function Mark({ ok }: { ok: boolean | null }) {
   return ok === null ? (
@@ -157,7 +165,7 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
           )}
           {turn.said && turn.said.trim() !== sum.asking && (
             <section>
-              <h4>{working ? "Latest from Claude" : "Claude's last words"}</h4>
+              <h4>{working ? `Latest from ${harness(agent)}` : `${harness(agent)}'s last words`}</h4>
               <p className="ts-prose">{turn.said}</p>
             </section>
           )}

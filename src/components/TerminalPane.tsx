@@ -11,7 +11,7 @@ import { sessionKey, type Agent, type SessionRef } from "../nebula/types";
 import { enqueue, isIdle, noteTyped, unqueue } from "../nebula/queue";
 import { findQuestion, noteSize, type Choice, type Question } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
-import { TurnStrip } from "./TurnStrip";
+import { hasLog, TurnStrip } from "./TurnStrip";
 import { Reader } from "./Reader";
 import { AskStrip } from "./AskStrip";
 import { termFont, whenLoaded } from "../nebula/termfont";
@@ -279,7 +279,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   }, [agent?.unseen, agent?.id]);
 
   const [mode, setMode] = usePaneMode();
-  const canRead = !!agent && agent.kind === "claude" && !!agent.session_id;
+  const canRead = !!agent && hasLog(agent);
   const reading = canRead && mode === "read";
   const toTerminal = () => {
     setMode("terminal");

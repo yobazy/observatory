@@ -24,7 +24,7 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
         const from = last.current;
         const t: Transcript | null = isPreview()
           ? (await import("../nebula/mock")).mockTranscript(getState(), agent.id)
-          : await invoke<Transcript | null>("thread_transcript", { session, from });
+          : await invoke<Transcript | null>("thread_transcript", { session, from, kind: agent.kind });
         if (!live || !t) return;
         setGot((prev) => {
           const entries = from === null || !prev ? t.entries : merge(prev.entries, t.entries, t.dropped);

@@ -634,6 +634,20 @@ export function mockTurn(s: State, agentId: string): Turn | null {
       ],
       said: "Failed syncs now retry after 1s, 2s, 4s and so on, up to a minute, and the tests cover it. Committed on this branch; it isn't pushed yet.",
     },
+    // A Codex thread: its log reads the same way (codex_log.rs).
+    a4: {
+      prompt: "handle invoice.paid webhooks idempotently",
+      started: now - 2 * 60,
+      last: now - 10,
+      steps: [
+        step("Grep", "rg -n 'invoice.paid' src"),
+        step("Read", `${root}/src/webhooks/stripe.ts`),
+        step("Edit", `${root}/src/webhooks/stripe.ts`),
+        step("Edit", `${root}/src/webhooks/seen.ts`),
+        step("Bash", "npm test -- webhooks", null, null, 10),
+      ],
+      said: "Each event id is now recorded before the handler runs, so a redelivered invoice.paid is skipped. Running the webhook tests.",
+    },
   };
   const t = turns[agentId];
   return t ? { ...t, number: agentId === "a3" ? 3 : 1, dropped: 0, interrupted: false } : null;
