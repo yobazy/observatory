@@ -87,6 +87,7 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
     writeOpen(!open);
   };
   const commands = sum.commands.slice(-12);
+  const failed = sum.commands.filter((c) => c.ok === false).length;
   // A finished turn that left changes behind: reviewing them is the next step.
   const reviewable = !working && sum.edited.length > 0 && !!git && !("error" in git) && changedFiles(git) > 0;
 
@@ -149,12 +150,20 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
               </ul>
             </section>
           )}
-          {commands.length > 0 && (
+          {turn.said && turn.said.trim() !== sum.asking && (
             <section>
-              <h4>
+              <h4>{working ? "Latest from Claude" : "Claude's last words"}</h4>
+              <p className="ts-prose ts-clamp">{turn.said}</p>
+            </section>
+          )}
+          {commands.length > 0 && (
+            <details className="ts-fold">
+              <summary>
                 Ran {sum.commands.length} {sum.commands.length === 1 ? "command" : "commands"}
-                {commands.length < sum.commands.length && <span className="ts-h-note">, the last {commands.length}</span>}
-              </h4>
+                {failed > 0 && <span className="ts-fold-bad">, {failed} failed</span>}
+                {sum.looked > 0 && `, looked through ${sum.looked} ${sum.looked === 1 ? "file" : "files"}`}
+              </summary>
+              {commands.length < sum.commands.length && <p className="ts-foot">The last {commands.length}:</p>}
               <ul className="ts-commands">
                 {commands.map((c, i) => (
                   <li key={i} title={c.command}>
@@ -164,18 +173,11 @@ export function TurnStrip({ agent, worktree }: { agent: Agent; worktree: Worktre
                   </li>
                 ))}
               </ul>
-            </section>
+            </details>
           )}
-          {turn.said && turn.said.trim() !== sum.asking && (
-            <section>
-              <h4>{working ? "Latest from Claude" : "Claude's last words"}</h4>
-              <p className="ts-prose ts-clamp">{turn.said}</p>
-            </section>
-          )}
-          {sum.looked > 0 && (
+          {commands.length === 0 && sum.looked > 0 && (
             <p className="ts-foot">
-              Looked through {sum.looked} {sum.looked === 1 ? "file" : "files"}
-              {turn.dropped > 0 ? `; ${turn.dropped} earlier steps not shown` : ""}.
+              Looked through {sum.looked} {sum.looked === 1 ? "file" : "files"}.
             </p>
           )}
         </div>
