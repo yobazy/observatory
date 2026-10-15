@@ -299,6 +299,7 @@ body.is-resizing-rows * {
   font-size: 14px;
   letter-spacing: -0.01em;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .link-dot {
@@ -4745,7 +4746,6 @@ button.attempt-status:hover span:nth-child(2) {
 }
 
 .dev-badge {
-  margin-left: 6px;
   padding: 1px 5px;
   border-radius: var(--r-sm);
   background: var(--st-running);
