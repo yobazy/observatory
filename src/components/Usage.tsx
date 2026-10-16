@@ -470,7 +470,7 @@ export function UsageChip() {
       className={`usage-chip${on ? " is-on" : ""}${level ? ` is-${level}` : ""}`}
       onClick={() => setState({ view: on ? "sessions" : "usage" })}
       aria-pressed={on}
-      title="Agent usage (⌘U)"
+      title="Usage: what your agents have spent, by project, day and task, against your budgets (⌘U)"
     >
       <span className="usage-chip-label">Usage</span>
       <span className="usage-chip-value">

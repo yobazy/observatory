@@ -1,6 +1,6 @@
 // Browser preview (`npm run dev` outside Tauri): demo projects and a canned
 // terminal, so the UI can be styled without a daemon. Never loaded in the app.
-import { byId, getState, setState } from "./store";
+import { byId, fromDaemon, getState, setState } from "./store";
 import type { GitStatus } from "./git";
 import type { UsageBucket, UsageReport } from "./usage";
 import type { Agent, AgentStatus, EntityId, Project, SessionRef, Worktree } from "./types";
@@ -217,7 +217,7 @@ export function startMock(handlers: Map<string, PtyHandler>) {
   setState({
     link: { state: "connected", daemonPid: 0 },
     loaded: true,
-    projects: byId(projects),
+    projects: byId(fromDaemon(projects)),
     worktrees: byId(worktrees),
     agents: byId(agents),
     terminals: {},
@@ -344,7 +344,8 @@ export function startMock(handlers: Map<string, PtyHandler>) {
         repo_path,
         sort_order: 1000,
       };
-      setState((s) => ({ projects: { ...s.projects, [project.id]: project } }));
+      const [named] = fromDaemon([project]);
+      setState((s) => ({ projects: { ...s.projects, [named.id]: named } }));
       return { Project: project.id };
     }
     if (variant !== "Attach" || !body) return;

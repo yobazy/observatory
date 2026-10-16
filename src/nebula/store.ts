@@ -140,9 +140,35 @@ export function getState(): State {
   return state;
 }
 
+/** The daemon's own names for projects, by id: what an alias stands in for. */
+const daemonNames = new Map<string, string>();
+
+/** `p` named by its alias, when it has one. */
+function aliased(p: Project, prefs: DesktopPrefs): Project {
+  const name = prefs.projectAliases?.[p.repo_path]?.trim() || daemonNames.get(p.id) || p.name;
+  return name === p.name ? p : { ...p, name };
+}
+
+/** Projects as the daemon sent them, named the way the app shows them: an
+ *  alias, set in the desktop prefs, stands in for the daemon's name all
+ *  over the app. */
+export function fromDaemon(projects: Project[]): Project[] {
+  for (const p of projects) daemonNames.set(p.id, p.name);
+  return projects.map((p) => aliased(p, state.prefs));
+}
+
+/** The name the daemon (and the TUI) uses for `p`, whatever it's called here. */
+export function daemonName(p: Project): string {
+  return daemonNames.get(p.id) ?? p.name;
+}
+
 export function setState(patch: Partial<State> | ((s: State) => Partial<State>)) {
   const next = typeof patch === "function" ? patch(state) : patch;
   state = { ...state, ...next };
+  // New aliases rename the projects already here.
+  if ("prefs" in next && !("projects" in next)) {
+    state = { ...state, projects: Object.fromEntries(Object.entries(state.projects).map(([id, p]) => [id, aliased(p, state.prefs)])) };
+  }
   if ("selectedProject" in next || "selectedSession" in next) {
     try {
       localStorage.setItem(
