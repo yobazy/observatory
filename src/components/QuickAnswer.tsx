@@ -66,7 +66,7 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
     return (
       <div className="qa qa-muted">
         Its terminal isn't running.{" "}
-        <button className="link-btn" onClick={onOpen}>
+        <button className="link-btn" onClick={onOpen} title="Open the session, to start its terminal again">
           Open it
         </button>
       </div>
@@ -103,7 +103,7 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
         <pre className="qa-tail">{lastRows(screen, 5).join("\n")}</pre>
         <p className="qa-muted">
           It's showing a menu this can't read.{" "}
-          <button className="link-btn" onClick={onOpen}>
+          <button className="link-btn" onClick={onOpen} title="A reply typed here could pick the highlighted choice, so answer in its terminal">
             Open it to answer
           </button>
         </p>
@@ -128,7 +128,7 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
           spellCheck={false}
           disabled={busy}
         />
-        <button className="btn btn-sm" type="submit" disabled={busy || !reply.trim()}>
+        <button className="btn btn-sm" type="submit" disabled={busy || !reply.trim()} title="Type this into its terminal and press Return">
           Send
         </button>
       </form>

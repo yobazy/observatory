@@ -18,6 +18,7 @@ import { ShelfStrip } from "./Files";
 import { termFont, whenLoaded } from "../nebula/termfont";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { watchForFiles, type FileWatch } from "../nebula/shelf";
+import { isSliding } from "./Resizer";
 
 const THEME = {
   background: "#0f1524",
@@ -192,7 +193,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
 
     const observer = new ResizeObserver(() => refit.current());
     refit.current = () => {
-      if (!term.current || !fit.current) return;
+      if (!term.current || !fit.current || isSliding()) return;
       const { cols, rows } = term.current;
       fit.current.fit();
       const t2 = term.current;
@@ -202,10 +203,14 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       }
     };
     if (host.current) observer.observe(host.current);
+    // A column slid open or shut: fit once, now it has stopped moving.
+    const onSlid = () => refit.current();
+    window.addEventListener("observatory:slid", onSlid);
 
     return () => {
       disposed = true;
       observer.disconnect();
+      window.removeEventListener("observatory:slid", onSlid);
       unlink();
       files.current?.dispose();
       files.current = null;
