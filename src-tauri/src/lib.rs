@@ -1,3 +1,4 @@
+mod activity;
 mod cards;
 mod codex_log;
 mod daemon;
@@ -40,6 +41,7 @@ pub fn run() {
         })
         .manage(daemon::DaemonState::default())
         .manage(usage::UsageState::default())
+        .manage(activity::ActivityState::default())
         .manage(thread_edits::EditsState::default())
         .manage(turns::TurnsState::default())
         .manage(transcript::TranscriptState::default())
@@ -64,6 +66,8 @@ pub fn run() {
             gh::gh_pr_create,
             gh::gh_pr_merge,
             usage::usage_report,
+            activity::activity_report,
+            activity::stop_process,
             thread_edits::thread_edits,
             turns::thread_turn,
             transcript::thread_transcript,

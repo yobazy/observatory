@@ -123,6 +123,7 @@ function build(s: State, ctx: PaletteContext): Item[] {
   }
   act("grid", "Watch tasks in a grid", ctx.toggleGrid, "⌘G");
   act("usage", "Agent usage", () => setState({ view: "usage" }), "⌘U");
+  act("activity", "Activity: what's running in your projects", () => setState({ view: "activity" }), "⌥⌘U");
   act("settings", "Settings", () => setState({ view: "settings" }), "⌘,");
   act("add", "Add a project", ctx.addProject, "⌘O");
   act("projects", "Hide or show projects", ctx.toggleProjects, "⌘B");
