@@ -15,7 +15,6 @@
 - Open several files at once from the Files list, as tabs in the preview, to compare versions of a mockup. Why: wanted, set aside for now (2026-10-16).
 - Files, most recent first: the Files row's chips and every section of its All list sorted by when each file was last shown or opened. Today a file shown again keeps its old place (addToShelf leaves the order alone so rescans don't reshuffle the row). Why: wanted, set aside for now (2026-10-16).
 - Drag a project onto a folder (or out of one) to file it, instead of only the right-click Move to folder. Why: wanted, set aside for now (2026-10-16).
-- Move a thread to another project, as a handoff: a new thread in the other project starts with the original ask, what was done and decided, the files it touched and a link back, and the old one is archived (or kept). Agents can already hand off with an observatory:// link (#14). A true move, the same conversation going on in the new folder, needs nebula to start a session that resumes an old one: an upstream change. Why: wanted, set aside for now (2026-10-16).
 - More activities for the sidebar cat, beyond stargazing, catching stars, grooming and stretching (#37). Why: wanted, set aside for now (2026-10-16).
 - Pick the sidebar pet: a cat or a dog, in Settings beside the on/off switch; the dog needs its own frames for every activity. Why: wanted, set aside for now (2026-10-16).
 - Drag folders to reorder them in the sidebar; today a folder's menu moves it up or down one place. Why: wanted, set aside for now (2026-10-16).

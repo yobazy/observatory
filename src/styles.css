@@ -6207,3 +6207,12 @@ button.board-main:hover .board-text {
   margin-left: auto;
   font-size: 12px;
 }
+/* "Keep the old thread" in the new-task box, for a thread being moved. */
+.field-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12.5px;
+}

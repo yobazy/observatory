@@ -8,6 +8,7 @@ import { DispatchBoard } from "./components/DispatchBoard";
 import { CardDialog, type CardTarget } from "./components/CardDialog";
 import type { Seed } from "./components/RowMenu";
 import { useHandoffLinks, type Handoff } from "./nebula/handoffLinks";
+import { useMoveRequests } from "./nebula/moveThread";
 import { DaemonGate } from "./components/DaemonGate";
 import { Welcome } from "./components/Welcome";
 import { AddProjectDialog, Notice, addProject, type AddStep } from "./components/AddProject";
@@ -61,6 +62,8 @@ export default function App() {
     handoff?: Handoff;
     /** An idea being started (Ideas view): its words, and the project it's in. */
     idea?: Idea;
+    /** A thread moving here from another project (moveThread.ts). */
+    moving?: { agentId: string; name: string };
   } | null>(null);
   // Each opening is a new dialog (see the key below), never an update to one
   // that is already mounted.
@@ -74,6 +77,15 @@ export default function App() {
     useCallback((handoff: Handoff) => {
       setLaunchKey((k) => k + 1);
       setLaunch({ worktree: null, handoff });
+    }, []),
+  );
+  // A thread moving to another project: the box opens on its brief, the
+  // project for you to pick.
+  useMoveRequests(
+    useCallback(({ agent, prompt, from }) => {
+      setState({ view: "sessions" });
+      setLaunchKey((k) => k + 1);
+      setLaunch({ worktree: null, handoff: { projectId: null, named: null, prompt, from }, moving: { agentId: agent.id, name: agent.name } });
     }, []),
   );
   // Dispatch, the day's to-do list; `text` is a list to paste in to begin with.
@@ -348,6 +360,7 @@ export default function App() {
           seed={launch.seed}
           pickProject={launch.pickProject}
           handoff={launch.handoff}
+          moving={launch.moving}
           onDispatch={launch.pickProject && !launch.idea ? openDispatch : undefined}
           onSaveIdea={launch.pickProject && !launch.idea ? saveIdea : undefined}
           initial={
