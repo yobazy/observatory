@@ -182,8 +182,10 @@ function mockProcesses(s: State): Proc[] {
     ...more,
   });
   const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  // A little drift between reads, so the view looks alive.
+  // A little drift between reads, so the view looks alive, and a dev
+  // server that rebuilds now and then, so the order has a reason to change.
   const j = (n: number) => Math.max(0, n * (0.85 + Math.random() * 0.3));
+  const rebuilding = Math.floor(Date.now() / 15_000) % 2 === 1;
   return [
     p("wm3", "Python", "uv run python -m jobs.invoice_worker --watch", j(114), 1680 * mb, 6 * 3600 + 1240),
     p("wm3", "uv", "uv run python -m jobs.invoice_worker --watch", 0, 22 * mb, 6 * 3600 + 1241),
@@ -194,7 +196,7 @@ function mockProcesses(s: State): Proc[] {
     p("w0", "node", "node node_modules/.bin/vite --port 5173", j(1.2), 214 * mb, 3 * 3600 + 400, { ports: [5173] }),
     p("w0", "esbuild", "esbuild --service=0.25.1 --ping", j(0.1), 18 * mb, 3 * 3600 + 399),
     p("w0", "zsh", "-zsh", 0, 4 * mb, 5 * 3600),
-    p("wm0", "node", "node node_modules/.bin/next dev -p 3000", j(8), 450 * mb, 2400, { ports: [3000], nebula: true }),
+    p("wm0", "node", "node node_modules/.bin/next dev -p 3000", j(rebuilding ? 160 : 8), 450 * mb, 2400, { ports: [3000], nebula: true }),
     p("wm0", "claude", "claude --model sonnet", j(1), 310 * mb, 2500, { nebula: true }),
     p("wm5", "node", "node scripts/watch.js", j(0.3), 64 * mb, 26 * 3600),
   ].filter((x) => x.worktree);

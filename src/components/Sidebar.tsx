@@ -258,7 +258,7 @@ export function Sidebar({
           onClick={() => setState({ view: state.view === "activity" ? "sessions" : "activity" })}
           aria-pressed={state.view === "activity"}
           aria-label="Activity"
-          title="Activity: what's running in your projects (⌥⌘U)"
+          title="Activity: what's running in your projects, and the CPU and memory it takes (⌥⌘U)"
         >
           <ActivityGlyph />
         </button>
