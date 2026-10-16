@@ -465,6 +465,35 @@ body.is-resizing-rows * {
   padding: 2px 10px 16px;
 }
 
+/* The projects' own heading: what they are, and where new ones come from. */
+.projects-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 6px 10px 4px 20px;
+}
+.projects-head h2 {
+  flex: 1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.projects-count {
+  margin-left: 4px;
+  color: var(--faint);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.projects-head .icon-btn {
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+.projects-head .icon-btn:hover {
+  color: var(--text);
+}
+
 /* Folders of projects (Sidebar.tsx FolderGroup), and tags (folders.ts). */
 .folder {
   margin: 0 10px 2px;

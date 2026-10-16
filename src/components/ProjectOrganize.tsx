@@ -174,9 +174,10 @@ export function FolderDialog({ project, onClose }: { project: Project; onClose: 
   );
 }
 
-export function FolderGlyph({ open = false }: { open?: boolean }) {
+export function FolderGlyph({ open = false, plus = false }: { open?: boolean; plus?: boolean }) {
   return (
     <svg className="folder-glyph" width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      {plus && <path d="M8 7.6v3.8M6.1 9.5h3.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />}
       {open ? (
         <path
           d="M1.75 4.25c0-.55.45-1 1-1h3.1l1.5 1.5h5.9c.55 0 1 .45 1 1v1H4.6c-.45 0-.84.3-.96.73L1.75 13V4.25Zm1.85 3.25h10.9l-1.6 5.25H2l1.6-5.25Z"

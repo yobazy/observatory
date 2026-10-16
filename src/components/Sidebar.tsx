@@ -19,7 +19,7 @@ import { AwayDigest } from "./AwayDigest";
 import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon";
 import { FlagGlyph, FollowUps } from "./Organize";
 import { UncommittedEntry } from "./Uncommitted";
-import { deleteFolder, moveInFolder, moveProject, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
+import { createFolder, deleteFolder, moveInFolder, moveProject, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
 import { allTags, layout, matches, type ProjectFolder } from "../nebula/folders";
 import { FolderGlyph } from "./ProjectOrganize";
 import { ContextMenu, type MenuItem } from "./Menu";
@@ -173,16 +173,8 @@ export function Sidebar({
         </span>
         <span className="sidebar-actions">
           <LinkDot />
-          <button className="icon-btn" title="Hide projects (⌘B)" aria-label="Hide projects" onClick={onHide}>
+          <button className="icon-btn" title="Hide the sidebar (⌘B)" aria-label="Hide the sidebar" onClick={onHide}>
             <PanelGlyph />
-          </button>
-          <button
-            className="icon-btn"
-            title="Add project (⌘O)"
-            aria-label="Add project"
-            onClick={onAddProject}
-          >
-            +
           </button>
         </span>
       </div>
@@ -192,7 +184,10 @@ export function Sidebar({
       <div className="sidebar-scroll">
         {waiting.length > 0 && (
           <section className="waiting" aria-label="Sessions waiting on you">
-            <h2 className="waiting-title">
+            <h2
+              className="waiting-title"
+              title="Sessions stopped until you answer them: a question, a permission prompt or a menu. Click one to open it, or Answer to reply from here."
+            >
               Waiting on you <span className="waiting-count">{waiting.length}</span>
             </h2>
             <ul>
@@ -239,6 +234,33 @@ export function Sidebar({
         <FollowUps />
         <UncommittedEntry />
 
+        <div className="projects-head">
+          <h2 title="Every project nebula knows. Right-click one for folders, a name of your own, tags, its icon and color.">
+            Projects <span className="projects-count">{projects.length}</span>
+          </h2>
+          <button
+            className="icon-btn"
+            onClick={() =>
+              setFolderDialog({
+                kind: "text",
+                title: "New folder",
+                label: "Folder name",
+                initial: "",
+                submit: "Create folder",
+                note: "Put projects in it from their right-click menu: Move to folder.",
+                onSubmit: async (name) => void (await createFolder(name)),
+              })
+            }
+            title="New folder: group projects together"
+            aria-label="New folder"
+          >
+            <FolderGlyph plus />
+          </button>
+          <button className="icon-btn" onClick={onAddProject} title="Add a project: a git folder for nebula to run agents in (⌘O)" aria-label="Add project">
+            +
+          </button>
+        </div>
+
         <div className="project-search has-toggle">
           <input
             ref={search}
@@ -275,7 +297,13 @@ export function Sidebar({
             {tags.map((t) => {
               const on = query.trim().toLowerCase() === `#${t}`;
               return (
-                <button key={t} className={`tag-chip${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => setQuery(on ? "" : `#${t}`)}>
+                <button
+                  key={t}
+                  className={`tag-chip${on ? " is-on" : ""}`}
+                  aria-pressed={on}
+                  onClick={() => setQuery(on ? "" : `#${t}`)}
+                  title={on ? "Show every project again" : `Show only projects tagged ${t}`}
+                >
                   #{t}
                 </button>
               );
@@ -435,7 +463,13 @@ function FolderGroup({
   const open = !folder.collapsed;
   return (
     <section className={`folder${open ? " is-open" : ""}`} aria-label={`${folder.name} folder`}>
-      <button className="folder-head" onClick={() => void toggleFolder(folder.id)} onContextMenu={(e) => onMenu(e, folder)} aria-expanded={open}>
+      <button
+        className="folder-head"
+        onClick={() => void toggleFolder(folder.id)}
+        onContextMenu={(e) => onMenu(e, folder)}
+        aria-expanded={open}
+        title={`${folder.name}: ${projects.length} ${projects.length === 1 ? "project" : "projects"}. Click to ${open ? "fold it away" : "open it"}; right-click to rename, move or delete it.`}
+      >
         <span className="folder-chev" aria-hidden>
           {open ? "▾" : "▸"}
         </span>
@@ -521,7 +555,11 @@ function ProjectRow({
       onKeyDown={onKeyDown}
       aria-keyshortcuts={index !== null ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
       aria-current={selected ? "page" : undefined}
-      title={missing ? `Folder not found: ${project.repo_path}` : project.repo_path}
+      title={
+        missing
+          ? `Folder not found: ${project.repo_path}`
+          : `${project.name}\n${project.repo_path}${summary ? `\n${summary}` : ""}\nRight-click for folders, a name of your own, tags, icon and color.`
+      }
     >
       <span className="project-line">
         <ProjectIcon project={project} />
@@ -557,7 +595,11 @@ function ProjectRow({
       </span>
       {tags.length > 0 && <span className="project-tags">{tags.map((t) => `#${t}`).join("  ")}</span>}
       {/* One segment per live session, ordered by urgency. */}
-      <span className="spectrum" aria-label={summary || `${agents.length} sessions`}>
+      <span
+        className="spectrum"
+        aria-label={summary || `${agents.length} sessions`}
+        title={`${summary || `${agents.length} ${agents.length === 1 ? "session" : "sessions"}`}\nOne segment per session, most urgent first: coral is waiting on you, blue working, green finished and unread, grey finished, pink stopped with an error.`}
+      >
         {ordered.length === 0 ? (
           <span className="spectrum-empty" />
         ) : (

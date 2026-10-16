@@ -52,7 +52,10 @@ export function AwayDigest({ onOpen }: { onOpen: (agent: Agent) => void }) {
   if (!done.length) return null;
   return (
     <section className="waiting away" aria-label="Finished while you were away">
-      <h2 className="waiting-title">
+      <h2
+        className="waiting-title"
+        title="What finished while the window was in the background for ten minutes or more, or since the app opened. A task leaves once you open it; × puts the list away."
+      >
         While you were away <span className="waiting-count">{done.length}</span>
         <button className="icon-btn away-close" onClick={dismissAway} aria-label="Dismiss" title="Dismiss">
           ×

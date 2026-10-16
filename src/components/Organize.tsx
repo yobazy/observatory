@@ -93,7 +93,10 @@ export function FollowUps() {
   const shown = all ? flagged : flagged.slice(0, FOLLOW_UP_ROWS);
   return (
     <section className="followups" aria-label="Flagged for follow-up">
-      <h2 className="followups-title">
+      <h2
+        className="followups-title"
+        title="Tasks to come back to: those you flagged, and those that finished while you weren't looking. ✓ clears one; replying or archiving clears it too."
+      >
         <FlagGlyph />
         Follow up <span className="followups-count">{flagged.length}</span>
       </h2>
