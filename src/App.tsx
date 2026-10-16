@@ -18,6 +18,8 @@ import { useGitPolling } from "./nebula/git";
 import { fitColumns, Resizer, SESSIONS, SIDEBAR, useColumnWidth, useHidden, useWindowWidth } from "./components/Resizer";
 import { PanelGlyph } from "./components/Sidebar";
 import { UsageView } from "./components/Usage";
+import { ActivityView } from "./components/Activity";
+import { useActivityPolling } from "./nebula/activity";
 import { SettingsView } from "./components/Settings";
 import { useUsagePolling } from "./nebula/usage";
 import { savePrefs, useTheme } from "./nebula/theme";
@@ -139,6 +141,7 @@ export default function App() {
   useQueueRunner();
   useBatchRunner();
   useUsagePolling();
+  useActivityPolling();
   useTheme();
   useRunWatch();
   useLimitWatch();
@@ -183,7 +186,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘O adds a project; ⌘U shows usage; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -207,6 +210,9 @@ export default function App() {
       } else if (e.key === ",") {
         e.preventDefault();
         setState((s) => ({ view: s.view === "settings" ? "sessions" : "settings" }));
+      } else if (e.code === "KeyU" && e.altKey) {
+        e.preventDefault();
+        setState((s) => ({ view: s.view === "activity" ? "sessions" : "activity" }));
       } else if (e.key === "u") {
         e.preventDefault();
         setState((s) => ({ view: s.view === "usage" ? "sessions" : "usage" }));
@@ -277,6 +283,7 @@ export default function App() {
         <PreviewPane />
       </div>
       {view === "usage" && <UsageView />}
+      {view === "activity" && <ActivityView />}
       {view === "settings" && <SettingsView />}
       {view === "review" && <ReviewView key={getState().review ?? ""} />}
       {view === "uncommitted" && <UncommittedView />}

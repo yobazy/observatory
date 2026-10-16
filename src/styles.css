@@ -1712,18 +1712,151 @@ body.is-resizing-rows * {
 }
 .usage-chip-value {
   grid-row: 2;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.usage-chip kbd {
-  grid-row: 1 / 3;
-  grid-column: 2;
-  align-self: center;
+
+/* Activity (Activity.tsx): processes by project and checkout. */
+.act-project {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.act-project h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.act-sum {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.act-checkout h3 {
+  margin: 4px 0 2px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.act-table {
+  table-layout: fixed;
+}
+.act-table td {
+  max-width: none;
+}
+.act-col-from {
+  width: 180px;
+}
+.act-col-num {
+  width: 84px;
+}
+.act-col-actions {
+  width: 160px;
+}
+.act-table td:last-child {
+  text-align: right;
+}
+.act-what {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.act-name {
+  flex: none;
+  color: var(--text);
+  font-weight: 550;
+}
+.act-cmd {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+.act-from {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.act-from .link-btn {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.act-port {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.act-muted {
+  color: var(--faint);
+}
+.act-left {
+  flex: none;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  color: var(--amber);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+.act-actions .btn {
+  opacity: 0;
+}
+.act-actions .btn + .btn {
+  margin-left: 6px;
+}
+.act-table tr:hover .act-actions .btn,
+.act-table tr:focus-within .act-actions .btn {
+  opacity: 1;
+}
+.act-more {
+  margin: 4px 8px 0;
+  font-size: 12px;
+}
+
+/* A busy project's quiet meter on its sidebar row. */
+.load-meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 10px;
+  margin-right: 2px;
+}
+.load-meter span {
+  width: 2.5px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+}
+.load-meter span:nth-child(1) {
+  height: 4px;
+}
+.load-meter span:nth-child(2) {
+  height: 7px;
+}
+.load-meter span:nth-child(3) {
+  height: 10px;
+}
+.load-meter span.is-on {
+  background: var(--muted);
+}
+.load-meter.is-3 span.is-on {
+  background: var(--text);
 }
 
 /* The usage view takes the sessions and terminal columns. */
 .usage,
+.activity,
 .settings {
   grid-area: 1 / 2 / 2 / -1;
   z-index: 3;

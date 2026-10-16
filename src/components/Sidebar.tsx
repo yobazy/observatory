@@ -11,6 +11,7 @@ import {
 import { relativeTime } from "../nebula/status";
 import type { Agent, Project } from "../nebula/types";
 import { UsageChip } from "./Usage";
+import { ActivityGlyph, LoadMeter } from "./Activity";
 import { Pet } from "./Pet";
 import { restartToUpdate, useUpdateState } from "../nebula/updates";
 import { QuickAnswer } from "./QuickAnswer";
@@ -252,6 +253,15 @@ export function Sidebar({
       <UpdateReady />
       <footer className="sidebar-foot">
         <UsageChip />
+        <button
+          className={`icon-btn foot-gear${state.view === "activity" ? " is-on" : ""}`}
+          onClick={() => setState({ view: state.view === "activity" ? "sessions" : "activity" })}
+          aria-pressed={state.view === "activity"}
+          aria-label="Activity"
+          title="Activity: what's running in your projects (⌥⌘U)"
+        >
+          <ActivityGlyph />
+        </button>
         <button className="icon-btn foot-gear" onClick={onDispatch} aria-label="Dispatch" title="Dispatch: your to-do list (⇧⌘N)">
           <ListGlyph />
         </button>
@@ -388,6 +398,7 @@ function ProjectRow({
         <span className="project-name">{project.name}</span>
         {live && <span className="live-dot" title="Dev server running" aria-label="Dev server running" />}
         <span className="project-meta">
+          <LoadMeter projectId={project.id} />
           {missing && (
             <span className="project-badge badge-missing" title="Folder not found. Right-click to locate it.">
               !

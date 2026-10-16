@@ -482,7 +482,6 @@ export function UsageChip() {
               ? "No usage today"
               : "…"}
       </span>
-      <kbd>⌘U</kbd>
     </button>
   );
 }
