@@ -7,6 +7,7 @@ import { isPreview } from "./client";
 import { loadSettings } from "./settings";
 import { getState, setState, subscribe } from "./store";
 import type { FolderPrefs } from "./folders";
+import type { Idea } from "./ideaList";
 import type { TermFontPrefs } from "./termfont";
 
 export type Mode = "system" | "dark" | "black" | "light";
@@ -76,6 +77,8 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs {
   taskColors?: Record<string, string>;
   /** Tasks marked to come back to, by agent id: when they were marked (ms). */
   followUps?: Record<string, number>;
+  /** Ideas not started yet, newest first (ideas.ts). */
+  ideas?: Idea[];
   /** Which of those the app flagged itself, when a turn ended while you
    *  weren't looking (followupRules.ts); they clear once you act. */
   autoFollowUps?: Record<string, true>;

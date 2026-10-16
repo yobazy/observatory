@@ -22,7 +22,8 @@ import {
   type RouterWorktree,
   type Target,
 } from "../nebula/router";
-import { flash, setState, sortedProjects, useAppState } from "../nebula/store";
+import { flash, getState, setState, sortedProjects, useAppState } from "../nebula/store";
+import { addIdea } from "../nebula/ideas";
 
 const TARGET_LABEL: Record<Target, string> = { project: "Project", home: "Home", you: "You" };
 const MODE_LABEL: Record<Mode, string> = {
@@ -274,6 +275,21 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
                             ? `Shared: at most ${card.concurrency} at once.`
                             : ""}
                   </span>
+                  <button
+                    type="button"
+                    className="link-btn route-later"
+                    onClick={() => {
+                      const repo = t.target === "project" && t.projectId ? (getState().projects[t.projectId]?.repo_path ?? null) : null;
+                      void addIdea(t.text, repo, { kind: "dispatch" }).then((made) => {
+                        if (!made) return;
+                        setTasks((ts) => ts.filter((x) => x.id !== t.id));
+                        flash("Saved to Ideas");
+                      });
+                    }}
+                    title="Not now: take it off this plan and keep it in Ideas, under its project, to start later"
+                  >
+                    Not now
+                  </button>
                   <button
                     type="button"
                     className="icon-btn route-remove"

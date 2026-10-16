@@ -20,6 +20,9 @@ export function LaunchDialog({
   onClose,
   pickProject = false,
   onDispatch,
+  onSaveIdea,
+  initial,
+  onStarted,
   handoff,
 }: {
   initialWorktree: string | null;
@@ -32,12 +35,19 @@ export function LaunchDialog({
   onClose: () => void;
   /** Offer Dispatch instead, as quick capture does: what's typed so far goes with it. */
   onDispatch?: (text: string) => void;
+  /** Offer to keep it as an idea instead of starting it (quick capture):
+   *  the project picked here, or null when none was. */
+  onSaveIdea?: (text: string, projectId: string | null) => void;
+  /** The task to start with, in this project: an idea being started. */
+  initial?: { task: string; projectId: string | null } | null;
+  /** Once the agent exists: its id. */
+  onStarted?: (agentId: string | null) => void;
 }) {
   const state = useAppState();
   const projects = useMemo(() => sortedProjects(state), [state]);
   // Derived on every render rather than frozen at mount, so a selection that
   // changes (or was stale when the dialog opened) can't leave it blank.
-  const [pickedProject, setPickedProject] = useState<string | null>(handoff?.projectId ?? null);
+  const [pickedProject, setPickedProject] = useState<string | null>(handoff?.projectId ?? initial?.projectId ?? null);
   // A handed-over task whose project didn't match waits for you to pick one,
   // rather than starting in whichever project happens to be open.
   const unpicked = !!handoff && !handoff.projectId && !pickedProject && projects.length > 1;
@@ -58,7 +68,7 @@ export function LaunchDialog({
   const [kinds, setKinds] = useState<AgentKind[]>([]);
   const [copies, setCopies] = useState(1);
   const [preset, setPreset] = useState<string>("");
-  const [task, setTask] = useState(seed?.task ?? handoff?.prompt ?? "");
+  const [task, setTask] = useState(seed?.task ?? handoff?.prompt ?? initial?.task ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const taskBox = useRef<HTMLTextAreaElement>(null);
@@ -141,7 +151,8 @@ export function LaunchDialog({
         worktree = created.Worktree;
       }
 
-      await createAgent({ worktree, kind, settings, prompt: task, preset: chosenPreset });
+      const agent = await createAgent({ worktree, kind, settings, prompt: task, preset: chosenPreset });
+      onStarted?.(agent);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -218,12 +229,32 @@ export function LaunchDialog({
           rows={5}
           aria-label="Task"
         />
-        {onDispatch && (
+        {(onDispatch || onSaveIdea) && (
           <p className="dialog-note">
-            A list of things to do?{" "}
-            <button type="button" className="link-btn" onClick={() => onDispatch(task)} disabled={busy}>
-              Paste it into Dispatch
-            </button>
+            {onDispatch && (
+              <>
+                A list of things to do?{" "}
+                <button type="button" className="link-btn" onClick={() => onDispatch(task)} disabled={busy}>
+                  Paste it into Dispatch
+                </button>
+                {onSaveIdea ? ". Not now? " : ""}
+              </>
+            )}
+            {onSaveIdea && (
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => onSaveIdea(task, pickedProject)}
+                disabled={busy || !task.trim()}
+                title={
+                  pickedProject
+                    ? `Keep it in Ideas, under ${project.name}, to start later`
+                    : "Keep it in Ideas, Unsorted unless you pick a project above, to start later"
+                }
+              >
+                Save it as an idea
+              </button>
+            )}
           </p>
         )}
 

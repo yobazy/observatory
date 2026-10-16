@@ -20,6 +20,7 @@ import { AwayDigest } from "./AwayDigest";
 import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon";
 import { FlagGlyph, FollowUps } from "./Organize";
 import { UncommittedEntry } from "./Uncommitted";
+import { IdeasEntry } from "./Ideas";
 import { createFolder, deleteFolder, moveInFolder, moveProject, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
 import { allTags, layout, matches, type ProjectFolder } from "../nebula/folders";
 import { FolderGlyph } from "./ProjectOrganize";
@@ -237,7 +238,10 @@ export function Sidebar({
 
         <AwayDigest onOpen={selectAgent} />
         <FollowUps />
-        <UncommittedEntry />
+        <div className="side-entries">
+          <UncommittedEntry />
+          <IdeasEntry />
+        </div>
 
         <div className="projects-head">
           <h2 title="Every project nebula knows. Right-click one for folders, a name of your own, tags, its icon and color.">
