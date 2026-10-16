@@ -63,6 +63,11 @@ export function removeFromShelf(agentId: string, path: string) {
   );
 }
 
+/** Take everything off `agentId`'s shelf. */
+export function clearShelf(agentId: string) {
+  write(agentId, []);
+}
+
 /** Mount once: loads the shelves, and drops those of agents the daemon no
  *  longer has. */
 export function useShelf() {

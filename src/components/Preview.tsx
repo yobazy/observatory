@@ -193,24 +193,28 @@ export function PreviewPane() {
   );
 }
 
+/** `path` somewhere other than here: the browser, the code editor picked in
+ *  Settings, or Finder. Says so when it can't. */
+export async function openFileIn(path: string, what: "browser" | "editor" | "finder") {
+  if (isPreview()) return flash(`Would open ${baseName(path)} in the ${what}.`);
+  try {
+    const opener = await import("@tauri-apps/plugin-opener");
+    if (what === "finder") await opener.revealItemInDir(path);
+    else if (what === "browser") await opener.openPath(path);
+    else {
+      const app = currentEditor();
+      if (!app) return flash("No code editor found. Pick one in Settings › General.");
+      await invoke("open_in_editor", { path, app });
+    }
+  } catch (e) {
+    flash(`Couldn't open ${baseName(path)}: ${errText(e)}`);
+  }
+}
+
 /** Browser, editor, Finder: the file somewhere other than here. */
 function OpenMenu({ file }: { file: PreviewFile }) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
-  const run = async (what: "browser" | "editor" | "finder") => {
-    if (isPreview()) return flash(`Would open ${baseName(file.path)} in the ${what}.`);
-    try {
-      const opener = await import("@tauri-apps/plugin-opener");
-      if (what === "finder") await opener.revealItemInDir(file.path);
-      else if (what === "browser") await opener.openPath(file.path);
-      else {
-        const app = currentEditor();
-        if (!app) return flash("No code editor found. Pick one in Settings › General.");
-        await invoke("open_in_editor", { path: file.path, app });
-      }
-    } catch (e) {
-      flash(`Couldn't open ${baseName(file.path)}: ${errText(e)}`);
-    }
-  };
+  const run = (what: "browser" | "editor" | "finder") => openFileIn(file.path, what);
   const items = [
     ...(file.kind === "html" ? [{ label: "Browser", run: () => void run("browser") }] : []),
     { label: "Editor", run: () => void run("editor") },

@@ -11,13 +11,13 @@ import { sessionKey, type Agent, type SessionRef } from "../nebula/types";
 import { enqueue, isIdle, noteTyped, unqueue } from "../nebula/queue";
 import { findQuestion, noteSize, type Choice, type Question } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
-import { hasLog, TurnStrip } from "./TurnStrip";
+import { hasLog, setTurnLineHidden, TurnStrip, useTurnLineHidden } from "./TurnStrip";
 import { Reader } from "./Reader";
 import { AskStrip } from "./AskStrip";
+import { ShelfStrip } from "./Files";
 import { termFont, whenLoaded } from "../nebula/termfont";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
-import { removeFromShelf, watchForFiles, type FileWatch, type ShelfItem } from "../nebula/shelf";
-import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
+import { watchForFiles, type FileWatch } from "../nebula/shelf";
 
 const THEME = {
   background: "#0f1524",
@@ -279,6 +279,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   }, [agent?.unseen, agent?.id]);
 
   const [mode, setMode] = usePaneMode();
+  const summaryHidden = useTurnLineHidden();
   const canRead = !!agent && hasLog(agent);
   const reading = canRead && mode === "read";
   const toTerminal = () => {
@@ -333,6 +334,11 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
             </span>
           </div>
           <div className="pane-actions">
+            {canRead && summaryHidden && (
+              <button className="btn btn-sm btn-rare" onClick={() => setTurnLineHidden(false)} title="Show what the latest turn did, above the terminal">
+                Summary
+              </button>
+            )}
             {canRead && (
               <div className="segmented segmented-sm pane-mode" role="radiogroup" aria-label="Show the thread as">
                 <button role="radio" aria-checked={!reading} className={reading ? "" : "is-on"} onClick={toTerminal}>
@@ -397,7 +403,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       {agent && <TurnStrip key={agent.id} agent={agent} worktree={wt} />}
       {asking && !reading && <AskStrip question={asking} onPick={answer} />}
       {agent && <QueueStrip agent={agent} queued={state.queue[agent.id]} />}
-      {agent && <ShelfStrip agentId={agent.id} items={state.shelf[agent.id]} />}
+      {agent && <ShelfStrip agent={agent} worktree={wt} items={state.shelf[agent.id]} />}
       <div className="pane-body" data-drop-session={key ?? undefined}>
         <div ref={host} className={`xterm-host${exists ? "" : " is-hidden"}`} />
         {reading && agent && <Reader key={agent.id} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} question={asking} onPick={answer} />}
@@ -500,50 +506,6 @@ function QueueStrip({ agent, queued }: { agent: Agent; queued: { id: string; tex
           </li>
         ))}
       </ol>
-    </div>
-  );
-}
-
-const KIND_MARK: Record<string, string> = { html: "◧", htm: "◧", md: "¶", markdown: "¶", pdf: "⎘" };
-
-/** The files this task has shown: hover for the card, click to open. */
-function ShelfStrip({ agentId, items }: { agentId: string; items: ShelfItem[] | undefined }) {
-  if (!items?.length) return null;
-  return (
-    <div className="shelf-strip" aria-label="Files this task has shown">
-      <span className="queue-label">Files</span>
-      <ul>
-        {items.map((item) => {
-          const ext = item.path.slice(item.path.lastIndexOf(".") + 1).toLowerCase();
-          return (
-            <li key={item.path}>
-              <button
-                className="shelf-chip"
-                title={`${dirName(item.path)}/${baseName(item.path)}`}
-                onClick={() => {
-                  hideCard();
-                  void openPreview([item.path], agentId);
-                }}
-                onMouseEnter={(e) => hoverPath(item.path, e.clientX, e.clientY + 12, agentId)}
-                onMouseLeave={() => leavePath()}
-              >
-                <span className="shelf-mark" aria-hidden>
-                  {KIND_MARK[ext] ?? "▣"}
-                </span>
-                {baseName(item.path)}
-              </button>
-              <button
-                className="shelf-x"
-                aria-label={`Remove ${baseName(item.path)} from the shelf`}
-                title="Remove from the shelf"
-                onClick={() => removeFromShelf(agentId, item.path)}
-              >
-                ×
-              </button>
-            </li>
-          );
-        })}
-      </ul>
     </div>
   );
 }
