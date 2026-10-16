@@ -12,6 +12,7 @@ import { openReview } from "../nebula/diff";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
 import { isFollowUp, isPinned, moveTask, toggleFlag, unpinAll, unpinTask } from "../nebula/organize";
 import { TaskColorDialog } from "./Organize";
+import { moveThread } from "../nebula/moveThread";
 
 export type Seed = { task: string; kind: AgentKind };
 
@@ -198,6 +199,7 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
       },
       { label: "Restart", run: () => void attempt(request("RestartAgent", { id: a.id })) },
       duplicate,
+      { label: "Move to project…", run: () => void attempt(moveThread(a)) },
       rename,
       autoName,
       ...arrange,

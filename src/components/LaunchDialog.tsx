@@ -23,6 +23,7 @@ export function LaunchDialog({
   onSaveIdea,
   initial,
   onStarted,
+  moving,
   handoff,
 }: {
   initialWorktree: string | null;
@@ -42,6 +43,8 @@ export function LaunchDialog({
   initial?: { task: string; projectId: string | null } | null;
   /** Once the agent exists: its id. */
   onStarted?: (agentId: string | null) => void;
+  /** The thread being moved here (moveThread.ts): archived once this starts, unless kept. */
+  moving?: { agentId: string; name: string } | null;
 }) {
   const state = useAppState();
   const projects = useMemo(() => sortedProjects(state), [state]);
@@ -70,6 +73,7 @@ export function LaunchDialog({
   const [preset, setPreset] = useState<string>("");
   const [task, setTask] = useState(seed?.task ?? handoff?.prompt ?? initial?.task ?? "");
   const [busy, setBusy] = useState(false);
+  const [keepOld, setKeepOld] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const taskBox = useRef<HTMLTextAreaElement>(null);
 
@@ -153,6 +157,14 @@ export function LaunchDialog({
 
       const agent = await createAgent({ worktree, kind, settings, prompt: task, preset: chosenPreset });
       onStarted?.(agent);
+      if (moving) {
+        if (keepOld) flash(`Started in ${project?.name}; ${moving.name} is still where it was.`);
+        else
+          await request("ArchiveAgent", { id: moving.agentId }).then(
+            () => flash(`Moved to ${project?.name}: ${moving.name} is archived.`),
+            (e) => flash(`Started in ${project?.name}, but couldn't archive ${moving.name}: ${e instanceof Error ? e.message : e}`),
+          );
+      }
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -375,6 +387,13 @@ export function LaunchDialog({
               ))}
             </div>
           </div>
+        )}
+
+        {moving && (
+          <label className="field-check" title={`Off: ${moving.name} is archived once this starts. Its conversation stays there either way.`}>
+            <input type="checkbox" checked={keepOld} onChange={(e) => setKeepOld(e.target.checked)} />
+            Keep {moving.name} too, instead of archiving it
+          </label>
         )}
 
         {error && (
