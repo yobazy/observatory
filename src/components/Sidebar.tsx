@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import {
   STATUS_ORDER,
+  daemonName,
   projectAgents,
   projectOfWorktree,
   setState,
@@ -18,7 +19,11 @@ import { AwayDigest } from "./AwayDigest";
 import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon";
 import { FlagGlyph, FollowUps } from "./Organize";
 import { UncommittedEntry } from "./Uncommitted";
-import { moveProject } from "../nebula/organize";
+import { deleteFolder, moveInFolder, moveProject, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
+import { allTags, layout, matches, type ProjectFolder } from "../nebula/folders";
+import { FolderGlyph } from "./ProjectOrganize";
+import { ContextMenu, type MenuItem } from "./Menu";
+import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
 import { reorderKey, useReorder } from "./useReorder";
 import { useBatches } from "../nebula/batch";
 
@@ -54,14 +59,15 @@ export function Sidebar({
   const projectMenu = useProjectMenu();
   // Dragging reorders the whole list, so not while it's filtered.
   const filtered = !!query || needsOnly;
-  const reorder = useReorder((repo, to) => void moveProject(repo, to), !filtered);
-
   const projects = useMemo(() => sortedProjects(state), [state]);
+  // Unfiltered, the list is folders first, then the projects in none.
+  const grouped = useMemo(() => layout(projects, state.prefs), [projects, state.prefs]);
+  const looseRepos = grouped.loose.map((p) => p.repo_path);
+  const reorder = useReorder((repo, to) => void moveProject(repo, to, looseRepos), !filtered);
+  const tags = useMemo(() => allTags(state.prefs, projects.map((p) => p.repo_path)), [projects, state.prefs]);
   const waiting = useMemo(() => waitingAgents(state), [state]);
   const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (q)
-      return projects.filter((p) => p.name.toLowerCase().includes(q) || p.repo_path.toLowerCase().includes(q));
+    if (query.trim()) return projects.filter((p) => matches(p, daemonName(p), state.prefs, query));
     // Needs you: what's waiting, working or unread, and the project you're in.
     if (needsOnly)
       return projects.filter(
@@ -73,6 +79,63 @@ export function Sidebar({
     return projects;
   }, [projects, query, needsOnly, state]);
   const hiddenCount = projects.length - shown.length;
+  // The order on screen, which ⌘1–9 count in: a folded folder's projects aren't.
+  const onScreen = filtered ? shown : [...grouped.folders.flatMap((g) => (g.folder.collapsed ? [] : g.projects)), ...grouped.loose];
+  const keyOf = (p: Project) => (filtered ? null : onScreen.indexOf(p));
+
+  const row = (p: Project, i: number, count: number, move: (to: number) => void) => (
+    <ProjectRow
+      project={p}
+      index={keyOf(p)}
+      agents={projectAgents(state, p.id)}
+      live={Object.values(state.terminals).some(
+        (t) => t.alive && t.run_command !== null && state.worktrees[t.worktree_id]?.project_id === p.id,
+      )}
+      selected={p.id === state.selectedProject}
+      onMenu={projectMenu.openFor}
+      onKeyDown={(e) => !filtered && reorderKey(e, i, count, move)}
+    />
+  );
+
+  const [folderMenu, setFolderMenu] = useState<{ items: MenuItem[]; x: number; y: number; label: string } | null>(null);
+  const [folderDialog, setFolderDialog] = useState<TextDialogSpec | ConfirmDialogSpec | null>(null);
+  const openFolderMenu = (e: React.MouseEvent, folder: ProjectFolder) => {
+    e.preventDefault();
+    const all = state.prefs.projectFolders ?? [];
+    const at = all.findIndex((f) => f.id === folder.id);
+    const items: MenuItem[] = [
+      {
+        label: "Rename folder…",
+        run: () =>
+          setFolderDialog({
+            kind: "text",
+            title: "Rename folder",
+            label: "Folder name",
+            initial: folder.name,
+            submit: "Rename",
+            onSubmit: async (name) => void (await renameFolder(folder.id, name)),
+          }),
+      },
+      ...(at > 0 ? [{ label: "Move up", run: () => void shiftFolder(folder.id, -1), separated: true }] : []),
+      ...(at < all.length - 1 ? [{ label: "Move down", run: () => void shiftFolder(folder.id, 1), separated: at === 0 }] : []),
+      {
+        label: "Delete folder…",
+        destructive: true,
+        separated: true,
+        run: () =>
+          setFolderDialog({
+            kind: "confirm",
+            title: `Delete ${folder.name}?`,
+            message: folder.projects.length
+              ? `The folder goes and its ${folder.projects.length === 1 ? "project goes" : `${folder.projects.length} projects go`} back to the list. Nothing else changes.`
+              : "The folder goes. Nothing else changes.",
+            confirm: "Delete folder",
+            onConfirm: async () => void (await deleteFolder(folder.id)),
+          }),
+      },
+    ];
+    setFolderMenu({ items, x: e.clientX, y: e.clientY, label: `${folder.name} actions` });
+  };
 
   // ⌘P jumps to the project filter; ⌘1–9 picks a project.
   useEffect(() => {
@@ -83,7 +146,7 @@ export function Sidebar({
         search.current?.focus();
         search.current?.select();
       } else if (/^[1-9]$/.test(e.key)) {
-        const p = projects[Number(e.key) - 1];
+        const p = onScreen[Number(e.key) - 1];
         if (p) {
           e.preventDefault();
           setState({ selectedProject: p.id });
@@ -92,7 +155,7 @@ export function Sidebar({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [projects]);
+  }, [onScreen]);
 
   return (
     <nav className="sidebar" aria-label="Projects">
@@ -207,20 +270,28 @@ export function Sidebar({
           </button>
         </div>
 
+        {tags.length > 0 && (
+          <div className="tag-filter" aria-label="Filter by tag">
+            {tags.map((t) => {
+              const on = query.trim().toLowerCase() === `#${t}`;
+              return (
+                <button key={t} className={`tag-chip${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => setQuery(on ? "" : `#${t}`)}>
+                  #{t}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {!filtered &&
+          grouped.folders.map(({ folder, projects: inside }) => (
+            <FolderGroup key={folder.id} folder={folder} projects={inside} row={row} onMenu={openFolderMenu} />
+          ))}
+
         <ul className="project-list" ref={reorder.list}>
-          {shown.map((p, i) => (
+          {(filtered ? shown : grouped.loose).map((p, i, list) => (
             <li key={p.id} {...reorder.item(p.repo_path)}>
-              <ProjectRow
-                project={p}
-                index={filtered ? null : i}
-                agents={projectAgents(state, p.id)}
-                live={Object.values(state.terminals).some(
-                  (t) => t.alive && t.run_command !== null && state.worktrees[t.worktree_id]?.project_id === p.id,
-                )}
-                selected={p.id === state.selectedProject}
-                onMenu={projectMenu.openFor}
-                onKeyDown={(e) => !filtered && reorderKey(e, i, shown.length, (to) => void moveProject(p.repo_path, to))}
-              />
+              {row(p, i, list.length, (to) => void moveProject(p.repo_path, to, looseRepos))}
             </li>
           ))}
           {needsOnly && !query && hiddenCount > 0 && (
@@ -248,6 +319,9 @@ export function Sidebar({
       </div>
 
       {projectMenu.element}
+      {folderMenu && <ContextMenu {...folderMenu} onClose={() => setFolderMenu(null)} />}
+      {folderDialog?.kind === "text" && <TextDialog d={folderDialog} onClose={() => setFolderDialog(null)} />}
+      {folderDialog?.kind === "confirm" && <ConfirmDialog d={folderDialog} onClose={() => setFolderDialog(null)} />}
       <Pet on={state.prefs.pet !== false} />
       <UpdateReady />
       <footer className="sidebar-foot">
@@ -339,6 +413,70 @@ function UpdateReady() {
   );
 }
 
+/** A folder of projects: its header folds it away, keeping what's inside
+ *  waiting, working or unread in sight; its projects drag among themselves. */
+function FolderGroup({
+  folder,
+  projects,
+  row,
+  onMenu,
+}: {
+  folder: ProjectFolder;
+  projects: Project[];
+  row: (p: Project, i: number, count: number, move: (to: number) => void) => React.ReactNode;
+  onMenu: (e: React.MouseEvent, folder: ProjectFolder) => void;
+}) {
+  const state = useAppState();
+  const reorder = useReorder((repo, to) => void moveInFolder(folder.id, repo, to));
+  const agents = projects.flatMap((p) => projectAgents(state, p.id));
+  const needs = agents.filter((a) => a.status === "needs_feedback").length;
+  const running = agents.filter((a) => a.status === "running").length;
+  const unseen = agents.filter((a) => a.status === "finished" && a.unseen).length;
+  const open = !folder.collapsed;
+  return (
+    <section className={`folder${open ? " is-open" : ""}`} aria-label={`${folder.name} folder`}>
+      <button className="folder-head" onClick={() => void toggleFolder(folder.id)} onContextMenu={(e) => onMenu(e, folder)} aria-expanded={open}>
+        <span className="folder-chev" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+        <FolderGlyph open={open} />
+        <span className="folder-name">{folder.name}</span>
+        <span className="folder-count">{projects.length}</span>
+        {!open && (
+          <span className="project-meta">
+            {running > 0 && (
+              <span className="project-working" title={`${running} in progress`}>
+                <span className="orbit" aria-hidden />
+                <span aria-hidden>{running}</span>
+              </span>
+            )}
+            {needs > 0 && (
+              <span className="project-badge badge-needs" title={`${needs} waiting on you`}>
+                {needs}
+              </span>
+            )}
+            {unseen > 0 && (
+              <span className="project-badge badge-unseen" title={`${unseen} finished, unread`}>
+                {unseen}
+              </span>
+            )}
+          </span>
+        )}
+      </button>
+      {open && (
+        <ul className="project-list in-folder" ref={reorder.list}>
+          {projects.map((p, i) => (
+            <li key={p.id} {...reorder.item(p.repo_path)}>
+              {row(p, i, projects.length, (to) => void moveInFolder(folder.id, p.repo_path, to))}
+            </li>
+          ))}
+          {projects.length === 0 && <li className="folder-empty">Empty. Right-click a project and pick Move to folder.</li>}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function ProjectRow({
   project,
   index,
@@ -370,7 +508,9 @@ function ProjectRow({
     .filter(Boolean)
     .join(", ");
   const colorStyle = useProjectColorStyle(project);
-  const missing = !!useAppState().missingProjects[project.id];
+  const { missingProjects, prefs } = useAppState();
+  const missing = !!missingProjects[project.id];
+  const tags = prefs.projectTags?.[project.repo_path] ?? [];
 
   return (
     <button
@@ -415,6 +555,7 @@ function ProjectRow({
           )}
         </span>
       </span>
+      {tags.length > 0 && <span className="project-tags">{tags.map((t) => `#${t}`).join("  ")}</span>}
       {/* One segment per live session, ordered by urgency. */}
       <span className="spectrum" aria-label={summary || `${agents.length} sessions`}>
         {ordered.length === 0 ? (

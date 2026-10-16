@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { byId, getState, setState, withoutProject } from "./store";
+import { byId, fromDaemon, getState, setState, withoutProject } from "./store";
 import { onStatusChanged, updateBadge } from "./notify";
 import type {
   Agent,
@@ -298,7 +298,7 @@ function handle(event: ServerEvent) {
       return {
         loaded: true,
         snapshots: prev.snapshots + 1,
-        projects: byId(s.projects),
+        projects: byId(fromDaemon(s.projects)),
         worktrees: byId(s.worktrees),
         agents: byId(agents),
         terminals: byId(s.terminals),
@@ -331,7 +331,10 @@ function handle(event: ServerEvent) {
     filesListeners.forEach((l) => l(paths, agent));
   } else if ("EntityUpserted" in event) {
     const e = event.EntityUpserted.entity;
-    if ("Project" in e) setState((s) => ({ projects: { ...s.projects, [e.Project.id]: e.Project } }));
+    if ("Project" in e) {
+      const [p] = fromDaemon([e.Project]);
+      setState((s) => ({ projects: { ...s.projects, [p.id]: p } }));
+    }
     else if ("Worktree" in e)
       setState((s) => ({ worktrees: { ...s.worktrees, [e.Worktree.id]: e.Worktree } }));
     else if ("Agent" in e) {

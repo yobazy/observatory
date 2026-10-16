@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "./client";
 import { loadSettings } from "./settings";
 import { getState, setState, subscribe } from "./store";
+import type { FolderPrefs } from "./folders";
 import type { TermFontPrefs } from "./termfont";
 
 export type Mode = "system" | "dark" | "black" | "light";
@@ -34,7 +35,7 @@ export const ACCENTS: Record<string, { dark: string; light: string }> = {
 
 /** The terminal's face, size and line spacing come from `TermFontPrefs`
  *  (termfont.ts). */
-export interface DesktopPrefs extends TermFontPrefs {
+export interface DesktopPrefs extends TermFontPrefs, FolderPrefs {
   mode?: Mode;
   /** The sidebar cat (`Pet.tsx`); on unless turned off. */
   pet?: boolean;

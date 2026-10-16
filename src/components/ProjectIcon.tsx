@@ -13,7 +13,8 @@ import type { Project } from "../nebula/types";
 import { ContextMenu, type MenuItem } from "./Menu";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import { ColorRow } from "./Organize";
-import { resetProjectOrder } from "../nebula/organize";
+import { moveToFolder, resetProjectOrder } from "../nebula/organize";
+import { FolderDialog, ProjectDetailsDialog } from "./ProjectOrganize";
 import { locateProject } from "../nebula/relocate";
 import { useCards } from "../nebula/cards";
 import { CardDialog, type CardTarget } from "./CardDialog";
@@ -164,6 +165,8 @@ export function useProjectMenu() {
   const [picking, setPicking] = useState<Project | null>(null);
   const [confirm, setConfirm] = useState<ConfirmDialogSpec | null>(null);
   const [card, setCard] = useState<CardTarget | null>(null);
+  const [details, setDetails] = useState<Project | null>(null);
+  const [filing, setFiling] = useState<Project | null>(null);
   const { prefs, missingProjects } = useAppState();
   const cards = useCards();
 
@@ -179,7 +182,16 @@ export function useProjectMenu() {
       run: () => setCard({ cardKey: project.id, name: project.name, folder: project.repo_path }),
       separated: items.length > 0,
     });
+    items.push({ label: "Name and tags…", run: () => setDetails(project) });
     items.push({ label: "Icon & color…", run: () => setPicking(project) });
+    const folder = prefs.projectFolders?.find((f) => f.projects.includes(project.repo_path));
+    items.push({ label: folder ? "Move to another folder…" : "Move to folder…", run: () => setFiling(project), separated: true });
+    if (folder) {
+      items.push({
+        label: `Take out of ${folder.name}`,
+        run: () => void moveToFolder(project.repo_path, null),
+      });
+    }
     if (prefs.projectIcons?.[project.repo_path] || prefs.projectColors?.[project.repo_path]) {
       items.push({
         label: "Reset icon & color",
@@ -216,6 +228,8 @@ export function useProjectMenu() {
       {picking && <IconPicker project={picking} onClose={() => setPicking(null)} />}
       {confirm && <ConfirmDialog d={confirm} onClose={() => setConfirm(null)} />}
       {card && <CardDialog target={card} onClose={() => setCard(null)} />}
+      {details && <ProjectDetailsDialog project={details} onClose={() => setDetails(null)} />}
+      {filing && <FolderDialog project={filing} onClose={() => setFiling(null)} />}
     </>
   );
   return { openFor, element };

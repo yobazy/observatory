@@ -7,6 +7,7 @@ import { onAgentStatus } from "./client";
 import { afterStatus, settled } from "./followupRules";
 import { isWatching } from "./notify";
 import { flash, getState, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
+import { moveWithin, placeIn, type ProjectFolder } from "./folders";
 import { savePrefs, type DesktopPrefs } from "./theme";
 import type { Agent } from "./types";
 
@@ -32,9 +33,15 @@ function pruned(s: State, prefs: DesktopPrefs): DesktopPrefs {
         .filter(([, ids]) => ids.length > 0),
     );
   const repos = new Set(Object.values(s.projects).map((p) => p.repo_path));
+  const ofRepo = <V>(rec: Record<string, V> | undefined) => rec && Object.fromEntries(Object.entries(rec).filter(([r]) => repos.has(r)));
   return {
     ...prefs,
     projectOrder: prefs.projectOrder?.filter((r) => repos.has(r)),
+    // Folders stay, emptied or not: a project removed and added again
+    // goes back to the list, not into a folder it left.
+    projectFolders: prefs.projectFolders?.map((f) => ({ ...f, projects: f.projects.filter((r) => repos.has(r)) })),
+    projectAliases: ofRepo(prefs.projectAliases),
+    projectTags: ofRepo(prefs.projectTags),
     pinnedTasks,
     taskColors: keep(prefs.taskColors),
     followUps: keep(prefs.followUps),
@@ -55,10 +62,81 @@ async function save(change: (prefs: DesktopPrefs) => DesktopPrefs): Promise<bool
   }
 }
 
-/** Put a project at `to` in the sidebar. */
-export function moveProject(repo: string, to: number) {
+/** Put a project at `to` in the sidebar: among `group` (the projects in
+ *  none of the folders, as shown) when given, else in the whole list. */
+export function moveProject(repo: string, to: number, group?: string[]) {
   const order = sortedProjects(getState()).map((p) => p.repo_path);
-  return save((prefs) => ({ ...prefs, projectOrder: moved(order, repo, to) }));
+  return save((prefs) => ({ ...prefs, projectOrder: group ? moveWithin(order, group, repo, to) : moved(order, repo, to) }));
+}
+
+// ---- folders, aliases and tags (folders.ts) ----
+
+const folders = (prefs: DesktopPrefs) => prefs.projectFolders ?? [];
+
+/** A new folder, at the end, with `repo` in it when given. */
+export function createFolder(name: string, repo?: string) {
+  const folder: ProjectFolder = { id: `f${Date.now().toString(36)}`, name, projects: [] };
+  return save((prefs) => {
+    const all = [...folders(prefs), folder];
+    return { ...prefs, projectFolders: repo ? placeIn(all, repo, folder.id) : all };
+  });
+}
+
+export function renameFolder(id: string, name: string) {
+  return save((prefs) => ({ ...prefs, projectFolders: folders(prefs).map((f) => (f.id === id ? { ...f, name } : f)) }));
+}
+
+/** The folder goes; its projects go back to the list. */
+export function deleteFolder(id: string) {
+  return save((prefs) => ({ ...prefs, projectFolders: folders(prefs).filter((f) => f.id !== id) }));
+}
+
+export function toggleFolder(id: string) {
+  return save((prefs) => ({ ...prefs, projectFolders: folders(prefs).map((f) => (f.id === id ? { ...f, collapsed: !f.collapsed } : f)) }));
+}
+
+/** Move a folder one place up (-1) or down (1). */
+export function shiftFolder(id: string, by: -1 | 1) {
+  return save((prefs) => {
+    const all = [...folders(prefs)];
+    const i = all.findIndex((f) => f.id === id);
+    const j = i + by;
+    if (i < 0 || j < 0 || j >= all.length) return prefs;
+    [all[i], all[j]] = [all[j], all[i]];
+    return { ...prefs, projectFolders: all };
+  });
+}
+
+/** Put `repo` in a folder, or (null) back in the list. */
+export function moveToFolder(repo: string, folderId: string | null) {
+  return save((prefs) => ({ ...prefs, projectFolders: placeIn(folders(prefs), repo, folderId) }));
+}
+
+/** Put `repo` at `to` among its folder's projects. */
+export function moveInFolder(folderId: string, repo: string, to: number) {
+  return save((prefs) => ({
+    ...prefs,
+    projectFolders: folders(prefs).map((f) => (f.id === folderId ? { ...f, projects: moveWithin(f.projects, f.projects, repo, to) } : f)),
+  }));
+}
+
+/** A name for `repo` here in place of the daemon's; empty goes back to it. */
+export function setProjectAlias(repo: string, alias: string) {
+  return save((prefs) => {
+    const projectAliases = { ...prefs.projectAliases };
+    if (alias.trim()) projectAliases[repo] = alias.trim();
+    else delete projectAliases[repo];
+    return { ...prefs, projectAliases };
+  });
+}
+
+export function setProjectTags(repo: string, tags: string[]) {
+  return save((prefs) => {
+    const projectTags = { ...prefs.projectTags };
+    if (tags.length) projectTags[repo] = tags;
+    else delete projectTags[repo];
+    return { ...prefs, projectTags };
+  });
 }
 
 /** Put a task at `to` in its branch. Everything above where it lands is

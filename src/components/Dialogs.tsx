@@ -25,7 +25,7 @@ export type ConfirmDialogSpec = {
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-function useEscape(onClose: () => void, busy: boolean) {
+export function useEscape(onClose: () => void, busy: boolean) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy && onClose();
     window.addEventListener("keydown", onKey);
