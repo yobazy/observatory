@@ -1,14 +1,15 @@
 import { memo, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { getState, subscribe, waitingAgents } from "../nebula/store";
 import { onPetMood } from "../nebula/delight";
-import { CAT_W, H, SCALE, step, TICK_MS, W, type Cat, type Frame } from "./petBrain";
+import { CAT_W, H, SCALE, SCOPE_AT, step, TICK_MS, W, type Cat, type Frame } from "./petBrain";
+import { FRAMES, TELESCOPE, TELESCOPE_W, type Px } from "./petFrames";
 
 // A pixel cat that lives along the bottom of the sidebar, VS Code Pets
-// style: it wanders, sits, naps, and chases a ball of yarn in the theme's
-// accent. A click gets a heart; an agent that starts waiting on you gets its
+// style: it wanders, sits, naps, chases a ball of yarn in the theme's
+// accent, grooms, stretches, watches the sky through a telescope pointed at
+// the terminal, and catches the odd falling star. A click gets a heart; an agent that starts waiting on you gets its
 // attention. Frames face right and are mirrored for walking left.
 
-type Px = "." | "O" | "D" | "W" | "K" | "P";
 const COLORS: Record<Exclude<Px, ".">, string> = {
   O: "#f2a65a", // fur
   D: "#c8742f", // stripes
@@ -16,107 +17,6 @@ const COLORS: Record<Exclude<Px, ".">, string> = {
   K: "#1b2233", // eyes
   P: "#ff9eb5", // nose
 };
-
-const FRAMES = {
-  stand: [
-    "............O..O..",
-    "...........OOOOOO.",
-    "..O........OKOOKO.",
-    ".O.........OOOPOO.",
-    ".O..OOOOOOOWWWWWO.",
-    ".OOOODOODOOOOWWO..",
-    "..OOOOOOOOOOOOOO..",
-    "...ODOODOODOOOO...",
-    "...OOOOOOOOOOOO...",
-    "...OO.OO...OO.OO..",
-    "...OO.OO...OO.OO..",
-    "...WW.WW...WW.WW..",
-  ],
-  walkA: [
-    "............O..O..",
-    "...........OOOOOO.",
-    "..O........OKOOKO.",
-    ".O.........OOOPOO.",
-    ".O..OOOOOOOWWWWWO.",
-    ".OOOODOODOOOOWWO..",
-    "..OOOOOOOOOOOOOO..",
-    "...ODOODOODOOOO...",
-    "...OOOOOOOOOOOO...",
-    "..OO...OO.OO...OO.",
-    ".OO.....OOO.....OO",
-    ".WW......WW.....WW",
-  ],
-  walkB: [
-    "............O..O..",
-    "...........OOOOOO.",
-    "..O........OKOOKO.",
-    ".O.........OOOPOO.",
-    ".O..OOOOOOOWWWWWO.",
-    ".OOOODOODOOOOWWO..",
-    "..OOOOOOOOOOOOOO..",
-    "...ODOODOODOOOO...",
-    "...OOOOOOOOOOOO...",
-    "....OOOO...OOOO...",
-    "....OO.OO..OO.OO..",
-    "....WW..WW.WW..WW.",
-  ],
-  sit: [
-    "..........O..O....",
-    ".........OOOOOO...",
-    ".........OKOOKO...",
-    ".........OOOPOO...",
-    ".........WWWWWW...",
-    "..........OWWO....",
-    ".O.......OOWWOO...",
-    ".O......OOOWWOOO..",
-    "..O.....ODOOOODO..",
-    "...O....OOOOOOOO..",
-    "....OOOOOOOOOOOO..",
-    "........WW....WW..",
-  ],
-  blink: [
-    "..........O..O....",
-    ".........OOOOOO...",
-    ".........OOOOOO...",
-    ".........OKKOKKO..",
-    ".........WWPWWW...",
-    "..........OWWO....",
-    ".O.......OOWWOO...",
-    ".O......OOOWWOOO..",
-    "..O.....ODOOOODO..",
-    "...O....OOOOOOOO..",
-    "....OOOOOOOOOOOO..",
-    "........WW....WW..",
-  ],
-  pounce: [
-    "..............O..O",
-    ".............OOOOO",
-    "..O..........OKOOK",
-    ".O...........OOOPO",
-    ".O....OOOOOOOWWWWW",
-    ".OOOOODOODOOOOWWO.",
-    "..OOOOOOOOOOOOOOWW",
-    "...ODOODOODOOOO.WW",
-    "...OOOOOOOOOOOO...",
-    "...OO.OO..........",
-    "..OO..OO..........",
-    "..WW..WW..........",
-  ],
-  sleep: [
-    "..................",
-    "..................",
-    "..................",
-    "..................",
-    "..........O..O....",
-    ".........OOOOOO...",
-    ".........OKKOKKO..",
-    "...OOOOOOOOOPOOO..",
-    "..OOODOODOOWWWWO..",
-    ".OOOOOOOOOOOOOOO..",
-    ".OODOODOODOOOOO...",
-    "..OOOOOOOOOOOOO...",
-  ],
-} satisfies Record<Frame, string[]>;
 
 function Sprite({ frame }: { frame: Frame }) {
   const rects = useMemo(() => {
@@ -134,6 +34,25 @@ function Sprite({ frame }: { frame: Frame }) {
     </svg>
   );
 }
+
+const SCOPE_COLORS: Record<string, string> = {
+  T: "var(--accent)",
+  H: "var(--accent)",
+  B: "var(--faint)",
+  E: "var(--muted)",
+  L: "var(--muted)",
+};
+
+/** The telescope, drawn once: it never changes. */
+const Telescope = memo(function Telescope() {
+  return (
+    <svg width={TELESCOPE_W * SCALE} height={H * SCALE} viewBox={`0 0 ${TELESCOPE_W} ${H}`} shapeRendering="crispEdges" aria-hidden>
+      {TELESCOPE.flatMap((row, y) =>
+        [...row].map((c, x) => (c === "." ? null : <rect key={`${x}-${y}`} x={x} y={y} width="1.02" height="1.02" fill={SCOPE_COLORS[c]} />)),
+      )}
+    </svg>
+  );
+});
 
 const BUBBLE_TEXT: Record<NonNullable<Cat["bubble"]>, string> = {
   heart: "♥",
@@ -188,7 +107,7 @@ export const Pet = memo(function Pet({ on }: { on: boolean }) {
       const now = waitingAgents(s).length;
       if (s.snapshots !== snapshots) snapshots = s.snapshots;
       else if (now > waiting) {
-        setCat((c) => ({ ...c, mode: "alert", left: 30, ball: null, bubble: "!", bubbleLeft: 20 }));
+        setCat((c) => ({ ...c, mode: "alert", left: 30, ball: null, star: null, bubble: "!", bubbleLeft: 20 }));
       }
       waiting = now;
     });
@@ -204,10 +123,10 @@ export const Pet = memo(function Pet({ on }: { on: boolean }) {
           c.mode === "alert" && mood !== "party"
             ? c
             : mood === "party"
-            ? { ...c, mode: "party", left: 28, ball: null, bubble: "star", bubbleLeft: 28 }
+            ? { ...c, mode: "party", left: 28, ball: null, star: null, bubble: "star", bubbleLeft: 28 }
             : mood === "happy"
               ? { ...c, mode: c.mode === "sleep" ? "sit" : c.mode, left: c.mode === "sleep" ? 30 : c.left, bubble: "note", bubbleLeft: 14 }
-              : { ...c, mode: "sit", left: 40, ball: null, bubble: "sweat", bubbleLeft: 24 },
+              : { ...c, mode: "sit", left: 40, ball: null, star: null, bubble: "sweat", bubbleLeft: 24 },
         ),
       ),
     [],
@@ -223,6 +142,14 @@ export const Pet = memo(function Pet({ on }: { on: boolean }) {
             <rect x="1" y="0" width="2" height="4" fill="var(--accent)" />
             <rect x="0" y="1" width="4" height="2" fill="var(--accent)" />
             <rect x="1" y="1" width="1" height="1" fill="#ffffff" opacity="0.7" />
+          </svg>
+        </span>
+      )}
+      {cat.star && (
+        <span className="pet-star" style={{ transform: `translate(${cat.star.x}px, ${-cat.star.y}px)` }} aria-hidden>
+          <svg width="6" height="6" viewBox="0 0 3 3" shapeRendering="crispEdges">
+            <rect x="1" y="0" width="1" height="3" fill="#ffd76a" />
+            <rect x="0" y="1" width="3" height="1" fill="#ffd76a" />
           </svg>
         </span>
       )}
@@ -251,6 +178,14 @@ export const Pet = memo(function Pet({ on }: { on: boolean }) {
           </span>
         )}
       </button>
+      {/* Drawn over the cat, so its eye meets the eyepiece; a star now and
+          then at the far end. */}
+      {cat.mode === "gaze" && (
+        <span className="pet-scope" style={{ transform: `translateX(${cat.x + SCOPE_AT}px)` }} aria-hidden>
+          <Telescope />
+          {cat.step % 16 < 4 && !reduced && <span className="pet-twinkle">✦</span>}
+        </span>
+      )}
     </div>
   );
 });

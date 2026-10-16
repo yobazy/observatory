@@ -2812,6 +2812,25 @@ td.task-last {
   bottom: 1px;
   line-height: 0;
 }
+.pet-scope,
+.pet-star {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  line-height: 0;
+  pointer-events: none;
+}
+.pet-star {
+  bottom: 2px;
+  transition: transform 140ms linear;
+}
+.pet-twinkle {
+  position: absolute;
+  top: -9px;
+  right: -3px;
+  color: #ffd76a;
+  font: 700 9px/1 var(--mono);
+}
 .pet-bubble {
   position: absolute;
   top: -12px;
