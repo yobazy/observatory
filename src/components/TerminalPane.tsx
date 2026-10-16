@@ -15,6 +15,7 @@ import { hasLog, setTurnLineHidden, TurnStrip, useTurnLineHidden } from "./TurnS
 import { Reader } from "./Reader";
 import { AskStrip } from "./AskStrip";
 import { ShelfStrip } from "./Files";
+import { addIdea } from "../nebula/ideas";
 import { termFont, whenLoaded } from "../nebula/termfont";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { watchForFiles, type FileWatch } from "../nebula/shelf";
@@ -481,6 +482,14 @@ function queueDialog(agent: Agent): TextDialogSpec {
     note: idle ? undefined : "Sent by this app as soon as the current turn ends, while the app is open.",
     onSubmit: async (text) => {
       if ((await enqueue(agent, text)) === "queued") flash(`Queued for ${agent.name}`);
+    },
+    alt: {
+      label: "Save for later",
+      title: "Keep it in Ideas, under this project, instead of sending it",
+      onSubmit: async (text) => {
+        const repo = projectOfWorktree(getState(), agent.worktree_id)?.repo_path ?? null;
+        if (await addIdea(text, repo, { kind: "thread", agent: agent.id })) flash("Saved to Ideas");
+      },
     },
   };
 }

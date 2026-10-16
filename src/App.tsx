@@ -19,6 +19,9 @@ import { fitColumns, Resizer, SESSIONS, SIDEBAR, startSlide, useColumnWidth, use
 import { PanelGlyph } from "./components/Sidebar";
 import { UsageView } from "./components/Usage";
 import { ActivityView } from "./components/Activity";
+import { IdeasView } from "./components/Ideas";
+import { addIdea, markStarted } from "./nebula/ideas";
+import type { Idea } from "./nebula/ideaList";
 import { useActivityPolling } from "./nebula/activity";
 import { SettingsView } from "./components/Settings";
 import { useUsagePolling } from "./nebula/usage";
@@ -56,6 +59,8 @@ export default function App() {
     seed?: Seed;
     pickProject?: boolean;
     handoff?: Handoff;
+    /** An idea being started (Ideas view): its words, and the project it's in. */
+    idea?: Idea;
   } | null>(null);
   // Each opening is a new dialog (see the key below), never an update to one
   // that is already mounted.
@@ -110,6 +115,20 @@ export default function App() {
     setLaunchKey((k) => k + 1);
     setLaunch({ worktree: null, pickProject: true });
   }, [openDispatch]);
+  // Start an idea as a task: the new-task box, written in, in its project.
+  const startIdea = useCallback((idea: Idea) => {
+    setState({ view: "sessions" });
+    setLaunchKey((k) => k + 1);
+    setLaunch({ worktree: null, pickProject: true, idea });
+  }, []);
+  const saveIdea = useCallback((text: string, projectId: string | null) => {
+    const repo = projectId ? getState().projects[projectId]?.repo_path ?? null : null;
+    void addIdea(text, repo, { kind: "capture" }).then((made) => {
+      if (!made) return;
+      setLaunch(null);
+      flash(repo ? `Saved to Ideas, under ${getState().projects[projectId!]?.name}` : "Saved to Ideas, Unsorted");
+    });
+  }, []);
   const openAgent = useCallback((id: string) => {
     const a = getState().agents[id];
     if (a) selectAgent(a);
@@ -204,7 +223,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I the ideas; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -234,6 +253,9 @@ export default function App() {
       } else if (e.key === "u") {
         e.preventDefault();
         setState((s) => ({ view: s.view === "usage" ? "sessions" : "usage" }));
+      } else if (e.key === "i" && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        setState((s) => ({ view: s.view === "ideas" ? "sessions" : "ideas" }));
       } else if (e.key === "o") {
         e.preventDefault();
         openAddProject();
@@ -305,6 +327,15 @@ export default function App() {
       </div>
       {view === "usage" && <UsageView />}
       {view === "activity" && <ActivityView />}
+      {view === "ideas" && (
+        <IdeasView
+          onStart={startIdea}
+          onDispatch={(ideas) => {
+            setState({ view: "sessions" });
+            openDispatch(ideas.map((i) => i.text.replace(/\n+/g, " ")).join("\n"));
+          }}
+        />
+      )}
       {view === "settings" && <SettingsView />}
       {view === "review" && <ReviewView key={getState().review ?? ""} />}
       {view === "uncommitted" && <UncommittedView />}
@@ -317,7 +348,17 @@ export default function App() {
           seed={launch.seed}
           pickProject={launch.pickProject}
           handoff={launch.handoff}
-          onDispatch={launch.pickProject ? openDispatch : undefined}
+          onDispatch={launch.pickProject && !launch.idea ? openDispatch : undefined}
+          onSaveIdea={launch.pickProject && !launch.idea ? saveIdea : undefined}
+          initial={
+            launch.idea
+              ? {
+                  task: launch.idea.text,
+                  projectId: Object.values(getState().projects).find((p) => p.repo_path === launch.idea!.project)?.id ?? null,
+                }
+              : null
+          }
+          onStarted={launch.idea ? (agent) => agent && void markStarted([launch.idea!.id], agent) : undefined}
           onClose={() => setLaunch(null)}
         />
       )}

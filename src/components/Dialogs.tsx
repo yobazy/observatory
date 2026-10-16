@@ -10,6 +10,8 @@ export type TextDialogSpec = {
   /** A line under the field, e.g. what happens to the text. */
   note?: string;
   onSubmit: (v: string) => Promise<void>;
+  /** A second thing to do with the text, beside the main one. */
+  alt?: { label: string; title?: string; onSubmit: (v: string) => Promise<void> };
 };
 
 /** onConfirm resolving `false` keeps the dialog: it has put up another. */
@@ -44,11 +46,11 @@ export function TextDialog({ d, onClose }: { d: TextDialogSpec; onClose: () => v
     field.current?.select();
   }, []);
 
-  const submit = async () => {
+  const submit = async (alt = false) => {
     if (!text.trim() || busy) return;
     setBusy(true);
     try {
-      await d.onSubmit(text.trim());
+      await (alt && d.alt ? d.alt.onSubmit : d.onSubmit)(text.trim());
       onClose();
     } catch (e) {
       setError(errText(e));
@@ -105,6 +107,11 @@ export function TextDialog({ d, onClose }: { d: TextDialogSpec; onClose: () => v
           <button type="button" className="btn" onClick={onClose} disabled={busy}>
             Cancel
           </button>
+          {d.alt && (
+            <button type="button" className="btn" onClick={() => void submit(true)} disabled={busy || !text.trim()} title={d.alt.title}>
+              {d.alt.label}
+            </button>
+          )}
           <button type="submit" className="btn btn-primary" disabled={busy || !text.trim()}>
             {d.submit}
           </button>

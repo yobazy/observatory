@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { ProjectIdeas } from "./Ideas";
 import {
   flash,
   getState,
@@ -191,6 +192,7 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
           <p className="sessions-path" title={project.repo_path}>
             {project.repo_path.replace(/^\/Users\/[^/]+/, "~")}
           </p>
+          <ProjectIdeas repo={project.repo_path} />
         </div>
         <div className="sessions-actions">
           <button className="icon-btn" title="Hide tasks (⌥⌘B)" aria-label="Hide tasks" onClick={onHide}>
