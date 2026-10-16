@@ -20,7 +20,11 @@ function Row({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
     : lastPrompt(agent);
   return (
     <li>
-      <button className="waiting-row away-row" onClick={onOpen}>
+      <button
+        className="waiting-row away-row"
+        onClick={onOpen}
+        title={`${agent.name}, in ${project?.name ?? "its project"}, ${failed ? "stopped with an error" : "finished"} ${relativeTime(agent.status_changed_at) === "now" ? "just now" : `${relativeTime(agent.status_changed_at)} ago`}.${did ? `\n${did}` : ""}\nClick to open it; it leaves this list.`}
+      >
         <span className={`sdot dot-${agent.status}`} aria-hidden />
         <span className="waiting-name">{agent.name}</span>
         <span className="away-did">{failed ? "Stopped with an error" : did}</span>
@@ -67,7 +71,11 @@ export function AwayDigest({ onOpen }: { onOpen: (agent: Agent) => void }) {
         ))}
       </ul>
       {done.length > MAX_ROWS && (
-        <button className="link-btn away-more" onClick={() => setAll((v) => !v)}>
+        <button
+          className="link-btn away-more"
+          onClick={() => setAll((v) => !v)}
+          title={all ? "Back to the three most recent" : "Every task that finished while you were away"}
+        >
           {all ? "Show fewer" : `Show all ${done.length}`}
         </button>
       )}

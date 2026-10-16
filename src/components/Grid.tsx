@@ -13,6 +13,7 @@ import { noteTyped } from "../nebula/queue";
 import { noteSize } from "../nebula/screen";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { watchForFiles } from "../nebula/shelf";
+import { isSliding } from "./Resizer";
 
 export const GRID_MAX = 4;
 
@@ -160,6 +161,7 @@ function Tile({ agent, focused }: { agent: Agent; focused: boolean }) {
 
     const observer = new ResizeObserver(() => refit.current());
     refit.current = () => {
+      if (isSliding()) return;
       const { cols, rows } = t;
       fit.fit();
       if (t.cols !== cols || t.rows !== rows) {
@@ -168,9 +170,13 @@ function Tile({ agent, focused }: { agent: Agent; focused: boolean }) {
       }
     };
     observer.observe(host.current);
+    // A column slid open or shut: fit once, now it has stopped moving.
+    const onSlid = () => refit.current();
+    window.addEventListener("observatory:slid", onSlid);
 
     return () => {
       observer.disconnect();
+      window.removeEventListener("observatory:slid", onSlid);
       offData.dispose();
       t.textarea?.removeEventListener("focus", onFocus);
       offPty();

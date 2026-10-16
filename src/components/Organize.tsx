@@ -105,7 +105,11 @@ export function FollowUps() {
           const project = projectOfWorktree(state, agent.worktree_id);
           return (
             <li key={agent.id}>
-              <button className="followup-row" onClick={() => selectAgent(agent)}>
+              <button
+                className="followup-row"
+                onClick={() => selectAgent(agent)}
+                title={`${agent.name}, in ${project?.name ?? "its project"}${agent.archived ? " (archived)" : ""}.\nClick to open it; ✓ when you're done with it.`}
+              >
                 <span className="followup-name">{agent.name}</span>
                 <span className="followup-where">
                   <span className="followup-project">
@@ -134,7 +138,11 @@ export function FollowUps() {
         })}
       </ul>
       {flagged.length > FOLLOW_UP_ROWS && (
-        <button className="link-btn followups-more" onClick={() => setAll((v) => !v)}>
+        <button
+          className="link-btn followups-more"
+          onClick={() => setAll((v) => !v)}
+          title={all ? "Back to the three most recent" : "Every task flagged to come back to"}
+        >
           {all ? "Show fewer" : `Show all ${flagged.length}`}
         </button>
       )}

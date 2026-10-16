@@ -151,3 +151,47 @@ export function useHidden(key: string): [boolean, (v: boolean | ((v: boolean) =>
   }, [storage, hidden]);
   return [hidden, setHidden];
 }
+
+// ---- sliding a column shut or open ----
+
+/** How long a column takes to slide, ms; `.app.is-sliding` in the CSS
+ *  matches it. */
+export const SLIDE_MS = 220;
+let slidingUntil = 0;
+let slideTimer: number | undefined;
+
+/** Whether a column is mid-slide. A terminal waits it out instead of
+ *  resizing its session on every frame, and fits once at the end. */
+export function isSliding(): boolean {
+  return Date.now() < slidingUntil;
+}
+
+/** Let the next change to `app`'s column widths animate: call it just
+ *  before hiding or showing a column. Afterwards terminals hear
+ *  "observatory:slid" and fit to where things landed. */
+export function startSlide(app: HTMLElement | null) {
+  if (!app || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  slidingUntil = Date.now() + SLIDE_MS + 40;
+  app.classList.add("is-sliding");
+  window.clearTimeout(slideTimer);
+  slideTimer = window.setTimeout(() => {
+    app.classList.remove("is-sliding");
+    slidingUntil = 0;
+    window.dispatchEvent(new Event("observatory:slid"));
+  }, SLIDE_MS + 40);
+}
+
+/** Whether a hidden column still has its contents: for as long as it
+ *  slides shut, so there's something to see go. */
+export function useMountedFor(hidden: boolean): boolean {
+  const [mounted, setMounted] = useState(!hidden);
+  useEffect(() => {
+    if (!hidden) {
+      setMounted(true);
+      return;
+    }
+    const t = window.setTimeout(() => setMounted(false), isSliding() ? SLIDE_MS + 40 : 0);
+    return () => window.clearTimeout(t);
+  }, [hidden]);
+  return mounted || !hidden;
+}

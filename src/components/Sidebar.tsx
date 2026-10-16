@@ -9,7 +9,7 @@ import {
   useAppState,
   waitingAgents,
 } from "../nebula/store";
-import { relativeTime } from "../nebula/status";
+import { lastPrompt, relativeTime } from "../nebula/status";
 import type { Agent, Project } from "../nebula/types";
 import { UsageChip } from "./Usage";
 import { ActivityGlyph, LoadMeter } from "./Activity";
@@ -196,7 +196,11 @@ export function Sidebar({
                 const open = answering.has(a.id);
                 return (
                   <li key={a.id} className={open ? "is-answering" : undefined}>
-                    <button className="waiting-row" onClick={() => selectAgent(a)}>
+                    <button
+                      className="waiting-row"
+                      onClick={() => selectAgent(a)}
+                      title={`${a.name}, in ${projectOfWorktree(state, a.worktree_id)?.name ?? "its project"}, is waiting on you.${lastPrompt(a) ? `\nYou asked: ${lastPrompt(a)}` : ""}\nClick to open it.`}
+                    >
                       <span className="sdot dot-needs_feedback" aria-hidden />
                       <span className="waiting-name">
                         {a.name}
@@ -325,7 +329,7 @@ export function Sidebar({
           ))}
           {needsOnly && !query && hiddenCount > 0 && (
             <li className="project-quiet">
-              <button className="link-btn" onClick={() => setNeedsOnly(false)}>
+              <button className="link-btn" onClick={() => setNeedsOnly(false)} title="These have nothing waiting, working or unread. Show them too.">
                 {hiddenCount} quiet {hiddenCount === 1 ? "project" : "projects"}
               </button>
             </li>

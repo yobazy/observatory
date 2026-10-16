@@ -148,6 +148,27 @@ p {
 .column-sessions {
   grid-area: 1 / 2;
 }
+/* A column sliding shut or open (startSlide in Resizer.tsx): the columns
+   animate, and the moving one keeps its full width inside, clipped, so it
+   slides rather than squeezes. */
+.app.is-sliding {
+  transition: grid-template-columns 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.app.is-sliding .column-sidebar,
+.app.is-sliding .column-sessions {
+  overflow: hidden;
+}
+.app.is-sliding .column-sidebar > :first-child {
+  min-width: var(--w-sidebar-full);
+}
+.app.is-sliding .column-sessions > :first-child {
+  min-width: var(--w-sessions-full);
+}
+@media (prefers-reduced-motion: reduce) {
+  .app.is-sliding {
+    transition: none;
+  }
+}
 .column-terminal {
   grid-area: 1 / 3;
 }

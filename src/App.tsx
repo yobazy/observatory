@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar, selectAgent } from "./components/Sidebar";
 import { Sessions } from "./components/Sessions";
 import { TerminalPane } from "./components/TerminalPane";
@@ -15,7 +15,7 @@ import { pickFolder, start } from "./nebula/client";
 import { watchAway } from "./nebula/away";
 import { homeCard, homeKeyFor, isFolderKey } from "./nebula/cards";
 import { useGitPolling } from "./nebula/git";
-import { fitColumns, Resizer, SESSIONS, SIDEBAR, useColumnWidth, useHidden, useWindowWidth } from "./components/Resizer";
+import { fitColumns, Resizer, SESSIONS, SIDEBAR, startSlide, useColumnWidth, useHidden, useMountedFor, useWindowWidth } from "./components/Resizer";
 import { PanelGlyph } from "./components/Sidebar";
 import { UsageView } from "./components/Usage";
 import { ActivityView } from "./components/Activity";
@@ -154,8 +154,26 @@ export default function App() {
   const previewBeside = !!preview && prefs.previewPlacement === "beside";
   const [sidebarW, setSidebarW] = useColumnWidth(SIDEBAR);
   const [sessionsPref, setSessionsW] = useColumnWidth(SESSIONS);
-  const [hideProjects, setHideProjects] = useHidden("projects");
-  const [hideTasks, setHideTasks] = useHidden("tasks");
+  // Hiding or showing a column slides it (startSlide) rather than snapping.
+  const app = useRef<HTMLDivElement>(null);
+  const [hideProjects, setHideProjectsNow] = useHidden("projects");
+  const [hideTasks, setHideTasksNow] = useHidden("tasks");
+  const setHideProjects = useCallback(
+    (v: boolean | ((h: boolean) => boolean)) => {
+      startSlide(app.current);
+      setHideProjectsNow(v);
+    },
+    [setHideProjectsNow],
+  );
+  const setHideTasks = useCallback(
+    (v: boolean | ((h: boolean) => boolean)) => {
+      startSlide(app.current);
+      setHideTasksNow(v);
+    },
+    [setHideTasksNow],
+  );
+  const sidebarShown = useMountedFor(hideProjects);
+  const tasksShown = useMountedFor(hideTasks);
   const [sidebarCol, sessionsW] = fitColumns(
     hideProjects ? null : sidebarW,
     hideTasks ? null : sessionsPref,
@@ -242,17 +260,20 @@ export default function App() {
 
   return (
     <div
+      ref={app}
       className={`app${view !== "sessions" ? " is-overlay" : ""}`}
       style={
         {
           "--w-sidebar": `${sidebarCol}px`,
           "--w-sessions": `${sessionsW}px`,
+          "--w-sidebar-full": `${sidebarW}px`,
+          "--w-sessions-full": `${sessionsPref}px`,
           "--reveal-pad": reveal.length ? `${revealLeft + reveal.length * 30}px` : "0px",
         } as React.CSSProperties
       }
     >
-      <div className="column column-sidebar" hidden={hideProjects}>
-        {!hideProjects && (
+      <div className="column column-sidebar" hidden={!sidebarShown}>
+        {sidebarShown && (
           <>
             <Sidebar onAddProject={openAddProject} onHide={() => setHideProjects(true)} onDispatch={() => openDispatch()} />
             <Resizer spec={SIDEBAR} width={sidebarCol} onWidth={setSidebarW} />
@@ -261,8 +282,8 @@ export default function App() {
       </div>
       {/* Usage and settings lie over the sessions and terminal rather than
           replacing them, so the terminal keeps its session attached. */}
-      <div className="column column-sessions" inert={view !== "sessions"} hidden={hideTasks}>
-        {!hideTasks && (
+      <div className="column column-sessions" inert={view !== "sessions"} hidden={!tasksShown}>
+        {tasksShown && (
           <>
             <Sessions onNewTask={openLaunch} onHide={() => setHideTasks(true)} />
             <Resizer spec={SESSIONS} width={sessionsW} onWidth={setSessionsW} />
