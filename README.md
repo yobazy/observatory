@@ -135,9 +135,13 @@ app shows up in the other. Rows that only affect the TUI's look are tagged. The 
 shared with the TUI; System, Dark, Black and Light are for the desktop app, and the terminal
 follows them.
 
+<p align="center">
+  <img src="docs/cat.gif" width="432" alt="The pixel cat at its telescope under a night sky: a shooting star goes by, and it sits up to watch">
+</p>
+
 **And** a pixel cat that plays at the bottom of the sidebar. It chases a
-yarn ball, naps, and sits up when an agent starts waiting on you. Click it to say hi, or turn it
-off in Settings.
+yarn ball, naps, watches the sky through its telescope, and sits up when an agent starts waiting
+on you. Click it to say hi, or turn it off in Settings.
 
 ## Building from source
 
