@@ -52,6 +52,7 @@ import { usePreviewEvents } from "./nebula/preview";
 import { useShelf } from "./nebula/shelf";
 import { HoverCard, PreviewPane } from "./components/Preview";
 import { Palette, type PaletteContext } from "./components/Palette";
+import { MomentCard } from "./components/Moments";
 import { TextDialog, type TextDialogSpec } from "./components/Dialogs";
 
 export default function App() {
@@ -382,6 +383,7 @@ export default function App() {
       {textDialog && <TextDialog d={textDialog} onClose={() => setTextDialog(null)} />}
       <HoverCard />
       <Notice />
+      <MomentCard />
       <DaemonGate />
       <Welcome />
     </div>
