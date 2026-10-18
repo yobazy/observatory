@@ -7,7 +7,7 @@ import { relativeTime } from "../nebula/status";
 import { summarize } from "../nebula/turnsummary";
 import type { Agent, Worktree } from "../nebula/types";
 import { ContextMenu, type MenuItem } from "./Menu";
-import { openFileIn } from "./Preview";
+import { appLabel, openFileIn } from "./Preview";
 import { useTurn } from "./TurnStrip";
 
 const KIND_MARK: Record<string, string> = { html: "◧", htm: "◧", md: "¶", markdown: "¶", pdf: "⎘" };
@@ -90,8 +90,8 @@ export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree:
 }
 
 /** Every file the task has shown, the ones its branch's other sessions
- *  showed, and the ones its last turn changed: each to open here, in the
- *  editor or in Finder. */
+ *  showed, and the ones its last turn changed: each to open here, in its
+ *  app, in the editor or in Finder. */
 function FilesPanel({
   agent,
   worktree,
@@ -169,8 +169,8 @@ function FilesPanel({
   };
   const actions = (r: Row): MenuItem[] => [
     { label: "Open here", run: () => open(r) },
+    { label: `Open in ${appLabel(r.path).toLowerCase()}`, run: () => void openFileIn(r.path, "app") },
     { label: "Open in editor", run: () => void openFileIn(r.path, "editor") },
-    ...(/\.html?$/i.test(r.path) ? [{ label: "Open in browser", run: () => void openFileIn(r.path, "browser") }] : []),
     { label: "Show in Finder", run: () => void openFileIn(r.path, "finder") },
     {
       label: "Copy path",
@@ -210,7 +210,7 @@ function FilesPanel({
               <button
                 className="icon-btn fl-more"
                 aria-label={`More for ${baseName(r.path)}`}
-                title="Open in editor, show in Finder, copy the path"
+                title="Open in its app or the editor, show in Finder, copy the path"
                 onClick={(e) => {
                   const b = e.currentTarget.getBoundingClientRect();
                   setMenu({ row: r, x: b.left, y: b.bottom + 4 });
