@@ -6,6 +6,7 @@ mod editor;
 mod gh;
 mod git;
 mod icons;
+mod moments;
 mod nebula_setup;
 mod preview;
 mod relocate;
@@ -73,6 +74,9 @@ pub fn run() {
             uselog::append_use_log,
             uselog::use_log_path,
             uselog::clear_use_log,
+            moments::save_moment,
+            moments::annotate_moment,
+            moments::moments_dir,
             activity::activity_report,
             activity::stop_process,
             thread_edits::thread_edits,

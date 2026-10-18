@@ -1453,6 +1453,31 @@ body.is-resizing-rows * {
   margin-top: 6px;
 }
 
+/* ---------- marked moment (Moments.tsx) ---------- */
+
+.moment-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(440px, calc(100vw - 32px));
+  padding: 12px 14px;
+}
+.moment-card p {
+  margin: 0;
+  line-height: 1.45;
+}
+.moment-hint {
+  color: var(--muted);
+}
+.moment-card .setting-input {
+  width: 100%;
+}
+.moment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* ---------- first-launch welcome + telescope ---------- */
 
 .welcome {

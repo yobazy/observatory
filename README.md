@@ -140,6 +140,12 @@ and dialogs you open and how long they stay up, the ⌘ shortcuts you press and 
 one JSON line each in `~/Library/Application Support/dev.bazil.observatory/usage-log.jsonl`. Never what you
 type, and nothing is sent anywhere. It's there to show where the app gets in your way.
 
+**Mark this moment** (`⇧⌘M`): noticed something off? This saves the last minute of those events,
+what's on screen (the view, project, session and its status) and a screenshot of the window to a
+folder under `moments/` beside the log, copies the folder's path, and takes a line on what you
+saw. Paste the path wherever you're reporting it. The minute is kept in memory whether or not the
+log is on, and only written when you press it. The screenshot needs Screen Recording allowed.
+
 **And** a pixel cat that plays at the bottom of the sidebar. It chases a
 yarn ball, naps, and sits up when an agent starts waiting on you. Click it to say hi, or turn it
 off in Settings.
