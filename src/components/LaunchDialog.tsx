@@ -241,32 +241,12 @@ export function LaunchDialog({
           rows={5}
           aria-label="Task"
         />
-        {(onDispatch || onSaveIdea) && (
+        {onDispatch && (
           <p className="dialog-note">
-            {onDispatch && (
-              <>
-                A list of things to do?{" "}
-                <button type="button" className="link-btn" onClick={() => onDispatch(task)} disabled={busy}>
-                  Paste it into Dispatch
-                </button>
-                {onSaveIdea ? ". Not now? " : ""}
-              </>
-            )}
-            {onSaveIdea && (
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => onSaveIdea(task, pickedProject)}
-                disabled={busy || !task.trim()}
-                title={
-                  pickedProject
-                    ? `Keep it in Ideas, under ${project.name}, to start later`
-                    : "Keep it in Ideas, Unsorted unless you pick a project above, to start later"
-                }
-              >
-                Save it as an idea
-              </button>
-            )}
+            A list of things to do?{" "}
+            <button type="button" className="link-btn" onClick={() => onDispatch(task)} disabled={busy}>
+              Paste it into Dispatch
+            </button>
           </p>
         )}
 
@@ -410,6 +390,21 @@ export function LaunchDialog({
           <button type="button" className="btn" onClick={onClose} disabled={busy}>
             Cancel
           </button>
+          {onSaveIdea && (
+            <button
+              type="button"
+              className="btn btn-idea"
+              onClick={() => onSaveIdea(task, pickedProject)}
+              disabled={busy || !task.trim()}
+              title={
+                pickedProject
+                  ? `Keep it in Ideas, under ${project.name}, to start later`
+                  : "Keep it in Ideas, Unsorted unless you pick a project above, to start later"
+              }
+            >
+              Save as idea
+            </button>
+          )}
           <button
             type="submit"
             className="btn btn-primary"

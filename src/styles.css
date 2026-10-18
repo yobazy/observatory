@@ -23,6 +23,8 @@
   --st-merged: #b58cff;
   /* Git's modified and CI's pending, in the yellow everyone reads them in. */
   --amber: #f2b84b;
+  /* A button filled yellow. Light mode's --amber is dark enough for text, too dark to fill. */
+  --amber-fill: #f2b84b;
 
   --ui: "Onest Variable", -apple-system, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -1276,6 +1278,15 @@ body.is-resizing-rows * {
 }
 .btn-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 82%, white);
+}
+/* Keeping a task for later instead of starting it: still a confirm, but not the go-ahead. */
+.btn-idea {
+  background: var(--amber-fill);
+  border-color: var(--amber-fill);
+  color: #1d1606;
+}
+.btn-idea:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--amber-fill) 85%, white);
 }
 
 /* ---------- dialog ---------- */
