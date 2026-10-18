@@ -24,6 +24,10 @@ function compare(a: string, b: string): number {
   return 0;
 }
 
+/** How long the telescope rests on the nebula once nebula is up, before
+ *  the gate goes: the tube's settle plus a beat (styles.css). */
+const FOUND_MS = 1100;
+
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 /** Covers the app until the first Snapshot arrives, and turns what's wrong —
@@ -45,7 +49,23 @@ export function DaemonGate() {
     void staleDaemon().then(setStale).catch(() => {});
   }, [down]);
 
-  if (!down) return null;
+  // Once nebula is up, the telescope stops on it for a moment before the
+  // gate goes, as if it found it. Straight away with reduced motion.
+  // Set while rendering, so the gate (and the telescope's angle) never
+  // unmounts in between.
+  const [found, setFound] = useState(false);
+  const [wasDown, setWasDown] = useState(down);
+  if (down !== wasDown) {
+    setWasDown(down);
+    setFound(!down && !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+  useEffect(() => {
+    if (!found) return;
+    const t = setTimeout(() => setFound(false), FOUND_MS);
+    return () => clearTimeout(t);
+  }, [found]);
+
+  if (!down && !found) return null;
 
   /** A start that failed: an old nebula out of reach gets its own screen;
    *  anything else is said under the copy. */
@@ -111,10 +131,15 @@ export function DaemonGate() {
     }
   };
 
-  const mismatch = link.reason.includes("protocol");
+  // Connected while the telescope settles, so there's no reason any more.
+  const reason = link.state === "disconnected" ? link.reason : "";
+  const mismatch = reason.includes("protocol");
   const pinned = status?.pinned ?? "";
   const order = status?.version ? compare(status.version, pinned) : 0;
 
+  // The screens where nebula just isn't there to talk to: the telescope
+  // scans the sky for it.
+  let searching = true;
   let title = "nebula isn’t running";
   let body: React.ReactNode = (
     <p>
@@ -160,6 +185,7 @@ export function DaemonGate() {
       </button>
     );
   } else if (status && !status.path) {
+    searching = false;
     title = "Set up nebula";
     body = (
       <p>
@@ -174,6 +200,7 @@ export function DaemonGate() {
       </button>
     );
   } else if (status?.version && order < 0) {
+    searching = false;
     title = `nebula ${status.version} is older than this app`;
     body = (
       <p>
@@ -187,6 +214,7 @@ export function DaemonGate() {
       </button>
     );
   } else if (status?.version && order > 0 && mismatch) {
+    searching = false;
     // Newer only matters when it changed the protocol: a newer nebula that
     // speaks this app's protocol just needs starting.
     title = "Observatory needs an update";
@@ -202,15 +230,20 @@ export function DaemonGate() {
       </button>
     );
   } else if (mismatch) {
+    searching = false;
     title = "This app and your nebula don’t match";
-    body = <p>{link.reason}</p>;
+    body = <p>{reason}</p>;
     action = null;
   }
 
   return (
-    <div className="gate" data-tauri-drag-region>
+    <div className={`gate${found ? " gate-found" : ""}`} data-tauri-drag-region>
       <div className="gate-card">
-        <Telescope mode={busy ? "scan" : "rest"} size={150} />
+        <Telescope
+          mode={found ? "found" : searching ? "search" : busy ? "scan" : "rest"}
+          target="nebula"
+          size={150}
+        />
         <h1>{title}</h1>
         {body}
         {error && (
