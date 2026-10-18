@@ -29,6 +29,7 @@ import { isPreview } from "../nebula/client";
 import { DEFAULT_CAP, globalCap } from "../nebula/batch";
 import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
 import { clearUseLog, useLogPath } from "../nebula/uselog";
+import { momentsDir } from "../nebula/moments";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
 type Tab = (typeof TABS)[number];
@@ -340,6 +341,14 @@ function UsageLog() {
       flash(`Couldn't show the log: ${errText(e)}`);
     }
   };
+  const showMoments = async () => {
+    try {
+      const { openPath } = await import("@tauri-apps/plugin-opener");
+      await openPath(await momentsDir());
+    } catch (e) {
+      flash(`Couldn't show moments: ${errText(e)}`);
+    }
+  };
   const clear = () =>
     void clearUseLog()
       .then(() => flash("Usage log deleted"))
@@ -371,6 +380,18 @@ function UsageLog() {
             Delete
           </button>
         </div>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label">Marked moments</span>
+          <span className="setting-hint">
+            <kbd>⇧⌘M</kbd> saves the last minute of this log, what’s on screen and a screenshot to a folder,
+            and copies its path. Kept in memory until you press it, whether or not the log is on.
+          </span>
+        </div>
+        <button className="btn" onClick={() => void showMoments()}>
+          Show in Finder
+        </button>
       </div>
     </Group>
   );
@@ -860,6 +881,7 @@ const SHORTCUTS: [string, string][] = [
   ["⌥⌘B", "Hide or show the tasks column"],
   ["⌘G", "Watch up to four tasks in a grid"],
   ["⇧↵", "Newline in a Claude Code prompt"],
+  ["⇧⌘M", "Mark this moment: save what the app was doing, and copy where"],
 ];
 
 function Shortcuts() {

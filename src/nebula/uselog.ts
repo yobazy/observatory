@@ -3,6 +3,9 @@
 // each in a file on this Mac (uselog.rs), to read back for where the app gets
 // in the way. Off unless Settings › General › Usage log turns it on. It never
 // notes what you type, only ⌘/⌃ chords and Esc.
+//
+// The last minute of it is kept in memory either way, for a marked moment
+// (moments.ts) to save; it's only ever written when you mark one.
 import { invoke } from "@tauri-apps/api/core";
 import { getState, subscribe, type State } from "./store.ts";
 
@@ -13,10 +16,13 @@ type Fields = Record<string, string | number | boolean | null | undefined>;
 const LABEL_MAX = 60;
 const MESSAGE_MAX = 200;
 const FLUSH_MS = 5000;
+/** How far back a marked moment looks. */
+export const RECENT_MS = 60_000;
 
 const on = () => getState().prefs.keepUseLog === true;
 
 let buffer: UseEvent[] = [];
+let recent: UseEvent[] = [];
 
 export function event(e: string, fields: Fields = {}, now = new Date()): UseEvent {
   const out: UseEvent = { t: now.toISOString(), e };
@@ -24,9 +30,27 @@ export function event(e: string, fields: Fields = {}, now = new Date()): UseEven
   return out;
 }
 
-/** Note one thing you did, when the log is on. */
+/** `events` from the last `ms` before `now`. */
+export function within(events: UseEvent[], now: number, ms = RECENT_MS): UseEvent[] {
+  const since = now - ms;
+  return events.filter((e) => Date.parse(e.t) >= since);
+}
+
+function record(ev: UseEvent) {
+  recent.push(ev);
+  // Trimmed now and then rather than on every event.
+  if (recent.length > 500) recent = within(recent, Date.now());
+  if (on()) buffer.push(ev);
+}
+
+/** The last minute of events, for a marked moment. */
+export function recentEvents(now = Date.now()): UseEvent[] {
+  return within(recent, now);
+}
+
+/** Note one thing you did: kept for a minute, and logged when the log is on. */
 export function logUse(e: string, fields?: Fields) {
-  if (on()) buffer.push(event(e, fields));
+  record(event(e, fields));
 }
 
 function flush() {
@@ -112,7 +136,7 @@ function watchDialogs(): () => void {
   };
   // Terminals redraw constantly, so a burst of changes is checked once.
   const seen = new MutationObserver(() => {
-    if (queued || !on()) return;
+    if (queued) return;
     queued = true;
     setTimeout(check, 250);
   });
@@ -120,7 +144,7 @@ function watchDialogs(): () => void {
   return () => seen.disconnect();
 }
 
-/** Start noting, once at launch: does nothing while the log is off. */
+/** Start noting, once at launch: into memory always, and to the log when it's on. */
 export function startUseLog(): () => void {
   let prev = getState();
   let viewSince = Date.now();
@@ -135,14 +159,14 @@ export function startUseLog(): () => void {
       flush();
     }
     wasOn = on();
-    if (on()) for (const e of changes(prev, next, Date.now() - viewSince)) buffer.push(e);
+    for (const e of changes(prev, next, Date.now() - viewSince)) record(e);
     if (next.view !== prev.view) viewSince = Date.now();
     prev = next;
   });
 
-  const onClick = (e: MouseEvent) => on() && e.target instanceof Element && clicked(e.target);
+  const onClick = (e: MouseEvent) => e.target instanceof Element && clicked(e.target);
   const onKey = (e: KeyboardEvent) => {
-    const keys = on() && chord(e);
+    const keys = chord(e);
     if (keys) logUse("key", { keys, in: document.querySelector('[role="dialog"]') ? "dialog" : getState().view });
   };
   const onFocus = () => {
