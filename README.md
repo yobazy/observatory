@@ -135,6 +135,11 @@ app shows up in the other. Rows that only affect the TUI's look are tagged. The 
 shared with the TUI; System, Dark, Black and Light are for the desktop app, and the terminal
 follows them.
 
+**Usage log** (Settings › General, off unless you turn it on): notes what you click, the views
+and dialogs you open and how long they stay up, the ⌘ shortcuts you press and the errors you hit,
+one JSON line each in `~/Library/Application Support/dev.bazil.observatory/usage-log.jsonl`. Never what you
+type, and nothing is sent anywhere. It's there to show where the app gets in your way.
+
 **And** a pixel cat that plays at the bottom of the sidebar. It chases a
 yarn ball, naps, and sits up when an agent starts waiting on you. Click it to say hi, or turn it
 off in Settings.

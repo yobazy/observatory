@@ -87,6 +87,8 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs {
   routerCommand?: string;
   /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
   dispatchCap?: number;
+  /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */
+  keepUseLog?: boolean;
 }
 
 export type ProjectIconChoice = { kind: "emoji"; value: string } | { kind: "image"; value: string };
