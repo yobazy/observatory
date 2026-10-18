@@ -18,6 +18,7 @@ mod transcript;
 mod tray;
 mod turns;
 mod usage;
+mod uselog;
 
 /// Show and focus the main window, e.g. for the quick-capture hotkey.
 #[tauri::command]
@@ -69,6 +70,9 @@ pub fn run() {
             gh::gh_pr_create,
             gh::gh_pr_merge,
             usage::usage_report,
+            uselog::append_use_log,
+            uselog::use_log_path,
+            uselog::clear_use_log,
             activity::activity_report,
             activity::stop_process,
             thread_edits::thread_edits,
