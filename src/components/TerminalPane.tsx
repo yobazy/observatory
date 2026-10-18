@@ -19,6 +19,7 @@ import { addIdea } from "../nebula/ideas";
 import { termFont, whenLoaded } from "../nebula/termfont";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { watchForFiles, type FileWatch } from "../nebula/shelf";
+import { afterClosing } from "../nebula/recent";
 import { isSliding } from "./Resizer";
 
 const THEME = {
@@ -377,7 +378,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
                   className="btn btn-rare"
                   onClick={() => {
                     void request("ArchiveAgent", { id: agent.id });
-                    setState({ selectedSession: null });
+                    setState(afterClosing);
                   }}
                 >
                   Archive
@@ -394,7 +395,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
                 className="btn"
                 onClick={() => {
                   void request("CloseTerminal", { id: tab.id });
-                  setState({ selectedSession: null });
+                  setState(afterClosing);
                 }}
               >
                 Close shell
