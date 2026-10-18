@@ -1277,6 +1277,15 @@ body.is-resizing-rows * {
 .btn-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 82%, white);
 }
+/* Keeping a task for later instead of starting it: still a confirm, but not the go-ahead. */
+.btn-idea {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #1d1606;
+}
+.btn-idea:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--amber) 85%, white);
+}
 
 /* ---------- dialog ---------- */
 
