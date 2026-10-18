@@ -1611,6 +1611,59 @@ body.is-resizing-rows * {
   animation: scope-pulse 2.4s ease-in-out infinite;
 }
 
+/* The nebula the startup gate looks for: a soft cloud, faint until found. */
+.scope-nebula {
+  --nebula-a: #b49cff;
+  --nebula-b: #ff9fd2;
+  --nebula-c: #8fd0ff;
+  opacity: 0.45;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 600ms ease;
+}
+:root[data-mode="light"] .scope-nebula {
+  --nebula-a: #7d5cf0;
+  --nebula-b: #e0559b;
+  --nebula-c: #3d9ad6;
+}
+.scope-nebula-a {
+  fill: var(--nebula-a);
+  opacity: 0.75;
+}
+.scope-nebula-b {
+  fill: var(--nebula-b);
+  opacity: 0.55;
+}
+.scope-nebula-c {
+  fill: var(--nebula-c);
+  opacity: 0.5;
+}
+.scope-nebula-core {
+  fill: #fff;
+  opacity: 0.7;
+}
+:root[data-mode="light"] .scope-nebula-core {
+  fill: var(--nebula-a);
+}
+.scope-search .scope-nebula {
+  animation: scope-drift 9s ease-in-out infinite;
+}
+
+/* search: scan the sky slowly, stopping here and there, never quite on it.
+   Its rest angle is near the nebula but off it, for reduced motion. */
+.scope-search .scope-tube {
+  transform: rotate(-24deg);
+  animation: scope-search 16s ease-in-out infinite;
+}
+
+/* found: turn from wherever the scan was and settle on the nebula. */
+.scope-found .scope-tube {
+  animation: scope-settle 700ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
+}
+.scope-found .scope-nebula {
+  opacity: 1;
+}
+
 @keyframes scope-twinkle {
   50% {
     opacity: 0.12;
@@ -1650,6 +1703,51 @@ body.is-resizing-rows * {
     transform: rotate(-48deg);
   }
 }
+@keyframes scope-search {
+  0% {
+    transform: rotate(-20deg);
+  }
+  11%,
+  16% {
+    transform: rotate(-37deg);
+  }
+  27%,
+  29% {
+    transform: rotate(-27deg);
+  }
+  44%,
+  53% {
+    transform: rotate(-47deg);
+  }
+  63% {
+    transform: rotate(-39deg);
+  }
+  67%,
+  70% {
+    transform: rotate(-41deg);
+  }
+  84%,
+  91% {
+    transform: rotate(-22deg);
+  }
+  100% {
+    transform: rotate(-20deg);
+  }
+}
+@keyframes scope-settle {
+  from {
+    transform: rotate(var(--scope-from, -24deg));
+  }
+  to {
+    transform: rotate(-32deg);
+  }
+}
+@keyframes scope-drift {
+  50% {
+    opacity: 0.6;
+    transform: scale(1.06);
+  }
+}
 @keyframes scope-found {
   from {
     opacity: 0;
@@ -1674,9 +1772,24 @@ body.is-resizing-rows * {
   align-self: center;
   margin-bottom: 4px;
 }
+/* nebula's up: the copy goes while the telescope settles, then the gate. */
+.gate-found .gate-card > :not(.scope) {
+  opacity: 0;
+  transition: opacity 250ms ease;
+}
+.gate-found {
+  animation: gate-out 300ms 800ms ease both;
+  pointer-events: none;
+}
+@keyframes gate-out {
+  to {
+    opacity: 0;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .scope *,
+  .gate-found,
   .welcome,
   .welcome * {
     animation: none !important;

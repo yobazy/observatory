@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // The first launch's hello: a little telescope on a tripod sweeps the sky,
 // hunting, while the app gets going, then settles on a star that lights up
@@ -23,23 +23,54 @@ const STARS: [number, number, number, number][] = [
   [12, 70, 1, 0.8],
 ];
 
-export type ScopeMode = "intro" | "scan" | "rest";
+export type ScopeMode = "intro" | "scan" | "rest" | "search" | "found";
+
+/** The tube's turn, in degrees, as its running animation has it now. */
+function tubeAngle(el: Element): number | null {
+  const m = getComputedStyle(el).transform.match(/^matrix\(([^,]+),\s*([^,]+)/);
+  return m ? (Math.atan2(Number(m[2]), Number(m[1])) * 180) / Math.PI : null;
+}
 
 /** The telescope itself, also used on the startup gate: "intro" hunts and
  *  then finds its star, "scan" sweeps for as long as something is setting
- *  up, "rest" sits pointed at the star. */
-export function Telescope({ mode, size = 220 }: { mode: ScopeMode; size?: number }) {
+ *  up, "rest" sits pointed at the star. On the gate it looks for a nebula
+ *  instead: "search" scans the sky for it, and "found" turns from wherever
+ *  the scan had got to and settles on it. */
+export function Telescope({ mode, size = 220, target = "star" }: { mode: ScopeMode; size?: number; target?: "star" | "nebula" }) {
+  const tube = useRef<SVGGElement>(null);
+  // Where "found" turns from, read while rendering it: the page still has
+  // the scan's class then, so this is the angle the scan had got to.
+  const from = useRef<number | null>(null);
+  if (mode !== "found") from.current = null;
+  else if (from.current === null && tube.current) from.current = tubeAngle(tube.current);
   return (
     <svg className={`scope scope-${mode}`} viewBox="0 0 220 170" width={size} height={(size * 170) / 220} aria-hidden="true">
       {STARS.map(([x, y, r, d], i) => (
         <circle key={i} className="scope-star" cx={x} cy={y} r={r} style={{ animationDelay: `${d}s` }} />
       ))}
 
-      {/* The star it finds, where the tube comes to rest. */}
-      <g className="scope-target">
-        <circle className="scope-target-glow" cx="181" cy="53" r="12" />
-        <path className="scope-target-star" d="M181 43 Q182.4 51.6 191 53 Q182.4 54.4 181 63 Q179.6 54.4 171 53 Q179.6 51.6 181 43Z" />
-      </g>
+      {target === "nebula" ? (
+        // A soft cloud where the tube comes to rest: overlapping glows, blurred.
+        <g className="scope-nebula">
+          <defs>
+            <filter id="scope-nebula-blur" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="4" />
+            </filter>
+          </defs>
+          <g filter="url(#scope-nebula-blur)">
+            <ellipse className="scope-nebula-a" cx="178" cy="55" rx="17" ry="10" transform="rotate(-24 178 55)" />
+            <ellipse className="scope-nebula-b" cx="187" cy="49" rx="11" ry="8" />
+            <ellipse className="scope-nebula-c" cx="173" cy="60" rx="9" ry="6" />
+          </g>
+          <circle className="scope-nebula-core" cx="181" cy="53" r="2.2" />
+        </g>
+      ) : (
+        // The star it finds, where the tube comes to rest.
+        <g className="scope-target">
+          <circle className="scope-target-glow" cx="181" cy="53" r="12" />
+          <path className="scope-target-star" d="M181 43 Q182.4 51.6 191 53 Q182.4 54.4 181 63 Q179.6 54.4 171 53 Q179.6 51.6 181 43Z" />
+        </g>
+      )}
 
       {/* Ground and tripod. */}
       <path className="scope-ground" d="M14 156 Q110 146 206 156" />
@@ -50,7 +81,11 @@ export function Telescope({ mode, size = 220 }: { mode: ScopeMode; size?: number
       </g>
 
       {/* The tube, drawn pointing right and turned about the mount. */}
-      <g className="scope-tube">
+      <g
+        ref={tube}
+        className="scope-tube"
+        style={from.current !== null ? ({ "--scope-from": `${from.current}deg` } as React.CSSProperties) : undefined}
+      >
         <rect className="scope-eyepiece" x="60" y="100" width="13" height="8" rx="2" />
         <rect className="scope-body" x="71" y="95" width="66" height="18" rx="5" />
         <rect className="scope-band" x="88" y="95" width="5" height="18" />
