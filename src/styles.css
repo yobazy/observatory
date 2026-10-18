@@ -6198,6 +6198,14 @@ button.board-main:hover .board-text {
 .ideas-search {
   width: 180px;
 }
+/* ⌘I's quick idea (IdeaDialog.tsx) */
+.idea-dialog-row {
+  display: flex;
+  gap: 8px;
+}
+.idea-dialog .dialog-foot .link-btn {
+  margin-right: auto;
+}
 .ideas-new {
   display: flex;
   flex-wrap: wrap;

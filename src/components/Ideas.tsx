@@ -451,7 +451,7 @@ export function IdeasEntry() {
     <button
       className={`uc-entry${on ? " is-on" : ""}`}
       onClick={() => (on ? setState({ view: "sessions" }) : openIdeas())}
-      title="Ideas: things written down to start later, by project, with a priority and a deadline (⌘I)"
+      title="Ideas: things written down to start later, by project, with a priority and a deadline (⇧⌘I)"
     >
       <span className="uc-entry-title">Ideas</span>
       <span className="uc-entry-sub">

@@ -26,6 +26,7 @@ import { homeCard } from "../nebula/cards";
 export interface PaletteContext {
   newTask: () => void;
   dispatch: () => void;
+  newIdea: () => void;
   /** Pick a folder to be Home, where errands and scheduling run. */
   pickHome: () => void;
   editHome: () => void;
@@ -124,7 +125,8 @@ function build(s: State, ctx: PaletteContext): Item[] {
   act("grid", "Watch tasks in a grid", ctx.toggleGrid, "⌘G");
   act("usage", "Agent usage", () => setState({ view: "usage" }), "⌘U");
   act("activity", "Activity: what's running in your projects", () => setState({ view: "activity" }), "⌥⌘U");
-  act("ideas", "Ideas: what you've written down to start later", () => setState({ view: "ideas" }), "⌘I");
+  act("new-idea", "New idea: write one down for later", ctx.newIdea, "⌘I");
+  act("ideas", "Ideas: what you've written down to start later", () => setState({ view: "ideas" }), "⇧⌘I");
   act("settings", "Settings", () => setState({ view: "settings" }), "⌘,");
   act("add", "Add a project", ctx.addProject, "⌘O");
   act("projects", "Hide or show projects", ctx.toggleProjects, "⌘B");

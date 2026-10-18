@@ -874,6 +874,8 @@ const SHORTCUTS: [string, string][] = [
   ["⌘P", "Filter projects"],
   ["⌘1 – ⌘9", "Jump to a project"],
   ["⌘J", "Next session waiting on you"],
+  ["⌘I", "Write an idea down for later"],
+  ["⇧⌘I", "Ideas: everything written down to start later"],
   ["⌘U", "Agent usage"],
   ["⌘,", "Settings"],
   ["⌘+ ⌘− ⌘0", "Terminal text: larger, smaller, back to normal"],
