@@ -208,9 +208,45 @@ export function debugLog(msg: string) {
   if (import.meta.env.DEV && !mockSend) void invoke("debug_log", { msg }).catch(() => {});
 }
 
+/** A nebula that holds the daemon lock but can't be reached: its socket is
+ *  gone or refuses connections (stale.rs). */
+export interface StaleDaemon {
+  pid: number;
+  /** Its child processes: the agent sessions a restart ends. */
+  sessions: number;
+}
+
+/** Why the daemon didn't start (daemon.rs `StartError`). */
+export type StartError = ({ kind: "stale" } & StaleDaemon) | { kind: "failed"; message: string };
+
+const PREVIEW_STALE: StaleDaemon = { pid: 48213, sessions: 3 };
+
+/** What went wrong starting nebula, whatever shape the error came in. */
+export function startError(e: unknown): StartError {
+  if (e && typeof e === "object" && "kind" in e) return e as StartError;
+  return { kind: "failed", message: e instanceof Error ? e.message : String(e) };
+}
+
+/** Start the daemon and wait to see it stay up; rejects with a StartError. */
 export function startDaemon(): Promise<void> {
-  if (isPreview()) return Promise.resolve();
+  if (isPreview()) {
+    if (PREVIEW_GATE === "stale") return Promise.reject({ kind: "stale", ...PREVIEW_STALE });
+    if (PREVIEW_GATE === "broken") return Promise.reject({ kind: "failed", message: "bind /tmp/nebula-501/daemon.sock: Permission denied" });
+    return Promise.resolve();
+  }
   return invoke("start_daemon");
+}
+
+/** The out-of-reach daemon, if there is one. */
+export function staleDaemon(): Promise<StaleDaemon | null> {
+  if (isPreview()) return Promise.resolve(PREVIEW_GATE === "stale" ? PREVIEW_STALE : null);
+  return invoke("stale_daemon");
+}
+
+/** Stop the out-of-reach daemon `pid` and start a fresh one. */
+export function restartDaemon(pid: number): Promise<void> {
+  if (isPreview()) return new Promise((r) => setTimeout(r, 1200));
+  return invoke("restart_daemon", { pid });
 }
 
 export interface NebulaStatus {
@@ -221,7 +257,7 @@ export interface NebulaStatus {
 }
 
 /** The preview's stand-in for the startup screen's states: `?gate=missing`,
- *  `older`, `newer`, `incompatible` or `stopped` in the URL. */
+ *  `older`, `newer`, `incompatible`, `stopped`, `stale` or `broken` in the URL. */
 export const PREVIEW_GATE = PREVIEW ? new URLSearchParams(location.search).get("gate") : null;
 
 export function nebulaStatus(): Promise<NebulaStatus> {
