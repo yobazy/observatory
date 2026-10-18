@@ -210,23 +210,84 @@ pub async fn send_input(
         .map_err(|e| e.to_string())
 }
 
+/// Why the daemon didn't start, for the startup gate (DaemonGate.tsx).
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum StartError {
+    /// An older daemon holds the lock but can't be reached (stale.rs).
+    Stale(crate::stale::StaleDaemon),
+    Failed {
+        message: String,
+    },
+}
+
+/// How long a new daemon gets to fail before it counts as started: one that
+/// can't take the lock or bind its socket quits well inside this.
+const START_GRACE: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// The line of a failed start's stderr worth showing: anyhow's `Error: …`
+/// when there is one, else the last line that isn't the interactive shell's
+/// own noise.
+fn start_failure(stderr: &str) -> Option<String> {
+    let noise = |l: &str| {
+        l.contains("no job control")
+            || l.contains("can't set tty")
+            || l.contains("Inappropriate ioctl")
+            || l.starts_with("Last login")
+            || l.starts_with("Restored session")
+            || l.starts_with("Saving session")
+    };
+    let lines: Vec<&str> = stderr
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !noise(l))
+        .collect();
+    lines
+        .iter()
+        .rev()
+        .find_map(|l| l.strip_prefix("Error: "))
+        .or(lines.last().copied())
+        .map(String::from)
+}
+
 /// Start `nebula daemon` through the user's interactive login shell, so it
 /// gets the PATH a terminal would (a Finder-launched app has almost none),
-/// in a session of its own so it outlives this app.
-#[tauri::command]
-pub fn start_daemon() -> Result<(), String> {
+/// in a session of its own so it outlives this app. Waits START_GRACE to
+/// see it stay up, and says why when it doesn't.
+pub fn spawn_daemon(app: &AppHandle) -> Result<(), StartError> {
+    let failed = |message: String| StartError::Failed { message };
+    // stderr goes to a file, not a pipe: a daemon that stays up keeps it, and
+    // a pipe this app stops reading would fail its writes.
+    let log = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| failed(e.to_string()))?
+        .join("daemon-start.log");
+    spawn_logged(&log)
+}
+
+/// `spawn_daemon`, its stderr in `log`.
+pub fn spawn_logged(log: &std::path::Path) -> Result<(), StartError> {
     use std::os::unix::process::CommandExt;
+    let failed = |message: String| StartError::Failed { message };
+    if let Some(stale) = crate::stale::find() {
+        return Err(StartError::Stale(stale));
+    }
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     // By its full path when found, so a nebula this app installed into
     // ~/.local/bin starts even if the shell profile doesn't put it on PATH.
     let nebula = crate::nebula_setup::find()
         .map(|p| format!("'{}'", p.display().to_string().replace('\'', "'\\''")))
         .unwrap_or_else(|| "nebula".into());
+    if let Some(dir) = log.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| failed(e.to_string()))?;
+    }
+    let stderr = std::fs::File::create(log).map_err(|e| failed(e.to_string()))?;
     let mut cmd = std::process::Command::new(shell);
     cmd.args(["-l", "-i", "-c", &format!("exec {nebula} daemon")])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
+        .stderr(stderr);
     unsafe {
         cmd.pre_exec(|| {
             extern "C" {
@@ -238,7 +299,33 @@ pub fn start_daemon() -> Result<(), String> {
             Ok(())
         });
     }
-    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+    let mut child = cmd.spawn().map_err(|e| failed(e.to_string()))?;
+    let until = std::time::Instant::now() + START_GRACE;
+    let status = loop {
+        match child.try_wait().map_err(|e| failed(e.to_string()))? {
+            Some(status) => break status,
+            None if std::time::Instant::now() >= until => return Ok(()),
+            None => std::thread::sleep(std::time::Duration::from_millis(100)),
+        }
+    };
+    let message = start_failure(&std::fs::read_to_string(log).unwrap_or_default())
+        .unwrap_or_else(|| format!("nebula daemon quit right away ({status})."));
+    // Raced with a daemon going out of reach: say so rather than the lock error.
+    if message.contains("already running") {
+        if let Some(stale) = crate::stale::find() {
+            return Err(StartError::Stale(stale));
+        }
+    }
+    Err(failed(message))
+}
+
+#[tauri::command]
+pub async fn start_daemon(app: AppHandle) -> Result<(), StartError> {
+    tauri::async_runtime::spawn_blocking(move || spawn_daemon(&app))
+        .await
+        .map_err(|e| StartError::Failed {
+            message: e.to_string(),
+        })?
 }
 
 fn read_json(path: PathBuf) -> serde_json::Value {
@@ -300,5 +387,26 @@ pub fn inspect_folder(path: PathBuf) -> FolderInfo {
         exists,
         path,
         in_git_repo,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::start_failure;
+
+    #[test]
+    fn a_failed_start_shows_nebulas_error_not_the_shells() {
+        let stderr = "zsh: can't set tty pgrp: Inappropriate ioctl for device\n\
+                      Error: another nebula daemon is already running\n";
+        assert_eq!(
+            start_failure(stderr).as_deref(),
+            Some("another nebula daemon is already running")
+        );
+        let stderr = "Last login: Sat Oct 18\nzsh:1: command not found: nebula\n\n";
+        assert_eq!(
+            start_failure(stderr).as_deref(),
+            Some("zsh:1: command not found: nebula")
+        );
+        assert_eq!(start_failure("zsh: no job control in this shell\n"), None);
     }
 }

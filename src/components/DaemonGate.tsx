@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { installNebula, nebulaStatus, reconnectNow, startDaemon, type NebulaStatus } from "../nebula/client";
+import {
+  installNebula,
+  nebulaStatus,
+  reconnectNow,
+  restartDaemon,
+  startDaemon,
+  startError,
+  staleDaemon,
+  type NebulaStatus,
+  type StaleDaemon,
+} from "../nebula/client";
 import { useAppState } from "../nebula/store";
 import { openLink } from "./Run";
 import { Telescope } from "./Welcome";
@@ -14,32 +24,56 @@ function compare(a: string, b: string): number {
   return 0;
 }
 
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
 /** Covers the app until the first Snapshot arrives, and turns what's wrong —
- *  no nebula, the wrong nebula, or nebula not running — into the fix, done
- *  here: the app installs the nebula it's built for itself. */
+ *  no nebula, the wrong nebula, nebula not running, or an old one still
+ *  running out of reach — into the fix, done here: the app installs the
+ *  nebula it's built for itself, and restarts one it can't reach. */
 export function DaemonGate() {
   const { link, loaded } = useAppState();
   const [status, setStatus] = useState<NebulaStatus | null>(null);
-  const [busy, setBusy] = useState<"install" | "start" | null>(null);
+  const [busy, setBusy] = useState<"install" | "start" | "restart" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState<StaleDaemon | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const down = !loaded && link.state === "disconnected";
 
   useEffect(() => {
-    if (down) void nebulaStatus().then(setStatus).catch((e) => setError(String(e)));
+    if (!down) return;
+    void nebulaStatus().then(setStatus).catch((e) => setError(String(e)));
+    void staleDaemon().then(setStale).catch(() => {});
   }, [down]);
 
   if (!down) return null;
+
+  /** A start that failed: an old nebula out of reach gets its own screen;
+   *  anything else is said under the copy. */
+  const failed = (e: unknown) => {
+    const err = startError(e);
+    if (err.kind === "stale") {
+      setStale({ pid: err.pid, sessions: err.sessions });
+      return;
+    }
+    setError(err.message);
+    void staleDaemon().then(setStale).catch(() => {});
+  };
+
+  /** Started and stayed up: connect, still "Starting…" until the window does. */
+  const started = () => {
+    setTimeout(reconnectNow, 300);
+    setTimeout(() => setBusy(null), 3000);
+  };
 
   const start = async () => {
     setBusy("start");
     setError(null);
     try {
       await startDaemon();
-      setTimeout(reconnectNow, 800);
+      started();
     } catch (e) {
-      setError(String(e));
-    } finally {
-      setTimeout(() => setBusy(null), 3000);
+      failed(e);
+      setBusy(null);
     }
   };
 
@@ -48,12 +82,31 @@ export function DaemonGate() {
     setError(null);
     try {
       setStatus(await installNebula());
-      // Installed: carry straight on to starting it, so it's one click.
-      await startDaemon();
-      setTimeout(reconnectNow, 800);
     } catch (e) {
       setError(`Couldn't install nebula: ${e}`);
-    } finally {
+      setBusy(null);
+      return;
+    }
+    // Installed: carry straight on to starting it, so it's one click.
+    try {
+      await startDaemon();
+      started();
+    } catch (e) {
+      failed(e);
+      setBusy(null);
+    }
+  };
+
+  const restart = async (pid: number) => {
+    setBusy("restart");
+    setConfirming(false);
+    setError(null);
+    try {
+      await restartDaemon(pid);
+      setStale(null);
+      started();
+    } catch (e) {
+      failed(e);
       setBusy(null);
     }
   };
@@ -71,11 +124,42 @@ export function DaemonGate() {
   );
   let action: React.ReactNode = (
     <button className="btn btn-primary" disabled={!!busy} onClick={() => void start()}>
-      {busy === "start" ? "Starting…" : "Start nebula"}
+      {busy === "start" || busy === "restart" ? "Starting…" : "Start nebula"}
     </button>
   );
 
-  if (status && !status.path) {
+  if (stale) {
+    title = "nebula can’t be reached";
+    body = (
+      <>
+        <p>
+          An older nebula is still running (pid {stale.pid}), but this window can’t reach it. Restart it to
+          connect.
+        </p>
+        {confirming && (
+          <p>
+            {stale.sessions
+              ? `It’s running ${plural(stale.sessions, "agent session")}. Restarting ends them.`
+              : "It isn’t running any agent sessions, so nothing is lost."}
+          </p>
+        )}
+      </>
+    );
+    action = confirming ? (
+      <>
+        <button className="btn btn-danger" onClick={() => void restart(stale.pid)}>
+          {stale.sessions ? `Restart and end ${plural(stale.sessions, "session")}` : "Restart nebula"}
+        </button>
+        <button className="btn" onClick={() => setConfirming(false)}>
+          Cancel
+        </button>
+      </>
+    ) : (
+      <button className="btn btn-primary" disabled={!!busy} onClick={() => setConfirming(true)}>
+        {busy === "restart" ? "Restarting…" : "Restart nebula"}
+      </button>
+    );
+  } else if (status && !status.path) {
     title = "Set up nebula";
     body = (
       <p>
@@ -136,9 +220,17 @@ export function DaemonGate() {
         )}
         <div className="gate-actions">
           {action}
-          <button className="btn" onClick={reconnectNow}>
-            Try again
-          </button>
+          {!confirming && (
+            <button
+              className="btn"
+              onClick={() => {
+                reconnectNow();
+                void staleDaemon().then(setStale).catch(() => {});
+              }}
+            >
+              Try again
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ mod preview;
 mod relocate;
 mod router;
 mod settings;
+mod stale;
 mod thread_edits;
 mod title;
 mod transcript;
@@ -52,6 +53,8 @@ pub fn run() {
             daemon::send,
             daemon::send_input,
             daemon::start_daemon,
+            stale::stale_daemon,
+            stale::restart_daemon,
             daemon::read_settings,
             daemon::read_presets,
             daemon::debug_log,
