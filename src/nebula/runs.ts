@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview, request, tailOutput } from "./client";
 import { ANSI } from "./pathtext";
-import { lastLocalUrl, portOf, type AgentUrl } from "./serving";
+import { localUrls, pick, portOf, remember, type AgentUrl } from "./serving";
 import { getState, projectWorktrees, setState, type State } from "./store";
 import type { Agent, TerminalTab } from "./types";
 
@@ -125,6 +125,9 @@ const NEXT_BYTES = 65_536;
  *  it, since an address can straddle two reads. */
 const agentSeen = new Map<string, { seq: number; carry: string; decoder: TextDecoder }>();
 const agentBusy = new Set<string>();
+/** Per agent: the addresses it has printed, newest last (serving.ts `pick`
+ *  chooses which to show). */
+const agentFound = new Map<string, string[]>();
 
 async function readAgent(a: Agent) {
   const at = agentSeen.get(a.id);
@@ -133,9 +136,8 @@ async function readAgent(a: Agent) {
   const decoder = at?.decoder ?? new TextDecoder();
   const text = (at?.carry ?? "") + decoder.decode(tail.data, { stream: true });
   agentSeen.set(a.id, { seq: tail.end_seq, carry: text.slice(-512), decoder });
-  const url = lastLocalUrl(text);
-  const was = getState().agentUrls[a.id];
-  if (url && was?.url !== url) setState((s) => ({ agentUrls: { ...s.agentUrls, [a.id]: { url, live: was?.live ?? false } } }));
+  const found = localUrls(text);
+  if (found.length) agentFound.set(a.id, remember(agentFound.get(a.id) ?? [], found));
 }
 
 /** Which of `ports` something on this Mac is listening on. */
@@ -146,17 +148,19 @@ async function listening(ports: number[]): Promise<Set<number>> {
   return new Set(await invoke<number[]>("local_ports_open", { ports }).catch(() => []));
 }
 
-/** Mark each address up or down, all in one call. */
+/** Choose what each agent shows, checking every address it printed in one
+ *  call. */
 async function checkServed() {
-  const rows = getState().agentUrls;
-  const up = await listening([...new Set(Object.values(rows).map((r) => portOf(r.url)))]);
+  const ports = new Set<number>();
+  for (const urls of agentFound.values()) for (const u of urls) ports.add(portOf(u));
+  const up = await listening([...ports]);
   const now = getState().agentUrls;
-  let changed = false;
   const next: Record<string, AgentUrl> = {};
-  for (const [id, r] of Object.entries(now)) {
-    const live = up.has(portOf(r.url));
-    next[id] = live === r.live ? r : { ...r, live };
-    changed ||= live !== r.live;
+  let changed = false;
+  for (const [id, urls] of agentFound) {
+    const shown = pick(urls, up, now[id]);
+    if (shown) next[id] = shown.url === now[id]?.url && shown.live === now[id]?.live ? now[id] : shown;
+    changed ||= next[id] !== now[id];
   }
   if (changed) setState({ agentUrls: next });
 }
@@ -176,14 +180,10 @@ export function useServingWatch() {
         void readAgent(a).finally(() => agentBusy.delete(a.id));
       }
       // Gone or archived agents are forgotten, so their address doesn't linger.
-      const gone = Object.keys(s.agentUrls).filter((id) => !s.agents[id] || s.agents[id].archived);
-      if (gone.length) {
-        for (const id of gone) agentSeen.delete(id);
-        setState((st) => {
-          const next = { ...st.agentUrls };
-          for (const id of gone) delete next[id];
-          return { agentUrls: next };
-        });
+      for (const id of agentFound.keys()) {
+        if (s.agents[id] && !s.agents[id].archived) continue;
+        agentSeen.delete(id);
+        agentFound.delete(id);
       }
       void checkServed();
     };

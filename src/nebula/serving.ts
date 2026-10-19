@@ -36,21 +36,28 @@ export function plainText(text: string): string {
   );
 }
 
-/** The latest address an agent printed: the last one on a "Local:" line
- *  (Vite, Next, Astro) when there is one, else the last one at all, since an
- *  agent that restarts its server says where it went last. */
-export function lastLocalUrl(text: string): string | null {
-  const plain = plainText(text);
-  let local: string | null = null;
-  let any: string | null = null;
-  for (const line of plain.split(/\r?\n/)) {
-    const m = line.match(LOCAL_URL);
-    if (!m) continue;
-    any = m[m.length - 1];
-    if (/\blocal\b\s*:/i.test(line)) local = m[m.length - 1];
-  }
-  const url = local ?? any;
-  return url ? clean(url) : null;
+/** Every local address in `text`, each once, in the order they were last
+ *  printed. */
+export function localUrls(text: string): string[] {
+  const found = (plainText(text).match(LOCAL_URL) ?? []).map(clean);
+  return [...new Set(found.reverse())].reverse();
+}
+
+/** How many addresses are kept per agent to choose from. */
+export const KEEP = 6;
+
+/** `before` with `found` added as the newest, at most KEEP of them. */
+export function remember(before: string[], found: string[]): string[] {
+  return [...before.filter((u) => !found.includes(u)), ...found].slice(-KEEP);
+}
+
+/** What to show for an agent: the newest address it printed that answers.
+ *  When none does, the one shown before stays, greyed, since it did answer
+ *  once; an address that never answered (an example in the agent's prose,
+ *  say) isn't shown at all. */
+export function pick(found: string[], up: Set<number>, shown: AgentUrl | undefined): AgentUrl | undefined {
+  for (let i = found.length - 1; i >= 0; i--) if (up.has(portOf(found[i]))) return { url: found[i], live: true };
+  return shown && { url: shown.url, live: false };
 }
 
 /** The port an address is served on. */
