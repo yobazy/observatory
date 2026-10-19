@@ -6229,6 +6229,15 @@ button.board-main:hover .board-text {
 .ideas-late {
   color: var(--st-waiting);
 }
+.uc-entry-title:has(.bulb-glyph) {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.bulb-glyph {
+  color: var(--muted);
+  flex: none;
+}
 .sessions-ideas {
   margin-top: 4px;
   font-size: 12px;

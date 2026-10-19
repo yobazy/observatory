@@ -439,11 +439,10 @@ function IdeaRow({
 }
 
 /** The sidebar's way in, beside Uncommitted: how many ideas wait, and how
- *  many are late. Shown once there's one. */
+ *  many are late. Always there, so there's somewhere to write the first one. */
 export function IdeasEntry() {
   const state = useAppState();
   const open = (state.prefs.ideas ?? []).filter(isOpen);
-  if (!open.length) return null;
   const today = localDay();
   const late = open.filter((i) => due(i, today) === "overdue").length;
   const on = state.view === "ideas";
@@ -453,12 +452,31 @@ export function IdeasEntry() {
       onClick={() => (on ? setState({ view: "sessions" }) : openIdeas())}
       title="Ideas: things written down to start later, by project, with a priority and a deadline (⌘I)"
     >
-      <span className="uc-entry-title">Ideas</span>
+      <span className="uc-entry-title">
+        <BulbGlyph />
+        Ideas
+      </span>
       <span className="uc-entry-sub">
-        {open.length} to start
+        {open.length ? `${open.length} to start` : "None yet"}
         {late > 0 && <span className="ideas-late"> · {late} overdue</span>}
       </span>
     </button>
+  );
+}
+
+/** A light bulb, in outline: Ideas. */
+function BulbGlyph() {
+  return (
+    <svg className="bulb-glyph" width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M6 12.25h4M6.5 14.5h3M6 10.5c0-1.2-.6-1.9-1.3-2.7A4.25 4.25 0 1 1 11.3 7.8c-.7.8-1.3 1.5-1.3 2.7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
