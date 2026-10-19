@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { isPreview } from "../nebula/client";
 import { runOnWorktree } from "../nebula/actions";
 import { NoRunCommand, runTerminal, SETUP_RUN_PROMPT, startRun, stopRun } from "../nebula/runs";
+import { liveUrl, portOf } from "../nebula/serving";
 import { writeProjectSetting } from "../nebula/settings";
 import { flash, getState, setState, useAppState } from "../nebula/store";
 import type { Worktree } from "../nebula/types";
@@ -105,6 +106,43 @@ export function BandRunLine({ worktree }: { worktree: Worktree }) {
         Stop
       </button>
     </p>
+  );
+}
+
+/** Above an agent's terminal: the dev server it started itself, greyed once
+ *  nothing answers there. */
+export function AgentServerLink({ agentId }: { agentId: string }) {
+  const at = useAppState().agentUrls[agentId];
+  if (!at) return null;
+  return (
+    <button
+      className={`link-btn agent-server${at.live ? "" : " is-down"}`}
+      onClick={() => void openLink(at.url)}
+      title={at.live ? `Open ${at.url}, where this task's dev server is` : `Nothing answers at ${at.url} now. Open it anyway`}
+    >
+      <span className={at.live ? "live-dot" : "down-dot"} aria-hidden />
+      {pretty(at.url)} ↗
+    </button>
+  );
+}
+
+/** On an agent's row: the port its dev server is up on, a click from open.
+ *  The row is a button itself, so this is a span; the header's link is the
+ *  one a keyboard reaches. */
+export function AgentServerMark({ agentId }: { agentId: string }) {
+  const url = liveUrl(useAppState(), agentId);
+  if (!url) return null;
+  return (
+    <span
+      className="row-mark row-server"
+      title={`Open ${url}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        void openLink(url);
+      }}
+    >
+      <span className="live-dot" aria-hidden />:{portOf(url)}
+    </span>
   );
 }
 

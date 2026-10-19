@@ -2,10 +2,14 @@
 // setting, else the checkout's `.nebula.json` "run") in the worktree's RUN
 // TERMINAL. Where it's being served is read off that terminal's output — the
 // "Local: http://localhost:5173/" dev servers print — without attaching to it.
+// An agent that starts a server itself is read the same way (serving.ts).
 import { useEffect } from "react";
-import { request, tailOutput } from "./client";
+import { invoke } from "@tauri-apps/api/core";
+import { isPreview, request, tailOutput } from "./client";
+import { ANSI } from "./pathtext";
+import { lastLocalUrl, portOf, type AgentUrl } from "./serving";
 import { getState, projectWorktrees, setState, type State } from "./store";
-import type { TerminalTab } from "./types";
+import type { Agent, TerminalTab } from "./types";
 
 /** The worktree's run terminal, if it has one (running or exited). */
 export function runTerminal(s: State, worktreeId: string): TerminalTab | undefined {
@@ -49,8 +53,6 @@ function omit<T>(rows: Record<string, T>, key: string): Record<string, T> {
 
 // ---- where it's live ----
 
-// eslint-disable-next-line no-control-regex
-export const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[@-_]/g;
 const LOCAL_URL = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])(?::\d{2,5})?(?:\/[^\s'"<>)\]]*)?/g;
 
 const clean = (url: string) =>
@@ -107,6 +109,86 @@ export function useRunWatch() {
         else forget(term.id);
       }
     }, POLL_MS);
+    return () => clearInterval(t);
+  }, []);
+}
+
+// ---- where an agent's own server is (serving.ts) ----
+
+const SERVING_POLL_MS = 3_000;
+/** The first read goes back further: the address may have scrolled by
+ *  before the app opened. */
+const FIRST_BYTES = 262_144;
+const NEXT_BYTES = 65_536;
+
+/** Per agent: the ring position last read, and the end of what came before
+ *  it, since an address can straddle two reads. */
+const agentSeen = new Map<string, { seq: number; carry: string; decoder: TextDecoder }>();
+const agentBusy = new Set<string>();
+
+async function readAgent(a: Agent) {
+  const at = agentSeen.get(a.id);
+  const tail = await tailOutput({ Agent: a.id }, at ? NEXT_BYTES : FIRST_BYTES, at?.seq ?? null);
+  if (!tail) return;
+  const decoder = at?.decoder ?? new TextDecoder();
+  const text = (at?.carry ?? "") + decoder.decode(tail.data, { stream: true });
+  agentSeen.set(a.id, { seq: tail.end_seq, carry: text.slice(-512), decoder });
+  const url = lastLocalUrl(text);
+  const was = getState().agentUrls[a.id];
+  if (url && was?.url !== url) setState((s) => ({ agentUrls: { ...s.agentUrls, [a.id]: { url, live: was?.live ?? false } } }));
+}
+
+/** Which of `ports` something on this Mac is listening on. */
+async function listening(ports: number[]): Promise<Set<number>> {
+  if (!ports.length) return new Set();
+  // The browser preview has nothing to ask: its demo addresses count as up.
+  if (isPreview()) return new Set(ports);
+  return new Set(await invoke<number[]>("local_ports_open", { ports }).catch(() => []));
+}
+
+/** Mark each address up or down, all in one call. */
+async function checkServed() {
+  const rows = getState().agentUrls;
+  const up = await listening([...new Set(Object.values(rows).map((r) => portOf(r.url)))]);
+  const now = getState().agentUrls;
+  let changed = false;
+  const next: Record<string, AgentUrl> = {};
+  for (const [id, r] of Object.entries(now)) {
+    const live = up.has(portOf(r.url));
+    next[id] = live === r.live ? r : { ...r, live };
+    changed ||= live !== r.live;
+  }
+  if (changed) setState({ agentUrls: next });
+}
+
+/** Mount once: reads the selected project's agents' output for addresses,
+ *  and checks the ones found are still served. */
+export function useServingWatch() {
+  useEffect(() => {
+    const tick = () => {
+      if (document.hidden) return;
+      const s = getState();
+      const trees = new Set(s.selectedProject ? projectWorktrees(s, s.selectedProject).map((w) => w.id) : []);
+      const watched = Object.values(s.agents).filter((a) => trees.has(a.worktree_id) && a.alive && !a.archived);
+      for (const a of watched) {
+        if (agentBusy.has(a.id)) continue;
+        agentBusy.add(a.id);
+        void readAgent(a).finally(() => agentBusy.delete(a.id));
+      }
+      // Gone or archived agents are forgotten, so their address doesn't linger.
+      const gone = Object.keys(s.agentUrls).filter((id) => !s.agents[id] || s.agents[id].archived);
+      if (gone.length) {
+        for (const id of gone) agentSeen.delete(id);
+        setState((st) => {
+          const next = { ...st.agentUrls };
+          for (const id of gone) delete next[id];
+          return { agentUrls: next };
+        });
+      }
+      void checkServed();
+    };
+    tick();
+    const t = setInterval(tick, SERVING_POLL_MS);
     return () => clearInterval(t);
   }, []);
 }

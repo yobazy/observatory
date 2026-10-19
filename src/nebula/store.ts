@@ -8,6 +8,7 @@ import type { FanOut } from "./fanout";
 import type { PreviewState } from "./preview";
 import type { ShelfItem } from "./shelf";
 import type { MockComment } from "./comments";
+import type { AgentUrl } from "./serving";
 import type {
   Agent,
   AgentStatus,
@@ -61,6 +62,9 @@ export interface State {
   minute: number;
   /** Where each run terminal is serving, read off its output (runs.ts). */
   runUrls: Record<string, string>;
+  /** Where each agent's own dev server is, and whether it still answers,
+   *  read off the agent's output (serving.ts). */
+  agentUrls: Record<string, AgentUrl>;
   /** Agents stopped at a usage limit the daemon still counts as running, by
    *  agent id: the line that said so, and the daemon's status_changed_at it
    *  was read against (limits.ts). Shown as waiting on you meanwhile. */
@@ -119,6 +123,7 @@ let state: State = {
   prs: {},
   queue: {},
   runUrls: {},
+  agentUrls: {},
   limits: {},
   logos: {},
   missingProjects: {},
