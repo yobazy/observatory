@@ -20,6 +20,7 @@ import { termFont, whenLoaded } from "../nebula/termfont";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { watchForFiles, type FileWatch } from "../nebula/shelf";
 import { isSliding } from "./Resizer";
+import { AgentServerLink } from "./Run";
 
 const THEME = {
   background: "#0f1524",
@@ -330,6 +331,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
                 </span>
               )}
               {!agent && <span>Shell</span>}
+              {agent && <AgentServerLink agentId={agent.id} />}
               {agent && harnessLabel(agent) !== usualHarness(Object.values(state.agents)) && <span>{harnessLabel(agent)}</span>}
               {project && (
                 <span>

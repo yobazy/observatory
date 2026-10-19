@@ -99,6 +99,9 @@ it would do without changing anything, and `--help` lists the other options.
 - **Start** runs the project's run command (the Project setting, or `run` in `.nebula.json`) in the
   worktree's run terminal. Once the dev server prints its address, the band shows it as a link.
 - No run command yet? Type one, or ask an agent to work it out and write `.nebula.json`.
+- **An agent started the server itself?** The address it printed shows above its terminal and as
+  the port on its row, so it's one click away. Running more than one? **+N** lists them all. Only
+  addresses that answer show, and one turns grey once its server stops.
 
 **Agent usage** (`⌘U`)
 

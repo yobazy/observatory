@@ -2,6 +2,10 @@
 // them links).
 // Kept free of the app so its tests run under plain Node.
 
+/** Terminal escape sequences: colors, cursor moves, OSC titles and links. */
+// eslint-disable-next-line no-control-regex
+export const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[@-_]/g;
+
 export interface Found {
   /** Offset into the text, and the path as written. */
   start: number;

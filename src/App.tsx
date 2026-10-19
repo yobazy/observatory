@@ -28,7 +28,7 @@ import { SettingsView } from "./components/Settings";
 import { useUsagePolling } from "./nebula/usage";
 import { savePrefs, useTheme } from "./nebula/theme";
 import { termFont, zoomed } from "./nebula/termfont";
-import { useRunWatch } from "./nebula/runs";
+import { useRunWatch, useServingWatch } from "./nebula/runs";
 import { useLimitWatch } from "./nebula/limits";
 import { useAutoFollowUps } from "./nebula/organize";
 import { useProjectSessions } from "./nebula/focus";
@@ -177,6 +177,7 @@ export default function App() {
   useTheme();
   useRunWatch();
   useLimitWatch();
+  useServingWatch();
   useAutoFollowUps();
   useProjectSessions();
   useProjectLogos();

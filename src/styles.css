@@ -2902,6 +2902,44 @@ td.task-last {
   white-space: nowrap;
   min-width: 0;
 }
+.down-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.agent-server {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.agent-server.is-down {
+  color: var(--faint);
+}
+.row-server {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--st-done);
+  cursor: pointer;
+}
+.row-server .live-dot {
+  width: 5px;
+  height: 5px;
+  box-shadow: none;
+}
+.agent-server-more {
+  font-size: 12px;
+  color: var(--muted);
+}
+.row-server-more {
+  color: var(--faint);
+}
+.row-server:hover {
+  text-decoration: underline;
+}
 .run-line .link-btn {
   font-size: 12px;
 }

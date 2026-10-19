@@ -11,6 +11,7 @@ mod nebula_setup;
 mod preview;
 mod relocate;
 mod router;
+mod serving;
 mod settings;
 mod stale;
 mod thread_edits;
@@ -77,6 +78,7 @@ pub fn run() {
             moments::save_moment,
             moments::annotate_moment,
             moments::moments_dir,
+            serving::local_ports_open,
             activity::activity_report,
             activity::stop_process,
             thread_edits::thread_edits,
