@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview, request, tailOutput } from "./client";
 import { ANSI } from "./pathtext";
-import { localUrls, pick, portOf, remember, type AgentUrl } from "./serving";
+import { localUrls, portOf, remember, sameServed, served, type AgentUrl } from "./serving";
 import { getState, projectWorktrees, setState, type State } from "./store";
 import type { Agent, TerminalTab } from "./types";
 
@@ -125,7 +125,7 @@ const NEXT_BYTES = 65_536;
  *  it, since an address can straddle two reads. */
 const agentSeen = new Map<string, { seq: number; carry: string; decoder: TextDecoder }>();
 const agentBusy = new Set<string>();
-/** Per agent: the addresses it has printed, newest last (serving.ts `pick`
+/** Per agent: the addresses it has printed, newest last (serving.ts `served`
  *  chooses which to show). */
 const agentFound = new Map<string, string[]>();
 
@@ -155,13 +155,14 @@ async function checkServed() {
   for (const urls of agentFound.values()) for (const u of urls) ports.add(portOf(u));
   const up = await listening([...ports]);
   const now = getState().agentUrls;
-  const next: Record<string, AgentUrl> = {};
+  const next: Record<string, AgentUrl[]> = {};
   let changed = false;
   for (const [id, urls] of agentFound) {
-    const shown = pick(urls, up, now[id]);
-    if (shown) next[id] = shown.url === now[id]?.url && shown.live === now[id]?.live ? now[id] : shown;
+    const shown = served(urls, up, now[id]);
+    if (shown.length) next[id] = sameServed(shown, now[id]) ? now[id] : shown;
     changed ||= next[id] !== now[id];
   }
+  changed ||= Object.keys(now).some((id) => !agentFound.has(id));
   if (changed) setState({ agentUrls: next });
 }
 

@@ -51,13 +51,14 @@ export function remember(before: string[], found: string[]): string[] {
   return [...before.filter((u) => !found.includes(u)), ...found].slice(-KEEP);
 }
 
-/** What to show for an agent: the newest address it printed that answers.
- *  When none does, the one shown before stays, greyed, since it did answer
- *  once; an address that never answered (an example in the agent's prose,
- *  say) isn't shown at all. */
-export function pick(found: string[], up: Set<number>, shown: AgentUrl | undefined): AgentUrl | undefined {
-  for (let i = found.length - 1; i >= 0; i--) if (up.has(portOf(found[i]))) return { url: found[i], live: true };
-  return shown && { url: shown.url, live: false };
+/** What an agent shows: every address it printed that answers, newest
+ *  first, then the ones shown before that have stopped, greyed, since they
+ *  did answer once. An address that never answered (an example in the
+ *  agent's prose, say) isn't shown at all. */
+export function served(found: string[], up: Set<number>, shown: AgentUrl[] = []): AgentUrl[] {
+  const live = found.filter((u) => up.has(portOf(u))).reverse();
+  const stopped = shown.filter((r) => !live.includes(r.url)).map((r) => ({ url: r.url, live: false }));
+  return [...live.map((url) => ({ url, live: true })), ...stopped].slice(0, KEEP);
 }
 
 /** The port an address is served on. */
@@ -66,8 +67,12 @@ export function portOf(url: string): number {
   return u.port ? Number(u.port) : u.protocol === "https:" ? 443 : 80;
 }
 
-/** The agent's dev server, when it's still answering: what its row shows. */
-export function liveUrl(s: State, agentId: string): string | null {
-  const at = s.agentUrls[agentId];
-  return at?.live ? at.url : null;
+/** The agent's dev servers that are answering, newest first: what its row
+ *  shows. */
+export function liveUrls(s: State, agentId: string): string[] {
+  return (s.agentUrls[agentId] ?? []).filter((r) => r.live).map((r) => r.url);
 }
+
+/** The same list of addresses, so the store isn't updated for nothing. */
+export const sameServed = (a: AgentUrl[] = [], b: AgentUrl[] = []) =>
+  a.length === b.length && a.every((r, i) => r.url === b[i].url && r.live === b[i].live);

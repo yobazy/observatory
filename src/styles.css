@@ -2930,6 +2930,13 @@ td.task-last {
   height: 5px;
   box-shadow: none;
 }
+.agent-server-more {
+  font-size: 12px;
+  color: var(--muted);
+}
+.row-server-more {
+  color: var(--faint);
+}
 .row-server:hover {
   text-decoration: underline;
 }

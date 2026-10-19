@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
-const { localUrls, remember, pick, portOf, KEEP } = await import('../src/nebula/serving.ts');
+const { localUrls, remember, served, sameServed, portOf, KEEP } = await import('../src/nebula/serving.ts');
 
 test('addresses come out once each, in the order last printed', () => {
   const text = 'Started on http://localhost:3000\nmoved: now on http://localhost:5174/ .\nback on http://localhost:3000';
@@ -33,17 +33,30 @@ test('an agent keeps its last few addresses, newest last', () => {
   assert.equal(remember([], many).at(-1), `u${KEEP + 1}`);
 });
 
-test('the newest address that answers is the one shown', () => {
-  // The live server, then an example written in prose after it.
-  const found = ['http://127.0.0.1:4321', 'http://localhost:5173'];
-  assert.deepEqual(pick(found, new Set([4321]), undefined), { url: 'http://127.0.0.1:4321', live: true });
-  assert.deepEqual(pick(found, new Set([4321, 5173]), undefined), { url: 'http://localhost:5173', live: true });
+test('every address that answers is shown, newest first', () => {
+  // A live server, a second one, then an example written in prose after them.
+  const found = ['http://127.0.0.1:4321', 'http://localhost:3000', 'http://localhost:5173'];
+  assert.deepEqual(served(found, new Set([4321, 3000])), [
+    { url: 'http://localhost:3000', live: true },
+    { url: 'http://127.0.0.1:4321', live: true },
+  ]);
 });
 
 test('a server that stops is greyed, an address that never answered never shows', () => {
-  const found = ['http://localhost:5173'];
-  assert.equal(pick(found, new Set(), undefined), undefined);
-  assert.deepEqual(pick(found, new Set(), { url: 'http://localhost:5173', live: true }), { url: 'http://localhost:5173', live: false });
+  const found = ['http://localhost:3000', 'http://localhost:5173'];
+  assert.deepEqual(served(found, new Set()), []);
+  const before = [{ url: 'http://localhost:3000', live: true }];
+  assert.deepEqual(served(found, new Set([5173]), before), [
+    { url: 'http://localhost:5173', live: true },
+    { url: 'http://localhost:3000', live: false },
+  ]);
+});
+
+test('the same addresses in the same state are the same list', () => {
+  const a = [{ url: 'http://localhost:3000', live: true }];
+  assert.equal(sameServed(a, [{ ...a[0] }]), true);
+  assert.equal(sameServed(a, [{ ...a[0], live: false }]), false);
+  assert.equal(sameServed(a, []), false);
 });
 
 test('the port is the one in the address, else the scheme’s', () => {

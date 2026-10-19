@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { isPreview } from "../nebula/client";
 import { runOnWorktree } from "../nebula/actions";
 import { NoRunCommand, runTerminal, SETUP_RUN_PROMPT, startRun, stopRun } from "../nebula/runs";
-import { liveUrl, portOf } from "../nebula/serving";
+import { liveUrls, portOf } from "../nebula/serving";
+import { ContextMenu } from "./Menu";
 import { writeProjectSetting } from "../nebula/settings";
 import { flash, getState, setState, useAppState } from "../nebula/store";
 import type { Worktree } from "../nebula/types";
@@ -109,39 +110,66 @@ export function BandRunLine({ worktree }: { worktree: Worktree }) {
   );
 }
 
-/** Above an agent's terminal: the dev server it started itself, greyed once
- *  nothing answers there. */
+/** Above an agent's terminal: the dev servers it started itself, the newest
+ *  as a link and the rest in a menu, greyed once nothing answers there. */
 export function AgentServerLink({ agentId }: { agentId: string }) {
-  const at = useAppState().agentUrls[agentId];
-  if (!at) return null;
+  const rows = useAppState().agentUrls[agentId] ?? [];
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  if (!rows.length) return null;
+  const [first, ...rest] = rows;
   return (
-    <button
-      className={`link-btn agent-server${at.live ? "" : " is-down"}`}
-      onClick={() => void openLink(at.url)}
-      title={at.live ? `Open ${at.url}, where this task's dev server is` : `Nothing answers at ${at.url} now. Open it anyway`}
-    >
-      <span className={at.live ? "live-dot" : "down-dot"} aria-hidden />
-      {pretty(at.url)} ↗
-    </button>
+    <>
+      <button
+        className={`link-btn agent-server${first.live ? "" : " is-down"}`}
+        onClick={() => void openLink(first.url)}
+        title={first.live ? `Open ${first.url}, where this task's dev server is` : `Nothing answers at ${first.url} now. Open it anyway`}
+      >
+        <span className={first.live ? "live-dot" : "down-dot"} aria-hidden />
+        {pretty(first.url)} ↗
+      </button>
+      {rest.length > 0 && (
+        <button
+          className="link-btn agent-server-more"
+          aria-haspopup="menu"
+          title="This task's other addresses"
+          onClick={(e) => {
+            const b = e.currentTarget.getBoundingClientRect();
+            setMenu({ x: b.left, y: b.bottom + 4 });
+          }}
+        >
+          +{rest.length} <span aria-hidden>▾</span>
+        </button>
+      )}
+      {menu && (
+        <ContextMenu
+          items={rows.map((r) => ({ label: r.live ? pretty(r.url) : `${pretty(r.url)} (stopped)`, run: () => void openLink(r.url) }))}
+          x={menu.x}
+          y={menu.y}
+          label="Addresses"
+          onClose={() => setMenu(null)}
+        />
+      )}
+    </>
   );
 }
 
-/** On an agent's row: the port its dev server is up on, a click from open.
- *  The row is a button itself, so this is a span; the header's link is the
- *  one a keyboard reaches. */
+/** On an agent's row: the port its newest dev server is up on, a click from
+ *  open, and how many more are. The row is a button itself, so this is a
+ *  span; the header's link is the one a keyboard reaches. */
 export function AgentServerMark({ agentId }: { agentId: string }) {
-  const url = liveUrl(useAppState(), agentId);
-  if (!url) return null;
+  const urls = liveUrls(useAppState(), agentId);
+  if (!urls.length) return null;
   return (
     <span
       className="row-mark row-server"
-      title={`Open ${url}`}
+      title={urls.length > 1 ? `Open ${urls[0]} (also up: ${urls.slice(1).map(pretty).join(", ")})` : `Open ${urls[0]}`}
       onClick={(e) => {
         e.stopPropagation();
-        void openLink(url);
+        void openLink(urls[0]);
       }}
     >
-      <span className="live-dot" aria-hidden />:{portOf(url)}
+      <span className="live-dot" aria-hidden />:{portOf(urls[0])}
+      {urls.length > 1 && <span className="row-server-more">+{urls.length - 1}</span>}
     </span>
   );
 }
