@@ -2027,6 +2027,60 @@ body.is-resizing-rows * {
   padding: 0 0 0 18px;
   background: none;
 }
+/* The last few projects you were in (Sidebar.tsx RecentPanel), above the
+   full list. */
+.recent {
+  margin: 0 10px 10px;
+}
+.recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 2px 10px;
+}
+.recent-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.recent-count {
+  height: 22px;
+  padding: 0 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.recent-count:hover,
+.recent-count:focus-visible {
+  border-color: var(--line);
+  color: var(--text);
+}
+.recent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--r-md);
+  padding: 5px 10px;
+  color: var(--muted);
+}
+.recent-row:hover {
+  background: var(--panel);
+  color: var(--text);
+}
+.recent-age {
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .sidebar-foot {
   display: flex;
   align-items: center;
