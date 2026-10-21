@@ -32,6 +32,7 @@ import { useRunWatch, useServingWatch } from "./nebula/runs";
 import { useLimitWatch } from "./nebula/limits";
 import { useAutoFollowUps } from "./nebula/organize";
 import { useProjectSessions } from "./nebula/focus";
+import { useRecentTracking } from "./nebula/recent";
 import { useProjectLogos } from "./nebula/icons";
 import { flash, getState, setState, subscribe, useAppState, waitingAgents } from "./nebula/store";
 import { usePrPolling } from "./nebula/prs";
@@ -180,6 +181,7 @@ export default function App() {
   useServingWatch();
   useAutoFollowUps();
   useProjectSessions();
+  useRecentTracking();
   useProjectLogos();
   useMinuteClock();
   useLeaveUsageOnSelect();
