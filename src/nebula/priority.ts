@@ -35,6 +35,12 @@ export function priorityLabel(p: string | undefined): string | undefined {
   return PRIORITIES.find((x) => x.id === p)?.label;
 }
 
+/** The one after `p`, as P steps through them: urgent, high, low, none. */
+export function nextPriority(p: string | undefined): Priority | null {
+  const i = PRIORITIES.findIndex((x) => x.id === p);
+  return i === PRIORITIES.length - 1 ? null : PRIORITIES[i + 1].id;
+}
+
 /** `items` by priority, each band keeping the order it had. */
 export function byPriority<T>(items: T[], of: (t: T) => string | undefined): T[] {
   return [...items].sort((a, b) => rank(of(a)) - rank(of(b)));

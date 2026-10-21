@@ -123,7 +123,7 @@ export function PriorityDialog({
             </button>
           ))}
         </div>
-        <p className="priority-note">Urgent and high sort to the top of their list, low to the bottom.</p>
+        <p className="priority-note">Urgent and high sort to the top of their list, low to the bottom. On a selected task, P steps through them.</p>
       </div>
     </div>
   );
@@ -153,7 +153,7 @@ export function PriorityMark({ priority }: { priority: string | undefined }) {
   const label = priorityLabel(priority);
   if (!label || !priority) return null;
   return (
-    <span className="row-mark priority-mark" role="img" title={`${label} priority`} aria-label={`${label} priority`}>
+    <span className="priority-mark" role="img" title={`${label} priority (P to change)`} aria-label={`${label} priority`}>
       <PriorityGlyph priority={priority} />
     </span>
   );

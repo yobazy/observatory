@@ -6492,22 +6492,30 @@ button.board-main:hover .board-text {
   font-size: 12.5px;
 }
 
-/* Priorities (priority.ts): quiet marks, since status keeps the loud
-   colors. Urgent reads in full text color, high muted, low faint. */
+/* Priorities (priority.ts): a mark before the name, so it reads first.
+   Urgent takes the amber, high full text color, low recedes. */
 .priority-mark {
-  color: var(--muted);
+  display: inline-grid;
+  flex: none;
+  color: var(--text);
+  vertical-align: -1px;
 }
 .priority-mark:has(.prio-urgent) {
-  color: var(--text);
+  color: var(--amber);
 }
 .priority-mark:has(.prio-low) {
   color: var(--faint);
 }
+.row-name .priority-mark {
+  margin-right: 5px;
+}
+.row-name .prio {
+  width: 12px;
+  height: 12px;
+}
 .project-line .priority-mark,
 .waiting-name .priority-mark {
-  flex: none;
   margin-left: 5px;
-  vertical-align: -1px;
 }
 .priority-row {
   display: grid;
@@ -6553,4 +6561,7 @@ button.board-main:hover .board-text {
   margin: 12px 0 0;
   color: var(--faint);
   font-size: 12px;
+}
+.priority-choice .prio-urgent {
+  color: var(--amber);
 }

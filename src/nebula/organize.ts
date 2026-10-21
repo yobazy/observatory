@@ -9,7 +9,7 @@ import { isWatching } from "./notify";
 import { flash, getState, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
 import { moveWithin, placeIn, type ProjectFolder } from "./folders";
 import { savePrefs, type DesktopPrefs } from "./theme";
-import type { Priority } from "./priority";
+import { nextPriority, priorityLabel, type Priority } from "./priority";
 import type { Agent } from "./types";
 
 /** `ids` with `id` taken out and put back at `to`. */
@@ -210,6 +210,13 @@ export function setTaskPriority(agentId: string, priority: Priority | null) {
     else delete taskPriorities[agentId];
     return { ...prefs, taskPriorities };
   });
+}
+
+/** Step a task to its next priority (P), and say which. */
+export async function cyclePriority(agent: Agent) {
+  const next = nextPriority(getState().prefs.taskPriorities?.[agent.id]);
+  if (!(await setTaskPriority(agent.id, next))) return;
+  flash(next ? `${agent.name}: ${priorityLabel(next)} priority` : `${agent.name}: no priority`);
 }
 
 export function setProjectPriority(repo: string, priority: Priority | null) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { byPriority, priorityLabel, rank } from '../src/nebula/priority.ts';
+import { byPriority, nextPriority, priorityLabel, rank } from '../src/nebula/priority.ts';
 import { layout } from '../src/nebula/folders.ts';
 
 test('urgent and high go first, low last, and none between them', () => {
@@ -23,4 +23,12 @@ test('a folder keeps its own order within each priority', () => {
   };
   const { folders } = layout([p('a'), p('b'), p('c'), p('d')], prefs);
   assert.deepEqual(folders[0].projects.map((x) => x.name), ['c', 'b', 'a']);
+});
+
+test('P steps urgent, high, low, then back to none', () => {
+  const seen = [];
+  let p;
+  for (let i = 0; i < 4; i++) seen.push((p = nextPriority(p) ?? undefined));
+  assert.deepEqual(seen, ['urgent', 'high', 'low', undefined]);
+  assert.equal(nextPriority('someday'), 'urgent');
 });
