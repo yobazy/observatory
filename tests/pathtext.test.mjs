@@ -98,3 +98,13 @@ test('a URL an app broke across rows is found whole', () => {
     assert.deepEqual(at[u.start + u.text.length - 1], { x: 9, y: 4 });
   }
 });
+
+test('a block of output an app wrapped joins only so far, so reading it stays cheap', () => {
+  // Base64 hard-wrapped at the full width: every row looks like it carries on.
+  const rows = screen(Array.from({ length: 2000 }, (_, i) => 'aZ9+/'.repeat(5).slice(i % 5, i % 5 + COLS)));
+  let reads = 0;
+  const row = (i) => (reads++, rows[i]);
+  const { last } = logicalLine(row, 1000, COLS);
+  assert.ok(last > 1000 && last < 1100, `stops near the row it starts on, not at ${last}`);
+  assert.ok(reads < 1000, `read ${reads} rows`);
+});

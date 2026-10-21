@@ -68,11 +68,15 @@ export interface Logical {
   text: string;
   /** Each character's cell, 1-based, as xterm's ranges want them. */
   at: { x: number; y: number }[];
+  /** The last row the line takes, 0-based. */
+  last: number;
 }
 
 /** The rows at most this far from the right edge still count as full. */
 const EDGE = 4;
 const PATHISH = /[\w./~@%+=,:?&#-]/;
+/** The most rows an app's own wrapping joins into one line, each way. */
+const MAX_APP_ROWS = 32;
 
 /** The logical line row `y` belongs to. Rows the terminal wrapped join as
  *  they are. So do rows an app wrapped itself, as Claude Code does when a
@@ -104,10 +108,17 @@ export function logicalLine(row: (i: number) => Row | undefined, y: number, cols
     const first = next.cells[indent(next)] ?? "";
     return PATHISH.test(first);
   };
+  // Rows the app wrapped join only so far: past that it's a block of output
+  // (base64, a minified file), and joining all of it would make reading each
+  // of its rows cost the whole block.
   let first = y;
-  while (first > 0 && goesOn(first - 1)) first--;
+  for (let hops = 0; first > 0 && goesOn(first - 1); first--) {
+    if (!row(first)?.wrapped && ++hops > MAX_APP_ROWS) break;
+  }
   let last = y;
-  while (goesOn(last)) last++;
+  for (let hops = 0; goesOn(last); last++) {
+    if (!row(last + 1)?.wrapped && ++hops > MAX_APP_ROWS) break;
+  }
 
   let text = "";
   const at: Logical["at"] = [];
@@ -125,5 +136,5 @@ export function logicalLine(row: (i: number) => Row | undefined, y: number, cols
       }
     }
   }
-  return { text, at };
+  return { text, at, last };
 }
