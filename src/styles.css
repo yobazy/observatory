@@ -3333,6 +3333,17 @@ td.task-last {
 .emoji-cell.is-on {
   border-color: var(--accent);
 }
+.found-cell {
+  display: grid;
+  place-items: center;
+  padding: 6px;
+}
+.found-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
 .emoji-typed {
   display: flex;
   gap: 8px;
