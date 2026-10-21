@@ -58,6 +58,8 @@ it would do without changing anything, and `--help` lists the other options.
 - **Worktree bands**: sessions grouped by branch, with the ones that need you first. Switching
   projects brings back the session you last had open there.
 - **Terminal**: attach to any agent or shell. Shift+Enter inserts a newline in Claude Code.
+  `⌘↑`/`⌘↓` page through the scrollback and `⇧⌘↑`/`⇧⌘↓` jump to either end; hold `⌥` while
+  scrolling to go five times faster. Scrolled up, a **Jump to latest** button takes you back.
 - **Right-click a task** for the TUI's menu: follow-up prompt, restart, duplicate, rename,
   archive, run or stop the dev server, open the worktree, delete.
 - **Hide either column** with `⌘B` (projects) and `⌥⌘B` (tasks), or drag them to resize.

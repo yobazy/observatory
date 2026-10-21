@@ -1220,12 +1220,37 @@ body.is-resizing-rows * {
 .xterm .xterm-viewport {
   background: transparent !important;
 }
-.xterm .xterm-viewport::-webkit-scrollbar {
-  width: 8px;
+/* xterm 6 draws its own scrollbar in a 14px gutter, with a square slider set
+   inline. Make it a thin pill like the rest of the app's, which fattens when
+   pointed at so it's easy to grab. */
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  left: 6px !important;
+  width: 5px !important;
+  border-radius: 3px;
+  background: var(--faint) !important;
+  opacity: 0.6;
+  transition: left 120ms, width 120ms, opacity 120ms;
 }
-.xterm .xterm-viewport::-webkit-scrollbar-thumb {
-  background: var(--line);
-  border-radius: 4px;
+.xterm .xterm-scrollable-element > .scrollbar.vertical:hover > .slider,
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider.active {
+  left: 3px !important;
+  width: 9px !important;
+  border-radius: 5px;
+  background: var(--muted) !important;
+  opacity: 0.8;
+}
+
+/* Shown while the terminal is scrolled up off its newest output. */
+.pane-latest {
+  position: absolute;
+  right: 28px;
+  bottom: 18px;
+  z-index: 12;
+  background: var(--raised);
+  box-shadow: 0 8px 20px rgb(5 8 16 / 0.35);
+}
+.pane-latest kbd {
+  margin-left: 6px;
 }
 
 .pane-empty {
