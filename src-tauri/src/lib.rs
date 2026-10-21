@@ -99,6 +99,7 @@ pub fn run() {
             relocate::carry_project_state,
             icons::read_icon,
             icons::project_logo,
+            icons::project_images,
             title::suggest_title,
             tray::update_tray,
             editor::list_editors,
