@@ -1,6 +1,6 @@
 // The desktop app's own arranging of the tree: projects dragged into order,
-// tasks pinned to the top of their branch, task colors, and tasks marked to
-// come back to. All of it lives in the desktop prefs beside the project
+// tasks pinned to the top of their branch, task colors, priorities, and tasks
+// marked to come back to. All of it lives in the desktop prefs beside the project
 // icons; the daemon (and so the TUI) keeps its own order.
 import { useEffect } from "react";
 import { onAgentStatus } from "./client";
@@ -9,6 +9,7 @@ import { isWatching } from "./notify";
 import { flash, getState, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
 import { moveWithin, placeIn, type ProjectFolder } from "./folders";
 import { savePrefs, type DesktopPrefs } from "./theme";
+import type { Priority } from "./priority";
 import type { Agent } from "./types";
 
 /** `ids` with `id` taken out and put back at `to`. */
@@ -42,8 +43,10 @@ function pruned(s: State, prefs: DesktopPrefs): DesktopPrefs {
     projectFolders: prefs.projectFolders?.map((f) => ({ ...f, projects: f.projects.filter((r) => repos.has(r)) })),
     projectAliases: ofRepo(prefs.projectAliases),
     projectTags: ofRepo(prefs.projectTags),
+    projectPriorities: ofRepo(prefs.projectPriorities),
     pinnedTasks,
     taskColors: keep(prefs.taskColors),
+    taskPriorities: keep(prefs.taskPriorities),
     followUps: keep(prefs.followUps),
     autoFollowUps: keep(prefs.autoFollowUps),
   };
@@ -197,6 +200,24 @@ export function setTaskColor(agentId: string, name: string | null) {
     if (name) taskColors[agentId] = name;
     else delete taskColors[agentId];
     return { ...prefs, taskColors };
+  });
+}
+
+export function setTaskPriority(agentId: string, priority: Priority | null) {
+  return save((prefs) => {
+    const taskPriorities = { ...prefs.taskPriorities };
+    if (priority) taskPriorities[agentId] = priority;
+    else delete taskPriorities[agentId];
+    return { ...prefs, taskPriorities };
+  });
+}
+
+export function setProjectPriority(repo: string, priority: Priority | null) {
+  return save((prefs) => {
+    const projectPriorities = { ...prefs.projectPriorities };
+    if (priority) projectPriorities[repo] = priority;
+    else delete projectPriorities[repo];
+    return { ...prefs, projectPriorities };
   });
 }
 

@@ -12,8 +12,9 @@ import { flash, getState, useAppState } from "../nebula/store";
 import type { Project } from "../nebula/types";
 import { ContextMenu, type MenuItem } from "./Menu";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
-import { ColorRow } from "./Organize";
-import { moveToFolder, resetProjectOrder } from "../nebula/organize";
+import { ColorRow, PriorityDialog } from "./Organize";
+import { moveToFolder, resetProjectOrder, setProjectPriority } from "../nebula/organize";
+import { priorityLabel } from "../nebula/priority";
 import { FolderDialog, ProjectDetailsDialog } from "./ProjectOrganize";
 import { locateProject } from "../nebula/relocate";
 import { useCards } from "../nebula/cards";
@@ -167,6 +168,7 @@ export function useProjectMenu() {
   const [card, setCard] = useState<CardTarget | null>(null);
   const [details, setDetails] = useState<Project | null>(null);
   const [filing, setFiling] = useState<Project | null>(null);
+  const [ranking, setRanking] = useState<Project | null>(null);
   const { prefs, missingProjects } = useAppState();
   const cards = useCards();
 
@@ -184,6 +186,8 @@ export function useProjectMenu() {
     });
     items.push({ label: "Name and tags…", run: () => setDetails(project) });
     items.push({ label: "Icon & color…", run: () => setPicking(project) });
+    const level = priorityLabel(prefs.projectPriorities?.[project.repo_path]);
+    items.push({ label: level ? `Priority: ${level}…` : "Priority…", run: () => setRanking(project) });
     const folder = prefs.projectFolders?.find((f) => f.projects.includes(project.repo_path));
     items.push({ label: folder ? "Move to another folder…" : "Move to folder…", run: () => setFiling(project), separated: true });
     if (folder) {
@@ -230,6 +234,14 @@ export function useProjectMenu() {
       {card && <CardDialog target={card} onClose={() => setCard(null)} />}
       {details && <ProjectDetailsDialog project={details} onClose={() => setDetails(null)} />}
       {filing && <FolderDialog project={filing} onClose={() => setFiling(null)} />}
+      {ranking && (
+        <PriorityDialog
+          name={ranking.name}
+          value={prefs.projectPriorities?.[ranking.repo_path]}
+          onPick={(p) => setProjectPriority(ranking.repo_path, p)}
+          onClose={() => setRanking(null)}
+        />
+      )}
     </>
   );
   return { openFor, element };

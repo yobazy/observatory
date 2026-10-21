@@ -27,7 +27,7 @@ import { ProjectIcon, useProjectColorStyle } from "./ProjectIcon";
 import { locateProject } from "../nebula/relocate";
 import { sameSession, type Agent, type SessionRef, type TerminalTab, type Worktree } from "../nebula/types";
 import { isFollowUp, isPinned, moveTask, toggleFlag } from "../nebula/organize";
-import { FlagGlyph, PinGlyph, useTaskColorStyle } from "./Organize";
+import { FlagGlyph, PinGlyph, PriorityMark, useTaskColorStyle } from "./Organize";
 import { reorderKey, useReorder } from "./useReorder";
 
 /** Re-render once a minute so relative times stay honest. */
@@ -673,6 +673,7 @@ function AgentRow({
       </span>
       <span className="row-age">
         <AgentServerMark agentId={agent.id} />
+        <PriorityMark priority={state.prefs.taskPriorities?.[agent.id]} />
         {flagged && (
           <span className="row-mark mark-flag" role="img" title="Flagged for follow-up (F)" aria-label="Flagged for follow-up">
             <FlagGlyph />
