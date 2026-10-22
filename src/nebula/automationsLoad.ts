@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "./client";
 import { getState, setState } from "./store";
-import { track, type AutomationsReport, type Watches } from "./automations";
+import { runNow, track, type AutomationsReport, type Job, type RunDeps, type Watches } from "./automations";
 
 const WATCH_KEY = "observatory.automations.watch";
 
@@ -67,4 +67,34 @@ export function useAutomationsPolling() {
     }, 5_000);
     return () => clearInterval(t);
   }, []);
+}
+
+let burst: ReturnType<typeof setInterval> | null = null;
+
+/** Read again every 2 s for 30 s: a job just started shows its new run. */
+export function refreshBurst() {
+  if (burst) clearInterval(burst);
+  let left = 15;
+  burst = setInterval(() => {
+    void refreshAutomations();
+    if (--left <= 0 && burst) {
+      clearInterval(burst);
+      burst = null;
+    }
+  }, 2_000);
+}
+
+/** Run now (or Restart, after `confirm`), then watch for the new run. */
+export async function runJob(job: Job, confirm: RunDeps["confirm"]): Promise<void> {
+  const started = await runNow(job, {
+    confirm,
+    invoke: (cmd, args) => (isPreview() ? Promise.resolve() : invoke(cmd, args)),
+  });
+  if (started) refreshBurst();
+}
+
+/** A job's own status command output, run now (automations.rs). */
+export async function readStatus(label: string): Promise<string> {
+  if (isPreview()) return "trigger url: set\ntoken: set\nlast fired: 2 h ago";
+  return invoke<string>("automations_status", { label });
 }

@@ -9,6 +9,8 @@ import {
   jobList,
   nextRun,
   parseLaunchctl,
+  runAction,
+  runNow,
   scheduleText,
   shownLabels,
   track,
@@ -204,4 +206,68 @@ test('calendar: {Hour: 9} with no Minute runs every minute of 9 am, but is stale
   assert.equal(nextRun(nine, null, true, at + 5 * MIN), at + 5 * MIN);
   assert.equal(nextRun(nine, null, true, at + 60 * MIN), at + 24 * 60 * MIN);
   assert.equal(expectedEvery({ StartCalendarInterval: { Minute: 30 } }), 60 * MIN);
+});
+
+// ---- Run now (S12) ----
+
+const stubs = (accept) => {
+  const calls = [];
+  const confirms = [];
+  return {
+    calls,
+    confirms,
+    deps: {
+      invoke: async (cmd, args) => void calls.push([cmd, args]),
+      confirm: async (c) => (confirms.push(c), accept),
+    },
+  };
+};
+
+test('run now: a StartInterval job calls kickstart without -k, and no confirm', async () => {
+  const report = { config: null, jobs: [raw({ label: 'com.bazil.wispr-watch', plist: plist('com.bazil.wispr-watch.plist') })] };
+  const [job] = jobList(report, undefined, NOW).jobs;
+  assert.equal(runAction(job).label, 'Run now');
+  const s = stubs(true);
+  assert.equal(await runNow(job, s.deps), true);
+  assert.deepEqual(s.calls, [['automations_kickstart', { label: 'com.bazil.wispr-watch', restart: false }]]);
+  assert.equal(s.confirms.length, 0);
+});
+
+test('run now: an always-on job reads Restart and kickstarts -k only after the confirm is accepted', async () => {
+  const report = {
+    config: null,
+    jobs: [raw({ label: 'ai.hermes.gateway', plist: plist('ai.hermes.gateway.plist'), launchctl: text('launchctl-hermes-gateway.txt') })],
+  };
+  const [job] = jobList(report, undefined, NOW).jobs;
+  assert.equal(runAction(job).label, 'Restart');
+
+  const declined = stubs(false);
+  assert.equal(await runNow(job, declined.deps), false);
+  assert.equal(declined.confirms.length, 1);
+  assert.deepEqual(declined.calls, []);
+
+  const accepted = stubs(true);
+  assert.equal(await runNow(job, accepted.deps), true);
+  assert.match(accepted.confirms[0].title, /^Restart /);
+  assert.deepEqual(accepted.calls, [['automations_kickstart', { label: 'ai.hermes.gateway', restart: true }]]);
+});
+
+test('run now: a not loaded job is disabled with "Not loaded in launchd"', async () => {
+  const report = { config: null, jobs: [raw({ label: 'com.bazil.todos-notion', launchctl: text('launchctl-missing.txt') })] };
+  const [job] = jobList(report, undefined, NOW).jobs;
+  assert.deepEqual(
+    { disabled: runAction(job).disabled, title: runAction(job).title },
+    { disabled: true, title: 'Not loaded in launchd' },
+  );
+  const s = stubs(true);
+  assert.equal(await runNow(job, s.deps), false);
+  assert.deepEqual(s.calls, []);
+});
+
+test('status command: a config entry with statusCommand marks the job', () => {
+  const config = JSON.stringify({ jobs: [{ label: 'com.bazil.wispr-watch', statusCommand: 'wispr-watch --status' }] });
+  const report = { config, jobs: [raw({ label: 'com.bazil.wispr-watch' }), raw({ label: 'com.bazil.todos-notion' })] };
+  const jobs = jobList(report, undefined, NOW).jobs;
+  assert.equal(jobs.find((j) => j.label === 'com.bazil.wispr-watch').hasStatus, true);
+  assert.equal(jobs.find((j) => j.label === 'com.bazil.todos-notion').hasStatus, false);
 });

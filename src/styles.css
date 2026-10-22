@@ -6974,3 +6974,18 @@ button.board-main:hover .board-text {
 .auto-detail .usage-note {
   margin-left: 0;
 }
+.auto-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.auto-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.auto-status-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

@@ -70,6 +70,10 @@ export interface Job {
   pid: number | null;
   tail: string[];
   logs: string[];
+  /** KeepAlive: Run now restarts it. */
+  alwaysOn: boolean;
+  /** automations.json gives it a statusCommand (run by automations.rs). */
+  hasStatus: boolean;
 }
 
 // ---- launchctl ----
@@ -373,6 +377,8 @@ export const parsePrefixes = (text: string) =>
 export interface ConfigEntry {
   label?: string;
   name?: string;
+  /** Run without a shell: a list of arguments, or a string split on spaces. */
+  statusCommand?: string | string[];
 }
 
 /** automations.json: `{"jobs": [{"label": "...", "name": "..."}]}`. A file
@@ -400,6 +406,7 @@ export function jobList(
 ): { jobs: Job[]; configError: string | null } {
   const { entries, error } = parseConfig(report.config);
   const names = new Map(entries.filter((e) => e.label && e.name).map((e) => [e.label!, e.name!]));
+  const withStatus = new Set(entries.filter((e) => e.label && e.statusCommand?.length).map((e) => e.label!));
   const shown = new Set(shownLabels(report.jobs.map((j) => j.label), prefixes));
   const jobs = report.jobs
     .filter((r) => shown.has(r.label))
@@ -423,6 +430,8 @@ export function jobList(
         pid: ld.pid,
         tail: r.tail,
         logs: [...new Set([r.plist.StandardOutPath, r.plist.StandardErrorPath].filter((p): p is string => !!p))],
+        alwaysOn: alwaysOn(r.plist),
+        hasStatus: withStatus.has(r.label),
       };
     })
     .sort((a, b) => ORDER[a.health] - ORDER[b.health] || a.name.localeCompare(b.name));
@@ -458,4 +467,53 @@ export function until(ms: number | null, now: number, stale = false): string {
   if (days === 0) return `At ${at}`;
   if (days === 1) return `Tomorrow at ${at}`;
   return `${d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} at ${at}`;
+}
+
+// ---- running a job ----
+
+export interface RunAction {
+  label: "Run now" | "Restart";
+  /** `kickstart -k`: stop the running instance first. */
+  restart: boolean;
+  disabled: boolean;
+  title: string;
+}
+
+/** The Run now button for a job: Restart for an always-on one, disabled
+ *  when launchd doesn't have it (loading it is separate work). */
+export function runAction(job: Pick<Job, "health" | "alwaysOn" | "name">): RunAction {
+  if (job.health === "not loaded") return { label: "Run now", restart: false, disabled: true, title: "Not loaded in launchd" };
+  if (job.alwaysOn) {
+    return { label: "Restart", restart: true, disabled: false, title: `Stop ${job.name} and start it again (launchctl kickstart -k)` };
+  }
+  return { label: "Run now", restart: false, disabled: false, title: `Run ${job.name} now, without waiting for its schedule (launchctl kickstart)` };
+}
+
+export interface RestartConfirm {
+  title: string;
+  message: string;
+  confirm: string;
+}
+
+export interface RunDeps {
+  invoke: (cmd: string, args: Record<string, unknown>) => Promise<unknown>;
+  /** An in-app confirm; resolves true once accepted. */
+  confirm: (c: RestartConfirm) => Promise<boolean>;
+}
+
+/** Run a job now. An always-on job is restarted, and only after a confirm.
+ *  Resolves whether kickstart was called. */
+export async function runNow(job: Pick<Job, "label" | "health" | "alwaysOn" | "name">, deps: RunDeps): Promise<boolean> {
+  const a = runAction(job);
+  if (a.disabled) return false;
+  if (a.restart) {
+    const ok = await deps.confirm({
+      title: `Restart ${job.name}?`,
+      message: `It's always on. launchd stops the running copy and starts it again (launchctl kickstart -k ${job.label}).`,
+      confirm: "Restart",
+    });
+    if (!ok) return false;
+  }
+  await deps.invoke("automations_kickstart", { label: job.label, restart: a.restart });
+  return true;
 }

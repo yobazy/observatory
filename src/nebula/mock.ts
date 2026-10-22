@@ -465,7 +465,7 @@ export function mockAutomations(): AutomationsReport {
     tail,
   });
   return {
-    config: JSON.stringify({ jobs: [{ label: "com.dev.notes-sync", name: "Notes sync" }] }),
+    config: JSON.stringify({ jobs: [{ label: "com.dev.notes-sync", name: "Notes sync", statusCommand: "notes-sync --status" }] }),
     jobs: [
       job("com.dev.notes-sync", { StartInterval: 300, WatchPaths: ["/Users/dev/notes/TODO.md"] }, loaded("com.dev.notes-sync", "\tlast exit code = 0"), 3, ["synced 4 notes", "synced 0 notes"]),
       job("com.dev.backup", { StartCalendarInterval: { Hour: 2, Minute: 30 } }, loaded("com.dev.backup", "\tlast exit code = 1"), 600, ["rsync: connection unexpectedly closed", "rsync error: error in rsync protocol data stream (code 12)"]),

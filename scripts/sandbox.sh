@@ -7,6 +7,8 @@
 #   scripts/sandbox.sh app     # run the app in dev mode against it
 #   scripts/sandbox.sh e2e     # protocol test: worktree, agent, attach, statuses
 #   scripts/sandbox.sh stop    # stop the sandbox daemon (never the real one)
+#   scripts/sandbox.sh automations        # install a throwaway launchd job
+#   scripts/sandbox.sh automations-clean  # remove it
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -48,10 +50,55 @@ stop() {
   fi
 }
 
+# A throwaway launchd agent for the Automations view: it echoes a line to a
+# log every 10 minutes. The log sits in the runtime folder, not under
+# ~/Documents, where macOS can block a launchd job from writing.
+JOB=com.observatory.sandbox-job
+JOB_PLIST="$HOME/Library/LaunchAgents/$JOB.plist"
+JOB_DIR="$NEBULA_RUNTIME_DIR/automations"
+
+automations() {
+  mkdir -p "$JOB_DIR" "$(dirname "$JOB_PLIST")"
+  cat > "$JOB_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>$JOB</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>-c</string>
+		<string>echo "sandbox job ran at \$(date '+%Y-%m-%d %H:%M:%S')"</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>600</integer>
+	<key>StandardOutPath</key>
+	<string>$JOB_DIR/sandbox-job.log</string>
+	<key>StandardErrorPath</key>
+	<string>$JOB_DIR/sandbox-job.log</string>
+</dict>
+</plist>
+PLIST
+  launchctl bootout "gui/$(id -u)/$JOB" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$JOB_PLIST"
+  echo "installed $JOB (log $JOB_DIR/sandbox-job.log)"
+}
+
+automations_clean() {
+  launchctl bootout "gui/$(id -u)/$JOB" 2>/dev/null || true
+  rm -f "$JOB_PLIST"
+  rm -rf "$JOB_DIR"
+  echo "removed $JOB"
+}
+
 case "${1:-}" in
   start) start ;;
   stop) stop ;;
   app) start && npm run tauri dev ;;
   e2e) start && (cd src-tauri && cargo run -q --example e2e) ;;
-  *) echo "usage: $0 start|app|e2e|stop" >&2; exit 2 ;;
+  automations) automations ;;
+  automations-clean) automations_clean ;;
+  *) echo "usage: $0 start|app|e2e|stop|automations|automations-clean" >&2; exit 2 ;;
 esac

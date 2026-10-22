@@ -1,17 +1,23 @@
-//! Background jobs on this Mac, read-only: every plist in
-//! `~/Library/LaunchAgents` (through `plutil -convert json`), what
-//! `launchctl print gui/<uid>/<label>` says about it, and the tail of its
-//! logs. Which jobs show, their schedule and their health are worked out in
-//! the webview (`automations.ts`); nothing here runs or changes a job.
+//! Background jobs on this Mac: every plist in `~/Library/LaunchAgents`
+//! (through `plutil -convert json`), what `launchctl print gui/<uid>/<label>`
+//! says about it, and the tail of its logs. Which jobs show, their schedule
+//! and their health are worked out in the webview (`automations.ts`). The
+//! only things run here are `launchctl kickstart` for a job that has a plist
+//! there, and a job's own status command from automations.json, without a
+//! shell and with a time limit.
 
 use serde::Serialize;
 use serde_json::Value;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::OnceLock;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, Instant, UNIX_EPOCH};
+
+/// How long a job's status command may run.
+const STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+pub const STATUS_TIMED_OUT: &str = "Status command timed out";
 
 /// Log lines sent per job.
 const TAIL_LINES: usize = 20;
@@ -211,11 +217,187 @@ pub async fn automations_report() -> Result<AutomationsReport, String> {
         let home = home();
         AutomationsReport {
             jobs: scan(&home.join("Library/LaunchAgents")),
-            config: std::fs::read_to_string(home.join(".config/observatory/automations.json")).ok(),
+            config: std::fs::read_to_string(config_path()).ok(),
         }
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+fn config_path() -> PathBuf {
+    home().join(".config/observatory/automations.json")
+}
+
+/// Whether `label` is one of the plists in `dir`: kickstart only ever goes
+/// to a job the view lists, never to a label the webview made up.
+fn has_plist(dir: &Path, label: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|e| {
+        let p = e.path();
+        p.extension().is_some_and(|x| x == "plist")
+            && read_plist(&p)
+                .ok()
+                .and_then(|v| v.get("Label").and_then(Value::as_str).map(|l| l == label))
+                .unwrap_or_else(|| p.file_stem().is_some_and(|s| s == label))
+    })
+}
+
+/// `launchctl kickstart`'s arguments: `-k` kills a running instance first.
+fn kickstart_args(uid: &str, label: &str, restart: bool) -> Vec<String> {
+    let mut args = vec!["kickstart".to_string()];
+    if restart {
+        args.push("-k".into());
+    }
+    args.push(format!("gui/{uid}/{label}"));
+    args
+}
+
+fn kickstart(dir: &Path, label: &str, restart: bool) -> Result<(), String> {
+    if !has_plist(dir, label) {
+        return Err(format!("{label} has no plist in {}", dir.display()));
+    }
+    let out = Command::new("/bin/launchctl")
+        .args(kickstart_args(uid(), label, restart))
+        .output()
+        .map_err(|e| format!("couldn't run launchctl: {e}"))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        let err = String::from_utf8_lossy(&out.stderr);
+        let msg = err.trim();
+        Err(if msg.is_empty() {
+            format!("launchctl kickstart exited with {}", out.status)
+        } else {
+            msg.to_string()
+        })
+    }
+}
+
+/// Run a job now: `launchctl kickstart`, with `-k` (restart) for an
+/// always-on job.
+#[tauri::command]
+pub async fn automations_kickstart(label: String, restart: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kickstart(&home().join("Library/LaunchAgents"), &label, restart)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// A job's `statusCommand` from automations.json: a list of arguments, or
+/// a string split on spaces (no shell, so no quoting or pipes).
+fn status_argv(config: &str, label: &str) -> Option<Vec<String>> {
+    let v: Value = serde_json::from_str(config).ok()?;
+    let list = v.get("jobs").unwrap_or(&v).as_array()?;
+    let entry = list
+        .iter()
+        .find(|e| e.get("label").and_then(Value::as_str) == Some(label))?;
+    let argv: Vec<String> = match entry.get("statusCommand")? {
+        Value::String(s) => s.split_whitespace().map(String::from).collect(),
+        Value::Array(a) => a
+            .iter()
+            .filter_map(|x| x.as_str().map(String::from))
+            .collect(),
+        _ => return None,
+    };
+    (!argv.is_empty()).then_some(argv)
+}
+
+/// A program by name, the way a login shell would find it: an app opened
+/// from Finder has almost no PATH of its own.
+fn resolve(program: &str) -> PathBuf {
+    if let Some(rest) = program.strip_prefix("~/") {
+        return home().join(rest);
+    }
+    if program.contains('/') {
+        return PathBuf::from(program);
+    }
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    dirs.extend([
+        home().join(".local/bin"),
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ]);
+    dirs.into_iter()
+        .map(|d| d.join(program))
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| PathBuf::from(program))
+}
+
+/// Run `argv` without a shell; its output (stdout, then stderr), or
+/// `STATUS_TIMED_OUT` once it has run for `timeout`, when it's killed.
+fn run_status(argv: &[String], timeout: Duration) -> Result<String, String> {
+    let (program, args) = argv.split_first().ok_or("empty status command")?;
+    let mut child = Command::new(resolve(program))
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("couldn't run {program}: {e}"))?;
+    // Read both pipes as the command writes, so a chatty one can't block on a
+    // full pipe; a reader left behind by a grandchild just ends with it.
+    let read = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut p) = pipe {
+                let _ = p.read_to_end(&mut buf);
+            }
+            String::from_utf8_lossy(&buf).into_owned()
+        })
+    };
+    let out = read(
+        child
+            .stdout
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let err = read(
+        child
+            .stderr
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(status) => break status,
+            None if start.elapsed() >= timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(STATUS_TIMED_OUT.into());
+            }
+            None => std::thread::sleep(Duration::from_millis(25)),
+        }
+    };
+    let mut text = out.join().unwrap_or_default();
+    text.push_str(&err.join().unwrap_or_default());
+    let mut text = text.trim_end().to_string();
+    if !status.success() {
+        if !text.is_empty() {
+            text.push('\n');
+        }
+        text.push_str(&format!("Exited with {status}"));
+    }
+    Ok(text)
+}
+
+/// The output of a job's status command, run now.
+#[tauri::command]
+pub async fn automations_status(label: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config =
+            std::fs::read_to_string(config_path()).map_err(|e| format!("automations.json: {e}"))?;
+        let argv =
+            status_argv(&config, &label).ok_or_else(|| format!("{label} has no statusCommand"))?;
+        run_status(&argv, STATUS_TIMEOUT)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -323,5 +505,117 @@ mod tests {
                 "com.bazil.wispr-watch"
             ]
         );
+    }
+
+    #[test]
+    fn kickstart_restarts_only_when_asked() {
+        assert_eq!(
+            kickstart_args("501", "com.x.job", false),
+            ["kickstart", "gui/501/com.x.job"]
+        );
+        assert_eq!(
+            kickstart_args("501", "com.x.job", true),
+            ["kickstart", "-k", "gui/501/com.x.job"]
+        );
+    }
+
+    #[test]
+    fn kickstart_refuses_a_label_without_a_plist() {
+        let dir = fixture("");
+        assert!(has_plist(&dir, "com.bazil.wispr-watch"));
+        assert!(!has_plist(&dir, "com.apple.Finder"));
+        let err = kickstart(&dir, "com.example.not-here", false).unwrap_err();
+        assert!(err.contains("has no plist"));
+    }
+
+    #[test]
+    fn status_command_comes_from_the_config() {
+        let config = r#"{"jobs": [
+            {"label": "com.x.a", "name": "A", "statusCommand": "wispr-watch --status"},
+            {"label": "com.x.b", "statusCommand": ["/bin/echo", "two words"]},
+            {"label": "com.x.c"}
+        ]}"#;
+        assert_eq!(
+            status_argv(config, "com.x.a").unwrap(),
+            ["wispr-watch", "--status"]
+        );
+        assert_eq!(
+            status_argv(config, "com.x.b").unwrap(),
+            ["/bin/echo", "two words"]
+        );
+        assert_eq!(status_argv(config, "com.x.c"), None);
+        assert_eq!(status_argv(config, "com.x.z"), None);
+    }
+
+    #[test]
+    fn status_command_output_is_its_lines() {
+        let argv = [
+            "/usr/bin/printf".to_string(),
+            "one\\ntwo\\nthree\\n".to_string(),
+        ];
+        assert_eq!(
+            run_status(&argv, STATUS_TIMEOUT).unwrap(),
+            "one\ntwo\nthree"
+        );
+        // No shell: a pipe is just an argument.
+        let echo = [
+            "/bin/echo".to_string(),
+            "a|b".to_string(),
+            "$HOME".to_string(),
+        ];
+        assert_eq!(run_status(&echo, STATUS_TIMEOUT).unwrap(), "a|b $HOME");
+    }
+
+    #[test]
+    fn status_command_past_its_time_is_killed() {
+        let argv = ["/bin/sleep".to_string(), "30".to_string()];
+        let start = Instant::now();
+        let err = run_status(&argv, Duration::from_millis(300)).unwrap_err();
+        assert_eq!(err, STATUS_TIMED_OUT);
+        assert!(start.elapsed() < Duration::from_secs(3));
+    }
+
+    #[test]
+    fn status_command_failure_says_how_it_exited() {
+        let argv = [
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "echo nope; exit 3".to_string(),
+        ];
+        let out = run_status(&argv, STATUS_TIMEOUT).unwrap();
+        assert!(out.starts_with("nope\nExited with"), "{out}");
+    }
+
+    /// Manual check for S12 against the throwaway sandbox job only (install
+    /// it with `scripts/sandbox.sh automations`): Run now's code path writes
+    /// a new line to its log within 5 s.
+    /// `cargo test -- --ignored sandbox_job_runs_now`
+    #[test]
+    #[ignore]
+    fn sandbox_job_runs_now() {
+        const LABEL: &str = "com.observatory.sandbox-job";
+        let dir = home().join("Library/LaunchAgents");
+        let plist = read_plist(&dir.join(format!("{LABEL}.plist")))
+            .expect("run scripts/sandbox.sh automations first");
+        let log = PathBuf::from(plist["StandardOutPath"].as_str().unwrap());
+        let lines = |p: &Path| {
+            std::fs::read_to_string(p)
+                .map(|t| t.lines().count())
+                .unwrap_or(0)
+        };
+        let before = lines(&log);
+        kickstart(&dir, LABEL, false).unwrap();
+        let start = Instant::now();
+        while lines(&log) <= before {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "no new line in 5 s"
+            );
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let (last, tail) = logs(&[log.to_string_lossy().into_owned()]);
+        assert!(Instant::now().duration_since(start) < Duration::from_secs(5));
+        assert!(last.is_some());
+        println!("new line: {}", tail.last().unwrap());
     }
 }

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
-import { setState, useAppState } from "../nebula/store";
-import { ago, jobList, toneOf, until, worstHealth, type Job } from "../nebula/automations";
-import { refreshAutomations } from "../nebula/automationsLoad";
+import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
+import { flash, setState, useAppState } from "../nebula/store";
+import { ago, jobList, runAction, toneOf, until, worstHealth, type Job, type RestartConfirm } from "../nebula/automations";
+import { readStatus, refreshAutomations, runJob } from "../nebula/automationsLoad";
+import { baseName, openPreview } from "../nebula/preview";
 
 /** The rows as of this minute; null until the first read lands. */
 function useJobs() {
@@ -23,24 +25,74 @@ const HEALTH_LABEL: Record<Job["health"], string> = {
   "not loaded": "Not loaded",
 };
 
+type Status = { state: "reading" } | { state: "done"; text: string } | { state: "error"; text: string };
+
 /** Background jobs on this Mac, each with its schedule, last and next run,
- *  health and log tail. Read-only. */
+ *  health and log tail, and a way to run it now. */
 export function AutomationsView() {
   const state = useAppState();
   const list = useJobs();
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [dialog, setDialog] = useState<ConfirmDialogSpec | null>(null);
+  const [starting, setStarting] = useState<Set<string>>(new Set());
+  const [status, setStatus] = useState<Record<string, Status>>({});
   const controls = useRef<HTMLDivElement>(null);
   useOverlayKeys(controls);
   useEffect(() => void refreshAutomations(), []);
 
   const jobs = list?.jobs ?? [];
   const failing = jobs.filter((j) => j.health === "failing").length;
-  const toggle = (label: string) =>
+  const checkStatus = useCallback((label: string) => {
+    setStatus((s) => ({ ...s, [label]: { state: "reading" } }));
+    readStatus(label).then(
+      (text) => setStatus((s) => ({ ...s, [label]: { state: "done", text } })),
+      (e) => setStatus((s) => ({ ...s, [label]: { state: "error", text: String(e) } })),
+    );
+  }, []);
+  const toggle = (j: Job) =>
     setOpen((o) => {
       const n = new Set(o);
-      if (!n.delete(label)) n.add(label);
+      if (!n.delete(j.label)) {
+        n.add(j.label);
+        if (j.hasStatus) checkStatus(j.label);
+      }
       return n;
     });
+  /** The in-app confirm Restart waits on; closing it any other way is a no. */
+  const confirm = (c: RestartConfirm) =>
+    new Promise<boolean>((resolve) => {
+      setDialog({
+        kind: "confirm",
+        ...c,
+        onConfirm: async () => resolve(true),
+      });
+      closeDialog.current = () => resolve(false);
+    });
+  const closeDialog = useRef<() => void>(() => {});
+  const run = async (j: Job) => {
+    const mark = () => setStarting((s) => new Set(s).add(j.label));
+    // A restart reads "Starting…" only once its confirm is accepted.
+    if (!j.alwaysOn) mark();
+    try {
+      await runJob(j, async (c) => {
+        const ok = await confirm(c);
+        if (ok) mark();
+        return ok;
+      });
+    } catch (e) {
+      flash(`Couldn't start ${j.name}: ${e instanceof Error ? e.message : e}`, 6000);
+    } finally {
+      setStarting((s) => {
+        const n = new Set(s);
+        n.delete(j.label);
+        return n;
+      });
+    }
+  };
+  const openLog = (path: string) => {
+    void openPreview([path]);
+    setState({ view: "sessions" });
+  };
   const now = Date.now();
 
   return (
@@ -89,7 +141,7 @@ export function AutomationsView() {
                 <li key={j.label} className={`auto-job${unfolded ? " is-open" : ""}`}>
                   <button
                     className="auto-head"
-                    onClick={() => toggle(j.label)}
+                    onClick={() => toggle(j)}
                     aria-expanded={unfolded}
                     title={unfolded ? "Hide the log tail" : "Show the log tail"}
                   >
@@ -118,6 +170,26 @@ export function AutomationsView() {
                   </button>
                   {unfolded && (
                     <div className="auto-detail">
+                      <div className="auto-actions">
+                        {(() => {
+                          const a = runAction(j);
+                          return (
+                            <button
+                              className="btn btn-sm"
+                              disabled={a.disabled || starting.has(j.label)}
+                              title={a.title}
+                              onClick={() => void run(j)}
+                            >
+                              {starting.has(j.label) ? "Starting…" : a.label}
+                            </button>
+                          );
+                        })()}
+                        {j.logs.map((p) => (
+                          <button key={p} className="btn btn-sm" onClick={() => openLog(p)} title={`Open ${p} in the preview`}>
+                            {j.logs.length === 1 ? "Open log" : `Open ${baseName(p)}`}
+                          </button>
+                        ))}
+                      </div>
                       <dl className="auto-facts">
                         <dt>Runs on</dt>
                         <dd>{j.where}{j.pid != null ? `, pid ${j.pid}` : ""}</dd>
@@ -133,6 +205,27 @@ export function AutomationsView() {
                       ) : (
                         <p className="usage-note">{j.logs.length ? "The log is empty." : "No log to show."}</p>
                       )}
+                      {j.hasStatus && (
+                        <div className="auto-status">
+                          <div className="auto-status-head">
+                            <span className="auto-k">Status command</span>
+                            <button
+                              className="link-btn"
+                              disabled={status[j.label]?.state === "reading"}
+                              onClick={() => checkStatus(j.label)}
+                            >
+                              Check again
+                            </button>
+                          </div>
+                          {status[j.label]?.state === "done" ? (
+                            <pre className="auto-tail">{(status[j.label] as { text: string }).text || "(no output)"}</pre>
+                          ) : status[j.label]?.state === "error" ? (
+                            <p className="usage-note" role="alert">{(status[j.label] as { text: string }).text}</p>
+                          ) : (
+                            <p className="usage-note">Running it…</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </li>
@@ -141,6 +234,15 @@ export function AutomationsView() {
           </ul>
         )}
       </div>
+      {dialog && (
+        <ConfirmDialog
+          d={dialog}
+          onClose={() => {
+            closeDialog.current();
+            setDialog(null);
+          }}
+        />
+      )}
     </section>
   );
 }
