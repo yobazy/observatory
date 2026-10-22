@@ -154,7 +154,7 @@ Acceptance criteria:
 - Given a `statusCommand` that prints 3 lines, then they show under the log tail. Given one that runs past 10 s, then "Status command timed out" shows instead and the app stays responsive (Rust test with `sleep`).
 - Given the sandbox job, when Run now is pressed, then a new line appears in its log tail within 5 s and its last run says "just now" (manual check).
 
-Status: todo
+Status: done. Not yet checked by hand in the running app: pressing Run now and Restart (Run now's Rust path was checked on the sandbox job).
 
 ### S13: Claude cloud routines in the view
 As a user, I want my Claude cloud routines in the same list, with schedule, last run and result, next run and the last run's log, plus Run now, so that cloud jobs and local jobs are checked in one place.
