@@ -59,3 +59,18 @@ export function stepsLine(steps: TStep[]): string {
   const line = parts.join(", ");
   return line ? line[0].toUpperCase() + line.slice(1) : "Worked";
 }
+
+/** What the step under way is doing, for the reader's working line:
+ *  "Editing sync.ts", "Running npm test". */
+export function doingLine(s: TStep): string {
+  const first = s.target.split("\n")[0].trim();
+  if (EDITS.has(s.tool)) return `Editing ${base(s.target)}`;
+  if (s.tool === "Read") return `Reading ${base(s.target)}`;
+  if (LOOKS.has(s.tool)) return "Looking through files";
+  // "cd /long/path && npm test" says what it runs, not where.
+  const command = first.replace(/^cd\s+\S+\s*&&\s*/, "");
+  if (s.tool === "Bash") return command ? `Running ${command}` : "Running a command";
+  if (s.tool === "WebFetch" || s.tool === "WebSearch") return "Searching the web";
+  if (s.tool === "Agent" || s.tool === "Task") return "Waiting on a subagent";
+  return `Using ${s.tool.replace(/^mcp__.+?__/, "").replace(/_/g, " ")}`;
+}

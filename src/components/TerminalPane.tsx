@@ -434,7 +434,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       {agent && <ShelfStrip agent={agent} worktree={wt} items={state.shelf[agent.id]} />}
       <div className="pane-body" data-drop-session={key ?? undefined}>
         <div ref={host} className={`xterm-host${exists ? "" : " is-hidden"}`} />
-        {reading && agent && <Reader key={agent.id} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} question={asking} onPick={answer} />}
+        {reading && agent && <Reader key={`${agent.id}:${agent.session_id}`} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} question={asking} onPick={answer} />}
         {exists && scrolledUp && !reading && (
           <button
             className="btn pane-latest"

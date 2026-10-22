@@ -4197,6 +4197,231 @@ td.task-last {
   background: var(--panel);
   border: 1px solid var(--line);
 }
+/* A reply written as a card: headline, status chips, pictures, decisions to
+   tap and details folded away. Prose replies don't get one. */
+.rd-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+.rd-head {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.rd-head code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+.rd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rd-chip {
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  --tone: var(--st-idle);
+  color: color-mix(in srgb, var(--tone) 75%, var(--text));
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+.rd-chip.is-done {
+  --tone: var(--st-done);
+}
+.rd-chip.is-wait {
+  --tone: var(--st-waiting);
+}
+.rd-chip.is-bad {
+  --tone: var(--st-error);
+}
+.rd-pics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rd-pic {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--term);
+  overflow: hidden;
+  cursor: pointer;
+}
+.rd-pic img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+}
+.rd-needs {
+  display: grid;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--st-waiting) 35%, var(--line));
+  border-radius: var(--r-md);
+  background: var(--term);
+}
+.rd-needs h4 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--st-waiting);
+}
+.rd-q {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.rd-q-text {
+  flex: 1 1 240px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.rd-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.rd-opt {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 11px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    border-color 120ms,
+    color 120ms,
+    transform 90ms;
+}
+.rd-opt:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.rd-opt:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.rd-opt.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+/* Options you can't tap (an older reply, or one waiting on the terminal)
+   lose their outline, so they don't pass for buttons; the one you sent
+   stays marked. */
+.rd-opt:disabled {
+  cursor: default;
+  color: var(--muted);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--line) 35%, transparent);
+}
+/* Your taps stay visible while the agent waits on the terminal. */
+.rd-opt.is-on:disabled {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.rd-opt.is-sent,
+.rd-opt.is-sent:disabled {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.rd-opt.is-sent::after {
+  content: "✓";
+  color: var(--accent);
+}
+.rd-fold summary {
+  width: fit-content;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: default;
+  list-style: none;
+}
+.rd-fold summary::-webkit-details-marker {
+  display: none;
+}
+.rd-fold summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 14px;
+  font-size: 12px;
+}
+.rd-fold[open] summary::before {
+  content: "▾";
+}
+.rd-fold .rd-md {
+  margin-top: 8px;
+}
+/* Every reply can be pointed at: a screenshot of it goes to the agent with
+   what you say about it. The button shows on hover. */
+.rd-reply {
+  position: relative;
+}
+.rd-point {
+  position: absolute;
+  top: -11px;
+  right: 8px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  opacity: 0;
+}
+.rd-reply:hover .rd-point,
+.rd-point:focus-visible,
+.rd-point.is-busy {
+  opacity: 1;
+}
+.rd-point:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.rd-reply.is-pointed > :first-child {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 6px;
+  border-radius: var(--r-md);
+}
+.rd-picked.rd-pointed {
+  max-width: 40%;
+  font-family: var(--ui);
+}
+.rd-quote {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rd-picked {
+  animation: fade 120ms ease-out;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  padding: 5px 6px 5px 10px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
 .rd-steps {
   font-size: 12.5px;
   color: var(--faint);
@@ -4290,6 +4515,96 @@ td.task-last {
   margin: 0;
   font-size: 13px;
   color: var(--st-waiting);
+}
+/* Reader motion: what arrives while you read rises in (a card's parts one
+   after another), answers press and fill, folds fade open. What was there
+   when the thread opened sits still. */
+.rd-col > .is-new {
+  animation: rise 160ms ease-out both;
+}
+/* A new card rises part by part instead of as a whole. */
+.rd-col > .rd-reply.is-new:has(> .rd-card) {
+  animation: none;
+}
+.rd-reply.is-new .rd-card > * {
+  animation: rise 160ms ease-out both;
+}
+.rd-reply.is-new .rd-card > :nth-child(2) {
+  animation-delay: 40ms;
+}
+.rd-reply.is-new .rd-card > :nth-child(3) {
+  animation-delay: 80ms;
+}
+.rd-reply.is-new .rd-card > :nth-child(n + 4) {
+  animation-delay: 120ms;
+}
+/* The frame fades in under its parts, so it never stands empty. */
+.rd-reply.is-new .rd-card {
+  animation: fade 120ms ease-out both;
+}
+.rd-fold[open] > .rd-md,
+.rd-steps[open] > ul {
+  animation: rise 160ms ease-out;
+}
+.rd-working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rd-pulse {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--st-running);
+  animation: breathe 1.4s ease-in-out infinite;
+}
+.rd-doing {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Takes no room, so showing it doesn't move what you're reading. */
+.rd-latest-at {
+  position: sticky;
+  bottom: 12px;
+  height: 0;
+  display: flex;
+  justify-content: center;
+}
+.rd-latest {
+  height: fit-content;
+  transform: translateY(-100%);
+  padding: 5px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  box-shadow: var(--shadow-pop);
+  cursor: pointer;
+  animation: fade 120ms ease-out;
+}
+.rd-latest:hover {
+  border-color: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-col > .is-new,
+  .rd-reply.is-new .rd-card,
+  .rd-reply.is-new .rd-card > *,
+  .rd-fold[open] > .rd-md,
+  .rd-steps[open] > ul,
+  .rd-picked,
+  .rd-pulse,
+  .rd-latest {
+    animation: none;
+  }
+  .rd-opt {
+    transition: none;
+  }
 }
 
 .ask-strip {
