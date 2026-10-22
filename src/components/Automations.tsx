@@ -8,10 +8,10 @@ import { refreshAutomations } from "../nebula/automationsLoad";
 function useJobs() {
   const state = useAppState();
   return useMemo(
-    () => (state.automations ? jobList(state.automations, state.prefs.automationLabels, Date.now()) : null),
+    () => (state.automations ? jobList(state.automations, state.prefs.automationLabels, Date.now(), state.automationWatch) : null),
     // Re-worked each minute too, so "about 5 min ago" and staleness move on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.automations, state.prefs.automationLabels, state.minute],
+    [state.automations, state.automationWatch, state.prefs.automationLabels, state.minute],
   );
 }
 
@@ -50,7 +50,7 @@ export function AutomationsView() {
           <h1 id="automations-title">Automations</h1>
           <p className="usage-sub">
             {list
-              ? `Background jobs on this Mac: ${jobs.length} ${jobs.length === 1 ? "job" : "jobs"}${failing ? `, ${failing} failing` : ""}. Last runs are read off each job's log, so they're approximate.`
+              ? `Background jobs on this Mac: ${jobs.length} ${jobs.length === 1 ? "job" : "jobs"}${failing ? `, ${failing} failing` : ""}. Last runs are read off each job's log and launchd's run count, so they're approximate.`
               : "Reading your launchd agents…"}
           </p>
         </div>

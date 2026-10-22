@@ -38,7 +38,8 @@ export interface RawJob {
    *  "Could not find service" error. */
   launchctl: string;
   /** The newer mtime of StandardOutPath and StandardErrorPath, ms; null
-   *  when neither exists. launchd doesn't record a last run, so this is it. */
+   *  when neither exists. One sign of a last run; the other is `runs`
+   *  going up (`track`). */
   lastWrite: number | null;
   /** The last lines of those logs, oldest first. */
   tail: string[];
@@ -236,18 +237,71 @@ export function lastError(tail: string[]): string | null {
   return lines.find((l) => ERROR_LINE.test(l) && !/^Traceback/.test(l.trim())) ?? lines.find((l) => ERROR_LINE.test(l))!;
 }
 
-export function health(raw: Pick<RawJob, "plist" | "launchctl" | "lastWrite" | "tail">, now: number): { health: Health; reason: string } {
+// ---- watching runs ----
+
+/** What the app has seen of a job's `runs` count (launchctl print), kept per
+ *  label in localStorage: launchd doesn't record when a job last ran, and a
+ *  job that rarely writes its log still counts up. */
+export interface Watch {
+  /** When the app first read this label, ms. */
+  since: number;
+  runs: number | null;
+  /** When the app last saw `runs` go up, ms. */
+  ranAt: number | null;
+}
+export type Watches = Record<string, Watch>;
+
+/** The watches after a read at `now`: new labels start being watched, a
+ *  `runs` count that went up marks a run, labels gone are dropped. */
+export function track(prev: Watches, jobs: Pick<RawJob, "label" | "launchctl">[], now: number): Watches {
+  const next: Watches = {};
+  for (const j of jobs) {
+    const runs = parseLaunchctl(j.launchctl).runs;
+    const was = prev[j.label];
+    if (!was) {
+      next[j.label] = { since: now, runs, ranAt: null };
+      continue;
+    }
+    const ran = runs != null && was.runs != null && runs > was.runs;
+    next[j.label] = { since: was.since, runs, ranAt: ran ? now : was.ranAt };
+  }
+  return next;
+}
+
+/** The newest sign of a run: the log's mtime, or `runs` going up. */
+export function lastRunOf(lastWrite: number | null, watch: Watch | undefined): number | null {
+  const ranAt = watch?.ranAt ?? null;
+  if (lastWrite == null) return ranAt;
+  return ranAt == null ? lastWrite : Math.max(lastWrite, ranAt);
+}
+
+export const NOT_SEEN = "Last run not seen yet";
+
+export function health(
+  raw: Pick<RawJob, "plist" | "launchctl" | "lastWrite" | "tail">,
+  now: number,
+  watch?: Watch,
+): { health: Health; reason: string } {
   const ld = parseLaunchctl(raw.launchctl);
   if (!ld.loaded) return { health: "not loaded", reason: lastError(raw.tail) ? clip(lastError(raw.tail)!) : "Not loaded in launchd" };
   if (alwaysOn(raw.plist) && ld.pid != null) return { health: "running", reason: `Running, pid ${ld.pid}` };
   if (ld.lastExitCode != null && ld.lastExitCode !== 0) return { health: "failing", reason: `Exited with code ${ld.lastExitCode}` };
   const err = lastError(raw.tail);
   if (err) return { health: "failing", reason: clip(err) };
-  const every = expectedEvery(raw.plist);
-  if (every != null && raw.lastWrite != null && now - raw.lastWrite > 3 * every) {
-    return { health: "stale", reason: `No run in ${span(roundTo(now - raw.lastWrite))} (expected every ${span(every)})` };
-  }
   if (alwaysOn(raw.plist)) return { health: "stale", reason: "Always on, but not running" };
+  const every = expectedEvery(raw.plist);
+  const last = lastRunOf(raw.lastWrite, watch);
+  if (every != null && (last == null || now - last > 3 * every)) {
+    // No sign of a run in 3× its interval. Only stale once the app has
+    // watched that long: a quiet job may have run before it started looking.
+    const watched = watch ? now - watch.since : 0;
+    if (watched < 3 * every) return { health: "ok", reason: NOT_SEEN };
+    const gap = last == null ? watched : now - last;
+    return {
+      health: "stale",
+      reason: `No run ${last == null ? "seen " : ""}in ${span(roundTo(gap))} (expected every ${span(every)})`,
+    };
+  }
   return { health: "ok", reason: ld.lastExitCode === 0 ? "Last run exited cleanly" : "" };
 }
 
@@ -320,7 +374,12 @@ export function parseConfig(text: string | null): { entries: ConfigEntry[]; erro
 const ORDER: Record<Health, number> = { failing: 0, "not loaded": 1, stale: 2, running: 3, ok: 4 };
 
 /** The rows: shown labels only, named from the config, worst first. */
-export function jobList(report: AutomationsReport, prefixes: string[] | undefined, now: number): { jobs: Job[]; configError: string | null } {
+export function jobList(
+  report: AutomationsReport,
+  prefixes: string[] | undefined,
+  now: number,
+  watches: Watches = {},
+): { jobs: Job[]; configError: string | null } {
   const { entries, error } = parseConfig(report.config);
   const names = new Map(entries.filter((e) => e.label && e.name).map((e) => [e.label!, e.name!]));
   const shown = new Set(shownLabels(report.jobs.map((j) => j.label), prefixes));
@@ -328,7 +387,9 @@ export function jobList(report: AutomationsReport, prefixes: string[] | undefine
     .filter((r) => shown.has(r.label))
     .map((r): Job => {
       const ld = parseLaunchctl(r.launchctl);
-      const h = health(r, now);
+      const watch = watches[r.label];
+      const h = health(r, now, watch);
+      const last = lastRunOf(r.lastWrite, watch);
       const args = r.plist.ProgramArguments ?? (r.plist.Program ? [r.plist.Program] : []);
       return {
         label: r.label,
@@ -337,8 +398,8 @@ export function jobList(report: AutomationsReport, prefixes: string[] | undefine
         command: args.join(" "),
         plistPath: r.plistPath,
         schedule: scheduleText(r.plist),
-        lastRun: r.lastWrite,
-        nextRun: nextRun(r.plist, r.lastWrite, ld.loaded, now),
+        lastRun: last,
+        nextRun: nextRun(r.plist, last, ld.loaded, now),
         health: h.health,
         reason: h.reason,
         pid: ld.pid,
@@ -354,7 +415,7 @@ export function jobList(report: AutomationsReport, prefixes: string[] | undefine
 
 /** "about 5 min ago": last runs come off log mtimes, so never exact. */
 export function ago(ms: number | null, now: number): string {
-  if (ms == null) return "No log yet";
+  if (ms == null) return "Not seen yet";
   const gap = now - ms;
   if (gap < MIN) return "Just now";
   return `About ${span(roundTo(gap))} ago`;

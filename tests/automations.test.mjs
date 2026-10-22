@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
+  ago,
   health,
   jobList,
   nextRun,
   parseLaunchctl,
   scheduleText,
   shownLabels,
+  track,
   worstHealth,
 } from '../src/nebula/automations.ts';
 
@@ -84,8 +86,50 @@ test('health: exit code 0 with a PermissionError ending the tail is failing with
 
 test('health: every 120 s, logs last written 10 min ago, is stale', () => {
   const r = raw({ plist: plist('com.bazil.wispr-watch.plist'), lastWrite: NOW - 10 * MIN });
-  assert.deepEqual(health(r, NOW), { health: 'stale', reason: 'No run in 10 min (expected every 2 min)' });
-  assert.equal(health({ ...r, lastWrite: NOW - 5 * MIN }, NOW).health, 'ok');
+  // Watched for the last 10 minutes, with runs never going up.
+  const watch = { since: NOW - 10 * MIN, runs: 77, ranAt: null };
+  assert.deepEqual(health(r, NOW, watch), { health: 'stale', reason: 'No run in 10 min (expected every 2 min)' });
+  assert.equal(health({ ...r, lastWrite: NOW - 5 * MIN }, NOW, watch).health, 'ok');
+});
+
+/** launchctl print output with a given runs count and exit code 0. */
+const printed = (runs) => text('launchctl-wispr-watch.txt').replace('runs = 77', `runs = ${runs}`);
+
+test('runs: a silent job whose runs went up 1 min ago is ok, last run about 1 min ago', () => {
+  const label = 'com.bazil.wispr-watch';
+  let w = track({}, [{ label, launchctl: printed(76) }], NOW - 3 * MIN);
+  w = track(w, [{ label, launchctl: printed(77) }], NOW - MIN);
+  assert.equal(w[label].ranAt, NOW - MIN);
+  const silent = raw({ label, plist: plist('com.bazil.wispr-watch.plist'), launchctl: printed(77), lastWrite: NOW - 3 * 60 * MIN, tail: [] });
+  assert.equal(health(silent, NOW, w[label]).health, 'ok');
+  const [job] = jobList({ config: null, jobs: [silent] }, undefined, NOW, w).jobs;
+  assert.equal(job.health, 'ok');
+  assert.equal(job.lastRun, NOW - MIN);
+  assert.equal(ago(job.lastRun, NOW), 'About 1 min ago');
+});
+
+test('runs: a silent job watched 2 min with a 2 min interval is not stale yet', () => {
+  const label = 'com.bazil.wispr-watch';
+  const w = track({}, [{ label, launchctl: printed(77) }], NOW - 2 * MIN);
+  const silent = raw({ label, plist: plist('com.bazil.wispr-watch.plist'), launchctl: printed(77), lastWrite: null, tail: [] });
+  assert.deepEqual(health(silent, NOW, w[label]), { health: 'ok', reason: 'Last run not seen yet' });
+  // A log written long ago is still no sign of a run while watched briefly.
+  assert.equal(health({ ...silent, lastWrite: NOW - 3 * 60 * MIN }, NOW, w[label]).health, 'ok');
+});
+
+test('runs: watched 10 min with no increase and an old log is stale', () => {
+  const label = 'com.bazil.wispr-watch';
+  let w = track({}, [{ label, launchctl: printed(77) }], NOW - 10 * MIN);
+  w = track(w, [{ label, launchctl: printed(77) }], NOW - 5 * MIN);
+  w = track(w, [{ label, launchctl: printed(77) }], NOW);
+  assert.equal(w[label].ranAt, null);
+  assert.equal(w[label].since, NOW - 10 * MIN);
+  const silent = raw({ label, plist: plist('com.bazil.wispr-watch.plist'), launchctl: printed(77), lastWrite: NOW - 3 * 60 * MIN, tail: [] });
+  assert.deepEqual(health(silent, NOW, w[label]), { health: 'stale', reason: 'No run in 3 h (expected every 2 min)' });
+  assert.deepEqual(health({ ...silent, lastWrite: null }, NOW, w[label]), {
+    health: 'stale',
+    reason: 'No run seen in 10 min (expected every 2 min)',
+  });
 });
 
 test('health: a KeepAlive job with a pid is running', () => {

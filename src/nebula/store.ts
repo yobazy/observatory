@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { GitState } from "./git";
 import type { UsageReport } from "./usage";
-import type { AutomationsReport } from "./automations";
+import type { AutomationsReport, Watches } from "./automations";
 import type { DesktopPrefs } from "./theme";
 import type { PrState } from "./prs";
 import type { Queued } from "./queue";
@@ -57,6 +57,8 @@ export interface State {
    *  latest one failed. */
   automations: AutomationsReport | null;
   automationsError: string | null;
+  /** Each job's `runs` count as the app has watched it (automations.ts). */
+  automationWatch: Watches;
   /** nebula's shared `theme` setting (the accent), and the desktop app's own prefs. */
   theme: string;
   prefs: DesktopPrefs;
@@ -143,6 +145,7 @@ let state: State = {
   usageError: null,
   automations: null,
   automationsError: null,
+  automationWatch: {},
   ...loadSelection(),
 };
 

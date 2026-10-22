@@ -2,7 +2,26 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "./client";
 import { getState, setState } from "./store";
-import type { AutomationsReport } from "./automations";
+import { track, type AutomationsReport, type Watches } from "./automations";
+
+const WATCH_KEY = "observatory.automations.watch";
+
+function loadWatches(): Watches {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WATCH_KEY) ?? "{}");
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveWatches(w: Watches) {
+  try {
+    localStorage.setItem(WATCH_KEY, JSON.stringify(w));
+  } catch {
+    // Without it the app starts watching afresh next launch: no false stale.
+  }
+}
 
 let loading = false;
 /** Asked for mid-read (a Refresh click): read again once this one lands. */
@@ -18,7 +37,9 @@ export async function refreshAutomations() {
     const report = isPreview()
       ? (await import("./mock")).mockAutomations()
       : await invoke<AutomationsReport>("automations_report");
-    setState({ automations: report, automationsError: null });
+    const watches = track(loadWatches(), report.jobs, Date.now());
+    saveWatches(watches);
+    setState({ automations: report, automationsError: null, automationWatch: watches });
   } catch (e) {
     setState({ automationsError: String(e) });
   } finally {
