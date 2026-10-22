@@ -2075,6 +2075,10 @@ body.is-resizing-rows * {
   background: var(--panel);
   color: var(--text);
 }
+.recent-row.is-selected {
+  background: var(--raised);
+  color: var(--text);
+}
 .recent-age {
   color: var(--faint);
   font-size: 11px;

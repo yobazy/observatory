@@ -16,15 +16,15 @@ export function visit(visits: Visit[], repo: string, at: number): Visit[] {
   return [{ repo, at }, ...visits.filter((v) => v.repo !== repo)].slice(0, KEEP);
 }
 
-/** Up to `count` recent projects that still exist, leaving out the one
- *  you're in: the panel is for going somewhere else. */
+/** Up to `count` recent projects that still exist, the one you're in
+ *  included and marked, so you can see where you are among them. */
 export function recentProjects(visits: Visit[], projects: Project[], current: Project | undefined, count: number) {
   const byRepo = new Map(projects.map((p) => [p.repo_path, p]));
-  const out: { project: Project; at: number }[] = [];
+  const out: { project: Project; at: number; here: boolean }[] = [];
   for (const v of visits) {
     const project = byRepo.get(v.repo);
-    if (!project || project.repo_path === current?.repo_path) continue;
-    out.push({ project, at: v.at });
+    if (!project) continue;
+    out.push({ project, at: v.at, here: project.repo_path === current?.repo_path });
     if (out.length === count) break;
   }
   return out;
