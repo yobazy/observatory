@@ -64,6 +64,7 @@ pub fn run() {
             daemon::inspect_folder,
             cards::read_card_sources,
             router::route_list,
+            router::tag_threads,
             git::git_status,
             git::git_diff,
             git::delete_branch,

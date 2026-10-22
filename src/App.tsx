@@ -39,6 +39,7 @@ import { flash, getState, setState, subscribe, useAppState, waitingAgents } from
 import { usePrPolling } from "./nebula/prs";
 import { useQueueRunner } from "./nebula/queue";
 import { useBatchRunner } from "./nebula/batchRunner";
+import { useTaggingRunner } from "./nebula/taggingRunner";
 import { ReviewView } from "./components/Review";
 import { UncommittedView } from "./components/Uncommitted";
 import { CompareView } from "./components/Compare";
@@ -175,6 +176,7 @@ export default function App() {
   useShelf();
   useQueueRunner();
   useBatchRunner();
+  useTaggingRunner();
   useUsagePolling();
   useActivityPolling();
   useTheme();

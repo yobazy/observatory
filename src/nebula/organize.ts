@@ -207,6 +207,12 @@ export function deleteThreadTag(repo: string, tag: string) {
   return save((prefs) => deleteTag(prefs, repo, tag, ids));
 }
 
+/** A change worked out by the tagging prompt (tagging.ts), against the
+ *  prefs as they are when it's written. */
+export function saveTagging(change: (prefs: DesktopPrefs) => DesktopPrefs) {
+  return save(change);
+}
+
 /** A thread's tags, as you set them from its menu. */
 export function tagThread(agentId: string, tags: string[]) {
   return save((prefs) => setThreadTags(prefs, agentId, tags));

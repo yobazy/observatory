@@ -227,8 +227,8 @@ function Previews() {
   );
 }
 
-/** The agent CLI Dispatch routes a list with (router.rs), and how many
- *  sessions it runs at once (batch.ts). */
+/** The agent CLI Dispatch routes a list with (router.rs), the one that tags
+ *  threads (tagging.ts), and how many sessions it runs at once (batch.ts). */
 function DispatchSettings() {
   const { prefs } = useAppState();
   return (
@@ -249,6 +249,24 @@ function DispatchSettings() {
           placeholder="claude -p"
           suggestions={["claude -p", "claude -p --model haiku", "codex exec --skip-git-repo-check"]}
           onCommit={(v) => void savePrefs({ ...prefs, routerCommand: v || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-tagger">
+            Thread tagging
+          </label>
+          <span className="setting-hint">
+            The agent CLI that tags untagged threads from their project's tags, every 10 minutes, run headless with
+            the prompt on stdin. A cheap model is plenty. Empty is off; tags you set by hand are never changed.
+          </span>
+        </div>
+        <TextSetting
+          id="set-tagger"
+          value={prefs.tagCommand ?? ""}
+          placeholder="Off"
+          suggestions={["claude -p --model haiku --no-session-persistence", "codex exec --skip-git-repo-check"]}
+          onCommit={(v) => void savePrefs({ ...prefs, tagCommand: v || undefined })}
         />
       </div>
       <div className="setting">

@@ -206,8 +206,8 @@ export function buildRouterPrompt(items: RouterItem[], cards: RouterCard[], open
 // ---- the reply ----
 
 /** The one JSON value in a reply: a fenced block, or the outermost braces
- *  with any prose around them. */
-function extractJson(text: string): string | null {
+ *  with any prose around them. The tagging prompt's reply too (tagging.ts). */
+export function extractJson(text: string): string | null {
   const fences = [...text.matchAll(/```(?:json|JSON)?[ \t]*\r?\n([\s\S]*?)```/g)];
   if (fences.length === 1) return fences[0][1].trim();
   if (fences.length > 1) return null;

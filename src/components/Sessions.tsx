@@ -29,6 +29,7 @@ import { sameSession, type Agent, type SessionRef, type TerminalTab, type Worktr
 import { isFollowUp, isPinned, moveTask, toggleFlag } from "../nebula/organize";
 import { FlagGlyph, PinGlyph, TagListDialog, useTaskColorStyle } from "./Organize";
 import { hasTerms, searchTerms, tagCounts, tagList, threadShows } from "../nebula/threadtags";
+import { tagProjectNow } from "../nebula/taggingRunner";
 import type { DesktopPrefs } from "../nebula/theme";
 import { reorderKey, useReorder } from "./useReorder";
 
@@ -87,6 +88,7 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
   // The tag chip that's on: only its threads show.
   const [chip, setChip] = useState<string | null>(null);
   const [editingTags, setEditingTags] = useState(false);
+  const [tagging, setTagging] = useState(false);
   // A search and a chip belong to the project they were set in.
   useEffect(() => {
     setQuery("");
@@ -253,6 +255,19 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
         >
           Edit tags…
         </button>
+        {tags.length > 0 && project && (
+          <button
+            className="link-btn thread-chips-edit"
+            title="Have the tagging command tag this project's untagged threads now"
+            disabled={tagging}
+            onClick={() => {
+              setTagging(true);
+              void tagProjectNow(project.repo_path).finally(() => setTagging(false));
+            }}
+          >
+            {tagging ? "Tagging…" : "Tag untagged"}
+          </button>
+        )}
       </div>
 
       <div className="sessions-search">

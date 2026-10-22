@@ -195,6 +195,13 @@ export function runRouter(prompt: string, previewReply: () => string): Promise<s
   return invoke("route_list", { prompt });
 }
 
+/** The tagging prompt (tagging.ts) to the `tagCommand` CLI, the same way
+ *  (router.rs); the preview answers with `previewReply`. */
+export function runTagger(prompt: string, previewReply: () => string): Promise<string> {
+  if (isPreview()) return new Promise((r) => setTimeout(() => r(previewReply()), 900));
+  return invoke("tag_threads", { prompt });
+}
+
 /** The native folder picker; null when cancelled. */
 export async function pickFolder(defaultPath?: string, title = "Open a folder as a project"): Promise<string | null> {
   if (mockSend) return title.includes("Home") ? "/Users/dev/home" : "/Users/dev/code/new-idea";

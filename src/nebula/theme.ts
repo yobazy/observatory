@@ -91,6 +91,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs {
   /** The agent CLI Dispatch routes a list with, headless (router.rs);
    *  `claude -p` when unset. */
   routerCommand?: string;
+  /** The agent CLI the tagging prompt runs through, headless (tagging.ts,
+   *  router.rs). No default: tagging is off until it's set. */
+  tagCommand?: string;
   /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
   dispatchCap?: number;
   /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */

@@ -12,6 +12,9 @@ export interface ThreadTagRecord {
   tags: string[];
   by: "you" | "prompt";
   at: number;
+  /** Set when the prompt gave no tag: the key of the tag list it was asked
+   *  against (tagging.ts), so it's asked again once the list changes. */
+  list?: string;
 }
 
 export interface ThreadTagPrefs {
