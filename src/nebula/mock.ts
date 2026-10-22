@@ -639,6 +639,7 @@ export function mockTurn(s: State, agentId: string): Turn | null {
         step("Bash", "git commit -am 'Back off when a cart sync fails'", true, "Commit the change"),
       ],
       said: "Failed syncs now retry after 1s, 2s, 4s and so on, up to a minute, and the tests cover it. Committed on this branch; it isn't pushed yet.",
+      saidEnd: "Committed on this branch; it isn't pushed yet.\n\n**🟠 Keep open:** the branch isn't pushed.",
     },
     // A Codex thread: its log reads the same way (codex_log.rs).
     a4: {
@@ -654,6 +655,15 @@ export function mockTurn(s: State, agentId: string): Turn | null {
       ],
       said: "Each event id is now recorded before the handler runs, so a redelivered invoice.paid is skipped. Running the webhook tests.",
     },
+  };
+  // A thread whose last reply says it's done, for the Close thread button.
+  turns.a8 = {
+    prompt: "add a cmd+k menu for orders",
+    started: now - 4 * 3600,
+    last: now - 3 * 3600,
+    steps: [step("Edit", `${root}/src/orders/CommandMenu.tsx`), step("Bash", "npm test", true, "Run the tests")],
+    said: "⌘K opens a menu of orders, filtered as you type. Merged as #12.",
+    saidEnd: "⌘K opens a menu of orders, filtered as you type. Merged as #12.\n\n**✅ Safe to close.** Nothing left in this thread.",
   };
   const t = turns[agentId];
   return t ? { ...t, number: agentId === "a3" ? 3 : 1, dropped: 0, interrupted: false } : null;
@@ -679,7 +689,8 @@ export function mockTranscript(s: State, agentId: string): Transcript | null {
   // A reply written as a card, so the reader's card shows in the demo.
   add(
     "claude",
-    "**Cart sync applies one update at a time now, and the two-tab race is gone.**\n\n✅ Tests pass · 🟠 Not committed · ⚪ Dev server on :5173\n\nSync applied every update with `Promise.all`, so they **raced**. Now a worker applies the next update when the current one settles:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\n**Needs you**\n1. Commit and push this?  A commit & push · B leave it for now\n2. Also cap retries at 30s?  A yes · B no\n\nI'd pick **1A, 2A**.\n\n**Details**\n- Updates apply in order\n- A failure stops the queue instead of being lost",
+    "**Cart sync applies one update at a time now, and the two-tab race is gone.**\n\n✅ Tests pass · 🟠 Not committed · ⚪ Dev server on :5173\n\nSync applied every update with `Promise.all`, so they **raced**. Now a worker applies the next update when the current one settles:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\n**Needs you**\n1. Commit and push this?  A commit & push · B leave it for now\n2. Also cap retries at 30s?  A yes · B no\n\nI'd pick **1A, 2A**.\n\n**Details**\n- Updates apply in order\n- A failure stops the queue instead of being lost\n\n" +
+      (agentId === "a3" ? "**🟠 Keep open:** the branch isn't pushed." : "**✅ Safe to close.** Nothing left in this thread."),
   );
   return { entries, dropped: 0 };
 }

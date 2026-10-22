@@ -73,6 +73,8 @@ export interface State {
   logos: Record<string, string | null>;
   /** A one-line flash at the bottom of the window, e.g. "x is already a project". */
   notice: string | null;
+  /** A button on the notice: "Undo". */
+  noticeAction: { label: string; run: () => void } | null;
   /** Projects whose folder is no longer on disk, by id (relocate.ts). */
   missingProjects: Record<string, true>;
   /** The files open in the preview, over or beside the terminal (preview.ts). */
@@ -114,6 +116,7 @@ let state: State = {
   epoch: 0,
   snapshots: 0,
   notice: null,
+  noticeAction: null,
   git: {},
   view: "sessions",
   review: null,
@@ -206,10 +209,10 @@ export function useAppState(): State {
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Show `notice` for `ms`; longer for a line that takes reading. */
-export function flash(notice: string, ms = 3500) {
+export function flash(notice: string, ms = 3500, action: { label: string; run: () => void } | null = null) {
   if (noticeTimer) clearTimeout(noticeTimer);
-  setState({ notice });
-  noticeTimer = setTimeout(() => setState({ notice: null }), ms);
+  setState({ notice, noticeAction: action });
+  noticeTimer = setTimeout(() => setState({ notice: null, noticeAction: null }), ms);
 }
 
 export function byId<T extends { id: string }>(rows: T[]): Record<string, T> {

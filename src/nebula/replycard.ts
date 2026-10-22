@@ -24,6 +24,13 @@ export interface Ask {
   options: Option[];
 }
 
+/** How a reply closes: whether the thread can be closed now, and why not. */
+export interface Verdict {
+  kind: "safe" | "keep" | "dont";
+  /** What's still open, or the note after "Safe to close". */
+  reason: string;
+}
+
 export interface Card {
   /** Inline Markdown, without the bold around it. */
   headline: string | null;
@@ -36,6 +43,28 @@ export interface Card {
   details: string | null;
   /** Absolute paths of the images the reply names, in order. */
   images: string[];
+  /** Its closing line, taken out of the rest. */
+  verdict: Verdict | null;
+}
+
+const VERDICT = /^\s*(?:[-*]\s+)?(✅|🟠|🔴)\s*(Safe to close|Keep open|Don['’]t close|Do not close)\b[.:]?\s*(.*)$/u;
+
+/** A line like "**🟠 Keep open:** waiting on 2", read as a verdict. */
+function verdictOf(line: string): Verdict | null {
+  const m = VERDICT.exec(line.replace(/\*\*|__/g, ""));
+  if (!m) return null;
+  const kind = m[1] === "✅" ? "safe" : m[1] === "🟠" ? "keep" : "dont";
+  return { kind, reason: m[3].replace(/^[.:]\s*/, "").trim() };
+}
+
+/** The verdict a reply closes with: its last line that reads as one. */
+export function readVerdict(text: string): Verdict | null {
+  const lines = text.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const v = verdictOf(lines[i]);
+    if (v) return v;
+  }
+  return null;
 }
 
 const TONES: [RegExp, Tone][] = [
@@ -133,6 +162,12 @@ function paragraphs(text: string): string[] {
 
 export function readCard(text: string): Card {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
+  // The closing verdict shows on its own, so it comes out of the rest.
+  let verdict: Verdict | null = null;
+  for (let i = lines.length - 1; i >= 0 && !verdict; i--) {
+    verdict = verdictOf(lines[i]);
+    if (verdict) lines.splice(i, 1);
+  }
   // Split into the part before any section, and the sections by name.
   const lead: string[] = [];
   const sections: Record<"needs" | "details", string[]> = { needs: [], details: [] };
@@ -209,6 +244,7 @@ export function readCard(text: string): Card {
     asksNote: note.join("\n").trim(),
     details: details || null,
     images,
+    verdict,
   };
 }
 

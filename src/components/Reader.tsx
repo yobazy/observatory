@@ -6,7 +6,8 @@ import { isPreview } from "../nebula/client";
 import { flash, getState } from "../nebula/store";
 import { enqueue, isIdle } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
-import { answersIn, answerText, isCard, suggested, pointerText, readCard, replyQuote, type Card } from "../nebula/replycard";
+import { closeThread } from "../nebula/verdicts";
+import { answersIn, answerText, isCard, suggested, pointerText, readCard, replyQuote, type Card, type Verdict } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { describe, openPreview, previewUrl } from "../nebula/preview";
 import type { Agent } from "../nebula/types";
@@ -92,6 +93,25 @@ function Pictures({ paths, from }: { paths: string[]; from: string }) {
   );
 }
 
+/** How the reply closes: safe to close, with the button that does it while
+ *  this is the latest reply, or what's keeping it open. */
+function VerdictLine({ verdict, onClose }: { verdict: Verdict; onClose?: () => void }) {
+  const label = verdict.kind === "safe" ? "Safe to close" : verdict.kind === "keep" ? "Keep open" : "Don't close";
+  return (
+    <footer className={`rd-verdict is-${verdict.kind}`}>
+      <span className="rd-verdict-text">
+        <b>{label}</b>
+        {verdict.reason && <span dangerouslySetInnerHTML={{ __html: toHtml(verdict.reason, true) }} />}
+      </span>
+      {verdict.kind === "safe" && onClose && (
+        <button className="btn btn-primary btn-sm" onClick={onClose} title="Archives the thread; Undo brings it back">
+          Close thread
+        </button>
+      )}
+    </footer>
+  );
+}
+
 /** A reply written as a card: headline, status, pictures, decisions to tap,
  *  and details folded away. Decisions only take taps on the latest reply. */
 function CardReply({
@@ -101,6 +121,7 @@ function CardReply({
   sent,
   picks,
   onPick,
+  onClose,
 }: {
   card: Card;
   from: string;
@@ -109,6 +130,7 @@ function CardReply({
   sent: boolean;
   picks: Record<number, string>;
   onPick: (n: number, letter: string) => void;
+  onClose?: () => void;
 }) {
   const headline = useMemo(() => (card.headline ? toHtml(card.headline, true) : ""), [card.headline]);
   return (
@@ -158,6 +180,7 @@ function CardReply({
           <Md text={card.details} />
         </details>
       )}
+      {card.verdict && <VerdictLine verdict={card.verdict} onClose={onClose} />}
     </article>
   );
 }
@@ -169,9 +192,18 @@ function Reply(props: {
   sent: boolean;
   picks: Record<number, string>;
   onPick: (n: number, letter: string) => void;
+  onClose?: () => void;
 }) {
   const card = useMemo(() => readCard(props.text), [props.text]);
-  return isCard(card) ? <CardReply card={card} {...props} /> : <Md text={props.text} />;
+  if (isCard(card)) return <CardReply card={card} {...props} />;
+  return card.verdict ? (
+    <>
+      <Md text={card.body} />
+      <VerdictLine verdict={card.verdict} onClose={props.onClose} />
+    </>
+  ) : (
+    <Md text={props.text} />
+  );
 }
 
 function Steps({ entry, root, fresh }: { entry: Entry; root: string; fresh: boolean }) {
@@ -399,6 +431,7 @@ export function Reader({
                       sent={e.n !== latest || showQueued}
                       picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : picks}
                       onPick={pick}
+                      onClose={e.n === latest && agent.status === "finished" && !agent.archived ? () => closeThread(agent) : undefined}
                     />
                     {!waiting && (
                       <button
