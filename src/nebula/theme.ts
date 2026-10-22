@@ -9,6 +9,7 @@ import { getState, setState, subscribe } from "./store";
 import type { FolderPrefs } from "./folders";
 import type { Idea } from "./ideaList";
 import type { TermFontPrefs } from "./termfont";
+import type { ThreadTagRecord } from "./threadtags";
 
 export type Mode = "system" | "dark" | "black" | "light";
 export const MODES: { id: Mode; label: string }[] = [
@@ -75,6 +76,11 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs {
   pinnedTasks?: Record<string, string[]>;
   /** Colors picked for tasks, by agent id: a PROJECT_COLORS name. */
   taskColors?: Record<string, string>;
+  /** Each project's tags for its threads, by repo path, in the order added
+   *  (threadtags.ts). Not the sidebar's `projectTags`, which tag projects. */
+  threadTagLists?: Record<string, string[]>;
+  /** The tags each thread carries, and who set them, by agent id. */
+  threadTags?: Record<string, ThreadTagRecord>;
   /** Tasks marked to come back to, by agent id: when they were marked (ms). */
   followUps?: Record<string, number>;
   /** Ideas not started yet, newest first (ideas.ts). */

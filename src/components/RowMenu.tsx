@@ -12,7 +12,7 @@ import { openLink, RunSetupDialog } from "./Run";
 import { openReview } from "../nebula/diff";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
 import { isFollowUp, isPinned, moveTask, toggleFlag, unpinAll, unpinTask } from "../nebula/organize";
-import { TaskColorDialog } from "./Organize";
+import { TaskColorDialog, ThreadTagsDialog } from "./Organize";
 import { moveThread } from "../nebula/moveThread";
 
 export type Seed = { task: string; kind: AgentKind };
@@ -21,7 +21,8 @@ type Dialog =
   | TextDialogSpec
   | ConfirmDialogSpec
   | { kind: "run-setup"; worktree: Worktree }
-  | { kind: "task-color"; agent: Agent };
+  | { kind: "task-color"; agent: Agent }
+  | { kind: "thread-tags"; agent: Agent };
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -143,6 +144,7 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
         ? [{ label: `Unpin all on ${wt?.branch ?? "this branch"}`, run: () => void attempt(unpinAll(a.worktree_id)) }]
         : []),
       { label: "Color…", run: () => setDialog({ kind: "task-color", agent: a }) },
+      { label: "Tags…", run: () => setDialog({ kind: "thread-tags", agent: a }) },
     ];
     const issue: MenuItem[] = a.issue_url ? [{ label: "Open issue", run: () => void openLink(a.issue_url!) }] : [];
 
@@ -319,6 +321,7 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
       {dialog?.kind === "text" && <TextDialog d={dialog} onClose={() => setDialog(null)} />}
       {dialog?.kind === "confirm" && <ConfirmDialog d={dialog} onClose={() => setDialog(null)} />}
       {dialog?.kind === "task-color" && <TaskColorDialog agent={dialog.agent} onClose={() => setDialog(null)} />}
+      {dialog?.kind === "thread-tags" && <ThreadTagsDialog agent={dialog.agent} onClose={() => setDialog(null)} />}
       {dialog?.kind === "run-setup" && (
         <RunSetupDialog
           worktree={dialog.worktree}
