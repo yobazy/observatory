@@ -118,3 +118,64 @@ Acceptance criteria:
 - Given an agent in another project is given the Settings instruction and asked to "hand this to Observatory", then it opens a link and the dialog shows a brief someone could act on without the original conversation (manual check with Claude and Codex).
 
 Status: done. Not yet checked by hand: a link opened while the app is closed, and briefs written by Claude and Codex from the Settings instruction.
+
+## Automations (S11 to S14)
+
+Problem: I have background jobs in three places: launchd agents on this Mac, Claude cloud routines, and a vault backup inside Obsidian. Nothing shows me whether they're healthy, so a broken job stays broken until I notice what it was supposed to do didn't happen. The check-up done while scoping this (2026-10-22) found exactly that. `com.bazil.todos-notion` isn't loaded in launchd, and its last log lines are a `PermissionError` on `~/Documents/Programming`. `wispr-watch --status` says "trigger url: missing, token: missing, last fired: never", so the meeting-finished trigger has never fired. The Hermes gateway's error log ends in `sqlite3.OperationalError: disk I/O error`. An Automations view puts every job in one list with its health, and lets me run it now.
+
+Principles, as above: nothing hardwired. The app knows kinds of job (launchd agent, cloud routine, watched folder), never specific jobs. Which agents show up comes from a label filter in Settings. Display names, status commands and watched folders come from an optional `~/.config/observatory/automations.json` that the user (or an agent) edits. Health checks are deterministic, with no model call. Tests use fixtures (plists, `launchctl print` output, API JSON, log tails) on Node's built-in runner and `cargo test`. Manual checks that run something use throwaway jobs, never the real ones. Build order: S11, S12, S13, S14. Enabling and disabling jobs comes later (see LATER.md).
+
+Where it lives: a view laid over sessions and terminal like Usage and Activity (`view: "automations"` in `store.ts`), opened from a sidebar footer button beside the usage chip. The button carries one dot for the worst health across all jobs, so a red job shows without opening anything.
+
+Decided (2026-10-22):
+1. Routines API: Run now goes through each routine's API trigger token, kept in the keychain (the `wispr-sync-routine` item wispr-watch already expects, one item per routine). Status, runs and logs come from a headless `claude -p --model haiku` call allowed only the RemoteTrigger tool, made when the view opens and on Refresh, never on a background timer. The app never holds the claude.ai login. The footer dot counts routines by their last fetched state.
+2. Placement: an overlay view like Usage, opened from a sidebar footer button carrying the health dot.
+
+### S11: Automations view with local launchd jobs (read-only)
+As a user, I want one view listing my launchd agents, each with where it runs, its schedule, its last run and result, its next run, a log tail and a health dot, so that I can see at a glance which background jobs are working.
+Notes: new `src-tauri/src/automations.rs` reads `~/Library/LaunchAgents/*.plist` (through `plutil -convert json`) and `launchctl print gui/<uid>/<label>` (loaded or not, pid, `last exit code`, `runs`). New `src/nebula/automations.ts` (pure: schedule text, next run, health, the job list) and `src/components/Automations.tsx`. Which labels show is set by a `automationLabels` pref in Settings, a list of prefixes. It starts as the prefixes of plists not from Apple, Google, Adobe or Valve, which today is `com.bazil.` and `ai.hermes.`. Schedule comes from `StartInterval`, `StartCalendarInterval`, `KeepAlive` and `WatchPaths`. Last run time is the newer mtime of the job's `StandardOutPath` and `StandardErrorPath` (launchd doesn't record it), so it's shown as "about". Next run is that time plus `StartInterval`, or the next `StartCalendarInterval` match. The log tail is the last 20 lines of those paths. Health: `ok`, `failing` (last exit code isn't 0, or the tail's last lines hold a traceback, `Error` or `error:`), `not loaded` (a plist with no launchd service), `stale` (no run in 3× its interval), `running` (always-on with a pid). The reason is one line: the exit code, or the last error line, clipped. Refreshes every 30 s while the view is open and every 5 min otherwise, for the footer dot (same pattern as `usage.ts`).
+Acceptance criteria:
+- Given the `com.bazil.todos-notion` plist fixture, when `scheduleText()` runs, then it returns "Every 5 min, and when 3 files change". Given `StartInterval: 7200`, then "Every 2 h". Given `KeepAlive: true`, then "Always on". Given a `StartCalendarInterval` of `{Hour: 9, Minute: 0}`, then "Daily at 9:00 am" (unit test).
+- Given `launchctl print` output reading "Could not find service", when `health()` runs, then it returns `not loaded`. Given `last exit code = 1`, then `failing` with "Exited with code 1". Given exit code 0 and a tail ending in `PermissionError: [Errno 1] Operation not permitted: '/Users/x/Documents/Programming'`, then `failing` with that line as the reason (unit test with fixtures).
+- Given a job every 120 s whose logs were last written 10 minutes ago, then `stale` with "No run in 10 min (expected every 2 min)". Given a `KeepAlive` job with a pid, then `running` (unit test).
+- Given plists for `com.bazil.a`, `com.google.keystone.agent` and `ai.hermes.gateway` with the default prefixes, then only `com.bazil.a` and `ai.hermes.gateway` are listed (unit test on the filter).
+- Given an `automations.json` entry naming `com.bazil.wispr-watch` "Wispr watcher", then the row shows that name, and the label otherwise (unit test).
+- Given one job `failing` and the rest `ok`, then the footer dot is red. All `ok` makes it green, and any `stale` or `not loaded` with nothing failing makes it orange (unit test on `worstHealth()`).
+- Given the app is running on this Mac, when the view is opened, then the four agents show. todos-notion shows `not loaded` with its PermissionError, and expanding a row shows its log tail (manual check, read-only).
+
+Status: todo
+
+### S12: Run now, open logs, and a status command for local jobs
+As a user, I want to run a launchd job now, open its full log, and see the job's own status command output, so that I can check a fix without waiting for the next interval.
+Notes: Run now is `launchctl kickstart gui/<uid>/<label>`. For an always-on job the button reads Restart and uses `kickstart -k`, after a confirm. A `not loaded` job's Run now is disabled, with "Not loaded in launchd" as its tooltip (loading it is the enable/disable work in LATER.md). Open log opens the log file in the app's file preview (`Preview.tsx`). An `automations.json` entry can give a `statusCommand` (for wispr-watch, `wispr-watch --status`). It runs through the Rust side with a 10 s timeout and no shell, and its output is shown under the log tail. After Run now, the row refreshes every 2 s for 30 s so the new run shows up. Manual checks use a throwaway agent that `scripts/sandbox.sh automations` installs (`com.observatory.sandbox-job`, echoes a line every 10 min to a log in the sandbox folder) and `scripts/sandbox.sh automations-clean` removes.
+Acceptance criteria:
+- Given a job with `StartInterval`, when Run now is pressed, then `kickstart` is called without `-k`. Given an always-on job, then the button reads Restart, a confirm appears, and `kickstart -k` is called only after it's accepted (unit test with a stubbed invoke).
+- Given a `not loaded` job, then Run now is disabled with "Not loaded in launchd" (unit test).
+- Given a `statusCommand` that prints 3 lines, then they show under the log tail. Given one that runs past 10 s, then "Status command timed out" shows instead and the app stays responsive (Rust test with `sleep`).
+- Given the sandbox job, when Run now is pressed, then a new line appears in its log tail within 5 s and its last run says "just now" (manual check).
+
+Status: todo
+
+### S13: Claude cloud routines in the view
+As a user, I want my Claude cloud routines in the same list, with schedule, last run and result, next run and the last run's log, plus Run now, so that cloud jobs and local jobs are checked in one place.
+Notes: the routines API (`/v1/code/triggers` and `/v1/code/sessions`) gives everything needed: `list` and `get` return `cron_expression`, `enabled`, `next_run_at` and `last_run` (`status`, `fired_at`, `finished_at`, `failure_reason`, `session_id`). `list_runs` gives recent runs, and `get_run_log` gives a run's condensed events. A per-routine API trigger token can only fire a run, not read anything, so reading needs the user's claude.ai login. How Observatory gets that is decision 1 above. New `src/nebula/routines.ts` (pure: maps API JSON to the same job rows as S11, cron to schedule text in the user's time zone, run status to health) and a Rust fetcher behind one `routines_*` command set. Health: `ok` (last run succeeded), `failing` (last run failed, with `failure_reason` or the log's last error as the reason), `paused` (`enabled: false`), `stale` (no run since a scheduled time more than 1 h ago). The log tail is the last 20 events of the last run. "Open on claude.ai" opens the routine's page. Run log text is data from a remote run: it's shown as plain text and never sent to a model.
+Acceptance criteria:
+- Given the Wispr routine's `get` fixture (`cron_expression: "0 1,13 * * *"`, UTC), when `scheduleText()` runs with zone America/Toronto, then it returns "Daily at 9:00 am and 9:00 pm". Given its `next_run_at`, then next run shows in local time (unit test).
+- Given `last_run.status: ROUTINE_RUN_STATUS_SUCCEEDED`, then `ok` with the run's duration. Given a failed run, then `failing` with its reason. Given `enabled: false`, then `paused` (unit test with fixtures).
+- Given a routine whose `next_run_at` is 3 h in the past and no newer run, then `stale` (unit test).
+- Given Run now is pressed, then the run call goes out once, the button shows "Starting…", and the new run is picked up from `list_runs` within 30 s (unit test with a stubbed fetcher).
+- Given the fetcher fails (signed out, network), then routines show one "Couldn't reach claude.ai: <error>" row, and local jobs are unaffected (unit test).
+- Given a throwaway test routine made for the check, when Run now is pressed in the app, then a run starts, finishes, and its log tail shows in the row (manual check; the two real routines are only read).
+
+Status: todo
+
+### S14: Watched folders, for jobs that run inside other apps
+As a user, I want jobs I can't run or query, such as the Obsidian Git vault backup, shown by when they last left a mark, so that a stopped backup turns red too.
+Notes: an `automations.json` entry of kind `folder`: `{name, path, every, match}`. Last run is the newest commit in `path` whose subject matches `match` (for Obsidian Git, `vault backup`), read through the existing `git.rs`. Without `match`, it's the newest file mtime in the folder. Health is `ok` within 3× `every` and `stale` past that. There's no Run now, and the row says "Runs inside Obsidian".
+Acceptance criteria:
+- Given a fixture repo whose last "vault backup" commit is 15 min old and `every: "10m"`, then `ok`. At 45 min, then `stale` with "No backup in 45 min (expected every 10 min)" (unit test).
+- Given a `path` that doesn't exist, then `failing` with "Folder not found" (unit test).
+- Given the real vault entry, then the row shows the last backup time (manual check, read-only).
+
+Status: todo
+
