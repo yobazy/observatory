@@ -143,7 +143,7 @@ Acceptance criteria:
 - Given one job `failing` and the rest `ok`, then the footer dot is red. All `ok` makes it green, and any `stale` or `not loaded` with nothing failing makes it orange (unit test on `worstHealth()`).
 - Given the app is running on this Mac, when the view is opened, then the four agents show. todos-notion shows `not loaded` with its PermissionError, and expanding a row shows its log tail (manual check, read-only).
 
-Status: todo
+Status: done. Not yet checked by hand in the running app: opening a row (checked in the browser preview and by a read-only run against the real agents).
 
 ### S12: Run now, open logs, and a status command for local jobs
 As a user, I want to run a launchd job now, open its full log, and see the job's own status command output, so that I can check a fix without waiting for the next interval.
