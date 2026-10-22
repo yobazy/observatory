@@ -19,10 +19,10 @@ test('only so many visits are kept', () => {
   assert.equal(v[0].repo, '/r/29');
 });
 
-test('recent leaves out the project you are in and ones that are gone, up to the count', () => {
+test('recent marks the project you are in, leaves out ones that are gone, up to the count', () => {
   const projects = ['a', 'b', 'c', 'd', 'e'].map(p);
   const v = ['/r/c', '/r/gone', '/r/a', '/r/b', '/r/d', '/r/e'].map((repo, i) => ({ repo, at: 10 - i }));
   const shown = recentProjects(v, projects, projects[2], 3);
-  assert.deepEqual(shown.map((r) => r.project.name), ['a', 'b', 'd']);
-  assert.equal(shown[0].at, 8);
+  assert.deepEqual(shown.map((r) => [r.project.name, r.here]), [['c', true], ['a', false], ['b', false]]);
+  assert.equal(shown[1].at, 8);
 });
