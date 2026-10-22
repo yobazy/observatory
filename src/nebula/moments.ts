@@ -70,18 +70,24 @@ let version: string | undefined;
 /** The browser preview has no app behind it: saving is pretended. */
 const inApp = () => "__TAURI_INTERNALS__" in globalThis;
 
+/** Save what's on screen now, screenshot included, without asking for a
+ *  note: the reader's "Point at this" uses it for the reply you mean. */
+export async function saveMoment(): Promise<{ dir: string; noScreenshot: string | null }> {
+  const now = new Date();
+  version ??= await import("@tauri-apps/api/app").then((m) => m.getVersion()).catch(() => undefined);
+  const moment: Moment = { t: now.toISOString(), version, note: null, state: snapshot(getState()), events: recentEvents(now.getTime()) };
+  return inApp()
+    ? await invoke<{ dir: string; noScreenshot: string | null }>("save_moment", { stamp: moment.t, moment })
+    : { dir: `~/Library/Application Support/dev.bazil.observatory/moments/${moment.t}`, noScreenshot: null };
+}
+
 /** Save this moment, before anything else shows, so the screenshot is of
  *  what you saw. */
 export async function markMoment() {
   if (mark.kind === "saving") return;
   setMark({ kind: "saving" });
-  const now = new Date();
   try {
-    version ??= await import("@tauri-apps/api/app").then((m) => m.getVersion()).catch(() => undefined);
-    const moment: Moment = { t: now.toISOString(), version, note: null, state: snapshot(getState()), events: recentEvents(now.getTime()) };
-    const saved = inApp()
-      ? await invoke<{ dir: string; noScreenshot: string | null }>("save_moment", { stamp: moment.t, moment })
-      : { dir: `~/Library/Application Support/dev.bazil.observatory/moments/${moment.t}`, noScreenshot: null };
+    const saved = await saveMoment();
     setMark({ kind: "saved", dir: saved.dir, noScreenshot: saved.noScreenshot });
   } catch (e) {
     setMark({ kind: "error", message: e instanceof Error ? e.message : String(e) });
