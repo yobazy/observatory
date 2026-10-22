@@ -51,6 +51,7 @@ import { useUpdateCheck } from "./nebula/updates";
 import { useFolderWatch } from "./nebula/relocate";
 import { usePreviewEvents } from "./nebula/preview";
 import { useShelf } from "./nebula/shelf";
+import { previousThread, trackRecent } from "./nebula/recentThreads";
 import { HoverCard, PreviewPane } from "./components/Preview";
 import { Palette, type PaletteContext } from "./components/Palette";
 import { MomentCard } from "./components/Moments";
@@ -185,6 +186,7 @@ export default function App() {
   useProjectLogos();
   useMinuteClock();
   useLeaveUsageOnSelect();
+  useEffect(trackRecent, []);
   const { view, preview, prefs } = useAppState();
   const previewBeside = !!preview && prefs.previewPlacement === "beside";
   const [sidebarW, setSidebarW] = useColumnWidth(SIDEBAR);
@@ -239,7 +241,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I the ideas; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I the ideas; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you; ⌘[ goes back to the thread open before this one.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -282,6 +284,9 @@ export default function App() {
         const size = zoomed(prefs, e.key === "0" ? 0 : e.key === "-" ? -1 : 1);
         if (size !== termFont(prefs).size) void savePrefs({ ...prefs, terminalFontSize: size });
         flash(`Terminal text ${size} pt`, 1200);
+      } else if (e.key === "[") {
+        e.preventDefault();
+        previousThread();
       } else if (e.key === "j") {
         e.preventDefault();
         const s = getState();
