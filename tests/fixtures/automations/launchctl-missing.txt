@@ -1,0 +1,2 @@
+Bad request.
+Could not find service "com.bazil.todos-notion" in domain for user gui: 501

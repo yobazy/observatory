@@ -6829,3 +6829,148 @@ button.board-main:hover .board-text {
   color: var(--muted);
   font-size: 12.5px;
 }
+
+/* Automations (Automations.tsx): one row per background job with its
+   health dot, opened to its details and log tail. */
+.auto-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--st-idle);
+}
+.auto-dot.is-green {
+  background: var(--st-done);
+}
+.auto-dot.is-orange {
+  background: var(--amber);
+}
+.auto-dot.is-red {
+  background: var(--st-error);
+}
+.auto-btn {
+  position: relative;
+}
+.auto-btn-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.auto-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.auto-job {
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.auto-head {
+  display: grid;
+  grid-template-columns: 9px 8px minmax(140px, 1.3fr) minmax(110px, 1fr) minmax(100px, 0.8fr) minmax(100px, 0.8fr) minmax(140px, 1.4fr);
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  padding: 10px 12px 10px 4px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+}
+.auto-head:hover {
+  background: var(--raised);
+}
+.auto-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--r-sm);
+}
+.auto-name,
+.auto-cell,
+.auto-health {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.auto-title {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.auto-label,
+.auto-reason {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.auto-k {
+  color: var(--faint);
+  font-size: 11px;
+}
+.auto-health.is-red .auto-k {
+  color: var(--st-error);
+  font-weight: 600;
+}
+.auto-health.is-orange .auto-k {
+  color: var(--amber);
+  font-weight: 600;
+}
+.auto-health.is-green .auto-k {
+  color: var(--st-done);
+}
+.auto-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 14px 33px;
+}
+.auto-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.auto-facts dt {
+  color: var(--faint);
+}
+.auto-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.auto-mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.auto-tail {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--term);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+.auto-detail .usage-note {
+  margin-left: 0;
+}

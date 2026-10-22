@@ -1,4 +1,5 @@
 mod activity;
+mod automations;
 mod cards;
 mod codex_log;
 mod daemon;
@@ -81,6 +82,7 @@ pub fn run() {
             serving::local_ports_open,
             activity::activity_report,
             activity::stop_process,
+            automations::automations_report,
             thread_edits::thread_edits,
             turns::thread_turn,
             transcript::thread_transcript,

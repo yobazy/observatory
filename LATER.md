@@ -22,3 +22,4 @@
 - Enable and disable a launchd job from the Automations view (`launchctl bootstrap` / `bootout`, with a confirm), and the same for a cloud routine (`enabled` through the routines API). Why: the panel starts read-only plus Run now (2026-10-22).
 - A banner when a job turns red, through `notify.ts` and respecting quiet hours. Why: the footer dot covers it until the view has proven which failures are real.
 - Add a job from the Automations view (write a plist, or create a routine). Why: jobs are made in agent threads today; the view only watches them.
+- Automations: a job that exits 0 without writing to its log (wispr-watch, mailwatch) reads `stale`, since last run is the log mtime; the `runs` count from `launchctl print` changing between reads could show it did run.

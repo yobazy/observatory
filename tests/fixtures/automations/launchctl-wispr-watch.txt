@@ -1,0 +1,30 @@
+gui/501/com.bazil.wispr-watch = {
+	active count = 0
+	path = /Users/x/Library/LaunchAgents/com.bazil.wispr-watch.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /bin/bash
+	arguments = {
+		/bin/bash
+		/Users/x/.local/bin/wispr-watch
+	}
+
+	stderr path = /Users/x/Library/Logs/wispr-watch.log
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		XPC_SERVICE_NAME => com.bazil.wispr-watch
+	}
+
+	domain = gui/501 [100005]
+	runs = 77
+	last exit code = 0
+
+	run interval = 120 seconds
+
+	job state = exited
+	properties = runatload | inferred program
+}
