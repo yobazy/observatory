@@ -70,6 +70,7 @@ function agent(
     session_id: `s-${id}`,
     cloud_session_id: null,
     issue_url: null,
+    role: "worker",
     sort_order: 0,
     alive: true,
     recent_prompts: prompts.map((text, i) => ({ text, submitted_at: now - (ago + i) * min })),

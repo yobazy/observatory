@@ -66,9 +66,8 @@ it would do without changing anything, and `--help` lists the other options.
 - **New task** (`⌘N`): on an existing branch or a new worktree (the branch name is suggested from
   the task), with your choice of agent and preset.
 - **Moved a project's folder?** Its row says the folder is missing, and **Locate…** points the
-  project at the new place, carrying its icon, color, settings and Claude Code history with it
-  (this needs a nebula release with `SetProjectPath`; until then it says so). Right-click a
-  project to **Remove from list**; nothing on disk is touched.
+  project at the new place, carrying its icon, color, settings and Claude Code history with it.
+  Right-click a project to **Remove from list**; nothing on disk is touched.
 
 **Previews**
 
@@ -171,7 +170,7 @@ The daemon only accepts clients built with its exact `PROTOCOL_VERSION`. `nebula
 by tag in `src-tauri/Cargo.toml`:
 
 ```toml
-nebula-core = { git = "https://github.com/AgentSystemLabs/nebula", tag = "v0.40.2" }
+nebula-core = { git = "https://github.com/AgentSystemLabs/nebula", tag = "v0.45.0" }
 ```
 
 After `nebula upgrade`, bump the tag and rebuild (`./scripts/setup.sh` picks up the new tag and
