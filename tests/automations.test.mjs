@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
   ago,
+  expectedEvery,
   health,
   jobList,
   nextRun,
@@ -11,6 +12,7 @@ import {
   scheduleText,
   shownLabels,
   track,
+  until,
   worstHealth,
 } from '../src/nebula/automations.ts';
 
@@ -77,7 +79,7 @@ test('health: last exit code 1 is failing with "Exited with code 1"', () => {
 });
 
 test('health: exit code 0 with a PermissionError ending the tail is failing with that line', () => {
-  const tail = text('todos-notion.log').trimEnd().split('\n');
+  const tail = text('todos-notion.log.txt').trimEnd().split('\n');
   assert.deepEqual(health(raw({ tail }), NOW), {
     health: 'failing',
     reason: "PermissionError: [Errno 1] Operation not permitted: '/Users/x/Documents/Programming'",
@@ -112,7 +114,7 @@ test('runs: a silent job watched 2 min with a 2 min interval is not stale yet', 
   const label = 'com.bazil.wispr-watch';
   const w = track({}, [{ label, launchctl: printed(77) }], NOW - 2 * MIN);
   const silent = raw({ label, plist: plist('com.bazil.wispr-watch.plist'), launchctl: printed(77), lastWrite: null, tail: [] });
-  assert.deepEqual(health(silent, NOW, w[label]), { health: 'ok', reason: 'Last run not seen yet' });
+  assert.deepEqual(health(silent, NOW, w[label]), { health: 'ok', reason: 'Watching for its next run' });
   // A log written long ago is still no sign of a run while watched briefly.
   assert.equal(health({ ...silent, lastWrite: NOW - 3 * 60 * MIN }, NOW, w[label]).health, 'ok');
 });
@@ -170,4 +172,36 @@ test('worstHealth: any failing is red, all ok green, stale or not loaded orange'
   assert.equal(worstHealth(['not loaded', 'ok']), 'orange');
   assert.equal(worstHealth(['stale', 'failing']), 'red');
   assert.equal(worstHealth([]), null);
+});
+
+test('runs: a count that went down but not to 0 (launchd reloaded it) counts as a run', () => {
+  const label = 'com.bazil.wispr-watch';
+  let w = track({}, [{ label, launchctl: printed(77) }], NOW - 5 * MIN);
+  w = track(w, [{ label, launchctl: printed(2) }], NOW);
+  assert.equal(w[label].ranAt, NOW);
+  assert.equal(w[label].runs, 2);
+  w = track(w, [{ label, launchctl: printed(0) }], NOW + MIN);
+  assert.equal(w[label].ranAt, NOW);
+});
+
+test('next run: past due reads "Due now", and "Overdue" only once stale', () => {
+  assert.equal(until(NOW - MIN, NOW), 'Due now');
+  assert.equal(until(NOW - MIN, NOW, true), 'Overdue');
+  assert.equal(until(NOW + 3 * MIN, NOW), 'In 3 min');
+});
+
+test('next run: a leap-day calendar entry is found years ahead', () => {
+  const leap = { StartCalendarInterval: { Month: 2, Day: 29, Hour: 9, Minute: 0 } };
+  assert.equal(nextRun(leap, null, true, NOW), new Date(2028, 1, 29, 9, 0).getTime());
+  // From just after one leap day, the next is nearly 4 years on.
+  assert.equal(nextRun(leap, null, true, new Date(2028, 1, 29, 10).getTime()), new Date(2032, 1, 29, 9, 0).getTime());
+});
+
+test('calendar: {Hour: 9} with no Minute runs every minute of 9 am, but is stale-checked daily', () => {
+  const nine = { StartCalendarInterval: { Hour: 9 } };
+  assert.equal(expectedEvery(nine), 24 * 60 * MIN);
+  const at = new Date(2026, 9, 23, 9, 0).getTime();
+  assert.equal(nextRun(nine, null, true, at + 5 * MIN), at + 5 * MIN);
+  assert.equal(nextRun(nine, null, true, at + 60 * MIN), at + 24 * 60 * MIN);
+  assert.equal(expectedEvery({ StartCalendarInterval: { Minute: 30 } }), 60 * MIN);
 });

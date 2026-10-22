@@ -294,7 +294,7 @@ mod tests {
     fn one_log_for_both_streams_is_read_once() {
         let dir = scratch("same");
         let log = dir.join("job.log");
-        std::fs::copy(fixture("todos-notion.log"), &log).unwrap();
+        std::fs::copy(fixture("todos-notion.log.txt"), &log).unwrap();
         let p = log.to_string_lossy().into_owned();
         let (last, tail) = logs(&[p.clone(), p]);
         assert!(last.is_some());

@@ -174,8 +174,20 @@ export function expectedEvery(p: Plist): number | null {
   if (p.StartInterval) return p.StartInterval * 1000;
   const cal = calendar(p);
   if (!cal.length) return null;
+  // The period is set by the coarsest key given: {Hour: 9} runs every minute
+  // of 9 am (a missing key is a wildcard), but only on one hour a day.
   const each = cal.map((e) =>
-    e.Minute == null ? MIN : e.Hour == null ? HOUR : e.Month != null || e.Day != null ? 31 * DAY : e.Weekday != null ? 7 * DAY : DAY,
+    e.Month != null
+      ? 366 * DAY
+      : e.Day != null
+        ? 31 * DAY
+        : e.Weekday != null
+          ? 7 * DAY
+          : e.Hour != null
+            ? DAY
+            : e.Minute != null
+              ? HOUR
+              : MIN,
   );
   // Several entries of the same kind share the period between them.
   const longest = Math.max(...each);
@@ -184,12 +196,15 @@ export function expectedEvery(p: Plist): number | null {
 
 const matches = (want: number | undefined, got: number) => want == null || want === got;
 
+/** How far ahead a calendar match is looked for: past the next Feb 29. */
+const SEARCH_DAYS = 4 * 366 + 1;
+
 /** The first minute at or after `from` that matches an entry, local time. */
 export function nextCalendarRun(entries: CalendarEntry[], from: number): number | null {
   const start = new Date(from);
   start.setSeconds(0, 0);
   if (start.getTime() < from) start.setMinutes(start.getMinutes() + 1);
-  for (let d = 0; d < 400; d++) {
+  for (let d = 0; d < SEARCH_DAYS; d++) {
     const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + d);
     let best: number | null = null;
     for (const e of entries) {
@@ -252,7 +267,9 @@ export interface Watch {
 export type Watches = Record<string, Watch>;
 
 /** The watches after a read at `now`: new labels start being watched, a
- *  `runs` count that went up marks a run, labels gone are dropped. */
+ *  `runs` count that went up marks a run, and so does one that went down
+ *  but not to 0 (launchd reloaded it, and it has run since); labels gone
+ *  are dropped. */
 export function track(prev: Watches, jobs: Pick<RawJob, "label" | "launchctl">[], now: number): Watches {
   const next: Watches = {};
   for (const j of jobs) {
@@ -262,7 +279,7 @@ export function track(prev: Watches, jobs: Pick<RawJob, "label" | "launchctl">[]
       next[j.label] = { since: now, runs, ranAt: null };
       continue;
     }
-    const ran = runs != null && was.runs != null && runs > was.runs;
+    const ran = runs != null && was.runs != null && (runs > was.runs || (runs < was.runs && runs > 0));
     next[j.label] = { since: was.since, runs, ranAt: ran ? now : was.ranAt };
   }
   return next;
@@ -275,7 +292,8 @@ export function lastRunOf(lastWrite: number | null, watch: Watch | undefined): n
   return ranAt == null ? lastWrite : Math.max(lastWrite, ranAt);
 }
 
-export const NOT_SEEN = "Last run not seen yet";
+/** No recent sign of a run, but not watched long enough to call it stale. */
+export const WATCHING = "Watching for its next run";
 
 export function health(
   raw: Pick<RawJob, "plist" | "launchctl" | "lastWrite" | "tail">,
@@ -295,7 +313,7 @@ export function health(
     // No sign of a run in 3× its interval. Only stale once the app has
     // watched that long: a quiet job may have run before it started looking.
     const watched = watch ? now - watch.since : 0;
-    if (watched < 3 * every) return { health: "ok", reason: NOT_SEEN };
+    if (watched < 3 * every) return { health: "ok", reason: WATCHING };
     const gap = last == null ? watched : now - last;
     return {
       health: "stale",
@@ -421,11 +439,12 @@ export function ago(ms: number | null, now: number): string {
   return `About ${span(roundTo(gap))} ago`;
 }
 
-/** "in 3 min", "at 2:30 am", "tomorrow at 9:00 am", "overdue". */
-export function until(ms: number | null, now: number): string {
+/** "in 3 min", "at 2:30 am", "tomorrow at 9:00 am"; past due, "Due now",
+ *  or "Overdue" once the job is stale. */
+export function until(ms: number | null, now: number, stale = false): string {
   if (ms == null) return "—";
   const gap = ms - now;
-  if (gap < 0) return "Overdue";
+  if (gap < 0) return stale ? "Overdue" : "Due now";
   if (gap < MIN) return "Any moment";
   if (gap < HOUR) return `In ${span(roundTo(gap))}`;
   const d = new Date(ms);

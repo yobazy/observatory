@@ -109,7 +109,7 @@ export function AutomationsView() {
                     </span>
                     <span className="auto-cell" title={j.nextRun ? new Date(j.nextRun).toLocaleString() : undefined}>
                       <span className="auto-k">Next run</span>
-                      {until(j.nextRun, now)}
+                      {until(j.nextRun, now, j.health === "stale")}
                     </span>
                     <span className={`auto-health is-${toneOf(j.health)}`}>
                       <span className="auto-k">{HEALTH_LABEL[j.health]}</span>
