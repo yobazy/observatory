@@ -13,7 +13,7 @@ import { agentSpec, harnessLabel, KIND_LABEL, lastPrompt, relativeTime, statusLa
 import { request } from "../nebula/client";
 import { changedFiles, neverPushed, shipKind, type GitState, type GitStatus } from "../nebula/git";
 import { runOnWorktree, SHIP_LABEL, shipPrompt, shipWhat, takerFor } from "../nebula/actions";
-import { BandRunButton, BandRunLine, ProjectRun } from "./Run";
+import { AgentServerMark, BandRunButton, BandRunLine, ProjectRun } from "./Run";
 import { PrLine } from "./Pr";
 import { useHoverPreview } from "./HoverPreview";
 import { fanOutOf, openCompare } from "../nebula/fanout";
@@ -672,6 +672,7 @@ function AgentRow({
         </span>
       </span>
       <span className="row-age">
+        <AgentServerMark agentId={agent.id} />
         {flagged && (
           <span className="row-mark mark-flag" role="img" title="Flagged for follow-up (F)" aria-label="Flagged for follow-up">
             <FlagGlyph />

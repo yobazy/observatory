@@ -19,8 +19,9 @@ import { addIdea } from "../nebula/ideas";
 import { termFont, whenLoaded } from "../nebula/termfont";
 import { linkPaths, osc8Links } from "../nebula/termpaths";
 import { watchForFiles, type FileWatch } from "../nebula/shelf";
-import { afterClosing } from "../nebula/recent";
+import { afterClosing } from "../nebula/recentThreads";
 import { isSliding } from "./Resizer";
+import { AgentServerLink } from "./Run";
 
 const THEME = {
   background: "#0f1524",
@@ -87,6 +88,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const current = useRef<SessionRef | null>(null);
   const [ready, setReady] = useState(false);
   const [exited, setExited] = useState<number | null | undefined>(undefined);
+  const [scrolledUp, setScrolledUp] = useState(false);
   // The numbered menu at the bottom of the screen, if there is one.
   const [menu, setMenu] = useState<Question | null>(null);
   const [dialog, setDialog] = useState<TextDialogSpec | null>(null);
@@ -163,8 +165,27 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
         if (current.current) void sendInput(current.current, "\x1b\r");
         return false;
       }
+      // ⌘↑/⌘↓ page through the scrollback; ⇧⌘↑/⇧⌘↓ go to either end.
+      if (e.metaKey && !e.altKey && !e.ctrlKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        if (e.type === "keydown") {
+          e.preventDefault();
+          const up = e.key === "ArrowUp";
+          if (e.shiftKey) {
+            if (up) t.scrollToTop();
+            else t.scrollToBottom();
+          } else t.scrollPages(up ? -1 : 1);
+        }
+        return false;
+      }
       return true;
     });
+    // Scrolled up off the end, so offer the way back.
+    const onMoved = () => {
+      const b = t.buffer.active;
+      setScrolledUp(b.viewportY < b.baseY);
+    };
+    t.onScroll(onMoved);
+    t.onWriteParsed(onMoved);
     t.onData((data) => {
       const ref = current.current;
       if (!ref) return;
@@ -331,6 +352,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
                 </span>
               )}
               {!agent && <span>Shell</span>}
+              {agent && <AgentServerLink agentId={agent.id} />}
               {agent && harnessLabel(agent) !== usualHarness(Object.values(state.agents)) && <span>{harnessLabel(agent)}</span>}
               {project && (
                 <span>
@@ -413,7 +435,19 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       {agent && <ShelfStrip agent={agent} worktree={wt} items={state.shelf[agent.id]} />}
       <div className="pane-body" data-drop-session={key ?? undefined}>
         <div ref={host} className={`xterm-host${exists ? "" : " is-hidden"}`} />
-        {reading && agent && <Reader key={agent.id} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} question={asking} onPick={answer} />}
+        {reading && agent && <Reader key={`${agent.id}:${agent.session_id}`} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} question={asking} onPick={answer} />}
+        {exists && scrolledUp && !reading && (
+          <button
+            className="btn pane-latest"
+            title="⌘↑ and ⌘↓ go a page at a time. Hold ⌥ while you scroll to go five times faster."
+            onClick={() => {
+              term.current?.scrollToBottom();
+              term.current?.focus();
+            }}
+          >
+            Jump to latest <kbd>⇧⌘↓</kbd>
+          </button>
+        )}
         {!exists && (
           <div className="pane-empty">
             <p>Open a session from the list, or start something new.</p>

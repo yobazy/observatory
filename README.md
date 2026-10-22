@@ -58,6 +58,8 @@ it would do without changing anything, and `--help` lists the other options.
 - **Worktree bands**: sessions grouped by branch, with the ones that need you first. Switching
   projects brings back the session you last had open there.
 - **Terminal**: attach to any agent or shell. Shift+Enter inserts a newline in Claude Code.
+  `⌘↑`/`⌘↓` page through the scrollback and `⇧⌘↑`/`⇧⌘↓` jump to either end; hold `⌥` while
+  scrolling to go five times faster. Scrolled up, a **Jump to latest** button takes you back.
 - **Right-click a task** for the TUI's menu: follow-up prompt, restart, duplicate, rename,
   archive, run or stop the dev server, open the worktree, delete.
 - **Hide either column** with `⌘B` (projects) and `⌥⌘B` (tasks), or drag them to resize.
@@ -99,6 +101,9 @@ it would do without changing anything, and `--help` lists the other options.
 - **Start** runs the project's run command (the Project setting, or `run` in `.nebula.json`) in the
   worktree's run terminal. Once the dev server prints its address, the band shows it as a link.
 - No run command yet? Type one, or ask an agent to work it out and write `.nebula.json`.
+- **An agent started the server itself?** The address it printed shows above its terminal and as
+  the port on its row, so it's one click away. Running more than one? **+N** lists them all. Only
+  addresses that answer show, and one turns grey once its server stops.
 
 **Agent usage** (`⌘U`)
 

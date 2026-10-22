@@ -22,7 +22,7 @@ import { selectAgent } from "./Sidebar";
 import type { TextDialogSpec } from "./Dialogs";
 import type { Agent } from "../nebula/types";
 import { homeCard } from "../nebula/cards";
-import { afterClosing, recentThreads } from "../nebula/recent";
+import { afterClosing, recentThreads } from "../nebula/recentThreads";
 
 export interface PaletteContext {
   newTask: () => void;

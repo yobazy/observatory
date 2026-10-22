@@ -1,68 +1,79 @@
-import { getState, setState, subscribe, type State } from "./store.ts";
-import type { Agent } from "./types";
+// The projects you've been in lately, most recent first, for the Recent panel
+// under the sidebar's projects. Kept by repo path, like folders and tags, and
+// remembered per Mac: which project you looked at is known only to this app.
+import { useEffect, useState } from "react";
+import { getState, subscribe } from "./store";
+import { RECENT_COUNTS, visit, type RecentCount, type Visit } from "./recentList";
 
-const KEY = "observatory.recent";
-const MAX = 20;
+const KEY = "observatory.recentProjects";
+const COUNT_KEY = "observatory.sidebar.recentCount";
 
-function load(): string[] {
+function load(): Visit[] {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "[]");
-    return Array.isArray(raw) ? raw.filter((id) => typeof id === "string") : [];
+    return Array.isArray(raw) ? raw.filter((v) => typeof v?.repo === "string" && typeof v?.at === "number") : [];
   } catch {
     return [];
   }
 }
 
-let recent: string[] = load();
+let visits: Visit[] = load();
+const listeners = new Set<() => void>();
 
-/** `ids` with `id` moved to the front, at most MAX long. */
-export function visit(ids: string[], id: string): string[] {
-  return [id, ...ids.filter((x) => x !== id)].slice(0, MAX);
+/** Mount once: notes each project you arrive in. */
+export function useRecentTracking() {
+  useEffect(() => {
+    let last: string | null = null;
+    const check = () => {
+      const s = getState();
+      const repo = s.selectedProject ? s.projects[s.selectedProject]?.repo_path : undefined;
+      if (!repo || repo === last) return;
+      last = repo;
+      visits = visit(visits, repo, Date.now());
+      try {
+        localStorage.setItem(KEY, JSON.stringify(visits));
+      } catch {
+        // A convenience: without storage it lasts until the app quits.
+      }
+      listeners.forEach((l) => l());
+    };
+    check();
+    return subscribe(check);
+  }, []);
 }
 
-/** Threads you've opened, most recent first: not the open one, nor any
- *  archived or gone since. */
-export function recentThreads(s: State, ids: string[] = recent): Agent[] {
-  const sel = s.selectedSession;
-  const open = sel && "Agent" in sel ? sel.Agent : null;
-  return ids
-    .filter((id) => id !== open)
-    .map((id) => s.agents[id])
-    .filter((a): a is Agent => !!a && !a.archived);
+/** The visits so far, kept current. */
+export function useVisits(): Visit[] {
+  const [now, setNow] = useState(visits);
+  useEffect(() => {
+    const update = () => setNow(visits);
+    listeners.add(update);
+    return () => {
+      listeners.delete(update);
+    };
+  }, []);
+  return now;
 }
 
-/** The selection once the open thread or shell closes: the thread you had
- *  open before it, else nothing. */
-export function afterClosing(s: State, ids: string[] = recent): Partial<State> {
-  const back = recentThreads(s, ids)[0];
-  if (!back) return { selectedSession: null };
-  return {
-    selectedProject: s.worktrees[back.worktree_id]?.project_id ?? s.selectedProject,
-    selectedSession: { Agent: back.id },
-  };
-}
-
-/** Remembers each thread as it's opened, from anywhere; returns the unsubscribe. */
-export function trackRecent(): () => void {
-  let last: string | null = null;
-  const note = () => {
-    const sel = getState().selectedSession;
-    const id = sel && "Agent" in sel ? sel.Agent : null;
-    if (!id || id === last) return;
-    last = id;
-    recent = visit(recent, id);
+/** How many the panel shows: 3, 5 or 7, remembered per Mac. */
+export function useRecentCount(): [RecentCount, (n: RecentCount) => void] {
+  const [count, setCount] = useState<RecentCount>(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify(recent));
+      const n = Number(localStorage.getItem(COUNT_KEY));
+      return (RECENT_COUNTS as readonly number[]).includes(n) ? (n as RecentCount) : RECENT_COUNTS[0];
     } catch {
-      // A convenience: the list starts over next launch.
+      return RECENT_COUNTS[0];
     }
-  };
-  note();
-  return subscribe(note);
-}
-
-/** ⌘[: back to the thread you had open before this one. */
-export function previousThread() {
-  const s = getState();
-  if (recentThreads(s).length) setState(afterClosing(s));
+  });
+  return [
+    count,
+    (n) => {
+      setCount(n);
+      try {
+        localStorage.setItem(COUNT_KEY, String(n));
+      } catch {
+        // Remembering it is a nicety.
+      }
+    },
+  ];
 }

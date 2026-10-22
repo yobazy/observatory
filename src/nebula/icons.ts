@@ -68,12 +68,14 @@ export async function setProjectIcon(repo: string, choice: ProjectIconChoice | n
   await savePrefs({ ...prefs, projectIcons });
 }
 
-/** Pick an image file for an icon; null when the picker is cancelled. */
-export async function pickIconImage(): Promise<string | null> {
+/** Pick an image file for an icon, starting in the project's folder; null
+ *  when the picker is cancelled. */
+export async function pickIconImage(repo: string): Promise<string | null> {
   if (isPreview()) return previewLogo("#5fd4b0", "◆");
   const { open } = await import("@tauri-apps/plugin-dialog");
   const path = await open({
     title: "Choose an icon",
+    defaultPath: repo,
     filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"] }],
   });
   if (typeof path !== "string") return null;
@@ -83,6 +85,21 @@ export async function pickIconImage(): Promise<string | null> {
 function previewLogo(color: string, glyph: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${color}"/><text x="16" y="22" font-size="16" text-anchor="middle" fill="white" font-family="sans-serif">${glyph}</text></svg>`;
   return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+}
+
+/** An image in a project that could be its icon, as a data URL. */
+export type FoundImage = { path: string; url: string };
+
+/** Images the project keeps that look like icons, for the picker to offer. */
+export async function findProjectImages(repo: string): Promise<FoundImage[]> {
+  if (isPreview()) {
+    return [
+      { path: "public/favicon.svg", url: previewLogo("#7c5cff", "S") },
+      { path: "src-tauri/icons/icon.png", url: previewLogo("#f2804b", "▲") },
+      { path: "assets/brand/mark.svg", url: previewLogo("#3b82f6", "●") },
+    ];
+  }
+  return invoke<FoundImage[]>("project_images", { repo });
 }
 
 async function findLogo(repo: string): Promise<string | null> {

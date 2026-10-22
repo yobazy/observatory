@@ -122,9 +122,12 @@ export function watchForFiles(t: Terminal, owner: () => string | null, cwd: () =
     for (let y = from; y < buf.length; y++) {
       // Rows joined into one line are read once, from its first row.
       if (y > from && buf.getLine(y)?.isWrapped) continue;
-      for (const f of findPaths(logicalLine((i) => textRow(t, i), y, t.cols).text)) {
+      const line = logicalLine((i) => textRow(t, i), y, t.cols);
+      for (const f of findPaths(line.text)) {
         if (WORTH.test(f.text)) seen.add(f.text);
       }
+      // So are rows an app wrapped, which the line above already took in.
+      y = Math.max(y, line.last);
     }
     if (!seen.size) return;
     const candidates = [...seen];

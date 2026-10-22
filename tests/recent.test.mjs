@@ -1,36 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { recentProjects, visit } from '../src/nebula/recentList.ts';
 
-globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+const p = (repo) => ({ id: repo, repo_path: `/r/${repo}`, name: repo });
 
-const { visit, recentThreads, afterClosing } = await import('../src/nebula/recent.ts');
-
-const agent = (id, wt = 'w1', over = {}) => ({ id, worktree_id: wt, name: id, archived: false, ...over });
-const state = (agents, open) => ({
-  agents: Object.fromEntries(agents.map((a) => [a.id, a])),
-  worktrees: { w1: { id: 'w1', project_id: 'p1' }, w2: { id: 'w2', project_id: 'p2' } },
-  selectedProject: 'p1',
-  selectedSession: open ? { Agent: open } : null,
+test('a visit moves its project to the front, once', () => {
+  let v = [];
+  v = visit(v, '/r/a', 1);
+  v = visit(v, '/r/b', 2);
+  v = visit(v, '/r/a', 3);
+  assert.deepEqual(v, [{ repo: '/r/a', at: 3 }, { repo: '/r/b', at: 2 }]);
 });
 
-test('visiting a thread moves it to the front, once', () => {
-  assert.deepEqual(visit(['a', 'b', 'c'], 'c'), ['c', 'a', 'b']);
-  assert.deepEqual(visit([], 'a'), ['a']);
-  const many = Array.from({ length: 30 }, (_, i) => `t${i}`);
-  assert.equal(visit(many, 'new').length, 20);
+test('only so many visits are kept', () => {
+  let v = [];
+  for (let i = 0; i < 30; i++) v = visit(v, `/r/${i}`, i);
+  assert.equal(v.length, 20);
+  assert.equal(v[0].repo, '/r/29');
 });
 
-test('recent threads leave out the open one, archived ones and ones gone', () => {
-  const s = state([agent('a'), agent('b', 'w1', { archived: true }), agent('c')], 'a');
-  assert.deepEqual(recentThreads(s, ['a', 'b', 'gone', 'c']).map((a) => a.id), ['c']);
-});
-
-test('closing a thread goes back to the one before it, in its project', () => {
-  const s = state([agent('a'), agent('b', 'w2')], 'a');
-  assert.deepEqual(afterClosing(s, ['a', 'b']), { selectedProject: 'p2', selectedSession: { Agent: 'b' } });
-});
-
-test('closing the only thread leaves nothing open', () => {
-  const s = state([agent('a')], 'a');
-  assert.deepEqual(afterClosing(s, ['a']), { selectedSession: null });
+test('recent leaves out the project you are in and ones that are gone, up to the count', () => {
+  const projects = ['a', 'b', 'c', 'd', 'e'].map(p);
+  const v = ['/r/c', '/r/gone', '/r/a', '/r/b', '/r/d', '/r/e'].map((repo, i) => ({ repo, at: 10 - i }));
+  const shown = recentProjects(v, projects, projects[2], 3);
+  assert.deepEqual(shown.map((r) => r.project.name), ['a', 'b', 'd']);
+  assert.equal(shown[0].at, 8);
 });

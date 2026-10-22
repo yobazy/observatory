@@ -10,21 +10,27 @@
   underneath on its own.
 -->
 
-### Keep ideas for later, without starting them
+### See where an agent's dev server is running
 
-Ideas is a list of things you want to do but not right now, so they stop piling up in one project. Write one down in a second, from anywhere:
+When an agent starts a dev server itself, its address now shows on the thread's row and above its terminal, as it already did for **Start**. No more scrolling back through the chat for `localhost:5173`. Only addresses that answer are shown, newest first, and one that stops goes grey.
 
-- quick capture's **Save it as an idea**;
-- **Save for later** in a thread's Follow up box, filed under that thread's project;
-- **Not now** on an item in Dispatch's plan;
-- the top line of the Ideas view.
+### Hop between your last few projects
 
-Each idea gets a project (or stays Unsorted), tags, a priority and a deadline. Open the view with ⌘I or the Ideas card in the sidebar: it groups ideas by project, sorts them by priority or deadline, and flags what's overdue or due soon. **Start** opens a new task with the idea already written in, and you can send several to Dispatch at once.
+A **Recent** panel above Projects lists the ones you were just in, newest first, with their badges. Click to switch; pick 3, 5 or 7 from its heading.
 
-<img src="docs/release/ideas.jpg" width="880" alt="The Ideas view: Unsorted ideas first, then storefront's, one a day late and one due tomorrow, then marketing-site's, each with its priority and tags">
+<img src="docs/release/recent.jpg" width="250" alt="The Recent panel: billing-api, marketing-site with one waiting, and admin-dashboard, above the project list">
 
-### Move a thread to the project it belongs in
+### Page through a long terminal
 
-**Move to project…** on a thread's right-click menu starts a new thread in the project you pick, with a brief of the old one: what was asked, its last words and the files it changed. You can edit the brief before it starts. The old thread is archived, unless you choose to keep it.
+**⌘↑ / ⌘↓** move a page at a time through a terminal's output, and **⇧⌘↑ / ⇧⌘↓** jump to either end. While you're scrolled up, **Jump to latest** takes you back. The scrollbar is a thin pill again, and a terminal holding a big block of wrapped output stays responsive.
 
-<img src="docs/release/move.jpg" width="640" alt="Moving Sync Retry Backoff from storefront to marketing-site: the new task box with the brief written in, and a box to keep the old thread">
+### Restart a nebula that's stuck
+
+If an older nebula is still running but the app can't reach it, the start screen now says so and offers **Restart nebula**, telling you first how many sessions a restart ends. Before, **Start nebula** just flipped back with nothing said.
+
+### And a few smaller things
+
+- The icon picker offers the project's own logos and icons, and **Choose image…** opens in the project's folder.
+- Quick capture's yellow button saves what you typed as an idea, and says where it goes.
+- The Ideas card stays in the sidebar when there are none.
+- An optional usage log (Settings › General) and **⇧⌘M** to mark a moment: they save what the app was doing, on your Mac only, so a rough spot is easy to report.
