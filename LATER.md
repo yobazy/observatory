@@ -23,4 +23,4 @@
 - Add a job from the Automations view (write a plist, or create a routine). Why: jobs are made in agent threads today; the view only watches them.
 - Thread tags, beyond S15 and S16: several chips on at once, tag colors, tagging several picked threads from the multi-select menu, and a tag filter across projects (⌘K or the sidebar). Why: one chip in one project covers the one-repo, several-clients case (2026-10-22).
 - Tagging prompt suggestions for new tags: the prompt proposes a tag that isn't in the project's list for the user to accept. Why: S16 only picks from the list, so a hand-made list stays the source of truth.
-- Thread tags: archived threads' menu has no "Tags…" (it lacks the arrange group), and with no tags yet "Edit tags…" is only reachable from a thread's Tags… dialog, since the chips row hides until a tag exists (S15).
+- Thread tags: archived threads' menu has no "Tags…", since it lacks the arrange group; their tags can only be changed by unarchiving (S15).

@@ -6876,3 +6876,6 @@ button.board-main:hover .board-text {
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+.thread-chips-edit.is-alone {
+  margin-left: 0;
+}

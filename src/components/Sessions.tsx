@@ -233,24 +233,27 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
         </div>
       )}
 
-      {tags.length > 0 && (
-        <div className="thread-chips" role="group" aria-label="Show threads tagged">
-          {tags.map((t) => (
-            <button
-              key={t}
-              className={`tag-chip${tag === t ? " is-on" : ""}`}
-              aria-pressed={tag === t}
-              title={tag === t ? "Show every thread again" : `Show only threads tagged #${t}`}
-              onClick={() => setChip(tag === t ? null : t)}
-            >
-              #{t} <span className="thread-chip-count">{counts.get(t) ?? 0}</span>
-            </button>
-          ))}
-          <button className="link-btn thread-chips-edit" onClick={() => setEditingTags(true)}>
-            Edit tags…
+      {/* Before the project has a tag, only the link to make some. */}
+      <div className="thread-chips" role="group" aria-label="Show threads tagged">
+        {tags.map((t) => (
+          <button
+            key={t}
+            className={`tag-chip${tag === t ? " is-on" : ""}`}
+            aria-pressed={tag === t}
+            title={tag === t ? "Show every thread again" : `Show only threads tagged #${t}`}
+            onClick={() => setChip(tag === t ? null : t)}
+          >
+            #{t} <span className="thread-chip-count">{counts.get(t) ?? 0}</span>
           </button>
-        </div>
-      )}
+        ))}
+        <button
+          className={`link-btn thread-chips-edit${tags.length ? "" : " is-alone"}`}
+          title="Add, rename or delete this project's tags for its threads"
+          onClick={() => setEditingTags(true)}
+        >
+          Edit tags…
+        </button>
+      </div>
 
       <div className="sessions-search">
         <input
