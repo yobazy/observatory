@@ -274,4 +274,4 @@ Acceptance criteria:
 - Given the sandbox project from S15 with 2 untagged threads, one whose first prompt names blkwtr and one about hoam, and `tagCommand` set to `claude -p --model haiku --no-session-persistence`, when I press "Tag untagged", then each gets the matching chip's tag, the chip counts go up by one each, and the threads I tagged by hand are unchanged (manual check against the sandbox `scripts/sandbox.sh app`).
 - Given `tagCommand` is set to `codex exec`, when a pass runs, then the tags come back the same way (manual check against the sandbox `scripts/sandbox.sh app`).
 
-Status: todo
+Status: done. Not yet checked by hand in the sandbox: "Tag untagged" with claude -p --model haiku, and a pass with codex exec.
