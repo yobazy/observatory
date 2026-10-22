@@ -63,9 +63,35 @@ function openLink(e: MouseEvent) {
   if (/^https?:/i.test(href)) void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href)).catch(() => {});
 }
 
+/** Put `text` on the clipboard and say so. */
+function copy(text: string, what: string) {
+  navigator.clipboard.writeText(text).then(
+    () => flash(`Copied ${what}`, 1500),
+    () => flash("Couldn't copy that", 4000),
+  );
+}
+
 function Md({ text, className = "" }: { text: string; className?: string }) {
   const html = useMemo(() => toHtml(text), [text]);
-  return <div className={`md-doc rd-md ${className}`} dangerouslySetInnerHTML={{ __html: html }} onClick={openLink} />;
+  const el = useRef<HTMLDivElement>(null);
+  // Each code block gets a Copy for what's in it.
+  useEffect(() => {
+    const added: HTMLElement[] = [];
+    for (const pre of el.current?.querySelectorAll("pre") ?? []) {
+      const b = document.createElement("button");
+      b.className = "rd-copy";
+      b.textContent = "Copy";
+      b.title = "Copy this block";
+      b.onclick = (e) => {
+        e.stopPropagation();
+        copy((pre.querySelector("code") ?? pre).textContent?.replace(/\n$/, "") ?? "", "the block");
+      };
+      pre.append(b);
+      added.push(b);
+    }
+    return () => added.forEach((b) => b.remove());
+  }, [html]);
+  return <div ref={el} className={`md-doc rd-md ${className}`} dangerouslySetInnerHTML={{ __html: html }} onClick={openLink} />;
 }
 
 /** The images a reply names, shown in it; a click opens the preview. */
@@ -400,16 +426,21 @@ export function Reader({
                       picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : picks}
                       onPick={pick}
                     />
-                    {!waiting && (
-                      <button
-                        className={`rd-point${pointing === e.n ? " is-busy" : ""}`}
-                        disabled={pointing !== null}
-                        onClick={() => void point(e)}
-                        title="Take a screenshot of this reply and tell the agent what to change about it"
-                      >
-                        {pointing === e.n ? "Capturing…" : "Point at this"}
+                    <div className="rd-tools">
+                      <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">
+                        Copy
                       </button>
-                    )}
+                      {!waiting && (
+                        <button
+                          className={`rd-point${pointing === e.n ? " is-busy" : ""}`}
+                          disabled={pointing !== null}
+                          onClick={() => void point(e)}
+                          title="Take a screenshot of this reply and tell the agent what to change about it"
+                        >
+                          {pointing === e.n ? "Capturing…" : "Point at this"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : e.kind === "steps" ? (
                   <Steps key={e.n} entry={e} root={root.replace(/\/+$/, "")} fresh={fresh(e)} />

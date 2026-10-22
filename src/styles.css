@@ -1500,7 +1500,17 @@ body.is-resizing-rows * {
 .moment-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 8px;
+}
+.moment-actions select {
+  flex: 1;
+  min-width: 0;
+  margin-right: auto;
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 4px 8px;
 }
 
 /* ---------- first-launch welcome + telescope ---------- */
@@ -4174,6 +4184,44 @@ td.task-last {
   flex-direction: column;
   gap: 14px;
 }
+/* The window doesn't select text; what was said in a thread does, so you can
+   copy part of a reply. Its buttons and folds stay clicks. */
+.rd-you,
+.rd-md,
+.rd-head,
+.rd-q-text {
+  user-select: text;
+  cursor: text;
+}
+.rd-md a {
+  cursor: pointer;
+}
+/* Code blocks get their own Copy, since they're most often what you take. */
+.rd-md pre {
+  position: relative;
+}
+.rd-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  color: var(--muted);
+  font: 500 11px/1.5 var(--ui);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.rd-md pre:hover .rd-copy,
+.rd-copy:focus-visible {
+  opacity: 1;
+}
+.rd-copy:hover {
+  color: var(--text);
+}
 .rd-you {
   align-self: flex-end;
   max-width: 85%;
@@ -4375,10 +4423,14 @@ td.task-last {
 .rd-reply {
   position: relative;
 }
-.rd-point {
+.rd-tools {
   position: absolute;
   top: -11px;
   right: 8px;
+  display: flex;
+  gap: 6px;
+}
+.rd-point {
   padding: 2px 9px;
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
@@ -4390,7 +4442,7 @@ td.task-last {
   opacity: 0;
 }
 .rd-reply:hover .rd-point,
-.rd-point:focus-visible,
+.rd-tools:focus-within .rd-point,
 .rd-point.is-busy {
   opacity: 1;
 }
