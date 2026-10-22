@@ -10,9 +10,10 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
+use std::sync::{mpsc, OnceLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 /// How long a job's status command may run.
@@ -228,20 +229,68 @@ fn config_path() -> PathBuf {
     home().join(".config/observatory/automations.json")
 }
 
-/// Whether `label` is one of the plists in `dir`: kickstart only ever goes
-/// to a job the view lists, never to a label the webview made up.
-fn has_plist(dir: &Path, label: &str) -> bool {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return false;
+/// Labels from vendors' own agents, never listed by default.
+const VENDORS: [&str; 4] = [
+    "com.apple.",
+    "com.google.",
+    "com.adobe.",
+    "com.valvesoftware.",
+];
+
+/// The prefixes listed when Settings has none: those of the labels not from
+/// Apple, Google, Adobe or Valve. Same rule as `defaultPrefixes` in
+/// automations.ts.
+fn default_prefixes(labels: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = labels
+        .iter()
+        .filter(|l| {
+            let l = l.to_ascii_lowercase();
+            !VENDORS.iter().any(|v| l.starts_with(v))
+        })
+        .map(|l| {
+            let parts: Vec<&str> = l.split('.').collect();
+            if parts.len() > 2 {
+                format!("{}.{}.", parts[0], parts[1])
+            } else {
+                l.clone()
+            }
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Whether the Automations view lists `label`: it starts with one of
+/// `prefixes` (the `automationLabels` pref), or, with none set, one of the
+/// default prefixes of `labels`.
+fn shown(label: &str, prefixes: &[String], labels: &[String]) -> bool {
+    let defaults;
+    let use_ = if prefixes.is_empty() {
+        defaults = default_prefixes(labels);
+        &defaults
+    } else {
+        prefixes
     };
-    entries.flatten().any(|e| {
-        let p = e.path();
-        p.extension().is_some_and(|x| x == "plist")
-            && read_plist(&p)
+    use_.iter().any(|p| label.starts_with(p.as_str()))
+}
+
+/// Each plist's Label in `dir` (its file name when it has none).
+fn plist_labels(dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "plist"))
+        .filter_map(|p| {
+            read_plist(&p)
                 .ok()
-                .and_then(|v| v.get("Label").and_then(Value::as_str).map(|l| l == label))
-                .unwrap_or_else(|| p.file_stem().is_some_and(|s| s == label))
-    })
+                .and_then(|v| v.get("Label").and_then(Value::as_str).map(str::to_string))
+                .or_else(|| Some(p.file_stem()?.to_string_lossy().into_owned()))
+        })
+        .collect()
 }
 
 /// `launchctl kickstart`'s arguments: `-k` kills a running instance first.
@@ -254,9 +303,16 @@ fn kickstart_args(uid: &str, label: &str, restart: bool) -> Vec<String> {
     args
 }
 
-fn kickstart(dir: &Path, label: &str, restart: bool) -> Result<(), String> {
-    if !has_plist(dir, label) {
+/// Kickstart `label`, only if it's a plist in `dir` that the Automations
+/// view lists (by `prefixes`, or the defaults when there are none): never a
+/// vendor's agent or a label the webview made up.
+fn kickstart(dir: &Path, label: &str, restart: bool, prefixes: &[String]) -> Result<(), String> {
+    let labels = plist_labels(dir);
+    if !labels.iter().any(|l| l == label) {
         return Err(format!("{label} has no plist in {}", dir.display()));
+    }
+    if !shown(label, prefixes, &labels) {
+        return Err(format!("{label} isn't one of the jobs Automations lists"));
     }
     let out = Command::new("/bin/launchctl")
         .args(kickstart_args(uid(), label, restart))
@@ -275,12 +331,113 @@ fn kickstart(dir: &Path, label: &str, restart: bool) -> Result<(), String> {
     }
 }
 
-/// Run a job now: `launchctl kickstart`, with `-k` (restart) for an
-/// always-on job.
+/// Run a job the Automations view lists now: `launchctl kickstart`, with
+/// `-k` (restart) for an always-on job. Which jobs it lists is read from
+/// the saved prefs here, not taken from the webview.
 #[tauri::command]
-pub async fn automations_kickstart(label: String, restart: bool) -> Result<(), String> {
+pub async fn automations_kickstart(
+    app: tauri::AppHandle,
+    label: String,
+    restart: bool,
+) -> Result<(), String> {
+    let prefixes: Vec<String> = crate::settings::read_desktop_prefs(app)
+        .get("automationLabels")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
-        kickstart(&home().join("Library/LaunchAgents"), &label, restart)
+        kickstart(
+            &home().join("Library/LaunchAgents"),
+            &label,
+            restart,
+            &prefixes,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The preview's own limit on a text file.
+const PREVIEW_MAX: u64 = 2 * 1024 * 1024;
+
+fn megabytes(bytes: u64) -> String {
+    let mb = bytes as f64 / (1024.0 * 1024.0);
+    if mb.fract() == 0.0 {
+        format!("{mb:.0} MB")
+    } else {
+        format!("{mb:.1} MB")
+    }
+}
+
+/// A job's log as the preview can show it: the file itself when it fits,
+/// else its last 2 MB copied into `out_dir`, headed "Showing the last 2 MB
+/// of 3.3 MB".
+fn log_for_preview(path: &Path, out_dir: &Path) -> Result<PathBuf, String> {
+    let len = std::fs::metadata(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?
+        .len();
+    if len <= PREVIEW_MAX {
+        return Ok(path.to_path_buf());
+    }
+    let mut f = File::open(path).map_err(|e| e.to_string())?;
+    f.seek(SeekFrom::Start(len - PREVIEW_MAX))
+        .map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    // Start at a whole line.
+    let from = buf.iter().position(|&b| b == b'\n').map_or(0, |i| i + 1);
+    std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+    let name = path
+        .file_name()
+        .map_or("log".into(), |n| n.to_string_lossy().into_owned());
+    let out = out_dir.join(format!("{name}.last-2MB.txt"));
+    let mut text = format!(
+        "Showing the last {} of {} ({})\n\n",
+        megabytes(PREVIEW_MAX),
+        megabytes(len),
+        path.display()
+    )
+    .into_bytes();
+    text.extend_from_slice(&buf[from..]);
+    std::fs::write(&out, text).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
+/// The log paths the plists in `dir` name.
+fn job_logs(dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "plist"))
+        .filter_map(|p| read_plist(&p).ok())
+        .flat_map(|v| {
+            ["StandardOutPath", "StandardErrorPath"]
+                .iter()
+                .filter_map(|k| v.get(*k).and_then(Value::as_str).map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// Open log: the path to show in the preview for one of a job's logs.
+#[tauri::command]
+pub async fn automations_log_preview(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !job_logs(&home().join("Library/LaunchAgents")).contains(&path) {
+            return Err(format!("{path} isn't a job's log"));
+        }
+        log_for_preview(
+            Path::new(&path),
+            &std::env::temp_dir().join("observatory-logs"),
+        )
+        .map(|p| p.to_string_lossy().into_owned())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -306,13 +463,15 @@ fn status_argv(config: &str, label: &str) -> Option<Vec<String>> {
 }
 
 /// A program by name, the way a login shell would find it: an app opened
-/// from Finder has almost no PATH of its own.
+/// from Finder has almost no PATH of its own. A relative path is taken
+/// from the home folder, not the app's working directory.
 fn resolve(program: &str) -> PathBuf {
     if let Some(rest) = program.strip_prefix("~/") {
         return home().join(rest);
     }
     if program.contains('/') {
-        return PathBuf::from(program);
+        let p = PathBuf::from(program);
+        return if p.is_absolute() { p } else { home().join(p) };
     }
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|p| std::env::split_paths(&p).collect())
@@ -328,8 +487,21 @@ fn resolve(program: &str) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(program))
 }
 
-/// Run `argv` without a shell; its output (stdout, then stderr), or
-/// `STATUS_TIMED_OUT` once it has run for `timeout`, when it's killed.
+/// How long to keep reading after the command exits, for output still in
+/// flight: not for something it left running that holds its output open.
+const AFTER_EXIT: Duration = Duration::from_millis(300);
+
+/// End every process in a group: the status command and whatever it started.
+fn kill_group(pgid: u32) {
+    let _ = Command::new("/bin/kill")
+        .args(["-KILL", &format!("-{pgid}")])
+        .stderr(Stdio::null())
+        .status();
+}
+
+/// Run `argv` without a shell, in its own process group; its output
+/// (stdout, then stderr), or `STATUS_TIMED_OUT` once it has run for
+/// `timeout`. Either way, nothing it started is left running.
 fn run_status(argv: &[String], timeout: Duration) -> Result<String, String> {
     let (program, args) = argv.split_first().ok_or("empty status command")?;
     let mut child = Command::new(resolve(program))
@@ -337,45 +509,74 @@ fn run_status(argv: &[String], timeout: Duration) -> Result<String, String> {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .process_group(0)
         .spawn()
         .map_err(|e| format!("couldn't run {program}: {e}"))?;
-    // Read both pipes as the command writes, so a chatty one can't block on a
-    // full pipe; a reader left behind by a grandchild just ends with it.
-    let read = |pipe: Option<Box<dyn Read + Send>>| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            if let Some(mut p) = pipe {
-                let _ = p.read_to_end(&mut buf);
-            }
-            String::from_utf8_lossy(&buf).into_owned()
-        })
-    };
-    let out = read(
+    let pgid = child.id();
+    // Both pipes are read as the command writes, in chunks over a channel,
+    // so waiting on them has a deadline too.
+    let (tx, rx) = mpsc::channel::<(usize, Option<Vec<u8>>)>();
+    let pipes: [Option<Box<dyn Read + Send>>; 2] = [
         child
             .stdout
             .take()
             .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
-    let err = read(
         child
             .stderr
             .take()
             .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
-    let start = Instant::now();
-    let status = loop {
-        match child.try_wait().map_err(|e| e.to_string())? {
-            Some(status) => break status,
-            None if start.elapsed() >= timeout => {
-                let _ = child.kill();
+    ];
+    for (i, pipe) in pipes.into_iter().enumerate() {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            if let Some(mut p) = pipe {
+                let mut buf = [0u8; 8192];
+                while let Ok(n) = p.read(&mut buf) {
+                    if n == 0 || tx.send((i, Some(buf[..n].to_vec()))).is_err() {
+                        break;
+                    }
+                }
+            }
+            let _ = tx.send((i, None));
+        });
+    }
+    drop(tx);
+    let deadline = Instant::now() + timeout;
+    let mut bufs = [Vec::new(), Vec::new()];
+    let mut open = 2;
+    let mut exited: Option<(std::process::ExitStatus, Instant)> = None;
+    loop {
+        if exited.is_none() {
+            if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+                exited = Some((status, Instant::now()));
+            }
+        }
+        let now = Instant::now();
+        match exited {
+            Some(_) if open == 0 => break,
+            None if now >= deadline => {
+                kill_group(pgid);
                 let _ = child.wait();
                 return Err(STATUS_TIMED_OUT.into());
             }
-            None => std::thread::sleep(Duration::from_millis(25)),
+            // Exited, but something it started still holds its output.
+            Some((_, at)) if now >= deadline || now - at >= AFTER_EXIT => {
+                kill_group(pgid);
+                break;
+            }
+            _ => {}
         }
-    };
-    let mut text = out.join().unwrap_or_default();
-    text.push_str(&err.join().unwrap_or_default());
+        let wait = Duration::from_millis(25).min(deadline.saturating_duration_since(now));
+        match rx.recv_timeout(wait) {
+            Ok((i, Some(chunk))) => bufs[i].extend(chunk),
+            Ok((_, None)) => open -= 1,
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => open = 0,
+        }
+    }
+    let (status, _) = exited.expect("left the loop after it exited");
+    let mut text = String::from_utf8_lossy(&bufs[0]).into_owned();
+    text.push_str(&String::from_utf8_lossy(&bufs[1]));
     let mut text = text.trim_end().to_string();
     if !status.success() {
         if !text.is_empty() {
@@ -522,10 +723,39 @@ mod tests {
     #[test]
     fn kickstart_refuses_a_label_without_a_plist() {
         let dir = fixture("");
-        assert!(has_plist(&dir, "com.bazil.wispr-watch"));
-        assert!(!has_plist(&dir, "com.apple.Finder"));
-        let err = kickstart(&dir, "com.example.not-here", false).unwrap_err();
+        assert!(plist_labels(&dir).contains(&"com.bazil.wispr-watch".to_string()));
+        let err = kickstart(&dir, "com.example.not-here", false, &[]).unwrap_err();
         assert!(err.contains("has no plist"));
+    }
+
+    #[test]
+    fn kickstart_only_goes_to_jobs_the_view_lists() {
+        let labels: Vec<String> = [
+            "com.bazil.a",
+            "com.google.keystone.agent",
+            "ai.hermes.gateway",
+        ]
+        .map(String::from)
+        .to_vec();
+        assert_eq!(default_prefixes(&labels), ["ai.hermes.", "com.bazil."]);
+        assert!(shown("com.bazil.a", &[], &labels));
+        assert!(shown("ai.hermes.gateway", &[], &labels));
+        assert!(!shown("com.google.keystone.agent", &[], &labels));
+        let only = ["com.bazil.".to_string()];
+        assert!(!shown("ai.hermes.gateway", &only, &labels));
+
+        // A Google agent with a plist right there is still refused, before
+        // launchctl is ever called.
+        let dir = scratch("vendor");
+        for label in ["com.bazil.a", "com.google.keystone.agent"] {
+            let plist = format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>Label</key><string>{label}</string></dict></plist>"#
+            );
+            std::fs::write(dir.join(format!("{label}.plist")), plist).unwrap();
+        }
+        let err = kickstart(&dir, "com.google.keystone.agent", false, &[]).unwrap_err();
+        assert!(err.contains("isn't one of the jobs"), "{err}");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -604,7 +834,7 @@ mod tests {
                 .unwrap_or(0)
         };
         let before = lines(&log);
-        kickstart(&dir, LABEL, false).unwrap();
+        kickstart(&dir, LABEL, false, &["com.observatory.".to_string()]).unwrap();
         let start = Instant::now();
         while lines(&log) <= before {
             assert!(
@@ -617,5 +847,94 @@ mod tests {
         assert!(Instant::now().duration_since(start) < Duration::from_secs(5));
         assert!(last.is_some());
         println!("new line: {}", tail.last().unwrap());
+    }
+
+    /// Whether a live process (not a zombie waiting to be reaped) whose
+    /// command holds `pattern` is still there 2 s on.
+    fn still_running(pattern: &str) -> bool {
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(2) {
+            let ps = Command::new("/bin/ps")
+                .args(["-axo", "stat=,command="])
+                .output()
+                .unwrap();
+            let found = String::from_utf8_lossy(&ps.stdout).lines().any(|l| {
+                let (stat, command) = l.trim_start().split_once(' ').unwrap_or((l, ""));
+                !stat.starts_with('Z') && command.contains(pattern)
+            });
+            if !found {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        true
+    }
+
+    #[test]
+    fn status_command_returns_though_a_child_holds_its_output() {
+        let argv = ["/bin/sh", "-c", "sleep 4.321 & echo hi"].map(String::from);
+        let start = Instant::now();
+        let out = run_status(&argv, Duration::from_secs(2)).unwrap();
+        assert_eq!(out, "hi");
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
+        assert!(
+            !still_running("sleep 4.321"),
+            "the background sleep was left running"
+        );
+    }
+
+    #[test]
+    fn status_command_timing_out_leaves_nothing_behind() {
+        let argv = ["/bin/sh", "-c", "sleep 3.217; echo x"].map(String::from);
+        let start = Instant::now();
+        assert_eq!(
+            run_status(&argv, Duration::from_millis(300)).unwrap_err(),
+            STATUS_TIMED_OUT
+        );
+        assert!(start.elapsed() < Duration::from_secs(1));
+        assert!(!still_running("sleep 3.217"), "the sleep was left running");
+    }
+
+    #[test]
+    fn a_relative_status_command_is_found_from_home() {
+        assert_eq!(resolve("bin/status.sh"), home().join("bin/status.sh"));
+        assert_eq!(resolve("~/bin/status.sh"), home().join("bin/status.sh"));
+        assert_eq!(resolve("/usr/bin/true"), PathBuf::from("/usr/bin/true"));
+    }
+
+    #[test]
+    fn a_log_over_2_mb_previews_its_last_2_mb() {
+        let dir = scratch("bigl");
+        let log = dir.join("gateway.log");
+        let line = "x".repeat(99) + "\n";
+        let total = (3.3 * 1024.0 * 1024.0) as usize / line.len();
+        let mut f = File::create(&log).unwrap();
+        for _ in 0..total - 1 {
+            f.write_all(line.as_bytes()).unwrap();
+        }
+        f.write_all(b"the last line\n").unwrap();
+        drop(f);
+        let out = log_for_preview(&log, &dir.join("out")).unwrap();
+        assert_ne!(out, log);
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert!(
+            text.starts_with("Showing the last 2 MB of 3.3 MB"),
+            "{}",
+            &text[..80]
+        );
+        assert!(text.ends_with("the last line\n"));
+        let body = text.split_once("\n\n").unwrap().1;
+        assert!(body.len() as u64 <= PREVIEW_MAX);
+        assert!(body.starts_with(&line), "starts on a whole line");
+
+        // A small log is shown as it is.
+        let small = dir.join("small.log");
+        std::fs::write(&small, "one\n").unwrap();
+        assert_eq!(log_for_preview(&small, &dir.join("out")).unwrap(), small);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

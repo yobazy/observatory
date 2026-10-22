@@ -85,6 +85,7 @@ pub fn run() {
             automations::automations_report,
             automations::automations_kickstart,
             automations::automations_status,
+            automations::automations_log_preview,
             thread_edits::thread_edits,
             turns::thread_turn,
             transcript::thread_transcript,

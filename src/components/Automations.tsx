@@ -3,7 +3,7 @@ import { useOverlayKeys } from "./Overlay";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import { flash, setState, useAppState } from "../nebula/store";
 import { ago, jobList, runAction, toneOf, until, worstHealth, type Job, type RestartConfirm } from "../nebula/automations";
-import { readStatus, refreshAutomations, runJob } from "../nebula/automationsLoad";
+import { logForPreview, readStatus, refreshAutomations, runJob } from "../nebula/automationsLoad";
 import { baseName, openPreview } from "../nebula/preview";
 
 /** The rows as of this minute; null until the first read lands. */
@@ -35,6 +35,8 @@ export function AutomationsView() {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<ConfirmDialogSpec | null>(null);
   const [starting, setStarting] = useState<Set<string>>(new Set());
+  /** The job whose Restart confirm is open. */
+  const [asking, setAsking] = useState<string | null>(null);
   const [status, setStatus] = useState<Record<string, Status>>({});
   const controls = useRef<HTMLDivElement>(null);
   useOverlayKeys(controls);
@@ -75,7 +77,8 @@ export function AutomationsView() {
     if (!j.alwaysOn) mark();
     try {
       await runJob(j, async (c) => {
-        const ok = await confirm(c);
+        setAsking(j.label);
+        const ok = await confirm(c).finally(() => setAsking(null));
         if (ok) mark();
         return ok;
       });
@@ -89,9 +92,13 @@ export function AutomationsView() {
       });
     }
   };
-  const openLog = (path: string) => {
-    void openPreview([path]);
-    setState({ view: "sessions" });
+  const openLog = async (path: string) => {
+    try {
+      await openPreview([await logForPreview(path)]);
+      setState({ view: "sessions" });
+    } catch (e) {
+      flash(`Couldn't open ${path}: ${e instanceof Error ? e.message : e}`, 6000);
+    }
   };
   const now = Date.now();
 
@@ -176,7 +183,7 @@ export function AutomationsView() {
                           return (
                             <button
                               className="btn btn-sm"
-                              disabled={a.disabled || starting.has(j.label)}
+                              disabled={a.disabled || starting.has(j.label) || asking === j.label}
                               title={a.title}
                               onClick={() => void run(j)}
                             >
@@ -185,7 +192,7 @@ export function AutomationsView() {
                           );
                         })()}
                         {j.logs.map((p) => (
-                          <button key={p} className="btn btn-sm" onClick={() => openLog(p)} title={`Open ${p} in the preview`}>
+                          <button key={p} className="btn btn-sm" onClick={() => void openLog(p)} title={`Open ${p} in the preview`}>
                             {j.logs.length === 1 ? "Open log" : `Open ${baseName(p)}`}
                           </button>
                         ))}

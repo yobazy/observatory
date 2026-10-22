@@ -93,6 +93,13 @@ export async function runJob(job: Job, confirm: RunDeps["confirm"]): Promise<voi
   if (started) refreshBurst();
 }
 
+/** The path Open log shows: the log itself, or, past the preview's 2 MB,
+ *  a copy of its last 2 MB (automations.rs). */
+export async function logForPreview(path: string): Promise<string> {
+  if (isPreview()) return path;
+  return invoke<string>("automations_log_preview", { path });
+}
+
 /** A job's own status command output, run now (automations.rs). */
 export async function readStatus(label: string): Promise<string> {
   if (isPreview()) return "trigger url: set\ntoken: set\nlast fired: 2 h ago";
