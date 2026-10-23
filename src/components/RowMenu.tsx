@@ -11,8 +11,9 @@ import { ContextMenu, type MenuItem } from "./Menu";
 import { openLink, RunSetupDialog } from "./Run";
 import { openReview } from "../nebula/diff";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
-import { isFollowUp, isPinned, moveTask, toggleFlag, unpinAll, unpinTask } from "../nebula/organize";
-import { TaskColorDialog } from "./Organize";
+import { isFollowUp, isPinned, moveTask, setTaskPriority, toggleFlag, unpinAll, unpinTask } from "../nebula/organize";
+import { priorityLabel } from "../nebula/priority";
+import { PriorityDialog, TaskColorDialog } from "./Organize";
 import { moveThread } from "../nebula/moveThread";
 
 export type Seed = { task: string; kind: AgentKind };
@@ -21,7 +22,8 @@ type Dialog =
   | TextDialogSpec
   | ConfirmDialogSpec
   | { kind: "run-setup"; worktree: Worktree }
-  | { kind: "task-color"; agent: Agent };
+  | { kind: "task-color"; agent: Agent }
+  | { kind: "priority"; agent: Agent };
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -127,6 +129,11 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
         }),
     };
     // Arranging it: the desktop app's own marks, kept in its prefs.
+    const level = priorityLabel(s.prefs.taskPriorities?.[a.id]);
+    const priority: MenuItem = {
+      label: level ? `Priority: ${level}…` : "Priority…",
+      run: () => setDialog({ kind: "priority", agent: a }),
+    };
     const followUp: MenuItem = {
       label: isFollowUp(s, a.id) ? "Clear flag" : "Flag for follow-up",
       keys: "F",
@@ -143,6 +150,7 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
         ? [{ label: `Unpin all on ${wt?.branch ?? "this branch"}`, run: () => void attempt(unpinAll(a.worktree_id)) }]
         : []),
       { label: "Color…", run: () => setDialog({ kind: "task-color", agent: a }) },
+      priority,
     ];
     const issue: MenuItem[] = a.issue_url ? [{ label: "Open issue", run: () => void openLink(a.issue_url!) }] : [];
 
@@ -319,6 +327,14 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
       {dialog?.kind === "text" && <TextDialog d={dialog} onClose={() => setDialog(null)} />}
       {dialog?.kind === "confirm" && <ConfirmDialog d={dialog} onClose={() => setDialog(null)} />}
       {dialog?.kind === "task-color" && <TaskColorDialog agent={dialog.agent} onClose={() => setDialog(null)} />}
+      {dialog?.kind === "priority" && (
+        <PriorityDialog
+          name={dialog.agent.name}
+          value={getState().prefs.taskPriorities?.[dialog.agent.id]}
+          onPick={(p) => setTaskPriority(dialog.agent.id, p)}
+          onClose={() => setDialog(null)}
+        />
+      )}
       {dialog?.kind === "run-setup" && (
         <RunSetupDialog
           worktree={dialog.worktree}
