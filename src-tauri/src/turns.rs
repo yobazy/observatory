@@ -55,6 +55,9 @@ pub struct Turn {
     dropped: u32,
     /// The last thing Claude said, if anything yet.
     said: Option<String>,
+    /// Its end, which `said` cuts off: where a reply says whether the thread
+    /// is safe to close.
+    said_end: Option<String>,
     interrupted: bool,
 }
 
@@ -93,6 +96,19 @@ pub(crate) fn clip(s: &str) -> String {
     match s.char_indices().nth(MAX_TEXT) {
         Some((i, _)) => format!("{}…", &s[..i]),
         None => s.to_string(),
+    }
+}
+
+/// Characters kept of the end of what Claude said.
+const MAX_TAIL: usize = 400;
+
+/// The last `MAX_TAIL` characters of `s`, trimmed.
+fn tail(s: &str) -> String {
+    let s = s.trim();
+    let n = s.chars().count();
+    match s.char_indices().nth(n.saturating_sub(MAX_TAIL)) {
+        Some((i, _)) if n > MAX_TAIL => format!("…{}", &s[i..]),
+        _ => s.to_string(),
     }
 }
 
@@ -228,6 +244,7 @@ impl Reading {
                 Some("text") => {
                     if let Some(t) = text_of(b, "text").filter(|t| !t.is_empty()) {
                         turn.said = Some(t);
+                        turn.said_end = b.get("text").and_then(|x| x.as_str()).map(tail);
                     }
                 }
                 Some("tool_use") => {
@@ -485,5 +502,16 @@ mod tests {
         let steps: Vec<_> = turn.steps.iter().map(|s| (s.tool.as_str(), s.ok)).collect();
         assert_eq!(steps, [("Bash", Some(false)), ("Edit", Some(true))]);
         assert_eq!(turn.last - turn.started, 12);
+        assert_eq!(turn.said_end.as_deref(), Some("Fixed it."));
+    }
+
+    #[test]
+    fn a_long_reply_keeps_its_end() {
+        let long = format!("{}\n\n**✅ Safe to close.**", "word ".repeat(400));
+        let end = tail(&long);
+        assert!(end.starts_with('…'));
+        assert!(end.ends_with("**✅ Safe to close.**"));
+        assert_eq!(end.chars().count(), MAX_TAIL + 1);
+        assert_eq!(tail("  short  "), "short");
     }
 }

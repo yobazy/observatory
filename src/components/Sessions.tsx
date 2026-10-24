@@ -29,6 +29,7 @@ import { sameSession, type Agent, type SessionRef, type TerminalTab, type Worktr
 import { isFollowUp, isPinned, moveTask, toggleFlag } from "../nebula/organize";
 import { FlagGlyph, PinGlyph, useTaskColorStyle } from "./Organize";
 import { reorderKey, useReorder } from "./useReorder";
+import { useVerdict } from "../nebula/verdicts";
 
 /** Re-render once a minute so relative times stay honest. */
 function useMinuteTick() {
@@ -635,6 +636,7 @@ function AgentRow({
   const picks = useContext(PicksContext);
   const isPicked = picks?.ids.has(agent.id) ?? false;
   const usual = useMemo(() => usualHarness(Object.values(state.agents)), [state.agents]);
+  const safe = useVerdict(agent)?.kind === "safe";
   return (
     <button
       className={`row row-${agent.status}${selected ? " is-selected" : ""}${isPicked ? " is-picked" : ""}${agent.unseen ? " is-unseen" : ""}${colorStyle ? " has-color" : ""}`}
@@ -673,6 +675,11 @@ function AgentRow({
       </span>
       <span className="row-age">
         <AgentServerMark agentId={agent.id} />
+        {safe && (
+          <span className="row-mark mark-safe" role="img" title="Its last reply says it's safe to close" aria-label="Safe to close">
+            ✓
+          </span>
+        )}
         {flagged && (
           <span className="row-mark mark-flag" role="img" title="Flagged for follow-up (F)" aria-label="Flagged for follow-up">
             <FlagGlyph />

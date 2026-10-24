@@ -22,6 +22,7 @@ import { watchForFiles, type FileWatch } from "../nebula/shelf";
 import { afterClosing } from "../nebula/recentThreads";
 import { isSliding } from "./Resizer";
 import { AgentServerLink } from "./Run";
+import { closeThread, useVerdict } from "../nebula/verdicts";
 
 const THEME = {
   background: "#0f1524",
@@ -79,6 +80,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const state = useAppState();
   const session = state.selectedSession;
   const agent = session && "Agent" in session ? state.agents[session.Agent] : undefined;
+  // What its last reply said about closing it.
+  const verdict = useVerdict(agent);
   const tab = session && "Terminal" in session ? state.terminals[session.Terminal] : undefined;
   const exists = !!(agent || tab);
 
@@ -386,6 +389,21 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
             )}
             {agent && !agent.archived && (
               <>
+                {verdict?.kind === "safe" && (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => closeThread(agent)}
+                    title={`Its last reply says it's safe to close${verdict.reason ? `: ${verdict.reason}` : ""}. Archives it; Undo brings it back.`}
+                  >
+                    Close thread
+                  </button>
+                )}
+                {verdict && verdict.kind !== "safe" && (
+                  <span className={`pane-verdict is-${verdict.kind}`} title={verdict.reason || undefined}>
+                    {verdict.kind === "keep" ? "Keep open" : "Don't close"}
+                    {verdict.reason && `: ${verdict.reason}`}
+                  </span>
+                )}
                 <button
                   className="btn"
                   onClick={() => setDialog(queueDialog(agent))}
