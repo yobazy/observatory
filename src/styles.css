@@ -4418,6 +4418,33 @@ td.task-last {
 .rd-fold .rd-md {
   margin-top: 8px;
 }
+/* The close verdict the reply ends on, set apart at the card's foot. */
+.rd-verdict {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  --tone: var(--st-idle);
+  color: color-mix(in srgb, var(--tone) 70%, var(--text));
+}
+.rd-verdict::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+.rd-verdict.is-done {
+  --tone: var(--st-done);
+}
+.rd-verdict.is-wait {
+  --tone: var(--st-waiting);
+}
+.rd-verdict.is-bad {
+  --tone: var(--st-error);
+}
 /* Every reply can be pointed at: a screenshot of it goes to the agent with
    what you say about it. The button shows on hover. */
 .rd-reply {

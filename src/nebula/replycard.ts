@@ -1,6 +1,7 @@
 // A reply read as a card, for the reader view: a bold first line as its
-// headline, a line of status dots as chips, a "Needs you" list whose
-// lettered options become buttons, and "Details" folded away. Anything the
+// headline, a line of status dots as chips, a "Needs you" (or "Decisions")
+// list whose lettered options become buttons, "Details" folded away, and
+// the closing "Safe to close" line set apart at the foot. Anything the
 // reply doesn't say that way stays as prose, so a reply written any other
 // way reads as it always did. Kept free of the app so its tests run under
 // plain Node.
@@ -36,6 +37,8 @@ export interface Card {
   details: string | null;
   /** Absolute paths of the images the reply names, in order. */
   images: string[];
+  /** The closing line: "✅ Safe to close", "🟠 Keep open: …". */
+  verdict: Chip | null;
 }
 
 const TONES: [RegExp, Tone][] = [
@@ -107,9 +110,11 @@ export function readAsk(n: number, line: string): Ask {
   return { n, text: line.slice(0, pick.at).trim(), options: optionsFrom(pick.at)! };
 }
 
-const SECTION = /^\s*(?:#{1,4}\s*)?(?:\*\*|__)?\s*(Needs you|Details)(?:\s*\([^)]*\))?[\s:*_]*$/i;
+const SECTION = /^\s*(?:#{1,4}\s*)?(?:\*\*|__)?\s*(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?[\s:*_]*$/i;
 // "**Needs you:** nothing tonight." starts the section and says it too.
-const SECTION_INLINE = /^\s*(?:\*\*|__)(Needs you|Details)(?:\s*\([^)]*\))?:?(?:\*\*|__):?\s+(\S.*)$/i;
+const SECTION_INLINE = /^\s*(?:\*\*|__)(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?:?(?:\*\*|__):?\s+(\S.*)$/i;
+// The close verdict a reply ends on, bold or not.
+const VERDICT = /^\s*(?:\*\*|__)?\s*(✅|🟠|🔴)\uFE0F?\s*(?:\*\*|__)?\s*((?:Safe to close|Keep open|Don['’]t close)\b.*)$/u;
 // A numbered decision, also as a bullet or with its number in bold:
 // "2. Ship today?", "- 2. Ship today?", "- **2. Ship today?** A …".
 const ITEM = /^\s*(?:[-*]\s+)?(\*\*|__)?(\d+)[.)]\s+(.+)$/;
@@ -131,8 +136,35 @@ function paragraphs(text: string): string[] {
   return out;
 }
 
+/** Decisions run together on one line ("2. Ship? A x · B y 3. Name? A …")
+ *  split back into one per number, where the numbers count up. */
+function splitAsks(line: string): string[] {
+  const first = ITEM.exec(line);
+  if (!first) return [line];
+  const out: string[] = [];
+  let next = Number(first[2]) + 1;
+  let rest = line;
+  for (;;) {
+    const at = rest.search(new RegExp(`\\s(?:\\*\\*|__)?${next}[.)]\\s+\\S`));
+    // The one before has to have read as a choice, so "under 5. Then" stays.
+    if (at < 0 || !readAsk(0, rest.slice(0, at).replace(ITEM, "$3")).options.length) break;
+    out.push(rest.slice(0, at));
+    rest = rest.slice(at + 1);
+    next++;
+  }
+  return [...out, rest];
+}
+
 export function readCard(text: string): Card {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
+  // The verdict on the last line comes off before anything else reads it.
+  let verdict: Chip | null = null;
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const last = lines.length > 1 ? VERDICT.exec(lines[lines.length - 1].replace(/(\*\*|__)(?=\s*$)/, "")) : null;
+  if (last) {
+    verdict = { tone: toneOf(last[1])!, text: last[2].replace(/\*\*|__/g, "").trim() };
+    lines.pop();
+  }
   // Split into the part before any section, and the sections by name.
   const lead: string[] = [];
   const sections: Record<"needs" | "details", string[]> = { needs: [], details: [] };
@@ -174,7 +206,7 @@ export function readCard(text: string): Card {
   // The lines each ask's own-line options came from, to give back if they
   // don't make a choice.
   const lined = new Map<Ask, string[]>();
-  for (const line of sections.needs) {
+  for (const line of sections.needs.flatMap(splitAsks)) {
     const item = ITEM.exec(line);
     const opt = open && readOptionLine(line);
     if (item) {
@@ -209,11 +241,12 @@ export function readCard(text: string): Card {
     asksNote: note.join("\n").trim(),
     details: details || null,
     images,
+    verdict,
   };
 }
 
 /** Whether there's more to it than prose. */
-export const isCard = (c: Card) => !!(c.headline || c.chips.length || c.asks.length || c.details);
+export const isCard = (c: Card) => !!(c.headline || c.chips.length || c.asks.length || c.details || c.verdict);
 
 /** What tapping answers sends: "1 A, 2 B", then anything typed after it. */
 export function answerText(picks: Record<number, string>, typed: string): string {

@@ -52,8 +52,12 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
   return got;
 }
 
+// A line break in a reply is one on screen too, so lines written one under
+// another (a list after a bold label, with no blank line) don't run together.
 const toHtml = (md: string, inline = false) =>
-  DOMPurify.sanitize((inline ? marked.parseInline(md, { async: false }) : marked.parse(md, { async: false })) as string);
+  DOMPurify.sanitize(
+    (inline ? marked.parseInline(md, { async: false, breaks: true }) : marked.parse(md, { async: false, breaks: true })) as string,
+  );
 
 /** Links in a reply open in the browser, not in the app's webview. */
 function openLink(e: MouseEvent) {
@@ -183,6 +187,9 @@ function CardReply({
           <summary>Details</summary>
           <Md text={card.details} />
         </details>
+      )}
+      {card.verdict && (
+        <p className={`rd-verdict is-${card.verdict.tone}`} dangerouslySetInnerHTML={{ __html: toHtml(card.verdict.text, true) }} />
       )}
     </article>
   );
