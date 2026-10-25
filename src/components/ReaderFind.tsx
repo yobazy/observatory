@@ -42,12 +42,19 @@ export function ReaderFind({
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const root = scroller.current?.querySelector<HTMLElement>(".rd-col");
-    setRanges(root && query.trim() ? rangesIn(root, query) : []);
+    // After the replies' own effects (code coloring, PR links) have changed
+    // their text, so the matches point at what's there.
+    const frame = requestAnimationFrame(() => {
+      const root = scroller.current?.querySelector<HTMLElement>(".rd-col");
+      setRanges(root && query.trim() ? rangesIn(root, query) : []);
+    });
+    return () => cancelAnimationFrame(frame);
   }, [query, version]);
   useEffect(() => setAt(0), [query]);
 
-  // Show the current match: open what folds it away, and scroll to it.
+  // Show the current match: open what folds it away, and scroll to it, but
+  // only when you search or step; new replies arriving leave you where you are.
+  const shownFor = useRef("");
   useEffect(() => {
     const r = ranges[Math.min(at, ranges.length - 1)];
     if (highlights && Mark) {
@@ -56,7 +63,9 @@ export function ReaderFind({
       else highlights.delete("rd-find-now");
     }
     const el = scroller.current;
-    if (!r || !el) return;
+    const asked = `${query}\0${at}`;
+    if (!r || !el || shownFor.current === asked) return;
+    shownFor.current = asked;
     for (let d = r.startContainer.parentElement?.closest("details"); d; d = d.parentElement?.closest("details")) d.open = true;
     const box = r.getBoundingClientRect();
     const view = el.getBoundingClientRect();

@@ -8,7 +8,7 @@ import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
 import { clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
-import { answersIn, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
+import { answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { shipKind } from "../nebula/git";
 import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
@@ -155,9 +155,9 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
           const a = document.createElement("a");
           a.href = prLink(where.prUrl, ref.number);
           a.className = "rd-pr";
-          a.textContent = `#${ref.number}`;
+          a.textContent = text.slice(ref.start, ref.start + ref.length);
           frag.append(a);
-          at = ref.start + String(ref.number).length + 1;
+          at = ref.start + ref.length;
         }
         frag.append(text.slice(at));
         node.replaceWith(frag);
@@ -538,8 +538,8 @@ export function Reader({
       if (e.kind === "claude" && readCard(e.text).asks.length) reply = e.n;
       else if (e.kind === "you" && reply >= 0) {
         // A message pointing at a reply says which first, then the answers.
-        const said = answersIn(e.text);
-        out[reply] = Object.keys(said).length ? said : answersIn(e.text.split(/\n\s*\n/).slice(1).join("\n\n"));
+        const said = answersSaid(e.text);
+        out[reply] = Object.keys(said).length ? said : answersSaid(e.text.split(/\n\s*\n/).slice(1).join("\n\n"));
         reply = -1;
       }
     }
@@ -565,6 +565,12 @@ export function Reader({
     if (Object.keys(typed.picks).length) setDraft(typed.rest);
     setTapped({ entry: latest, picks: { ...base, [n]: base[n] === letter ? "" : letter } });
   };
+  // Opening the Read view from its switch puts you in the thread, so ⌘F and
+  // ⌘↑ work at once; a box you're typing in keeps its focus.
+  useEffect(() => {
+    const at = document.activeElement;
+    if (!at || at === document.body || at.closest("[role=radiogroup]")) scroller.current?.focus({ preventScroll: true });
+  }, []);
   // ⌘F finds in the thread while you're in it; ⌘↑/⌘↓ go from one of your
   // messages to the one before or after, ⇧⌘↑/⇧⌘↓ to either end.
   const [finding, setFinding] = useState(false);
@@ -608,8 +614,10 @@ export function Reader({
   });
   // Decisions earlier replies asked that you haven't answered, kept in view
   // until you answer or put them away.
-  const [dismissed, setDismissed] = useState<Set<number>>(() => dismissedFor.get(agent.id) ?? new Set());
-  useEffect(() => void dismissedFor.set(agent.id, dismissed), [agent.id, dismissed]);
+  // Entry numbers start over with each session, so what you put away is kept per session.
+  const thread = `${agent.id}:${agent.session_id}`;
+  const [dismissed, setDismissed] = useState<Set<number>>(() => dismissedFor.get(thread) ?? new Set());
+  useEffect(() => void dismissedFor.set(thread, dismissed), [thread, dismissed]);
   const undecided = useMemo(
     () => openDecisions(t?.entries ?? [], latest).filter((d) => !dismissed.has(d.entry)),
     [t?.entries, latest, dismissed],

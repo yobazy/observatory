@@ -352,3 +352,17 @@ test('a thread waits on you when its latest reply asks and you have not answered
   assert.equal(pendingCard([...asked, { n: 3, kind: 'claude', text: 'Done.' }]), null);
   assert.equal(pendingCard([]), null);
 });
+
+test('answers written in, or given in the tray alongside taps, count as answered', async () => {
+  const { openDecisions, answersSaid } = await import('../src/nebula/replycard.ts');
+  assert.deepEqual(answersSaid('1 A\n2: keep it for a week'), { 1: 'A', 2: 'keep it for a week' });
+  const quote = 'Yes. The Read view already exists, so cards are a small step.';
+  const entries = [
+    { n: 1, kind: 'claude', text: reply },
+    { n: 2, kind: 'you', text: answerText({ 2: 'later' }, '') + '\n1: keep it' },
+    { n: 3, kind: 'claude', text: reply },
+    { n: 4, kind: 'you', text: answerText({ 1: 'A' }, `About your reply that starts "${quote}": 2 B`) },
+  ];
+  assert.equal(entries[3].text, `1 A\n\nAbout your reply that starts "${quote}": 2 B`);
+  assert.deepEqual(openDecisions(entries, -1).map((o) => [o.entry, o.asks.map((a) => a.n)]), [[3, [2]]]);
+});

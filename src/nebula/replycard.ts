@@ -259,7 +259,8 @@ export function answerText(picks: Record<number, string>, typed: string): string
   const said = [letters.map(([n, l]) => `${n} ${l}`).join(", "), ...written].filter(Boolean).join("\n");
   const rest = typed.trim();
   if (!said || !rest) return said || rest;
-  return written.length ? `${said}\n\n${rest}` : `${said}. ${rest}`;
+  // Answers to earlier replies, from the tray, keep a paragraph of their own.
+  return written.length || rest.startsWith("About your reply") ? `${said}\n\n${rest}` : `${said}. ${rest}`;
 }
 
 /** A reply's opening words, to say which one you mean: its first line with
@@ -287,6 +288,14 @@ export function pointerText(quote: string, shot: string | null, said: string): s
  *  "3D printing". */
 export function answersIn(text: string): Record<number, string> {
   return leadingAnswers(text).picks;
+}
+
+/** Every answer a message gives: the lettered ones it opens with, and any
+ *  written in on a line of their own ("2: keep it for a week"). */
+export function answersSaid(text: string): Record<number, string> {
+  const out = { ...answersIn(text) };
+  for (const m of text.matchAll(/^(\d+): (\S.*)$/gm)) out[Number(m[1])] ??= m[2].trim();
+  return out;
 }
 
 /** The answers a message opens with and what it says after them. */
@@ -348,14 +357,14 @@ export function openDecisions(
     } else if (e.kind === "you") {
       // "About your reply that starts "…": 2 B" answers an earlier one.
       for (const m of e.text.matchAll(/^About your reply that starts "(.+)": ([^\n]+)$/gm)) {
-        const said = answersIn(m[2]);
+        const said = answersSaid(m[2]);
         for (const o of out) if (o.quote === m[1]) o.asks = o.asks.filter((a) => !said[a.n]);
       }
     }
     if (e.kind === "you" && pending) {
       // A message pointing at a reply says which first, then the answers.
-      const said = answersIn(e.text);
-      const got = Object.keys(said).length ? said : answersIn(e.text.split(/\n\s*\n/).slice(1).join("\n\n"));
+      const said = answersSaid(e.text);
+      const got = Object.keys(said).length ? said : answersSaid(e.text.split(/\n\s*\n/).slice(1).join("\n\n"));
       const left = pending.asks.filter((a) => !got[a.n]);
       if (left.length) out.push({ ...pending, asks: left });
       pending = null;

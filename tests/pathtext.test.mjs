@@ -122,9 +122,10 @@ test('a code span that is only a path reads as that path', async () => {
 test('"#75" in prose names a PR, and links like any other of its repo', async () => {
   const { findPrRefs, prLink } = await import('../src/nebula/pathtext.ts');
   assert.deepEqual(findPrRefs('Merged #75 and (#76), not issue-#3 or #12abc.'), [
-    { start: 7, number: 75 },
-    { start: 16, number: 76 },
+    { start: 7, length: 3, number: 75 },
+    { start: 16, length: 3, number: 76 },
   ]);
-  assert.deepEqual(findPrRefs('#5 first'), [{ start: 0, number: 5 }]);
+  assert.deepEqual(findPrRefs('#5 first'), [{ start: 0, length: 2, number: 5 }]);
+  assert.deepEqual(findPrRefs('#075'), [{ start: 0, length: 4, number: 75 }]);
   assert.equal(prLink('https://github.com/o/r/pull/12', 75), 'https://github.com/o/r/pull/75');
 });

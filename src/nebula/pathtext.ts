@@ -148,8 +148,12 @@ export function pathInCode(text: string): string | null {
 }
 
 /** "#75" in prose, as the PR it names: where each one is in `text`. */
-export function findPrRefs(text: string): { start: number; number: number }[] {
-  return [...text.matchAll(/(^|[\s(\[])#(\d{1,6})\b(?![-\w])/g)].map((m) => ({ start: m.index! + m[1].length, number: Number(m[2]) }));
+export function findPrRefs(text: string): { start: number; length: number; number: number }[] {
+  return [...text.matchAll(/(^|[\s(\[])#(\d{1,6})\b(?![-\w])/g)].map((m) => ({
+    start: m.index! + m[1].length,
+    length: m[2].length + 1,
+    number: Number(m[2]),
+  }));
 }
 
 /** A PR's URL down to its repository's, so another number can be put on it. */
