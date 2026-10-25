@@ -26,3 +26,18 @@ test('a run of tool calls reads as one line', () => {
   assert.equal(stepsLine([s('mcp__x__y')]), 'Used 1 tool');
   assert.equal(stepsLine([s('Read'), s('TaskUpdate')]), 'Read 1 file, used 1 other tool');
 });
+
+test('the step under way is said as what it is doing', async () => {
+  const { doingLine } = await import('../src/nebula/transcript.ts');
+  const s = (tool, target = '') => ({ tool, target, ok: null });
+  assert.equal(doingLine(s('Edit', '/r/src/sync.ts')), 'Editing sync.ts');
+  assert.equal(doingLine(s('Bash', 'npm test\nmore')), 'Running npm test');
+  assert.equal(doingLine(s('Grep', 'foo')), 'Looking through files');
+  assert.equal(doingLine(s('mcp__pencil__execute')), 'Using execute');
+});
+
+test('working lines skip the cd and shorten mcp names', async () => {
+  const { doingLine } = await import('../src/nebula/transcript.ts');
+  assert.equal(doingLine({ tool: 'Bash', target: 'cd /a/b && npm test', ok: null }), 'Running npm test');
+  assert.equal(doingLine({ tool: 'mcp__claude_ai_Gmail__send_message', target: '', ok: null }), 'Using send message');
+});

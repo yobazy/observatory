@@ -241,7 +241,7 @@ export function LaunchDialog({
           rows={5}
           aria-label="Task"
         />
-        {(onDispatch || onSaveIdea) && (
+        {(onDispatch || (onSaveIdea && pickedProject)) && (
           <p className="dialog-note">
             {onDispatch && (
               <>
@@ -249,23 +249,22 @@ export function LaunchDialog({
                 <button type="button" className="link-btn" onClick={() => onDispatch(task)} disabled={busy}>
                   Paste it into Dispatch
                 </button>
-                {onSaveIdea ? ". Not now? " : ""}
+                {onSaveIdea && pickedProject ? ". " : ""}
               </>
             )}
-            {onSaveIdea && (
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => onSaveIdea(task, pickedProject)}
-                disabled={busy || !task.trim()}
-                title={
-                  pickedProject
-                    ? `Keep it in Ideas, under ${project.name}, to start later`
-                    : "Keep it in Ideas, Unsorted unless you pick a project above, to start later"
-                }
-              >
-                Save it as an idea
-              </button>
+            {onSaveIdea && pickedProject && (
+              <>
+                Not sure where it goes?{" "}
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => onSaveIdea(task, null)}
+                  disabled={busy || !task.trim()}
+                  title="Keep it in Ideas without a project, until you know where it goes"
+                >
+                  Save it as an idea in Unsorted
+                </button>
+              </>
             )}
           </p>
         )}
@@ -410,6 +409,24 @@ export function LaunchDialog({
           <button type="button" className="btn" onClick={onClose} disabled={busy}>
             Cancel
           </button>
+          {/* Where the idea goes is said on the button: the project above is
+              where a task would start, and an idea only goes there if you
+              picked it. */}
+          {onSaveIdea && (
+            <button
+              type="button"
+              className="btn btn-idea"
+              onClick={() => onSaveIdea(task, pickedProject)}
+              disabled={busy || !task.trim()}
+              title={
+                pickedProject
+                  ? `Keep it in Ideas, under ${project.name}, to start later`
+                  : "Keep it in Ideas, in Unsorted until you know where it goes. Pick a project above to file it there."
+              }
+            >
+              {pickedProject ? `Save as idea for ${project.name}` : "Save as idea (Unsorted)"}
+            </button>
+          )}
           <button
             type="submit"
             className="btn btn-primary"

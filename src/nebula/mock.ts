@@ -70,6 +70,7 @@ function agent(
     session_id: `s-${id}`,
     cloud_session_id: null,
     issue_url: null,
+    role: "worker",
     sort_order: 0,
     alive: true,
     recent_prompts: prompts.map((text, i) => ({ text, submitted_at: now - (ago + i) * min })),
@@ -676,5 +677,10 @@ export function mockTranscript(s: State, agentId: string): Transcript | null {
   );
   add("steps", "", turn.steps.slice(half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok })));
   if (turn.said) add("claude", turn.said);
+  // A reply written as a card, so the reader's card shows in the demo.
+  add(
+    "claude",
+    "**Cart sync applies one update at a time now, and the two-tab race is gone.**\n\n✅ Tests pass · 🟠 Not committed · ⚪ Dev server on :5173\n\nSync applied every update with `Promise.all`, so they **raced**. Now a worker applies the next update when the current one settles:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\n**Needs you**\n1. Commit and push this?  A commit & push · B leave it for now\n2. Also cap retries at 30s?  A yes · B no\n\nI'd pick **1A, 2A**.\n\n**Details**\n- Updates apply in order\n- A failure stops the queue instead of being lost",
+  );
   return { entries, dropped: 0 };
 }

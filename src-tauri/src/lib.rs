@@ -6,17 +6,21 @@ mod editor;
 mod gh;
 mod git;
 mod icons;
+mod moments;
 mod nebula_setup;
 mod preview;
 mod relocate;
 mod router;
+mod serving;
 mod settings;
+mod stale;
 mod thread_edits;
 mod title;
 mod transcript;
 mod tray;
 mod turns;
 mod usage;
+mod uselog;
 
 /// Show and focus the main window, e.g. for the quick-capture hotkey.
 #[tauri::command]
@@ -52,6 +56,8 @@ pub fn run() {
             daemon::send,
             daemon::send_input,
             daemon::start_daemon,
+            stale::stale_daemon,
+            stale::restart_daemon,
             daemon::read_settings,
             daemon::read_presets,
             daemon::debug_log,
@@ -66,6 +72,13 @@ pub fn run() {
             gh::gh_pr_create,
             gh::gh_pr_merge,
             usage::usage_report,
+            uselog::append_use_log,
+            uselog::use_log_path,
+            uselog::clear_use_log,
+            moments::save_moment,
+            moments::annotate_moment,
+            moments::moments_dir,
+            serving::local_ports_open,
             activity::activity_report,
             activity::stop_process,
             thread_edits::thread_edits,
@@ -86,6 +99,7 @@ pub fn run() {
             relocate::carry_project_state,
             icons::read_icon,
             icons::project_logo,
+            icons::project_images,
             title::suggest_title,
             tray::update_tray,
             editor::list_editors,

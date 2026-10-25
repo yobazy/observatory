@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { isPreview, request } from "../nebula/client";
 import {
   colorOf,
+  findProjectImages,
   iconFor,
   pickIconImage,
   setProjectColor,
   setProjectIcon,
+  type FoundImage,
   type ShownIcon,
 } from "../nebula/icons";
 import { flash, getState, useAppState } from "../nebula/store";
@@ -56,7 +58,18 @@ export function IconPicker({ project, onClose }: { project: Project; onClose: ()
   const color = prefs.projectColors?.[project.repo_path] ?? null;
   const logo = logos[project.repo_path];
   const [typed, setTyped] = useState("");
+  const [found, setFound] = useState<FoundImage[] | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let live = true;
+    findProjectImages(project.repo_path)
+      .then((images) => live && setFound(images))
+      .catch(() => live && setFound([]));
+    return () => {
+      live = false;
+    };
+  }, [project.repo_path]);
 
   useEffect(() => {
     dialog.current?.querySelector<HTMLElement>("button")?.focus();
@@ -84,6 +97,25 @@ export function IconPicker({ project, onClose }: { project: Project; onClose: ()
           labelledBy="color-label"
           onPick={(name) => void setProjectColor(project.repo_path, name).catch((e) => flash(String(e)))}
         />
+
+        {found && found.length > 0 && (
+          <>
+            <div className="picker-section">From the project</div>
+            <div className="emoji-grid" role="group" aria-label="Images in the project">
+              {found.map((img) => (
+                <button
+                  key={img.path}
+                  className={`emoji-cell found-cell${picked?.kind === "image" && picked.value === img.url ? " is-on" : ""}`}
+                  onClick={() => choose({ kind: "image", value: img.url })}
+                  aria-label={`Use ${img.path}`}
+                  title={img.path}
+                >
+                  <img src={img.url} alt="" draggable={false} />
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="picker-section">Icon</div>
         <div className="emoji-grid" role="group" aria-label="Emoji">
@@ -125,7 +157,7 @@ export function IconPicker({ project, onClose }: { project: Project; onClose: ()
             className="btn"
             onClick={async () => {
               try {
-                const img = await pickIconImage();
+                const img = await pickIconImage(project.repo_path);
                 if (img) choose({ kind: "image", value: img });
               } catch (e) {
                 flash(String(e));

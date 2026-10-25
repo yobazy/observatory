@@ -10,21 +10,22 @@
   underneath on its own.
 -->
 
-### Keep ideas for later, without starting them
+### Works with nebula 0.45
 
-Ideas is a list of things you want to do but not right now, so they stop piling up in one project. Write one down in a second, from anywhere:
+This version talks to nebula 0.45.0. If yours is older, the start screen offers **Update nebula to 0.45.0**. The daemon that's running keeps the old version until it restarts, so run `nebula kill` once your agents are idle. With 0.45, **Locate…** follows a project folder you've moved instead of saying it can't yet.
 
-- quick capture's **Save it as an idea**;
-- **Save for later** in a thread's Follow up box, filed under that thread's project;
-- **Not now** on an item in Dispatch's plan;
-- the top line of the Ideas view.
+### Answer a reply without typing
 
-Each idea gets a project (or stays Unsorted), tags, a priority and a deadline. Open the view with ⌘I or the Ideas card in the sidebar: it groups ideas by project, sorts them by priority or deadline, and flags what's overdue or due soon. **Start** opens a new task with the idea already written in, and you can send several to Dispatch at once.
+Replies written as cards (a bold headline, status dots, a **Needs you** list, folded **Details**) now read as cards. Lettered options are buttons that build `1 A, 2 B` in the reply box, and when there's a recommended answer the empty box suggests it and **Tab** takes it. **Enter** sends and **⇧↵** adds a line. A card you've answered keeps a ✓ on what you sent.
 
-<img src="docs/release/ideas.jpg" width="880" alt="The Ideas view: Unsorted ideas first, then storefront's, one a day late and one due tomorrow, then marketing-site's, each with its priority and tags">
+### Go back to the thread you were just in
 
-### Move a thread to the project it belongs in
+**⌘[** returns to the thread you had open before this one, and **⌘K** lists your recent threads before you type. Archiving a thread now lands you on the one before it instead of an empty pane.
 
-**Move to project…** on a thread's right-click menu starts a new thread in the project you pick, with a brief of the old one: what was asked, its last words and the files it changed. You can edit the brief before it starts. The old thread is archived, unless you choose to keep it.
+### Write an idea down with ⌘I
 
-<img src="docs/release/move.jpg" width="640" alt="Moving Sync Retry Backoff from storefront to marketing-site: the new task box with the brief written in, and a box to keep the old thread">
+**⌘I** opens a small **New idea** box over whatever you're doing: type, pick a project if it isn't the one you're in, and **↵** saves it. The full Ideas view moves to **⇧⌘I**.
+
+### And a smaller thing
+
+- The project you're in stays in **Recent**, highlighted, so the list doesn't reshuffle every time you switch.

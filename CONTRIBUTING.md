@@ -64,8 +64,8 @@ commit's author.
 
 ## Reviews
 
-Claude reviews PRs and leaves inline comments. Treat them like any reviewer's: fix what's right,
-and reply when you disagree. A person makes the final call.
+The maintainer reviews every PR and may use an AI agent to help. Treat its comments like any
+reviewer's: fix what's right, and reply when you disagree. A person makes the final call.
 
 ## License
 

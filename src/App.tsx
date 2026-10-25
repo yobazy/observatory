@@ -4,6 +4,7 @@ import { Sessions } from "./components/Sessions";
 import { TerminalPane } from "./components/TerminalPane";
 import { LaunchDialog } from "./components/LaunchDialog";
 import { DispatchDialog } from "./components/DispatchDialog";
+import { IdeaDialog } from "./components/IdeaDialog";
 import { DispatchBoard } from "./components/DispatchBoard";
 import { CardDialog, type CardTarget } from "./components/CardDialog";
 import type { Seed } from "./components/RowMenu";
@@ -28,10 +29,11 @@ import { SettingsView } from "./components/Settings";
 import { useUsagePolling } from "./nebula/usage";
 import { savePrefs, useTheme } from "./nebula/theme";
 import { termFont, zoomed } from "./nebula/termfont";
-import { useRunWatch } from "./nebula/runs";
+import { useRunWatch, useServingWatch } from "./nebula/runs";
 import { useLimitWatch } from "./nebula/limits";
 import { useAutoFollowUps } from "./nebula/organize";
 import { useProjectSessions } from "./nebula/focus";
+import { useRecentTracking } from "./nebula/recent";
 import { useProjectLogos } from "./nebula/icons";
 import { flash, getState, setState, subscribe, useAppState, waitingAgents } from "./nebula/store";
 import { usePrPolling } from "./nebula/prs";
@@ -50,8 +52,10 @@ import { useUpdateCheck } from "./nebula/updates";
 import { useFolderWatch } from "./nebula/relocate";
 import { usePreviewEvents } from "./nebula/preview";
 import { useShelf } from "./nebula/shelf";
+import { previousThread, trackRecent } from "./nebula/recentThreads";
 import { HoverCard, PreviewPane } from "./components/Preview";
 import { Palette, type PaletteContext } from "./components/Palette";
+import { MomentCard } from "./components/Moments";
 import { TextDialog, type TextDialogSpec } from "./components/Dialogs";
 
 export default function App() {
@@ -176,11 +180,14 @@ export default function App() {
   useTheme();
   useRunWatch();
   useLimitWatch();
+  useServingWatch();
   useAutoFollowUps();
   useProjectSessions();
+  useRecentTracking();
   useProjectLogos();
   useMinuteClock();
   useLeaveUsageOnSelect();
+  useEffect(trackRecent, []);
   const { view, preview, prefs } = useAppState();
   const previewBeside = !!preview && prefs.previewPlacement === "beside";
   const [sidebarW, setSidebarW] = useColumnWidth(SIDEBAR);
@@ -214,10 +221,12 @@ export default function App() {
   // the window's traffic lights when nothing else is left of it.
   const [palette, setPalette] = useState(false);
   const [textDialog, setTextDialog] = useState<TextDialogSpec | null>(null);
+  const [newIdea, setNewIdea] = useState(false);
   const paletteCtx = useMemo<PaletteContext>(
     () => ({
       newTask: () => openLaunch(),
       dispatch: () => openDispatch(),
+      newIdea: () => setNewIdea(true),
       pickHome: () => void pickHome().catch((e) => flash(`Couldn't open the folder picker: ${e instanceof Error ? e.message : String(e)}`)),
       editHome,
       addProject: openAddProject,
@@ -235,7 +244,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I the ideas; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I writes an idea down, ⇧⌘I shows them all; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you; ⌘[ goes back to the thread open before this one.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -265,9 +274,12 @@ export default function App() {
       } else if (e.key === "u") {
         e.preventDefault();
         setState((s) => ({ view: s.view === "usage" ? "sessions" : "usage" }));
-      } else if (e.key === "i" && !e.altKey && !e.shiftKey) {
+      } else if (e.code === "KeyI" && e.shiftKey && !e.altKey) {
         e.preventDefault();
         setState((s) => ({ view: s.view === "ideas" ? "sessions" : "ideas" }));
+      } else if (e.key === "i" && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        setNewIdea(true);
       } else if (e.key === "o") {
         e.preventDefault();
         openAddProject();
@@ -278,6 +290,9 @@ export default function App() {
         const size = zoomed(prefs, e.key === "0" ? 0 : e.key === "-" ? -1 : 1);
         if (size !== termFont(prefs).size) void savePrefs({ ...prefs, terminalFontSize: size });
         flash(`Terminal text ${size} pt`, 1200);
+      } else if (e.key === "[") {
+        e.preventDefault();
+        previousThread();
       } else if (e.key === "j") {
         e.preventDefault();
         const s = getState();
@@ -380,8 +395,10 @@ export default function App() {
       {addStep && <AddProjectDialog step={addStep} onDone={setAddStep} />}
       {palette && <Palette ctx={paletteCtx} onClose={() => setPalette(false)} />}
       {textDialog && <TextDialog d={textDialog} onClose={() => setTextDialog(null)} />}
+      {newIdea && <IdeaDialog onClose={() => setNewIdea(false)} />}
       <HoverCard />
       <Notice />
+      <MomentCard />
       <DaemonGate />
       <Welcome />
     </div>

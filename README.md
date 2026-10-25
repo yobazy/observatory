@@ -58,15 +58,16 @@ it would do without changing anything, and `--help` lists the other options.
 - **Worktree bands**: sessions grouped by branch, with the ones that need you first. Switching
   projects brings back the session you last had open there.
 - **Terminal**: attach to any agent or shell. Shift+Enter inserts a newline in Claude Code.
+  `⌘↑`/`⌘↓` page through the scrollback and `⇧⌘↑`/`⇧⌘↓` jump to either end; hold `⌥` while
+  scrolling to go five times faster. Scrolled up, a **Jump to latest** button takes you back.
 - **Right-click a task** for the TUI's menu: follow-up prompt, restart, duplicate, rename,
   archive, run or stop the dev server, open the worktree, delete.
 - **Hide either column** with `⌘B` (projects) and `⌥⌘B` (tasks), or drag them to resize.
 - **New task** (`⌘N`): on an existing branch or a new worktree (the branch name is suggested from
   the task), with your choice of agent and preset.
 - **Moved a project's folder?** Its row says the folder is missing, and **Locate…** points the
-  project at the new place, carrying its icon, color, settings and Claude Code history with it
-  (this needs a nebula release with `SetProjectPath`; until then it says so). Right-click a
-  project to **Remove from list**; nothing on disk is touched.
+  project at the new place, carrying its icon, color, settings and Claude Code history with it.
+  Right-click a project to **Remove from list**; nothing on disk is touched.
 
 **Previews**
 
@@ -99,6 +100,9 @@ it would do without changing anything, and `--help` lists the other options.
 - **Start** runs the project's run command (the Project setting, or `run` in `.nebula.json`) in the
   worktree's run terminal. Once the dev server prints its address, the band shows it as a link.
 - No run command yet? Type one, or ask an agent to work it out and write `.nebula.json`.
+- **An agent started the server itself?** The address it printed shows above its terminal and as
+  the port on its row, so it's one click away. Running more than one? **+N** lists them all. Only
+  addresses that answer show, and one turns grey once its server stops.
 
 **Agent usage** (`⌘U`)
 
@@ -135,6 +139,17 @@ app shows up in the other. Rows that only affect the TUI's look are tagged. The 
 shared with the TUI; System, Dark, Black and Light are for the desktop app, and the terminal
 follows them.
 
+**Usage log** (Settings › General, off unless you turn it on): notes what you click, the views
+and dialogs you open and how long they stay up, the ⌘ shortcuts you press and the errors you hit,
+one JSON line each in `~/Library/Application Support/dev.bazil.observatory/usage-log.jsonl`. Never what you
+type, and nothing is sent anywhere. It's there to show where the app gets in your way.
+
+**Mark this moment** (`⇧⌘M`): noticed something off? This saves the last minute of those events,
+what's on screen (the view, project, session and its status) and a screenshot of the window to a
+folder under `moments/` beside the log, copies the folder's path, and takes a line on what you
+saw. Paste the path wherever you're reporting it. The minute is kept in memory whether or not the
+log is on, and only written when you press it. The screenshot needs Screen Recording allowed.
+
 <p align="center">
   <img src="docs/cat.gif" width="432" alt="The pixel cat at its telescope under a night sky: a shooting star goes by, and it sits up to watch">
 </p>
@@ -159,7 +174,7 @@ The daemon only accepts clients built with its exact `PROTOCOL_VERSION`. `nebula
 by tag in `src-tauri/Cargo.toml`:
 
 ```toml
-nebula-core = { git = "https://github.com/AgentSystemLabs/nebula", tag = "v0.40.2" }
+nebula-core = { git = "https://github.com/AgentSystemLabs/nebula", tag = "v0.45.0" }
 ```
 
 After `nebula upgrade`, bump the tag and rebuild (`./scripts/setup.sh` picks up the new tag and

@@ -22,10 +22,12 @@ import { selectAgent } from "./Sidebar";
 import type { TextDialogSpec } from "./Dialogs";
 import type { Agent } from "../nebula/types";
 import { homeCard } from "../nebula/cards";
+import { afterClosing, recentThreads } from "../nebula/recentThreads";
 
 export interface PaletteContext {
   newTask: () => void;
   dispatch: () => void;
+  newIdea: () => void;
   /** Pick a folder to be Home, where errands and scheduling run. */
   pickHome: () => void;
   editHome: () => void;
@@ -38,12 +40,15 @@ export interface PaletteContext {
 
 interface Item {
   id: string;
-  group: "Actions" | "Tasks" | "Projects";
+  group: "Recent" | "Actions" | "Tasks" | "Projects";
   label: string;
   detail?: string;
   keys?: string;
   run: () => void;
 }
+
+/** How many recent threads head the palette before you type. */
+const RECENT_SHOWN = 5;
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -60,6 +65,11 @@ function build(s: State, ctx: PaletteContext): Item[] {
   const items: Item[] = [];
   const act = (id: string, label: string, run: () => void, keys?: string, detail?: string) =>
     items.push({ id: `act:${id}`, group: "Actions", label, run, keys, detail });
+
+  // The threads you had open before this one come first, so ⌘K ↩ goes back.
+  recentThreads(s)
+    .slice(0, RECENT_SHOWN)
+    .forEach((a, i) => items.push({ ...taskItem(s, a), id: `recent:${a.id}`, group: "Recent", keys: i === 0 ? "⌘[" : undefined }));
 
   if (s.selectedProject) act("new", "New task", ctx.newTask, "⌘N");
   act("dispatch", "Dispatch: paste a to-do list", ctx.dispatch, "⇧⌘N");
@@ -93,7 +103,7 @@ function build(s: State, ctx: PaletteContext): Item[] {
     act("restart", `Restart ${agent.name}`, () => void request("RestartAgent", { id: agent.id }).catch((e) => flash(errText(e))));
     act("archive", `Archive ${agent.name}`, () => {
       void request("ArchiveAgent", { id: agent.id }).catch((e) => flash(errText(e)));
-      setState({ selectedSession: null });
+      setState(afterClosing);
     });
   }
 
@@ -124,7 +134,8 @@ function build(s: State, ctx: PaletteContext): Item[] {
   act("grid", "Watch tasks in a grid", ctx.toggleGrid, "⌘G");
   act("usage", "Agent usage", () => setState({ view: "usage" }), "⌘U");
   act("activity", "Activity: what's running in your projects", () => setState({ view: "activity" }), "⌥⌘U");
-  act("ideas", "Ideas: what you've written down to start later", () => setState({ view: "ideas" }), "⌘I");
+  act("new-idea", "New idea: write one down for later", ctx.newIdea, "⌘I");
+  act("ideas", "Ideas: what you've written down to start later", () => setState({ view: "ideas" }), "⇧⌘I");
   act("settings", "Settings", () => setState({ view: "settings" }), "⌘,");
   act("add", "Add a project", ctx.addProject, "⌘O");
   act("projects", "Hide or show projects", ctx.toggleProjects, "⌘B");
@@ -195,7 +206,9 @@ export function Palette({ ctx, onClose }: { ctx: PaletteContext; onClose: () => 
       let tasks = 0;
       return all.filter((i) => i.group !== "Tasks" || tasks++ < 40);
     }
+    // Typing searches every task once; the recent ones are among them.
     return all
+      .filter((i) => i.group !== "Recent")
       .map((i) => ({ i, score: Math.max(fuzzy(q, i.label), fuzzy(q, `${i.label} ${i.detail ?? ""}`) - 2) }))
       .filter((r) => r.score >= 0)
       .sort((a, b) => b.score - a.score)

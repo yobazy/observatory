@@ -28,6 +28,8 @@ import { ContextMenu, type MenuItem } from "./Menu";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
 import { reorderKey, useReorder } from "./useReorder";
 import { useBatches } from "../nebula/batch";
+import { useRecentCount, useVisits } from "../nebula/recent";
+import { RECENT_COUNTS, recentProjects, type RecentCount } from "../nebula/recentList";
 
 export function selectAgent(agent: Agent) {
   setState((s) => ({
@@ -243,6 +245,8 @@ export function Sidebar({
           <IdeasEntry />
         </div>
 
+        <RecentPanel projects={projects} onMenu={projectMenu.openFor} />
+
         <div className="projects-head">
           <h2 title="Every project nebula knows. Right-click one for folders, a name of your own, tags, its icon and color.">
             Projects <span className="projects-count">{projects.length}</span>
@@ -422,6 +426,73 @@ function useNeedsOnly(): [boolean, (on: boolean) => void] {
       }
     },
   ];
+}
+
+/** The last few projects you were in, this one marked among them, above
+ *  the full list so switching back never takes a scroll or a search. */
+function RecentPanel({ projects, onMenu }: { projects: Project[]; onMenu: (e: React.MouseEvent, project: Project) => void }) {
+  const state = useAppState();
+  const visits = useVisits();
+  const [count, setCount] = useRecentCount();
+  const current = state.selectedProject ? state.projects[state.selectedProject] : undefined;
+  const recent = useMemo(() => recentProjects(visits, projects, current, count), [visits, projects, current, count]);
+  // Only you being here isn't a list yet.
+  if (recent.length < 2) return null;
+  return (
+    <section className="recent" aria-label="Recent projects">
+      <div className="recent-head">
+        <h2 title="The projects you were in last, newest first, with the one you're in highlighted.">Recent</h2>
+        <select
+          className="recent-count"
+          value={count}
+          onChange={(e) => setCount(Number(e.target.value) as RecentCount)}
+          aria-label="How many recent projects to show"
+          title="How many recent projects to show"
+        >
+          {RECENT_COUNTS.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </div>
+      <ul>
+        {recent.map(({ project, at, here }) => {
+          const agents = projectAgents(state, project.id);
+          const needs = agents.filter((a) => a.status === "needs_feedback").length;
+          const running = agents.filter((a) => a.status === "running").length;
+          return (
+            <li key={project.id}>
+              <button
+                className={`recent-row${here ? " is-selected" : ""}`}
+                aria-current={here ? "page" : undefined}
+                onClick={() => setState({ selectedProject: project.id })}
+                onContextMenu={(e) => onMenu(e, project)}
+                title={here ? `${project.name}\n${project.repo_path}\nYou're here` : `${project.name}\n${project.repo_path}\nLast opened: ${relativeTime(at)}`}
+              >
+                <ProjectIcon project={project} />
+                <span className="project-name">{project.name}</span>
+                <span className="project-meta">
+                  {running > 0 && (
+                    <span className="project-working" title={`${running} in progress`}>
+                      <span className="orbit" aria-hidden />
+                      <span aria-hidden>{running}</span>
+                    </span>
+                  )}
+                  {needs > 0 && (
+                    <span className="project-badge badge-needs" title={`${needs} waiting on you`}>
+                      {needs}
+                    </span>
+                  )}
+                  <span className="recent-age">{here ? "here" : relativeTime(at)}</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
 }
 
 /** Once a new version is installed: restart into it, and what's in it. */

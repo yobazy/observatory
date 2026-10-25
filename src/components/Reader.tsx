@@ -1,14 +1,21 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { isPreview } from "../nebula/client";
 import { flash, getState } from "../nebula/store";
 import { enqueue, isIdle } from "../nebula/queue";
-import { merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
+import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
+import { answersIn, answerText, isCard, suggested, pointerText, readCard, replyQuote, type Card } from "../nebula/replycard";
+import { saveMoment } from "../nebula/moments";
+import { describe, openPreview, previewUrl } from "../nebula/preview";
 import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
 import { AskChoices } from "./AskStrip";
+
+/** What you were typing to each agent, kept when the reader remounts for a
+ *  new session (/clear, resume). */
+const drafts = new Map<string, string>();
 
 /** The thread's conversation, read again as it moves. */
 function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | null {
@@ -45,27 +52,159 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
   return got;
 }
 
-function Reply({ text }: { text: string }) {
-  const html = useMemo(() => DOMPurify.sanitize(marked.parse(text, { async: false }) as string), [text]);
-  return (
-    <div
-      className="md-doc rd-md"
-      dangerouslySetInnerHTML={{ __html: html }}
-      onClick={(e) => {
-        const href = (e.target as HTMLElement).closest("a")?.getAttribute("href");
-        if (!href) return;
-        e.preventDefault();
-        if (/^https?:/i.test(href)) void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href)).catch(() => {});
-      }}
-    />
+const toHtml = (md: string, inline = false) =>
+  DOMPurify.sanitize((inline ? marked.parseInline(md, { async: false }) : marked.parse(md, { async: false })) as string);
+
+/** Links in a reply open in the browser, not in the app's webview. */
+function openLink(e: MouseEvent) {
+  const href = (e.target as HTMLElement).closest("a")?.getAttribute("href");
+  if (!href) return;
+  e.preventDefault();
+  if (/^https?:/i.test(href)) void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href)).catch(() => {});
+}
+
+/** Put `text` on the clipboard and say so. */
+function copy(text: string, what: string) {
+  navigator.clipboard.writeText(text).then(
+    () => flash(`Copied ${what}`, 1500),
+    () => flash("Couldn't copy that", 4000),
   );
 }
 
-function Steps({ entry, root }: { entry: Entry; root: string }) {
+function Md({ text, className = "" }: { text: string; className?: string }) {
+  const html = useMemo(() => toHtml(text), [text]);
+  const el = useRef<HTMLDivElement>(null);
+  // Each code block gets a Copy for what's in it.
+  useEffect(() => {
+    const added: HTMLElement[] = [];
+    for (const pre of el.current?.querySelectorAll("pre") ?? []) {
+      const b = document.createElement("button");
+      b.className = "rd-copy";
+      b.textContent = "Copy";
+      b.title = "Copy this block";
+      b.onclick = (e) => {
+        e.stopPropagation();
+        copy((pre.querySelector("code") ?? pre).textContent?.replace(/\n$/, "") ?? "", "the block");
+      };
+      pre.append(b);
+      added.push(b);
+    }
+    return () => added.forEach((b) => b.remove());
+  }, [html]);
+  return <div ref={el} className={`md-doc rd-md ${className}`} dangerouslySetInnerHTML={{ __html: html }} onClick={openLink} />;
+}
+
+/** The images a reply names, shown in it; a click opens the preview. */
+function Pictures({ paths, from }: { paths: string[]; from: string }) {
+  const [ready, setReady] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    void Promise.all(paths.map((p) => describe(p).then(() => p, () => null))).then((got) => {
+      if (live) setReady(got.filter((p): p is string => !!p));
+    });
+    return () => {
+      live = false;
+    };
+  }, [paths.join("\n")]);
+  if (!ready.length) return null;
+  return (
+    <div className="rd-pics">
+      {ready.map((p) => (
+        <button key={p} className="rd-pic" onClick={() => void openPreview([p], from)} title={`Open ${p}`}>
+          <img src={previewUrl(p)} alt="" onError={(e) => (e.currentTarget.closest(".rd-pic") as HTMLElement).remove()} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A reply written as a card: headline, status, pictures, decisions to tap,
+ *  and details folded away. Decisions only take taps on the latest reply. */
+function CardReply({
+  card,
+  from,
+  live,
+  sent,
+  picks,
+  onPick,
+}: {
+  card: Card;
+  from: string;
+  live: boolean;
+  /** The picks are what you answered with, not taps waiting to be sent. */
+  sent: boolean;
+  picks: Record<number, string>;
+  onPick: (n: number, letter: string) => void;
+}) {
+  const headline = useMemo(() => (card.headline ? toHtml(card.headline, true) : ""), [card.headline]);
+  return (
+    <article className="rd-card">
+      {headline && <h3 className="rd-head" dangerouslySetInnerHTML={{ __html: headline }} onClick={openLink} />}
+      {card.chips.length > 0 && (
+        <div className="rd-chips">
+          {card.chips.map((c, i) => (
+            <span key={i} className={`rd-chip is-${c.tone}`}>
+              {c.text}
+            </span>
+          ))}
+        </div>
+      )}
+      <Pictures paths={card.images} from={from} />
+      {card.body && <Md text={card.body} />}
+      {card.asks.length > 0 && (
+        <section className="rd-needs" aria-label="Needs you">
+          <h4>Needs you</h4>
+          {card.asks.map((a) => (
+            <div key={a.n} className="rd-q">
+              <span className="rd-q-text" dangerouslySetInnerHTML={{ __html: toHtml(`${a.n}. ${a.text}`, true) }} />
+              {a.options.length > 0 && (
+                <span className="rd-opts">
+                  {a.options.map((o) => (
+                    <button
+                      key={o.letter}
+                      className={`rd-opt${picks[a.n] === o.letter ? (sent ? " is-on is-sent" : " is-on") : ""}`}
+                      disabled={!live}
+                      aria-pressed={picks[a.n] === o.letter}
+                      title={sent && picks[a.n] === o.letter ? "You answered this" : undefined}
+                      onClick={() => onPick(a.n, o.letter)}
+                    >
+                      <b>{o.letter}</b> <span dangerouslySetInnerHTML={{ __html: toHtml(o.label, true) }} />
+                    </button>
+                  ))}
+                </span>
+              )}
+            </div>
+          ))}
+          {card.asksNote && <Md text={card.asksNote} />}
+        </section>
+      )}
+      {card.details && (
+        <details className="rd-fold">
+          <summary>Details</summary>
+          <Md text={card.details} />
+        </details>
+      )}
+    </article>
+  );
+}
+
+function Reply(props: {
+  text: string;
+  from: string;
+  live: boolean;
+  sent: boolean;
+  picks: Record<number, string>;
+  onPick: (n: number, letter: string) => void;
+}) {
+  const card = useMemo(() => readCard(props.text), [props.text]);
+  return isCard(card) ? <CardReply card={card} {...props} /> : <Md text={props.text} />;
+}
+
+function Steps({ entry, root, fresh }: { entry: Entry; root: string; fresh: boolean }) {
   const rel = (t: string) => (root && t.startsWith(`${root}/`) ? t.slice(root.length + 1) : t);
   const failed = entry.steps.some((s) => s.ok === false);
   return (
-    <details className={`rd-steps${failed ? " has-failed" : ""}`}>
+    <details className={`rd-steps${failed ? " has-failed" : ""}${fresh ? " is-new" : ""}`}>
       <summary>{stepsLine(entry.steps)}</summary>
       <ul>
         {entry.steps.map((s, i) => (
@@ -73,7 +212,7 @@ function Steps({ entry, root }: { entry: Entry; root: string }) {
             <span className={`ts-mark ${s.ok === null ? "is-pending" : s.ok ? "is-ok" : "is-bad"}`} aria-hidden>
               {s.ok === null ? "…" : s.ok ? "✓" : "✕"}
             </span>
-            <span className="rd-tool">{s.tool.replace(/^mcp__[^_]+__/, "")}</span>
+            <span className="rd-tool">{s.tool.replace(/^mcp__.+?__/, "")}</span>
             <code title={s.target}>{rel(s.target)}</code>
           </li>
         ))}
@@ -101,21 +240,145 @@ export function Reader({
   const t = useTranscript(agent);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
-  const [draft, setDraft] = useState("");
+  const lastTop = useRef(0);
+  // Entries there when the thread opened sit still; later ones arrive.
+  const known = useRef<number | null>(null);
+  if (t && known.current === null) known.current = t.entries.length ? t.entries[t.entries.length - 1].n : -1;
+  const fresh = (e: Entry) => known.current !== null && e.n > known.current;
+  const lastN = useRef<number | null>(null);
+  // Something arrived below while you were scrolled up.
+  const [behind, setBehind] = useState(false);
+  const [draft, setDraftState] = useState(() => drafts.get(agent.id) ?? "");
+  const setDraft = (text: string) => {
+    drafts.set(agent.id, text);
+    setDraftState(text);
+  };
+  // A glide down to the latest is under way; resizes leave it be.
+  const gliding = useRef(false);
   const waiting = agent.status === "needs_feedback";
+  // Answers tapped on the latest reply, until you send them or it moves on.
+  const [tapped, setTapped] = useState<{ entry: number; picks: Record<number, string> }>({ entry: -1, picks: {} });
+  const latest = useMemo(() => {
+    const all = t?.entries ?? [];
+    const last = [...all].reverse().find((e) => e.kind === "claude");
+    return last && !all.some((e) => e.kind === "you" && e.n > last.n) ? last.n : -1;
+  }, [t?.entries]);
+  // Answers queued while it works, shown as sent until your message lands.
+  const [queued, setQueued] = useState<{ entry: number; picks: Record<number, string>; text: string; how: "sent" | "queued" }>({
+    entry: -1,
+    picks: {},
+    text: "",
+    how: "sent",
+  });
+  const picks = tapped.entry === latest ? tapped.picks : {};
+  // A queued message you took back out of the queue no longer counts.
+  const stillGoing = queued.how === "sent" || (getState().queue[agent.id] ?? []).some((q) => q.text === queued.text);
+  const showQueued = queued.entry === latest && stillGoing && !answerText(picks, "");
+  // What you answered each earlier reply with, read from the message after it.
+  const answered = useMemo(() => {
+    const out: Record<number, Record<number, string>> = {};
+    let reply = -1;
+    for (const e of t?.entries ?? []) {
+      if (e.kind === "claude" && readCard(e.text).asks.length) reply = e.n;
+      else if (e.kind === "you" && reply >= 0) {
+        // A message pointing at a reply says which first, then the answers.
+        const said = answersIn(e.text);
+        out[reply] = Object.keys(said).length ? said : answersIn(e.text.split(/\n\s*\n/).slice(1).join("\n\n"));
+        reply = -1;
+      }
+    }
+    return out;
+  }, [t?.entries]);
+  // The step under way, said as what it's doing.
+  const doing = useMemo(() => {
+    const last = t?.entries[t.entries.length - 1];
+    const step = last?.kind === "steps" ? last.steps[last.steps.length - 1] : undefined;
+    return step && step.ok === null ? doingLine(step) : null;
+  }, [t?.entries]);
+  const pick = (n: number, letter: string) =>
+    setTapped({ entry: latest, picks: { ...picks, [n]: picks[n] === letter ? "" : letter } });
+  // "Point at this": a reply you want looked at, with a screenshot of how it
+  // showed, sent along with whatever you say about it.
+  const [pointed, setPointed] = useState<{ entry: number; quote: string; shot: string | null } | null>(null);
+  const [pointing, setPointing] = useState<number | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  // What the latest card recommends, offered in the empty box like the
+  // terminal's ghost text: Tab taps those answers, Enter sends them.
+  const recommended = useMemo(() => {
+    const e = t?.entries.find((x) => x.n === latest);
+    return e ? suggested(readCard(e.text)) : {};
+  }, [t?.entries, latest]);
+  const ghost = !draft && !answerText(picks, "") && !pointed && !showQueued ? answerText(recommended, "") : "";
+  const said = answerText(picks, draft);
+  const outgoing = pointed && said ? pointerText(pointed.quote, pointed.shot, said) : pointed ? "" : said;
+  const point = async (e: Entry) => {
+    if (pointing !== null) return;
+    setPointing(e.n);
+    const saved = await saveMoment().catch(() => null);
+    setPointing(null);
+    if (saved?.noScreenshot) flash(saved.noScreenshot, 6000);
+    setPointed({ entry: e.n, quote: replyQuote(e.text), shot: saved && !saved.noScreenshot ? `${saved.dir}/screenshot.png` : null });
+    box.current?.focus();
+  };
 
-  // Stay at the bottom while new entries come in, unless you scrolled up.
+  // Stay at the bottom while new entries come in, unless you scrolled up;
+  // then say something new is below instead.
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
+    const n = t?.entries.length ? t.entries[t.entries.length - 1].n : null;
+    const grew = lastN.current !== null && n !== null && n > lastN.current;
+    const opening = lastN.current === null;
+    lastN.current = n;
+    if (!el) return;
+    // Polls hand back a new list even when nothing changed; only arrivals move you.
+    if (stick.current && (grew || opening)) toBottom(opening ? "auto" : "smooth");
+    else if (grew) setBehind(true);
   }, [t?.entries]);
 
-  const send = async () => {
-    const text = draft.trim();
-    if (!text || waiting) return;
-    setDraft("");
+  // Pictures and folds change the height after the entries land; stay at
+  // the bottom through that too.
+  useEffect(() => {
+    const el = scroller.current;
+    const col = el?.firstElementChild;
+    if (!el || !col) return;
+    const watch = new ResizeObserver(() => {
+      if (stick.current && !gliding.current) el.scrollTop = el.scrollHeight;
+    });
+    watch.observe(col);
+    return () => watch.disconnect();
+  }, [!t]);
+
+  const toBottom = (how: ScrollBehavior) => {
+    const el = scroller.current;
+    if (!el) return;
     stick.current = true;
-    if ((await enqueue(agent, text)) === "queued") flash(`Queued for ${agent.name}: sent when its turn ends`);
+    setBehind(false);
+    const smooth = how === "smooth" && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    gliding.current = smooth;
+    // WebKit has no scrollend; reaching the bottom ends the glide, or this.
+    if (smooth) window.setTimeout(() => (gliding.current = false), 700);
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+  };
+
+  const send = async () => {
+    const text = outgoing;
+    if (!text || waiting) return;
+    const was = { draft, tapped, pointed };
+    setDraft("");
+    setTapped({ entry: -1, picks: {} });
+    setPointed(null);
+    stick.current = true;
+    try {
+      const how = await enqueue(agent, text);
+      setQueued({ entry: latest, picks, text, how });
+      if (how === "queued") flash(`Queued for ${agent.name}: sent when its turn ends`);
+    } catch {
+      // It didn't go: put back what you wrote and picked.
+      setDraft(was.draft);
+      setTapped(was.tapped);
+      setPointed(was.pointed);
+      flash(`Couldn't send to ${agent.name}. Your reply is still in the box.`, 6000);
+    }
   };
 
   return (
@@ -124,8 +387,20 @@ export function Reader({
         className="rd-scroll"
         ref={scroller}
         onScroll={(e) => {
+          // Only scrolling up lets go of the bottom, so a smooth glide down
+          // to a new entry doesn't count as leaving it.
           const el = e.currentTarget;
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          // Content shrinking (a fold closing, the working line going)
+          // pulls scrollTop back too; that isn't you, unless it leaves
+          // you away from the bottom.
+          const near = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          if (el.scrollTop < lastTop.current - 2 && !near) stick.current = false;
+          else if (near) {
+            stick.current = true;
+            gliding.current = false;
+            setBehind(false);
+          }
+          lastTop.current = el.scrollTop;
         }}
       >
         <div className="rd-col">
@@ -138,23 +413,59 @@ export function Reader({
               {t.dropped > 0 && <p className="rd-note">Earlier messages aren't shown; the terminal has them.</p>}
               {t.entries.map((e) =>
                 e.kind === "you" ? (
-                  <div key={e.n} className="rd-you">
+                  <div key={e.n} className={`rd-you${fresh(e) ? " is-new" : ""}`}>
                     {e.text}
                   </div>
                 ) : e.kind === "claude" ? (
-                  <Reply key={e.n} text={e.text} />
+                  <div key={e.n} className={`rd-reply${pointed?.entry === e.n ? " is-pointed" : ""}${fresh(e) ? " is-new" : ""}`}>
+                    <Reply
+                      text={e.text}
+                      from={agent.id}
+                      live={e.n === latest && !waiting}
+                      sent={e.n !== latest || showQueued}
+                      picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : picks}
+                      onPick={pick}
+                    />
+                    <div className="rd-tools">
+                      <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">
+                        Copy
+                      </button>
+                      {!waiting && (
+                        <button
+                          className={`rd-point${pointing === e.n ? " is-busy" : ""}`}
+                          disabled={pointing !== null}
+                          onClick={() => void point(e)}
+                          title="Take a screenshot of this reply and tell the agent what to change about it"
+                        >
+                          {pointing === e.n ? "Capturing…" : "Point at this"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ) : e.kind === "steps" ? (
-                  <Steps key={e.n} entry={e} root={root.replace(/\/+$/, "")} />
+                  <Steps key={e.n} entry={e} root={root.replace(/\/+$/, "")} fresh={fresh(e)} />
                 ) : (
-                  <p key={e.n} className="rd-note">
+                  <p key={e.n} className={`rd-note${fresh(e) ? " is-new" : ""}`}>
                     Stopped by you
                   </p>
                 ),
               )}
-              {agent.status === "running" && <p className="rd-note rd-working">Working…</p>}
+              {agent.status === "running" && (
+                <p className="rd-note rd-working">
+                  <span className="rd-pulse" aria-hidden />
+                  <span className="rd-doing">{doing ?? "Working…"}</span>
+                </p>
+              )}
             </>
           )}
         </div>
+        {behind && (
+          <div className="rd-latest-at">
+            <button className="rd-latest" onClick={() => toBottom("smooth")}>
+              ↓ Jump to latest
+            </button>
+          </div>
+        )}
       </div>
       <div className="rd-compose">
         {waiting && question ? (
@@ -171,20 +482,51 @@ export function Reader({
           </p>
         ) : (
           <>
+            {pointed && (
+              <span className="rd-picked rd-pointed" title={pointed.shot ?? "No screenshot"}>
+                <span className="rd-quote">About “{pointed.quote}”</span>
+                <button className="link-btn" onClick={() => setPointed(null)} aria-label="Stop pointing at that reply">
+                  ×
+                </button>
+              </span>
+            )}
+            {answerText(picks, "") && (
+              <span className="rd-picked">
+                {answerText(picks, "")}
+                <button className="link-btn" onClick={() => setTapped({ entry: -1, picks: {} })} aria-label="Clear the answers">
+                  ×
+                </button>
+              </span>
+            )}
             <textarea
+              ref={box}
               rows={2}
               value={draft}
-              placeholder={isIdle(agent) ? `Reply to ${agent.name}` : `Queue a reply for when ${agent.name} is done`}
+              placeholder={
+                ghost
+                  ? `${ghost}    Tab to use it`
+                  : pointed
+                  ? "What should change about it?"
+                  : answerText(picks, "")
+                  ? "Add anything else, or just send"
+                  : isIdle(agent)
+                    ? `Reply to ${agent.name}`
+                    : `Queue a reply for when ${agent.name} is done`
+              }
               aria-label="Reply"
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && e.metaKey) {
+                if (e.key === "Tab" && !e.shiftKey && ghost) {
+                  e.preventDefault();
+                  setTapped({ entry: latest, picks: recommended });
+                } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  // Enter sends, like the terminal; Shift-Enter starts a new line.
                   e.preventDefault();
                   void send();
                 }
               }}
             />
-            <button className="btn btn-primary" disabled={!draft.trim()} onClick={() => void send()} title="Send (⌘↵)">
+            <button className="btn btn-primary" disabled={!outgoing} onClick={() => void send()} title="Send (↵). Shift-↵ for a new line">
               {isIdle(agent) ? "Send" : "Queue"}
             </button>
           </>

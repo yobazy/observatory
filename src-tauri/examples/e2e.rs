@@ -180,6 +180,51 @@ async fn main() -> R<()> {
     })
     .await?;
     println!("ok   CreateTerminal / CloseTerminal");
+
+    // Locate…: a project whose folder moved on disk follows it (relocate.ts).
+    let dir = std::env::temp_dir().join(format!("observatory-e2e-{}", std::process::id()));
+    let (before, after) = (dir.join("before"), dir.join("after"));
+    send(
+        &mut s,
+        json!({"AddProject": {"req_id": 7, "path": before, "name": null, "create_missing": true}}),
+    )
+    .await?;
+    let moved = until(&mut s, 10, |v| {
+        (v.pointer("/Ack/req_id")? == 7).then(|| {
+            v.pointer("/Ack/created/Project")?
+                .as_str()
+                .map(String::from)
+        })?
+    })
+    .await?;
+    std::fs::rename(&before, &after)?;
+    let after = after.canonicalize()?;
+    send(
+        &mut s,
+        json!({"SetProjectPath": {"req_id": 8, "id": moved, "path": after}}),
+    )
+    .await?;
+    let mut seen = (false, false);
+    until(&mut s, 10, |v| {
+        if v.pointer("/EntityUpserted/entity/Project/id")
+            .and_then(Value::as_str)
+            == Some(&moved)
+        {
+            seen.0 = v.pointer("/EntityUpserted/entity/Project/repo_path")? == after.to_str()?;
+        }
+        if v.pointer("/Ack/req_id") == Some(&json!(8)) {
+            seen.1 = true;
+        }
+        (seen.0 && seen.1).then_some(())
+    })
+    .await?;
+    send(&mut s, json!({"RemoveProject": {"req_id": 9, "id": moved}})).await?;
+    until(&mut s, 5, |v| {
+        (v.pointer("/Ack/req_id")? == 9).then_some(())
+    })
+    .await?;
+    std::fs::remove_dir_all(&dir)?;
+    println!("ok   SetProjectPath follows a moved folder");
     println!("all passed");
     Ok(())
 }

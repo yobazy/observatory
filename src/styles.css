@@ -23,6 +23,8 @@
   --st-merged: #b58cff;
   /* Git's modified and CI's pending, in the yellow everyone reads them in. */
   --amber: #f2b84b;
+  /* A button filled yellow. Light mode's --amber is dark enough for text, too dark to fill. */
+  --amber-fill: #f2b84b;
 
   --ui: "Onest Variable", -apple-system, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -1218,12 +1220,37 @@ body.is-resizing-rows * {
 .xterm .xterm-viewport {
   background: transparent !important;
 }
-.xterm .xterm-viewport::-webkit-scrollbar {
-  width: 8px;
+/* xterm 6 draws its own scrollbar in a 14px gutter, with a square slider set
+   inline. Make it a thin pill like the rest of the app's, which fattens when
+   pointed at so it's easy to grab. */
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  left: 6px !important;
+  width: 5px !important;
+  border-radius: 3px;
+  background: var(--faint) !important;
+  opacity: 0.6;
+  transition: left 120ms, width 120ms, opacity 120ms;
 }
-.xterm .xterm-viewport::-webkit-scrollbar-thumb {
-  background: var(--line);
-  border-radius: 4px;
+.xterm .xterm-scrollable-element > .scrollbar.vertical:hover > .slider,
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider.active {
+  left: 3px !important;
+  width: 9px !important;
+  border-radius: 5px;
+  background: var(--muted) !important;
+  opacity: 0.8;
+}
+
+/* Shown while the terminal is scrolled up off its newest output. */
+.pane-latest {
+  position: absolute;
+  right: 28px;
+  bottom: 18px;
+  z-index: 12;
+  background: var(--raised);
+  box-shadow: 0 8px 20px rgb(5 8 16 / 0.35);
+}
+.pane-latest kbd {
+  margin-left: 6px;
 }
 
 .pane-empty {
@@ -1276,6 +1303,15 @@ body.is-resizing-rows * {
 }
 .btn-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 82%, white);
+}
+/* Keeping a task for later instead of starting it: still a confirm, but not the go-ahead. */
+.btn-idea {
+  background: var(--amber-fill);
+  border-color: var(--amber-fill);
+  color: #1d1606;
+}
+.btn-idea:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--amber-fill) 85%, white);
 }
 
 /* ---------- dialog ---------- */
@@ -1442,6 +1478,41 @@ body.is-resizing-rows * {
   margin-top: 6px;
 }
 
+/* ---------- marked moment (Moments.tsx) ---------- */
+
+.moment-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(440px, calc(100vw - 32px));
+  padding: 12px 14px;
+}
+.moment-card p {
+  margin: 0;
+  line-height: 1.45;
+}
+.moment-hint {
+  color: var(--muted);
+}
+.moment-card .setting-input {
+  width: 100%;
+}
+.moment-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.moment-actions select {
+  flex: 1;
+  min-width: 0;
+  margin-right: auto;
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 4px 8px;
+}
+
 /* ---------- first-launch welcome + telescope ---------- */
 
 .welcome {
@@ -1600,6 +1671,59 @@ body.is-resizing-rows * {
   animation: scope-pulse 2.4s ease-in-out infinite;
 }
 
+/* The nebula the startup gate looks for: a soft cloud, faint until found. */
+.scope-nebula {
+  --nebula-a: #b49cff;
+  --nebula-b: #ff9fd2;
+  --nebula-c: #8fd0ff;
+  opacity: 0.45;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 600ms ease;
+}
+:root[data-mode="light"] .scope-nebula {
+  --nebula-a: #7d5cf0;
+  --nebula-b: #e0559b;
+  --nebula-c: #3d9ad6;
+}
+.scope-nebula-a {
+  fill: var(--nebula-a);
+  opacity: 0.75;
+}
+.scope-nebula-b {
+  fill: var(--nebula-b);
+  opacity: 0.55;
+}
+.scope-nebula-c {
+  fill: var(--nebula-c);
+  opacity: 0.5;
+}
+.scope-nebula-core {
+  fill: #fff;
+  opacity: 0.7;
+}
+:root[data-mode="light"] .scope-nebula-core {
+  fill: var(--nebula-a);
+}
+.scope-search .scope-nebula {
+  animation: scope-drift 9s ease-in-out infinite;
+}
+
+/* search: scan the sky slowly, stopping here and there, never quite on it.
+   Its rest angle is near the nebula but off it, for reduced motion. */
+.scope-search .scope-tube {
+  transform: rotate(-24deg);
+  animation: scope-search 16s ease-in-out infinite;
+}
+
+/* found: turn from wherever the scan was and settle on the nebula. */
+.scope-found .scope-tube {
+  animation: scope-settle 700ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
+}
+.scope-found .scope-nebula {
+  opacity: 1;
+}
+
 @keyframes scope-twinkle {
   50% {
     opacity: 0.12;
@@ -1639,6 +1763,51 @@ body.is-resizing-rows * {
     transform: rotate(-48deg);
   }
 }
+@keyframes scope-search {
+  0% {
+    transform: rotate(-20deg);
+  }
+  11%,
+  16% {
+    transform: rotate(-37deg);
+  }
+  27%,
+  29% {
+    transform: rotate(-27deg);
+  }
+  44%,
+  53% {
+    transform: rotate(-47deg);
+  }
+  63% {
+    transform: rotate(-39deg);
+  }
+  67%,
+  70% {
+    transform: rotate(-41deg);
+  }
+  84%,
+  91% {
+    transform: rotate(-22deg);
+  }
+  100% {
+    transform: rotate(-20deg);
+  }
+}
+@keyframes scope-settle {
+  from {
+    transform: rotate(var(--scope-from, -24deg));
+  }
+  to {
+    transform: rotate(-32deg);
+  }
+}
+@keyframes scope-drift {
+  50% {
+    opacity: 0.6;
+    transform: scale(1.06);
+  }
+}
 @keyframes scope-found {
   from {
     opacity: 0;
@@ -1663,9 +1832,24 @@ body.is-resizing-rows * {
   align-self: center;
   margin-bottom: 4px;
 }
+/* nebula's up: the copy goes while the telescope settles, then the gate. */
+.gate-found .gate-card > :not(.scope) {
+  opacity: 0;
+  transition: opacity 250ms ease;
+}
+.gate-found {
+  animation: gate-out 300ms 800ms ease both;
+  pointer-events: none;
+}
+@keyframes gate-out {
+  to {
+    opacity: 0;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .scope *,
+  .gate-found,
   .welcome,
   .welcome * {
     animation: none !important;
@@ -1853,6 +2037,64 @@ body.is-resizing-rows * {
   padding: 0 0 0 18px;
   background: none;
 }
+/* The last few projects you were in (Sidebar.tsx RecentPanel), above the
+   full list. */
+.recent {
+  margin: 0 10px 10px;
+}
+.recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 2px 10px;
+}
+.recent-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.recent-count {
+  height: 22px;
+  padding: 0 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.recent-count:hover,
+.recent-count:focus-visible {
+  border-color: var(--line);
+  color: var(--text);
+}
+.recent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--r-md);
+  padding: 5px 10px;
+  color: var(--muted);
+}
+.recent-row:hover {
+  background: var(--panel);
+  color: var(--text);
+}
+.recent-row.is-selected {
+  background: var(--raised);
+  color: var(--text);
+}
+.recent-age {
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .sidebar-foot {
   display: flex;
   align-items: center;
@@ -2753,6 +2995,44 @@ td.task-last {
   white-space: nowrap;
   min-width: 0;
 }
+.down-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.agent-server {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.agent-server.is-down {
+  color: var(--faint);
+}
+.row-server {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--st-done);
+  cursor: pointer;
+}
+.row-server .live-dot {
+  width: 5px;
+  height: 5px;
+  box-shadow: none;
+}
+.agent-server-more {
+  font-size: 12px;
+  color: var(--muted);
+}
+.row-server-more {
+  color: var(--faint);
+}
+.row-server:hover {
+  text-decoration: underline;
+}
 .run-line .link-btn {
   font-size: 12px;
 }
@@ -3066,6 +3346,17 @@ td.task-last {
 }
 .emoji-cell.is-on {
   border-color: var(--accent);
+}
+.found-cell {
+  display: grid;
+  place-items: center;
+  padding: 6px;
+}
+.found-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
 }
 .emoji-typed {
   display: flex;
@@ -3893,6 +4184,44 @@ td.task-last {
   flex-direction: column;
   gap: 14px;
 }
+/* The window doesn't select text; what was said in a thread does, so you can
+   copy part of a reply. Its buttons and folds stay clicks. */
+.rd-you,
+.rd-md,
+.rd-head,
+.rd-q-text {
+  user-select: text;
+  cursor: text;
+}
+.rd-md a {
+  cursor: pointer;
+}
+/* Code blocks get their own Copy, since they're most often what you take. */
+.rd-md pre {
+  position: relative;
+}
+.rd-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  color: var(--muted);
+  font: 500 11px/1.5 var(--ui);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.rd-md pre:hover .rd-copy,
+.rd-copy:focus-visible {
+  opacity: 1;
+}
+.rd-copy:hover {
+  color: var(--text);
+}
 .rd-you {
   align-self: flex-end;
   max-width: 85%;
@@ -3919,6 +4248,235 @@ td.task-last {
 .rd-md pre {
   background: var(--panel);
   border: 1px solid var(--line);
+}
+/* A reply written as a card: headline, status chips, pictures, decisions to
+   tap and details folded away. Prose replies don't get one. */
+.rd-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+.rd-head {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.rd-head code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+.rd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rd-chip {
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  --tone: var(--st-idle);
+  color: color-mix(in srgb, var(--tone) 75%, var(--text));
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+.rd-chip.is-done {
+  --tone: var(--st-done);
+}
+.rd-chip.is-wait {
+  --tone: var(--st-waiting);
+}
+.rd-chip.is-bad {
+  --tone: var(--st-error);
+}
+.rd-pics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rd-pic {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--term);
+  overflow: hidden;
+  cursor: pointer;
+}
+.rd-pic img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+}
+.rd-needs {
+  display: grid;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--st-waiting) 35%, var(--line));
+  border-radius: var(--r-md);
+  background: var(--term);
+}
+.rd-needs h4 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--st-waiting);
+}
+.rd-q {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.rd-q-text {
+  flex: 1 1 240px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.rd-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.rd-opt {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 11px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    border-color 120ms,
+    color 120ms,
+    transform 90ms;
+}
+.rd-opt:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.rd-opt:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.rd-opt.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+/* Options you can't tap (an older reply, or one waiting on the terminal)
+   lose their outline, so they don't pass for buttons; the one you sent
+   stays marked. */
+.rd-opt:disabled {
+  cursor: default;
+  color: var(--muted);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--line) 35%, transparent);
+}
+/* Your taps stay visible while the agent waits on the terminal. */
+.rd-opt.is-on:disabled {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.rd-opt.is-sent,
+.rd-opt.is-sent:disabled {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.rd-opt.is-sent::after {
+  content: "✓";
+  color: var(--accent);
+}
+.rd-fold summary {
+  width: fit-content;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: default;
+  list-style: none;
+}
+.rd-fold summary::-webkit-details-marker {
+  display: none;
+}
+.rd-fold summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 14px;
+  font-size: 12px;
+}
+.rd-fold[open] summary::before {
+  content: "▾";
+}
+.rd-fold .rd-md {
+  margin-top: 8px;
+}
+/* Every reply can be pointed at: a screenshot of it goes to the agent with
+   what you say about it. The button shows on hover. */
+.rd-reply {
+  position: relative;
+}
+.rd-tools {
+  position: absolute;
+  top: -11px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+.rd-point {
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  opacity: 0;
+}
+.rd-reply:hover .rd-point,
+.rd-tools:focus-within .rd-point,
+.rd-point.is-busy {
+  opacity: 1;
+}
+.rd-point:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.rd-reply.is-pointed > :first-child {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 6px;
+  border-radius: var(--r-md);
+}
+.rd-picked.rd-pointed {
+  max-width: 40%;
+  font-family: var(--ui);
+}
+.rd-quote {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rd-picked {
+  animation: fade 120ms ease-out;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  padding: 5px 6px 5px 10px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  white-space: nowrap;
 }
 .rd-steps {
   font-size: 12.5px;
@@ -4013,6 +4571,96 @@ td.task-last {
   margin: 0;
   font-size: 13px;
   color: var(--st-waiting);
+}
+/* Reader motion: what arrives while you read rises in (a card's parts one
+   after another), answers press and fill, folds fade open. What was there
+   when the thread opened sits still. */
+.rd-col > .is-new {
+  animation: rise 160ms ease-out both;
+}
+/* A new card rises part by part instead of as a whole. */
+.rd-col > .rd-reply.is-new:has(> .rd-card) {
+  animation: none;
+}
+.rd-reply.is-new .rd-card > * {
+  animation: rise 160ms ease-out both;
+}
+.rd-reply.is-new .rd-card > :nth-child(2) {
+  animation-delay: 40ms;
+}
+.rd-reply.is-new .rd-card > :nth-child(3) {
+  animation-delay: 80ms;
+}
+.rd-reply.is-new .rd-card > :nth-child(n + 4) {
+  animation-delay: 120ms;
+}
+/* The frame fades in under its parts, so it never stands empty. */
+.rd-reply.is-new .rd-card {
+  animation: fade 120ms ease-out both;
+}
+.rd-fold[open] > .rd-md,
+.rd-steps[open] > ul {
+  animation: rise 160ms ease-out;
+}
+.rd-working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rd-pulse {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--st-running);
+  animation: breathe 1.4s ease-in-out infinite;
+}
+.rd-doing {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Takes no room, so showing it doesn't move what you're reading. */
+.rd-latest-at {
+  position: sticky;
+  bottom: 12px;
+  height: 0;
+  display: flex;
+  justify-content: center;
+}
+.rd-latest {
+  height: fit-content;
+  transform: translateY(-100%);
+  padding: 5px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  box-shadow: var(--shadow-pop);
+  cursor: pointer;
+  animation: fade 120ms ease-out;
+}
+.rd-latest:hover {
+  border-color: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-col > .is-new,
+  .rd-reply.is-new .rd-card,
+  .rd-reply.is-new .rd-card > *,
+  .rd-fold[open] > .rd-md,
+  .rd-steps[open] > ul,
+  .rd-picked,
+  .rd-pulse,
+  .rd-latest {
+    animation: none;
+  }
+  .rd-opt {
+    transition: none;
+  }
 }
 
 .ask-strip {
@@ -6042,12 +6690,29 @@ button.board-main:hover .board-text {
 .ideas-late {
   color: var(--st-waiting);
 }
+.uc-entry-title:has(.bulb-glyph) {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.bulb-glyph {
+  color: var(--muted);
+  flex: none;
+}
 .sessions-ideas {
   margin-top: 4px;
   font-size: 12px;
 }
 .ideas-search {
   width: 180px;
+}
+/* ⌘I's quick idea (IdeaDialog.tsx) */
+.idea-dialog-row {
+  display: flex;
+  gap: 8px;
+}
+.idea-dialog .dialog-foot .link-btn {
+  margin-right: auto;
 }
 .ideas-new {
   display: flex;

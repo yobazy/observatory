@@ -28,6 +28,8 @@ import { getVersion } from "@tauri-apps/api/app";
 import { isPreview } from "../nebula/client";
 import { DEFAULT_CAP, globalCap } from "../nebula/batch";
 import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
+import { clearUseLog, useLogPath } from "../nebula/uselog";
+import { momentsDir } from "../nebula/moments";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
 type Tab = (typeof TABS)[number];
@@ -96,6 +98,7 @@ export function SettingsView() {
               <Previews />
               <DispatchSettings />
               <Updates />
+              <UsageLog />
             </>
           ) : tab === "Sessions" ? (
             <Rows rows={SESSIONS} settings={settings} save={save} />
@@ -321,6 +324,74 @@ function Updates() {
             Check for updates
           </button>
         )}
+      </div>
+    </Group>
+  );
+}
+
+/** The usage log (uselog.ts): on or off, and the file it keeps. */
+function UsageLog() {
+  const { prefs } = useAppState();
+  const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+  const reveal = async () => {
+    try {
+      const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+      await revealItemInDir(await useLogPath());
+    } catch (e) {
+      flash(`Couldn't show the log: ${errText(e)}`);
+    }
+  };
+  const showMoments = async () => {
+    try {
+      const { openPath } = await import("@tauri-apps/plugin-opener");
+      await openPath(await momentsDir());
+    } catch (e) {
+      flash(`Couldn't show moments: ${errText(e)}`);
+    }
+  };
+  const clear = () =>
+    void clearUseLog()
+      .then(() => flash("Usage log deleted"))
+      .catch((e) => flash(`Couldn't delete the log: ${errText(e)}`));
+  return (
+    <Group title="Usage log">
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-use-log">
+            Keep a usage log
+          </label>
+          <span className="setting-hint">
+            Notes what you click, the views and dialogs you open and for how long, the shortcuts you press and the
+            errors you hit, in a file on this Mac. Never what you type. Nothing is sent anywhere.
+          </span>
+        </div>
+        <Switch id="set-use-log" on={prefs.keepUseLog === true} onChange={(on) => void savePrefs({ ...prefs, keepUseLog: on })} />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label">The log</span>
+          <span className="setting-hint">One JSON line per event, in usage-log.jsonl.</span>
+        </div>
+        <div className="setting-inline">
+          <button className="btn" onClick={() => void reveal()}>
+            Show in Finder
+          </button>
+          <button className="btn" onClick={clear}>
+            Delete
+          </button>
+        </div>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label">Marked moments</span>
+          <span className="setting-hint">
+            <kbd>⇧⌘M</kbd> saves the last minute of this log, what’s on screen and a screenshot to a folder,
+            and copies its path. Kept in memory until you press it, whether or not the log is on.
+          </span>
+        </div>
+        <button className="btn" onClick={() => void showMoments()}>
+          Show in Finder
+        </button>
       </div>
     </Group>
   );
@@ -803,6 +874,8 @@ const SHORTCUTS: [string, string][] = [
   ["⌘P", "Filter projects"],
   ["⌘1 – ⌘9", "Jump to a project"],
   ["⌘J", "Next session waiting on you"],
+  ["⌘I", "Write an idea down for later"],
+  ["⇧⌘I", "Ideas: everything written down to start later"],
   ["⌘U", "Agent usage"],
   ["⌘,", "Settings"],
   ["⌘+ ⌘− ⌘0", "Terminal text: larger, smaller, back to normal"],
@@ -810,6 +883,7 @@ const SHORTCUTS: [string, string][] = [
   ["⌥⌘B", "Hide or show the tasks column"],
   ["⌘G", "Watch up to four tasks in a grid"],
   ["⇧↵", "Newline in a Claude Code prompt"],
+  ["⇧⌘M", "Mark this moment: save what the app was doing, and copy where"],
 ];
 
 function Shortcuts() {
