@@ -253,3 +253,16 @@ test('decisions run together on one line split back apart', () => {
   assert.equal(one.asks.length, 1);
   assert.equal(one.asks[0].text, 'Keep it under 2. Then what?');
 });
+
+test('answers typed into the box light up the card they answer', async () => {
+  const { typedAnswers } = await import('../src/nebula/replycard.ts');
+  const c = readCard(reply);
+  assert.deepEqual(typedAnswers(c, '1 b, 2 a'), { picks: { 1: 'B', 2: 'A' }, rest: '' });
+  assert.deepEqual(typedAnswers(c, '1 B, 2 A. Also rename it'), { picks: { 1: 'B', 2: 'A' }, rest: 'Also rename it' });
+  // Still typing the second one.
+  assert.deepEqual(typedAnswers(c, '1 b, 2').picks, { 1: 'B' });
+  // An option the card doesn't have, or no card: just text.
+  assert.deepEqual(typedAnswers(c, '1 Z').picks, {});
+  assert.deepEqual(typedAnswers(null, '1 A').picks, {});
+  assert.deepEqual(typedAnswers(c, '3D printing').picks, {});
+});

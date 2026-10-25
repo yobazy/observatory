@@ -283,6 +283,11 @@ export function pointerText(quote: string, shot: string | null, said: string): s
  *  so a reply can show what you picked. Nothing for anything else, like
  *  "3D printing". */
 export function answersIn(text: string): Record<number, string> {
+  return leadingAnswers(text).picks;
+}
+
+/** The answers a message opens with and what it says after them. */
+function leadingAnswers(text: string): { picks: Record<number, string>; rest: string } {
   // "1 A, 2 B", and the ways dictation writes it: "1a 2b", "1: A and 2: B".
   // Read one pair at a time, so a long message can't make it backtrack.
   const pair = /\s*(?:[,;]\s*)?(?:and\s+)?(\d+)[ \t]*(?::[ \t]*)?([a-z])(?![a-z]|\.[a-z])/iy;
@@ -294,7 +299,18 @@ export function answersIn(text: string): Record<number, string> {
   // Two answers or more can run into whatever else you said; one alone needs
   // punctuation or the end after it, so "3D printing" isn't an answer.
   const rest = text.slice(at);
-  return count && (/^\s*($|[.;,!\n])/.test(rest) || (count >= 2 && /^\s/.test(rest))) ? out : {};
+  return count && (/^\s*($|[.;,!\n])/.test(rest) || (count >= 2 && /^\s/.test(rest)))
+    ? { picks: out, rest: rest.replace(/^\s*[.;,!]?\s*/, "") }
+    : { picks: {}, rest: text };
+}
+
+/** The answers you're typing or dictating into the box ("2 a, 3 b"), as
+ *  taps on the card they answer, with the rest of what you said. Only
+ *  answers the card offers count; anything else leaves the text alone. */
+export function typedAnswers(card: Card | null, text: string): { picks: Record<number, string>; rest: string } {
+  const got = card?.asks.length ? leadingAnswers(text) : { picks: {}, rest: text };
+  const known = Object.entries(got.picks).every(([n, l]) => card!.asks.some((a) => a.n === Number(n) && a.options.some((o) => o.letter === l)));
+  return Object.keys(got.picks).length && known ? got : { picks: {}, rest: text };
 }
 
 /** The answers a card recommends, for the reply box to offer: what follows

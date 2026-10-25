@@ -6,7 +6,7 @@ import { isPreview } from "../nebula/client";
 import { flash, getState } from "../nebula/store";
 import { enqueue, isIdle } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
-import { answersIn, answerText, isCard, suggested, pointerText, readCard, replyQuote, type Card } from "../nebula/replycard";
+import { answersIn, answerText, isCard, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { describe, openPreview, previewUrl } from "../nebula/preview";
 import type { Agent } from "../nebula/types";
@@ -284,7 +284,6 @@ export function Reader({
   const picks = tapped.entry === latest ? tapped.picks : {};
   // A queued message you took back out of the queue no longer counts.
   const stillGoing = queued.how === "sent" || (getState().queue[agent.id] ?? []).some((q) => q.text === queued.text);
-  const showQueued = queued.entry === latest && stillGoing && !answerText(picks, "");
   // What you answered each earlier reply with, read from the message after it.
   const answered = useMemo(() => {
     const out: Record<number, Record<number, string>> = {};
@@ -306,8 +305,20 @@ export function Reader({
     const step = last?.kind === "steps" ? last.steps[last.steps.length - 1] : undefined;
     return step && step.ok === null ? doingLine(step) : null;
   }, [t?.entries]);
-  const pick = (n: number, letter: string) =>
-    setTapped({ entry: latest, picks: { ...picks, [n]: picks[n] === letter ? "" : letter } });
+  const latestCard = useMemo(() => {
+    const e = t?.entries.find((x) => x.n === latest);
+    return e ? readCard(e.text) : null;
+  }, [t?.entries, latest]);
+  // Answers typed or dictated into the box ("2 a, 3 b") light up as taps.
+  const typed = typedAnswers(latestCard, draft);
+  const shown = { ...typed.picks, ...Object.fromEntries(Object.entries(picks).filter(([, l]) => l)) };
+  const showQueued = queued.entry === latest && stillGoing && !answerText(shown, "");
+  const pick = (n: number, letter: string) => {
+    // Tapping takes over the typed answers, so they aren't said twice.
+    const base = Object.keys(typed.picks).length ? { ...typed.picks, ...picks } : picks;
+    if (Object.keys(typed.picks).length) setDraft(typed.rest);
+    setTapped({ entry: latest, picks: { ...base, [n]: base[n] === letter ? "" : letter } });
+  };
   // "Point at this": a reply you want looked at, with a screenshot of how it
   // showed, sent along with whatever you say about it.
   const [pointed, setPointed] = useState<{ entry: number; quote: string; shot: string | null } | null>(null);
@@ -315,10 +326,7 @@ export function Reader({
   const box = useRef<HTMLTextAreaElement>(null);
   // What the latest card recommends, offered in the empty box like the
   // terminal's ghost text: Tab taps those answers, Enter sends them.
-  const recommended = useMemo(() => {
-    const e = t?.entries.find((x) => x.n === latest);
-    return e ? suggested(readCard(e.text)) : {};
-  }, [t?.entries, latest]);
+  const recommended = useMemo(() => (latestCard ? suggested(latestCard) : {}), [latestCard]);
   const ghost = !draft && !answerText(picks, "") && !pointed && !showQueued ? answerText(recommended, "") : "";
   const said = answerText(picks, draft);
   const outgoing = pointed && said ? pointerText(pointed.quote, pointed.shot, said) : pointed ? "" : said;
@@ -434,7 +442,7 @@ export function Reader({
                       from={agent.id}
                       live={e.n === latest && !waiting}
                       sent={e.n !== latest || showQueued}
-                      picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : picks}
+                      picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : shown}
                       onPick={pick}
                     />
                     <div className="rd-tools">
