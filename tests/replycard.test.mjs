@@ -266,3 +266,31 @@ test('answers typed into the box light up the card they answer', async () => {
   assert.deepEqual(typedAnswers(null, '1 A').picks, {});
   assert.deepEqual(typedAnswers(c, '3D printing').picks, {});
 });
+
+test('decisions an earlier reply asked and you never answered stay open', async () => {
+  const { openDecisions } = await import('../src/nebula/replycard.ts');
+  const entries = [
+    { n: 0, kind: 'you', text: 'go' },
+    { n: 1, kind: 'claude', text: reply },
+    { n: 2, kind: 'you', text: '2 B' },
+    { n: 3, kind: 'claude', text: reply },
+    { n: 4, kind: 'you', text: 'thanks, carry on' },
+    { n: 5, kind: 'claude', text: reply },
+  ];
+  const open = openDecisions(entries, 5);
+  assert.deepEqual(open.map((o) => [o.entry, o.asks.map((a) => a.n)]), [[1, [1]], [3, [1, 2]]]);
+  assert.equal(open[0].quote, 'Yes. The Read view already exists, so cards are a small step.');
+});
+
+test('answering an earlier decision from the tray closes it', async () => {
+  const { openDecisions } = await import('../src/nebula/replycard.ts');
+  const quote = 'Yes. The Read view already exists, so cards are a small step.';
+  const entries = [
+    { n: 1, kind: 'claude', text: reply },
+    { n: 2, kind: 'you', text: 'carry on' },
+    { n: 3, kind: 'claude', text: 'ok' },
+    { n: 4, kind: 'you', text: `About your reply that starts "${quote}": 1 A\nAbout your reply that starts "${quote}": 2 B` },
+  ];
+  assert.deepEqual(openDecisions(entries.slice(0, 3), -1).length, 1);
+  assert.deepEqual(openDecisions(entries, -1), []);
+});

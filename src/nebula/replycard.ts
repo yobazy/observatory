@@ -328,3 +328,35 @@ export function suggested(card: Card): Record<number, string> {
   }
   return out;
 }
+
+/** Decisions earlier replies asked that the message after them didn't
+ *  answer, newest last, for the reader to keep in view. The latest reply's
+ *  own are on its card, so they don't count. */
+export function openDecisions(
+  entries: { n: number; kind: string; text: string }[],
+  latest: number,
+): { entry: number; quote: string; asks: Ask[] }[] {
+  const out: { entry: number; quote: string; asks: Ask[] }[] = [];
+  let pending: { entry: number; quote: string; asks: Ask[] } | null = null;
+  for (const e of entries) {
+    if (e.kind === "claude") {
+      const asks = readCard(e.text).asks.filter((a) => a.options.length);
+      if (asks.length && e.n !== latest) pending = { entry: e.n, quote: replyQuote(e.text), asks };
+    } else if (e.kind === "you") {
+      // "About your reply that starts "…": 2 B" answers an earlier one.
+      for (const m of e.text.matchAll(/^About your reply that starts "(.+)": ([^\n]+)$/gm)) {
+        const said = answersIn(m[2]);
+        for (const o of out) if (o.quote === m[1]) o.asks = o.asks.filter((a) => !said[a.n]);
+      }
+    }
+    if (e.kind === "you" && pending) {
+      // A message pointing at a reply says which first, then the answers.
+      const said = answersIn(e.text);
+      const got = Object.keys(said).length ? said : answersIn(e.text.split(/\n\s*\n/).slice(1).join("\n\n"));
+      const left = pending.asks.filter((a) => !got[a.n]);
+      if (left.length) out.push({ ...pending, asks: left });
+      pending = null;
+    }
+  }
+  return out.filter((o) => o.asks.length);
+}

@@ -8,7 +8,7 @@ import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
-import { answersIn, answerText, isCard, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
+import { answersIn, answerText, isCard, openDecisions, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { describe, openPreview, previewUrl } from "../nebula/preview";
@@ -19,6 +19,8 @@ import { AskChoices } from "./AskStrip";
 /** What you were typing to each agent, kept when the reader remounts for a
  *  new session (/clear, resume). */
 const drafts = new Map<string, string>();
+/** Earlier decisions you put away, per agent, for as long as the app runs. */
+const dismissedFor = new Map<string, Set<number>>();
 
 /** The thread's conversation, read again as it moves. */
 function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | null {
@@ -296,6 +298,53 @@ function StepDetail({ detail, failed }: { detail: string; failed: boolean }) {
   );
 }
 
+type Undecided = ReturnType<typeof openDecisions>[number];
+
+/** Decisions left open on earlier replies, folded to a line above the box.
+ *  An option puts its answer in the box, said against that reply. */
+function OpenDecisions({
+  open,
+  onShow,
+  onAnswer,
+  onDismiss,
+}: {
+  open: Undecided[];
+  onShow: (n: number) => void;
+  onAnswer: (d: Undecided, n: number, letter: string) => void;
+  onDismiss: (d: Undecided) => void;
+}) {
+  const count = open.reduce((k, d) => k + d.asks.length, 0);
+  return (
+    <details className="rd-open">
+      <summary>{count === 1 ? "1 earlier decision still open" : `${count} earlier decisions still open`}</summary>
+      {open.map((d) => (
+        <div key={d.entry} className="rd-open-reply">
+          <div className="rd-open-head">
+            <button className="link-btn rd-quote" onClick={() => onShow(d.entry)} title="Show this reply">
+              “{d.quote}”
+            </button>
+            <button className="link-btn" onClick={() => onDismiss(d)} aria-label="Put these away" title="Put these away">
+              ×
+            </button>
+          </div>
+          {d.asks.map((a) => (
+            <div key={a.n} className="rd-q">
+              <span className="rd-q-text" dangerouslySetInnerHTML={{ __html: toHtml(`${a.n}. ${a.text}`, true) }} />
+              <span className="rd-opts">
+                {a.options.map((o) => (
+                  <button key={o.letter} className="rd-opt" onClick={() => onAnswer(d, a.n, o.letter)}>
+                    <b>{o.letter}</b> <span dangerouslySetInnerHTML={{ __html: toHtml(o.label, true) }} />
+                  </button>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </details>
+  );
+}
+
 function Steps({ entry, root, fresh }: { entry: Entry; root: string; fresh: boolean }) {
   const rel = (t: string) => (root && t.startsWith(`${root}/`) ? t.slice(root.length + 1) : t);
   const failed = entry.steps.some((s) => s.ok === false);
@@ -420,6 +469,27 @@ export function Reader({
     const base = Object.keys(typed.picks).length ? { ...typed.picks, ...picks } : picks;
     if (Object.keys(typed.picks).length) setDraft(typed.rest);
     setTapped({ entry: latest, picks: { ...base, [n]: base[n] === letter ? "" : letter } });
+  };
+  // Decisions earlier replies asked that you haven't answered, kept in view
+  // until you answer or put them away.
+  const [dismissed, setDismissed] = useState<Set<number>>(() => dismissedFor.get(agent.id) ?? new Set());
+  useEffect(() => void dismissedFor.set(agent.id, dismissed), [agent.id, dismissed]);
+  const undecided = useMemo(
+    () => openDecisions(t?.entries ?? [], latest).filter((d) => !dismissed.has(d.entry)),
+    [t?.entries, latest, dismissed],
+  );
+  const showReply = (n: number) => {
+    if (foldTo !== null && n < foldTo) setUnfolded(true);
+    // After the fold opens, if it had to.
+    requestAnimationFrame(() => {
+      const el = scroller.current?.querySelector<HTMLElement>(`.rd-reply[data-n="${n}"]`);
+      if (!el) return;
+      stick.current = false;
+      el.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      el.classList.remove("is-flash");
+      void el.offsetWidth;
+      el.classList.add("is-flash");
+    });
   };
   // "Point at this": a reply you want looked at, with a screenshot of how it
   // showed, sent along with whatever you say about it.
@@ -561,7 +631,11 @@ export function Reader({
                       {e.text}
                     </div>
                   ) : e.kind === "claude" ? (
-                    <div key={e.n} className={`rd-reply${pointed?.entry === e.n ? " is-pointed" : ""}${fresh(e) ? " is-new" : ""}`}>
+                    <div
+                      key={e.n}
+                      data-n={e.n}
+                      className={`rd-reply${pointed?.entry === e.n ? " is-pointed" : ""}${fresh(e) ? " is-new" : ""}`}
+                    >
                       <Reply
                         text={e.text}
                         from={agent.id}
@@ -611,6 +685,18 @@ export function Reader({
             </div>
           )}
         </div>
+        {!waiting && undecided.length > 0 && (
+          <OpenDecisions
+            open={undecided}
+            onShow={showReply}
+            onAnswer={(d, n, letter) => {
+              const line = `About your reply that starts "${d.quote}": ${n} ${letter}`;
+              setDraft(draft.trim() ? `${draft.trimEnd()}\n${line}` : line);
+              box.current?.focus();
+            }}
+            onDismiss={(d) => setDismissed((x) => new Set(x).add(d.entry))}
+          />
+        )}
         <div className="rd-compose">
           {waiting && question ? (
             <div className="rd-ask">

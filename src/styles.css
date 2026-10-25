@@ -6985,3 +6985,58 @@ button.board-main:hover .board-text {
 .rd-steps li > code {
   flex: 1 1 0;
 }
+
+/* Decisions earlier replies left open, folded above the reply box. */
+.rd-open {
+  max-width: 76ch;
+  width: calc(100% - 56px);
+  margin: 0 auto 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  font-size: 12.5px;
+}
+.rd-open > summary {
+  color: var(--st-waiting);
+  font-weight: 600;
+  cursor: pointer;
+}
+.rd-open[open] {
+  max-height: 40vh;
+  overflow: auto;
+}
+.rd-open-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+.rd-open-reply + .rd-open-reply {
+  border-top: 1px solid var(--line);
+}
+.rd-open-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rd-open-head .rd-quote {
+  color: var(--muted);
+  text-align: left;
+}
+.rd-reply.is-flash {
+  animation: rd-flash 1.4s ease-out;
+}
+@keyframes rd-flash {
+  from {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-reply.is-flash {
+    animation: none;
+  }
+}
