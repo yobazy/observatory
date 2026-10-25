@@ -331,3 +331,11 @@ test('two pictures read as before and after when the reply says which', async ()
   assert.equal(beforeAfter(['/s/a.png', '/s/b.png'], 'two shots'), null);
   assert.equal(beforeAfter(['/s/before.png'], ''), null);
 });
+
+test('a reply saved as a note is named after its headline and says where it came from', async () => {
+  const { noteFor } = await import('../src/nebula/replycard.ts');
+  const n = noteFor(reply, { thread: 'Card "replies"', project: 'observatory', date: '2026-10-25' });
+  assert.equal(n.name, 'Yes. The Read view already exists, so cards are a small step');
+  assert.match(n.body, /^---\ntags: \[observatory\]\nthread: "Card \\"replies\\""\nproject: "observatory"\nsaved: 2026-10-25\n---\n\n\*\*Yes\./);
+  assert.equal(noteFor('Plain `answer`: here.', { thread: 't', project: 'p', date: 'd' }).name, 'Plain answer: here');
+});

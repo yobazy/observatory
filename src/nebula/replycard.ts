@@ -410,3 +410,13 @@ export function beforeAfter(images: string[], text: string): [string, string] | 
   if (a === "after" && b === "before") return [images[1], images[0]];
   return null;
 }
+
+/** A reply kept as a Markdown note: named after its headline (else its
+ *  opening words), with where it came from in the note's properties. */
+export function noteFor(text: string, from: { thread: string; project: string; date: string }): { name: string; body: string } {
+  const card = readCard(text);
+  const name = (card.headline ?? replyQuote(text, 80)).replace(/\*\*|__|`/g, "").replace(/[.:]+$/, "").trim() || "Reply";
+  const yaml = (s: string) => JSON.stringify(s);
+  const body = ["---", "tags: [observatory]", `thread: ${yaml(from.thread)}`, `project: ${yaml(from.project)}`, `saved: ${from.date}`, "---", "", text.trim(), ""].join("\n");
+  return { name, body };
+}

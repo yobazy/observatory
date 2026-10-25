@@ -8,7 +8,7 @@ import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
 import { clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
-import { answersIn, answerText, beforeAfter, isCard, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
+import { answersIn, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { shipKind } from "../nebula/git";
 import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
@@ -612,6 +612,22 @@ export function Reader({
     [t?.entries, latest, dismissed],
   );
   const turns = useMemo(() => turnsOf(t?.entries ?? []), [t?.entries]);
+  // A reply kept as a note, in the folder picked in Settings.
+  const saveNote = async (text: string) => {
+    if (!state.prefs.notesFolder) {
+      flash("Pick a notes folder first, in Settings under Read view", 6000);
+      return;
+    }
+    const project = state.projects[state.worktrees[agent.worktree_id]?.project_id ?? ""]?.name ?? "";
+    const note = noteFor(text, { thread: agent.name, project, date: new Date().toLocaleDateString("sv") });
+    if (isPreview()) return flash(`Saved “${note.name}” to your notes`);
+    try {
+      const path = await invoke<string>("save_note", { name: note.name, text: note.body });
+      flash(`Saved to ${path.split("/").pop()}`);
+    } catch (e) {
+      flash(`Couldn't save the note: ${e}`, 6000);
+    }
+  };
   // What's left to ship on this thread's checkout, asked of the agent itself.
   const ship = useMemo((): Ship | null => {
     const g = state.git[agent.worktree_id];
@@ -855,6 +871,17 @@ export function Reader({
                         <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">
                           Copy
                         </button>
+                        <button
+                          className="rd-point"
+                          onClick={() => void saveNote(e.text)}
+                          title={
+                            state.prefs.notesFolder
+                              ? `Save this reply as a Markdown note in ${state.prefs.notesFolder}`
+                              : "Save this reply as a Markdown note, in a folder you pick in Settings"
+                          }
+                        >
+                          Save as note
+                        </button>
                         {!waiting && (
                           <button
                             className={`rd-point${pointing === e.n ? " is-busy" : ""}`}
@@ -876,27 +903,27 @@ export function Reader({
                   ),
                 ])}
                 {(state.queue[agent.id] ?? []).map((q) => (
-                <div key={q.id} className="rd-you is-queued">
-                  {q.text}
-                  <span className="rd-queued-bar">
-                    <span>Queued, sent when its turn ends</span>
-                    <button
-                      className="link-btn"
-                      onClick={() => {
-                        unqueue(agent.id, q.id);
-                        setDraft(draft.trim() ? `${q.text}\n\n${draft}` : q.text);
-                        box.current?.focus();
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button className="link-btn" onClick={() => unqueue(agent.id, q.id)}>
-                      Take back
-                    </button>
-                  </span>
-                </div>
-              ))}
-              {agent.status === "running" && (
+                  <div key={q.id} className="rd-you is-queued">
+                    {q.text}
+                    <span className="rd-queued-bar">
+                      <span>Queued, sent when its turn ends</span>
+                      <button
+                        className="link-btn"
+                        onClick={() => {
+                          unqueue(agent.id, q.id);
+                          setDraft(draft.trim() ? `${q.text}\n\n${draft}` : q.text);
+                          box.current?.focus();
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button className="link-btn" onClick={() => unqueue(agent.id, q.id)}>
+                        Take back
+                      </button>
+                    </span>
+                  </div>
+                ))}
+                {agent.status === "running" && (
                   <p className="rd-note rd-working">
                     <span className="rd-pulse" aria-hidden />
                     <span className="rd-doing">{doing ?? "Working…"}</span>

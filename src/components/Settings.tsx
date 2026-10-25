@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
-import { flash, setState, useAppState } from "../nebula/store";
+import { flash, getState, setState, useAppState } from "../nebula/store";
 import {
   AGENTS_HEAD,
   EXPERIMENTAL,
@@ -25,7 +25,7 @@ import { QUICK_CAPTURE_CHOICES, QUICK_CAPTURE_DEFAULT } from "../nebula/desktop"
 import { play } from "../nebula/delight";
 import { chosenEditor, useEditors } from "./Editor";
 import { getVersion } from "@tauri-apps/api/app";
-import { isPreview } from "../nebula/client";
+import { isPreview, pickFolder } from "../nebula/client";
 import { DEFAULT_CAP, globalCap } from "../nebula/batch";
 import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
 import { clearUseLog, useLogPath } from "../nebula/uselog";
@@ -222,6 +222,37 @@ function ReadView() {
               {o.label}
             </button>
           ))}
+        </div>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label">Notes folder</span>
+          <span className="setting-hint">
+            {prefs.notesFolder ? (
+              <>
+                Save as note writes a reply to <code>{prefs.notesFolder}</code>.
+              </>
+            ) : (
+              "Where Save as note on a reply writes it, as Markdown: an Obsidian vault, or any folder."
+            )}
+          </span>
+        </div>
+        <div className="setting-inline">
+          {prefs.notesFolder && (
+            <button className="btn" onClick={() => void savePrefs({ ...prefs, notesFolder: undefined })}>
+              Clear
+            </button>
+          )}
+          <button
+            className="btn"
+            onClick={() =>
+              void pickFolder(prefs.notesFolder, "Choose where notes go").then((dir) => {
+                if (dir) void savePrefs({ ...getState().prefs, notesFolder: dir });
+              })
+            }
+          >
+            {prefs.notesFolder ? "Change…" : "Choose…"}
+          </button>
         </div>
       </div>
     </Group>
