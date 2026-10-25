@@ -87,3 +87,11 @@ export function findAll(text: string, query: string): number[] {
   for (let at = t.indexOf(q); at >= 0; at = t.indexOf(q, at + q.length)) out.push(at);
   return out;
 }
+
+/** "45s", "1m 20s", "1h 5m": how long the turn under way has run. */
+export function clock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+}

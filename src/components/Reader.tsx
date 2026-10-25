@@ -7,7 +7,7 @@ import { flash, getState, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
-import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
+import { clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { answersIn, answerText, beforeAfter, isCard, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { highlightUnder } from "../nebula/highlight";
@@ -361,6 +361,17 @@ function StepDetail({ detail, failed }: { detail: string; failed: boolean }) {
       )}
     </>
   );
+}
+
+/** How long the turn under way has run, ticking. */
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  if (!since) return null;
+  return <span className="rd-elapsed">{clock((now - since) / 1000)}</span>;
 }
 
 type Undecided = ReturnType<typeof openDecisions>[number];
@@ -854,6 +865,7 @@ export function Reader({
                   <p className="rd-note rd-working">
                     <span className="rd-pulse" aria-hidden />
                     <span className="rd-doing">{doing ?? "Working…"}</span>
+                    <Elapsed since={agent.status_changed_at} />
                   </p>
                 )}
               </>

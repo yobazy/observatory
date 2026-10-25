@@ -48,3 +48,11 @@ test('finding in the thread ignores case and doesn\'t overlap', async () => {
   assert.deepEqual(findAll('aaaa', 'aa'), [0, 2]);
   assert.deepEqual(findAll('abc', ''), []);
 });
+
+test('the working line says how long the turn has run', async () => {
+  const { clock } = await import('../src/nebula/transcript.ts');
+  assert.equal(clock(45.9), '45s');
+  assert.equal(clock(80), '1m 20s');
+  assert.equal(clock(3900), '1h 5m');
+  assert.equal(clock(-3), '0s');
+});

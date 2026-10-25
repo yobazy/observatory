@@ -7268,3 +7268,11 @@ button.board-main:hover .board-text {
 .rd-md .hljs-punctuation {
   color: var(--muted);
 }
+.rd-elapsed {
+  flex: none;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.rd-elapsed::before {
+  content: "· ";
+}
