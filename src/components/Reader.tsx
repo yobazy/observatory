@@ -1,9 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { isPreview } from "../nebula/client";
-import { flash, getState } from "../nebula/store";
+import { flash, getState, useAppState } from "../nebula/store";
+import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
+import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { answersIn, answerText, isCard, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
@@ -64,8 +66,19 @@ const toHtml = (md: string, inline = false) =>
     (inline ? marked.parseInline(md, { async: false, breaks: true }) : marked.parse(md, { async: false, breaks: true })) as string,
   );
 
-/** Links in a reply open in the browser, not in the app's webview. */
+/** What a reply's paths and "#75"s are read against: the thread they're
+ *  from, its checkout, and any PR of its project, for the repo's address. */
+const Where = createContext<{ from: string; root: string; prUrl: string | null }>({ from: "", root: "", prUrl: null });
+
+/** Links in a reply open in the browser, not in the app's webview; a path
+ *  opens in the preview. */
 function openLink(e: MouseEvent) {
+  const path = (e.target as HTMLElement).closest<HTMLElement>("[data-path]");
+  if (path) {
+    e.preventDefault();
+    void openPreview([path.dataset.path!], path.dataset.from || null);
+    return;
+  }
   const href = (e.target as HTMLElement).closest("a")?.getAttribute("href");
   if (!href) return;
   e.preventDefault();
@@ -100,6 +113,53 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
     }
     return () => added.forEach((b) => b.remove());
   }, [html]);
+  // A code span that names a file on disk opens it; "#75" goes to that PR.
+  const where = useContext(Where);
+  useEffect(() => {
+    const root = el.current;
+    if (!root) return;
+    let live = true;
+    const spans = [...root.querySelectorAll<HTMLElement>("code")].filter((c) => !c.closest("pre") && pathInCode(c.textContent ?? ""));
+    void resolve(
+      spans.map((c) => pathInCode(c.textContent ?? "")!),
+      where.root || null,
+    ).then((abs) => {
+      if (!live) return;
+      spans.forEach((c, i) => {
+        if (!abs[i]) return;
+        c.classList.add("rd-path");
+        c.dataset.path = abs[i]!;
+        c.dataset.from = where.from;
+        c.title = `Open ${abs[i]}`;
+      });
+    });
+    if (where.prUrl) {
+      const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode: (n) => (n.parentElement?.closest("a, code, pre") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      });
+      const texts: Text[] = [];
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) if (findPrRefs(n.textContent ?? "").length) texts.push(n as Text);
+      for (const node of texts) {
+        const text = node.textContent ?? "";
+        const frag = document.createDocumentFragment();
+        let at = 0;
+        for (const ref of findPrRefs(text)) {
+          frag.append(text.slice(at, ref.start));
+          const a = document.createElement("a");
+          a.href = prLink(where.prUrl, ref.number);
+          a.className = "rd-pr";
+          a.textContent = `#${ref.number}`;
+          frag.append(a);
+          at = ref.start + String(ref.number).length + 1;
+        }
+        frag.append(text.slice(at));
+        node.replaceWith(frag);
+      }
+    }
+    return () => {
+      live = false;
+    };
+  }, [html, where.root, where.prUrl]);
   return <div ref={el} className={`md-doc rd-md ${className}`} dangerouslySetInnerHTML={{ __html: html }} onClick={openLink} />;
 }
 
@@ -250,6 +310,15 @@ export function Reader({
   onPick: (c: Choice) => void;
 }) {
   const t = useTranscript(agent);
+  const state = useAppState();
+  const where = useMemo(() => {
+    const project = state.worktrees[agent.worktree_id]?.project_id;
+    const pr = Object.values(state.worktrees)
+      .filter((w) => w.project_id === project)
+      .map((w) => state.prs[w.id])
+      .find((p) => p?.kind === "found");
+    return { from: agent.id, root, prUrl: pr?.kind === "found" ? pr.pr.url : null };
+  }, [agent.id, agent.worktree_id, root, state.worktrees, state.prs]);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const lastTop = useRef(0);
@@ -418,169 +487,171 @@ export function Reader({
   };
 
   return (
-    <div className="reader">
-      <div
-        className="rd-scroll"
-        ref={scroller}
-        onScroll={(e) => {
-          // Only scrolling up lets go of the bottom, so a smooth glide down
-          // to a new entry doesn't count as leaving it.
-          const el = e.currentTarget;
-          // Content shrinking (a fold closing, the working line going)
-          // pulls scrollTop back too; that isn't you, unless it leaves
-          // you away from the bottom.
-          const near = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-          if (el.scrollTop < lastTop.current - 2 && !near) stick.current = false;
-          else if (near) {
-            if (!stick.current) seenAll();
-            stick.current = true;
-            gliding.current = false;
-            setBehind(false);
-          }
-          lastTop.current = el.scrollTop;
-        }}
-      >
-        <div className="rd-col">
-          {!t ? (
-            <p className="rd-note">Reading the thread…</p>
-          ) : t.entries.length === 0 ? (
-            <p className="rd-note">Nothing said yet.</p>
+    <Where.Provider value={where}>
+      <div className="reader">
+        <div
+          className="rd-scroll"
+          ref={scroller}
+          onScroll={(e) => {
+            // Only scrolling up lets go of the bottom, so a smooth glide down
+            // to a new entry doesn't count as leaving it.
+            const el = e.currentTarget;
+            // Content shrinking (a fold closing, the working line going)
+            // pulls scrollTop back too; that isn't you, unless it leaves
+            // you away from the bottom.
+            const near = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+            if (el.scrollTop < lastTop.current - 2 && !near) stick.current = false;
+            else if (near) {
+              if (!stick.current) seenAll();
+              stick.current = true;
+              gliding.current = false;
+              setBehind(false);
+            }
+            lastTop.current = el.scrollTop;
+          }}
+        >
+          <div className="rd-col">
+            {!t ? (
+              <p className="rd-note">Reading the thread…</p>
+            ) : t.entries.length === 0 ? (
+              <p className="rd-note">Nothing said yet.</p>
+            ) : (
+              <>
+                {t.dropped > 0 && <p className="rd-note">Earlier messages aren't shown; the terminal has them.</p>}
+                {foldTo !== null && (
+                  <button className="rd-earlier" onClick={() => setUnfolded(true)}>
+                    {plan.current!.turns === 1 ? "1 earlier turn" : `${plan.current!.turns} earlier turns`}
+                  </button>
+                )}
+                {t.entries.filter((e) => foldTo === null || e.n >= foldTo).flatMap((e) => [
+                  ...(e.n === plan.current?.unread
+                    ? [
+                        <p key="since" className="rd-since" role="separator">
+                          <span>New since you were here</span>
+                        </p>,
+                      ]
+                    : []),
+                  e.kind === "you" ? (
+                    <div key={e.n} className={`rd-you${fresh(e) ? " is-new" : ""}`}>
+                      {e.text}
+                    </div>
+                  ) : e.kind === "claude" ? (
+                    <div key={e.n} className={`rd-reply${pointed?.entry === e.n ? " is-pointed" : ""}${fresh(e) ? " is-new" : ""}`}>
+                      <Reply
+                        text={e.text}
+                        from={agent.id}
+                        live={e.n === latest && !waiting}
+                        sent={e.n !== latest || showQueued}
+                        picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : shown}
+                        onPick={pick}
+                      />
+                      <div className="rd-tools">
+                        <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">
+                          Copy
+                        </button>
+                        {!waiting && (
+                          <button
+                            className={`rd-point${pointing === e.n ? " is-busy" : ""}`}
+                            disabled={pointing !== null}
+                            onClick={() => void point(e)}
+                            title="Take a screenshot of this reply and tell the agent what to change about it"
+                          >
+                            {pointing === e.n ? "Capturing…" : "Point at this"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : e.kind === "steps" ? (
+                    <Steps key={e.n} entry={e} root={root.replace(/\/+$/, "")} fresh={fresh(e)} />
+                  ) : (
+                    <p key={e.n} className={`rd-note${fresh(e) ? " is-new" : ""}`}>
+                      Stopped by you
+                    </p>
+                  ),
+                ])}
+                {agent.status === "running" && (
+                  <p className="rd-note rd-working">
+                    <span className="rd-pulse" aria-hidden />
+                    <span className="rd-doing">{doing ?? "Working…"}</span>
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+          {behind && (
+            <div className="rd-latest-at">
+              <button className="rd-latest" onClick={() => toBottom("smooth")}>
+                ↓ Jump to latest
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="rd-compose">
+          {waiting && question ? (
+            <div className="rd-ask">
+              {question.prompt && <p className="rd-wait">{question.prompt}</p>}
+              <AskChoices question={question} onPick={onPick} />
+            </div>
+          ) : waiting ? (
+            <p className="rd-wait">
+              It's waiting on a choice in the terminal.{" "}
+              <button className="link-btn" onClick={onTerminal}>
+                Answer there
+              </button>
+            </p>
           ) : (
             <>
-              {t.dropped > 0 && <p className="rd-note">Earlier messages aren't shown; the terminal has them.</p>}
-              {foldTo !== null && (
-                <button className="rd-earlier" onClick={() => setUnfolded(true)}>
-                  {plan.current!.turns === 1 ? "1 earlier turn" : `${plan.current!.turns} earlier turns`}
-                </button>
+              {pointed && (
+                <span className="rd-picked rd-pointed" title={pointed.shot ?? "No screenshot"}>
+                  <span className="rd-quote">About “{pointed.quote}”</span>
+                  <button className="link-btn" onClick={() => setPointed(null)} aria-label="Stop pointing at that reply">
+                    ×
+                  </button>
+                </span>
               )}
-              {t.entries.filter((e) => foldTo === null || e.n >= foldTo).flatMap((e) => [
-                ...(e.n === plan.current?.unread
-                  ? [
-                      <p key="since" className="rd-since" role="separator">
-                        <span>New since you were here</span>
-                      </p>,
-                    ]
-                  : []),
-                e.kind === "you" ? (
-                  <div key={e.n} className={`rd-you${fresh(e) ? " is-new" : ""}`}>
-                    {e.text}
-                  </div>
-                ) : e.kind === "claude" ? (
-                  <div key={e.n} className={`rd-reply${pointed?.entry === e.n ? " is-pointed" : ""}${fresh(e) ? " is-new" : ""}`}>
-                    <Reply
-                      text={e.text}
-                      from={agent.id}
-                      live={e.n === latest && !waiting}
-                      sent={e.n !== latest || showQueued}
-                      picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : shown}
-                      onPick={pick}
-                    />
-                    <div className="rd-tools">
-                      <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">
-                        Copy
-                      </button>
-                      {!waiting && (
-                        <button
-                          className={`rd-point${pointing === e.n ? " is-busy" : ""}`}
-                          disabled={pointing !== null}
-                          onClick={() => void point(e)}
-                          title="Take a screenshot of this reply and tell the agent what to change about it"
-                        >
-                          {pointing === e.n ? "Capturing…" : "Point at this"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ) : e.kind === "steps" ? (
-                  <Steps key={e.n} entry={e} root={root.replace(/\/+$/, "")} fresh={fresh(e)} />
-                ) : (
-                  <p key={e.n} className={`rd-note${fresh(e) ? " is-new" : ""}`}>
-                    Stopped by you
-                  </p>
-                ),
-              ])}
-              {agent.status === "running" && (
-                <p className="rd-note rd-working">
-                  <span className="rd-pulse" aria-hidden />
-                  <span className="rd-doing">{doing ?? "Working…"}</span>
-                </p>
+              {answerText(picks, "") && (
+                <span className="rd-picked">
+                  {answerText(picks, "")}
+                  <button className="link-btn" onClick={() => setTapped({ entry: -1, picks: {} })} aria-label="Clear the answers">
+                    ×
+                  </button>
+                </span>
               )}
+              <textarea
+                ref={box}
+                rows={2}
+                value={draft}
+                placeholder={
+                  ghost
+                    ? `${ghost}    Tab to use it`
+                    : pointed
+                    ? "What should change about it?"
+                    : answerText(picks, "")
+                    ? "Add anything else, or just send"
+                    : isIdle(agent)
+                      ? `Reply to ${agent.name}`
+                      : `Queue a reply for when ${agent.name} is done`
+                }
+                aria-label="Reply"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Tab" && !e.shiftKey && ghost) {
+                    e.preventDefault();
+                    setTapped({ entry: latest, picks: recommended });
+                  } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    // Enter sends, like the terminal; Shift-Enter starts a new line.
+                    e.preventDefault();
+                    void send();
+                  }
+                }}
+              />
+              <button className="btn btn-primary" disabled={!outgoing} onClick={() => void send()} title="Send (↵). Shift-↵ for a new line">
+                {isIdle(agent) ? "Send" : "Queue"}
+              </button>
             </>
           )}
         </div>
-        {behind && (
-          <div className="rd-latest-at">
-            <button className="rd-latest" onClick={() => toBottom("smooth")}>
-              ↓ Jump to latest
-            </button>
-          </div>
-        )}
       </div>
-      <div className="rd-compose">
-        {waiting && question ? (
-          <div className="rd-ask">
-            {question.prompt && <p className="rd-wait">{question.prompt}</p>}
-            <AskChoices question={question} onPick={onPick} />
-          </div>
-        ) : waiting ? (
-          <p className="rd-wait">
-            It's waiting on a choice in the terminal.{" "}
-            <button className="link-btn" onClick={onTerminal}>
-              Answer there
-            </button>
-          </p>
-        ) : (
-          <>
-            {pointed && (
-              <span className="rd-picked rd-pointed" title={pointed.shot ?? "No screenshot"}>
-                <span className="rd-quote">About “{pointed.quote}”</span>
-                <button className="link-btn" onClick={() => setPointed(null)} aria-label="Stop pointing at that reply">
-                  ×
-                </button>
-              </span>
-            )}
-            {answerText(picks, "") && (
-              <span className="rd-picked">
-                {answerText(picks, "")}
-                <button className="link-btn" onClick={() => setTapped({ entry: -1, picks: {} })} aria-label="Clear the answers">
-                  ×
-                </button>
-              </span>
-            )}
-            <textarea
-              ref={box}
-              rows={2}
-              value={draft}
-              placeholder={
-                ghost
-                  ? `${ghost}    Tab to use it`
-                  : pointed
-                  ? "What should change about it?"
-                  : answerText(picks, "")
-                  ? "Add anything else, or just send"
-                  : isIdle(agent)
-                    ? `Reply to ${agent.name}`
-                    : `Queue a reply for when ${agent.name} is done`
-              }
-              aria-label="Reply"
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Tab" && !e.shiftKey && ghost) {
-                  e.preventDefault();
-                  setTapped({ entry: latest, picks: recommended });
-                } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  // Enter sends, like the terminal; Shift-Enter starts a new line.
-                  e.preventDefault();
-                  void send();
-                }
-              }}
-            />
-            <button className="btn btn-primary" disabled={!outgoing} onClick={() => void send()} title="Send (↵). Shift-↵ for a new line">
-              {isIdle(agent) ? "Send" : "Queue"}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+    </Where.Provider>
   );
 }

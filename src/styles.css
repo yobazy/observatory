@@ -6939,3 +6939,16 @@ button.board-main:hover .board-text {
   color: var(--muted);
   font-size: 12.5px;
 }
+
+/* A file a reply names opens in the preview; "#75" goes to that PR. */
+.rd-md code.rd-path {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.rd-md code.rd-path:hover {
+  color: var(--accent);
+}
+.rd-md a.rd-pr {
+  font-weight: 600;
+}

@@ -138,3 +138,19 @@ export function logicalLine(row: (i: number) => Row | undefined, y: number, cols
   }
   return { text, at, last };
 }
+
+/** The path a code span in a reply names, if that's all it is
+ *  (`src/sync.ts`, `~/notes/plan.md:12`), without its line number. */
+export function pathInCode(text: string): string | null {
+  const bare = text.trim().replace(/:\d+(?::\d+)?$/, "");
+  const found = findPaths(bare);
+  return found.length === 1 && found[0].start === 0 && found[0].text === bare ? bare : null;
+}
+
+/** "#75" in prose, as the PR it names: where each one is in `text`. */
+export function findPrRefs(text: string): { start: number; number: number }[] {
+  return [...text.matchAll(/(^|[\s(\[])#(\d{1,6})\b(?![-\w])/g)].map((m) => ({ start: m.index! + m[1].length, number: Number(m[2]) }));
+}
+
+/** A PR's URL down to its repository's, so another number can be put on it. */
+export const prLink = (anyPrUrl: string, n: number) => anyPrUrl.replace(/\/pull\/\d+.*$/, `/pull/${n}`);
