@@ -6,7 +6,7 @@ import { isPreview } from "../nebula/client";
 import { flash, getState, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
-import { enqueue, isIdle } from "../nebula/queue";
+import { enqueue, isIdle, unqueue } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { answersIn, answerText, isCard, openDecisions, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
@@ -739,7 +739,28 @@ export function Reader({
                     </p>
                   ),
                 ])}
-                {agent.status === "running" && (
+                {(state.queue[agent.id] ?? []).map((q) => (
+                <div key={q.id} className="rd-you is-queued">
+                  {q.text}
+                  <span className="rd-queued-bar">
+                    <span>Queued, sent when its turn ends</span>
+                    <button
+                      className="link-btn"
+                      onClick={() => {
+                        unqueue(agent.id, q.id);
+                        setDraft(draft.trim() ? `${q.text}\n\n${draft}` : q.text);
+                        box.current?.focus();
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button className="link-btn" onClick={() => unqueue(agent.id, q.id)}>
+                      Take back
+                    </button>
+                  </span>
+                </div>
+              ))}
+              {agent.status === "running" && (
                   <p className="rd-note rd-working">
                     <span className="rd-pulse" aria-hidden />
                     <span className="rd-doing">{doing ?? "Working…"}</span>

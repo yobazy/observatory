@@ -7080,3 +7080,22 @@ button.board-main:hover .board-text {
   font-size: 13px;
   outline: none;
 }
+
+/* A reply waiting for the agent's turn to end, still yours to change. */
+.rd-you.is-queued {
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+.rd-queued-bar {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 6px;
+  font-size: 11.5px;
+  white-space: normal;
+  color: var(--faint);
+}
+.rd-queued-bar > span {
+  margin-right: auto;
+}
