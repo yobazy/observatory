@@ -4563,6 +4563,37 @@ td.task-last {
   color: var(--faint);
   text-align: center;
 }
+.rd-earlier {
+  align-self: center;
+  padding: 4px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.rd-earlier:hover {
+  color: var(--text);
+  border-style: solid;
+}
+.rd-since {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.rd-since::before,
+.rd-since::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid currentColor;
+  opacity: 0.45;
+}
 .rd-working {
   text-align: left;
 }

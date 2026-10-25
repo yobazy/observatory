@@ -8,6 +8,7 @@ import { enqueue, isIdle } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { answersIn, answerText, isCard, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
+import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { describe, openPreview, previewUrl } from "../nebula/preview";
 import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
@@ -257,6 +258,13 @@ export function Reader({
   if (t && known.current === null) known.current = t.entries.length ? t.entries[t.entries.length - 1].n : -1;
   const fresh = (e: Entry) => known.current !== null && e.n > known.current;
   const lastN = useRef<number | null>(null);
+  // Where you'd read to last time, and what that makes of the thread as it
+  // opened: a line where the new part starts, earlier turns folded away.
+  const plan = useRef<ReturnType<typeof readPlan> | null>(null);
+  if (t && !plan.current) plan.current = readPlan(t.entries, readTo(agent.id));
+  const [unfolded, setUnfolded] = useState(false);
+  const foldTo = unfolded ? null : (plan.current?.foldTo ?? null);
+  const seenAll = () => lastN.current !== null && markRead(agent.id, lastN.current);
   // Something arrived below while you were scrolled up.
   const [behind, setBehind] = useState(false);
   const [draft, setDraftState] = useState(() => drafts.get(agent.id) ?? "");
@@ -350,8 +358,17 @@ export function Reader({
     lastN.current = n;
     if (!el) return;
     // Polls hand back a new list even when nothing changed; only arrivals move you.
-    if (stick.current && (grew || opening)) toBottom(opening ? "auto" : "smooth");
+    // Opening on something new starts you where it starts, not at the end.
+    const since = opening ? el.querySelector<HTMLElement>(".rd-since") : null;
+    const at = since ? since.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 24 : 0;
+    if (since && at + el.clientHeight < el.scrollHeight) {
+      stick.current = false;
+      el.scrollTop = at;
+      lastTop.current = el.scrollTop;
+      setBehind(true);
+    } else if (stick.current && (grew || opening)) toBottom(opening ? "auto" : "smooth");
     else if (grew) setBehind(true);
+    if (stick.current) seenAll();
   }, [t?.entries]);
 
   // Pictures and folds change the height after the entries land; stay at
@@ -415,6 +432,7 @@ export function Reader({
           const near = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
           if (el.scrollTop < lastTop.current - 2 && !near) stick.current = false;
           else if (near) {
+            if (!stick.current) seenAll();
             stick.current = true;
             gliding.current = false;
             setBehind(false);
@@ -430,7 +448,19 @@ export function Reader({
           ) : (
             <>
               {t.dropped > 0 && <p className="rd-note">Earlier messages aren't shown; the terminal has them.</p>}
-              {t.entries.map((e) =>
+              {foldTo !== null && (
+                <button className="rd-earlier" onClick={() => setUnfolded(true)}>
+                  {plan.current!.turns === 1 ? "1 earlier turn" : `${plan.current!.turns} earlier turns`}
+                </button>
+              )}
+              {t.entries.filter((e) => foldTo === null || e.n >= foldTo).flatMap((e) => [
+                ...(e.n === plan.current?.unread
+                  ? [
+                      <p key="since" className="rd-since" role="separator">
+                        <span>New since you were here</span>
+                      </p>,
+                    ]
+                  : []),
                 e.kind === "you" ? (
                   <div key={e.n} className={`rd-you${fresh(e) ? " is-new" : ""}`}>
                     {e.text}
@@ -468,7 +498,7 @@ export function Reader({
                     Stopped by you
                   </p>
                 ),
-              )}
+              ])}
               {agent.status === "running" && (
                 <p className="rd-note rd-working">
                   <span className="rd-pulse" aria-hidden />
