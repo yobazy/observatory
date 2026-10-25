@@ -6,6 +6,9 @@ export interface TStep {
   tool: string;
   target: string;
   ok: boolean | null;
+  /** What it changed as diff lines ("- old", "+ new"), or the end of what
+   *  it printed when it failed. */
+  detail?: string;
 }
 
 export interface Entry {

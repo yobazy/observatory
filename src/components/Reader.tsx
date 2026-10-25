@@ -272,6 +272,30 @@ function Reply(props: {
   return isCard(card) ? <CardReply card={card} {...props} /> : <Md text={props.text} />;
 }
 
+/** What a step changed, or how it failed: a failure shows at once, a
+ *  change when you ask. */
+function StepDetail({ detail, failed }: { detail: string; failed: boolean }) {
+  const [open, setOpen] = useState(failed);
+  const lines = detail.split("\n");
+  return (
+    <>
+      <button className="link-btn rd-step-more" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? "Hide" : failed ? "Output" : "Diff"}
+      </button>
+      {open && (
+        <pre className={`rd-diff${failed ? " is-output" : ""}`}>
+          {lines.map((l, i) => (
+            <span key={i} className={failed ? "" : l.startsWith("+ ") ? "is-add" : l.startsWith("- ") ? "is-del" : "is-gap"}>
+              {l}
+              {"\n"}
+            </span>
+          ))}
+        </pre>
+      )}
+    </>
+  );
+}
+
 function Steps({ entry, root, fresh }: { entry: Entry; root: string; fresh: boolean }) {
   const rel = (t: string) => (root && t.startsWith(`${root}/`) ? t.slice(root.length + 1) : t);
   const failed = entry.steps.some((s) => s.ok === false);
@@ -286,6 +310,7 @@ function Steps({ entry, root, fresh }: { entry: Entry; root: string; fresh: bool
             </span>
             <span className="rd-tool">{s.tool.replace(/^mcp__.+?__/, "")}</span>
             <code title={s.target}>{rel(s.target)}</code>
+            {s.detail && <StepDetail detail={s.detail} failed={s.ok === false} />}
           </li>
         ))}
       </ul>

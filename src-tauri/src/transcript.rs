@@ -21,6 +21,8 @@ const MAX_ENTRIES: usize = 600;
 /// Characters kept of one prompt or one reply.
 const MAX_PROMPT: usize = 8_000;
 const MAX_REPLY: usize = 40_000;
+/// Lines kept of what a step changed, or of what a failed one printed.
+const MAX_DETAIL_LINES: usize = 40;
 
 #[derive(Default)]
 pub struct TranscriptState(Arc<Mutex<HashMap<String, Reading>>>);
@@ -56,6 +58,10 @@ pub struct Step {
     tool: String,
     target: String,
     ok: Option<bool>,
+    /// What it changed, as diff lines ("- old", "+ new"), or the end of
+    /// what it printed when it failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -89,6 +95,60 @@ fn clip_to(s: &str, max: usize) -> String {
         Some((i, _)) => format!("{}…", &s[..i]),
         None => s.to_string(),
     }
+}
+
+/// What an edit or a write changed, as diff lines, clipped.
+fn change_of(tool: &str, input: &serde_json::Value) -> Option<String> {
+    let s = |v: &serde_json::Value, k: &str| {
+        v.get(k).and_then(|t| t.as_str()).unwrap_or("").to_string()
+    };
+    let pairs: Vec<(String, String)> = match tool {
+        "Edit" => vec![(s(input, "old_string"), s(input, "new_string"))],
+        "MultiEdit" => input
+            .get("edits")
+            .and_then(|e| e.as_array())
+            .map(|a| {
+                a.iter()
+                    .map(|e| (s(e, "old_string"), s(e, "new_string")))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        "Write" => vec![(String::new(), s(input, "content"))],
+        _ => return None,
+    };
+    let mut lines = vec![];
+    for (i, (old, new)) in pairs.iter().enumerate() {
+        if i > 0 {
+            lines.push("…".to_string());
+        }
+        lines.extend(old.lines().map(|l| format!("- {l}")));
+        lines.extend(new.lines().map(|l| format!("+ {l}")));
+    }
+    if lines.is_empty() {
+        return None;
+    }
+    let more = lines.len().saturating_sub(MAX_DETAIL_LINES);
+    lines.truncate(MAX_DETAIL_LINES);
+    if more > 0 {
+        lines.push(format!("… {more} more lines"));
+    }
+    Some(lines.join("\n"))
+}
+
+/// The last lines of what a tool printed, from its result's content.
+fn output_tail(content: &serde_json::Value) -> String {
+    let text = match content {
+        serde_json::Value::String(t) => t.clone(),
+        serde_json::Value::Array(blocks) => blocks
+            .iter()
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => String::new(),
+    };
+    let lines: Vec<&str> = text.trim_end().lines().collect();
+    let from = lines.len().saturating_sub(MAX_DETAIL_LINES / 2);
+    clip_to(&lines[from..].join("\n"), 4_000)
 }
 
 impl Reading {
@@ -156,6 +216,9 @@ impl Reading {
                 let failed = b.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
                 if let Some(step) = self.get_mut(n).and_then(|e| e.steps.get_mut(i)) {
                     step.ok = Some(!failed);
+                    if failed {
+                        step.detail = b.get("content").map(output_tail).filter(|t| !t.is_empty());
+                    }
                 }
             }
         }
@@ -196,6 +259,7 @@ impl Reading {
                         tool: tool.to_string(),
                         target: target_of(&input),
                         ok: None,
+                        detail: change_of(tool, &input),
                     });
                 }
                 _ => {}
@@ -326,6 +390,16 @@ mod tests {
             [None, Some(false), Some(true)]
         );
         assert_eq!(r.entries[3].text, "Fixed it.");
+    }
+
+    #[test]
+    fn a_step_says_what_it_changed_or_how_it_failed() {
+        let edit = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"e1","name":"Edit","input":{"file_path":"/r/a.ts","old_string":"a\nb","new_string":"c"}},{"type":"tool_use","id":"e2","name":"Bash","input":{"command":"npm test"}}]}}"#;
+        let failed = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"e2","is_error":true,"content":[{"type":"text","text":"ok 1\nnot ok 2 - sync\n"}]}]}}"#;
+        let r = read(&[PROMPT, edit, failed]);
+        let steps = &r.entries[1].steps;
+        assert_eq!(steps[0].detail.as_deref(), Some("- a\n- b\n+ c"));
+        assert_eq!(steps[1].detail.as_deref(), Some("ok 1\nnot ok 2 - sync"));
     }
 
     #[test]

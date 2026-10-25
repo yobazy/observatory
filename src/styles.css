@@ -4541,9 +4541,39 @@ td.task-last {
 }
 .rd-steps li {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+}
+.rd-step-more {
+  font-size: 11.5px;
+}
+.rd-diff {
+  flex-basis: 100%;
+  margin: 2px 0 6px 20px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+.rd-diff .is-add {
+  color: var(--st-done);
+}
+.rd-diff .is-del {
+  color: var(--st-error);
+}
+.rd-diff .is-gap {
+  color: var(--faint);
+}
+.rd-diff.is-output {
+  color: var(--muted);
 }
 .rd-tool {
   color: var(--muted);
@@ -6951,4 +6981,7 @@ button.board-main:hover .board-text {
 }
 .rd-md a.rd-pr {
   font-weight: 600;
+}
+.rd-steps li > code {
+  flex: 1 1 0;
 }

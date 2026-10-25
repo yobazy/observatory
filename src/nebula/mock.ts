@@ -675,12 +675,19 @@ export function mockTranscript(s: State, agentId: string): Transcript | null {
   add("you", turn.prompt);
   add("claude", "I'll read the sync code first, then make the change and run the tests.");
   const half = Math.ceil(turn.steps.length / 2);
-  add("steps", "", turn.steps.slice(0, half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok })));
+  // What each step changed or printed, so the reader's diffs show.
+  const detail = (st: { tool: string; ok: boolean | null }) =>
+    st.tool === "Edit"
+      ? "- await Promise.all(pending.map((u) => this.apply(u)));\n+ for (const update of pending) {\n+   await this.apply(update);\n+ }"
+      : st.tool === "Bash" && st.ok === false
+        ? "FAIL src/cart/sync.test.ts\n  ✕ applies updates in order (12 ms)\n    Expected: [1, 2]\n    Received: [2, 1]"
+        : undefined;
+  add("steps", "", turn.steps.slice(0, half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok, detail: detail(st) })));
   add(
     "claude",
     "Sync applied every update with `Promise.all`, so they **raced**. Now a worker applies the next update when the current one settles:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\n- Updates apply in order\n- A failure stops the queue instead of being lost",
   );
-  add("steps", "", turn.steps.slice(half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok })));
+  add("steps", "", turn.steps.slice(half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok, detail: detail(st) })));
   if (turn.said) add("claude", turn.said);
   // A reply written as a card, so the reader's card shows in the demo.
   add(
