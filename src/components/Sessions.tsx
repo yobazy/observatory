@@ -636,7 +636,7 @@ function AgentRow({
   const picks = useContext(PicksContext);
   const isPicked = picks?.ids.has(agent.id) ?? false;
   const usual = useMemo(() => usualHarness(Object.values(state.agents)), [state.agents]);
-  const safe = useVerdict(agent)?.kind === "safe";
+  const safe = useVerdict(agent)?.tone === "done";
   return (
     <button
       className={`row row-${agent.status}${selected ? " is-selected" : ""}${isPicked ? " is-picked" : ""}${agent.unseen ? " is-unseen" : ""}${colorStyle ? " has-color" : ""}`}

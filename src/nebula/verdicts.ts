@@ -6,11 +6,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { isPreview, request } from "./client";
 import { flash, getState, setState } from "./store";
 import { afterClosing } from "./recentThreads";
-import { readVerdict, type Verdict } from "./replycard";
+import { readVerdict, type Chip } from "./replycard";
 import type { Turn } from "./turnsummary";
 import { sameSession, type Agent } from "./types";
 
-const known = new Map<string, { key: string; verdict: Verdict | null }>();
+const known = new Map<string, { key: string; verdict: Chip | null }>();
 const listeners = new Set<() => void>();
 let version = 0;
 // One log read at a time: a sidebar full of threads shouldn't read them all at once.
@@ -22,7 +22,7 @@ const keyOf = (a: Agent) => `${a.session_id}:${a.status}:${a.status_changed_at}`
 /** Only a finished thread whose log the app reads can say it's done. */
 const readable = (a: Agent) => !a.archived && a.status === "finished" && !!a.session_id && (a.kind === "claude" || a.kind === "codex");
 
-function set(agent: Agent, verdict: Verdict | null) {
+function set(agent: Agent, verdict: Chip | null) {
   known.set(agent.id, { key: keyOf(agent), verdict });
   version++;
   listeners.forEach((l) => l());
@@ -34,7 +34,7 @@ export function noteTurn(agent: Agent, turn: Turn | null) {
 }
 
 /** The thread's verdict, if it's at rest and its last reply gave one. */
-export function verdictOf(agent: Agent): Verdict | null {
+export function verdictOf(agent: Agent): Chip | null {
   const got = known.get(agent.id);
   return readable(agent) && got?.key === keyOf(agent) ? got.verdict : null;
 }
@@ -69,7 +69,7 @@ function useVersion() {
 }
 
 /** The thread's verdict, read when it comes to rest. */
-export function useVerdict(agent: Agent | undefined): Verdict | null {
+export function useVerdict(agent: Agent | undefined): Chip | null {
   useVersion();
   const key = agent ? keyOf(agent) : "";
   useEffect(() => {

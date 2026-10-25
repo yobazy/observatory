@@ -389,19 +389,18 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
             )}
             {agent && !agent.archived && (
               <>
-                {verdict?.kind === "safe" && (
+                {verdict?.tone === "done" && (
                   <button
                     className="btn btn-primary"
                     onClick={() => closeThread(agent)}
-                    title={`Its last reply says it's safe to close${verdict.reason ? `: ${verdict.reason}` : ""}. Archives it; Undo brings it back.`}
+                    title={`Its last reply says “${verdict.text}”. Archives it; Undo brings it back.`}
                   >
                     Close thread
                   </button>
                 )}
-                {verdict && verdict.kind !== "safe" && (
-                  <span className={`pane-verdict is-${verdict.kind}`} title={verdict.reason || undefined}>
-                    {verdict.kind === "keep" ? "Keep open" : "Don't close"}
-                    {verdict.reason && `: ${verdict.reason}`}
+                {verdict && verdict.tone !== "done" && (
+                  <span className={`pane-verdict is-${verdict.tone}`} title={verdict.text}>
+                    {verdict.text}
                   </span>
                 )}
                 <button

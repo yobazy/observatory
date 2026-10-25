@@ -42,12 +42,14 @@ fn folder_name(stamp: &str) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
+#[cfg(target_os = "macos")]
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {
     fn CGPreflightScreenCaptureAccess() -> bool;
     fn CGRequestScreenCaptureAccess() -> bool;
 }
 
+#[cfg(target_os = "macos")]
 #[link(name = "objc")]
 extern "C" {
     fn sel_registerName(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
@@ -56,6 +58,7 @@ extern "C" {
 
 /// The window's number in the window server, for `screencapture -l`, read
 /// on the main thread as AppKit wants.
+#[cfg(target_os = "macos")]
 fn window_number(window: &WebviewWindow) -> Result<i64, String> {
     let (tx, rx) = std::sync::mpsc::channel();
     let w = window.clone();
@@ -82,6 +85,7 @@ fn window_number(window: &WebviewWindow) -> Result<i64, String> {
 
 /// The window alone, even under others, into `out`. Screen Recording has
 /// to be allowed for the app; the first time, macOS asks.
+#[cfg(target_os = "macos")]
 fn screenshot(window: &WebviewWindow, out: &Path) -> Result<(), String> {
     if !unsafe { CGPreflightScreenCaptureAccess() } {
         unsafe { CGRequestScreenCaptureAccess() };
@@ -98,6 +102,13 @@ fn screenshot(window: &WebviewWindow, out: &Path) -> Result<(), String> {
         return Err(format!("screencapture failed ({status})."));
     }
     Ok(())
+}
+
+/// Elsewhere the moment is saved without one, so the Rust side still builds
+/// and tests on Linux.
+#[cfg(not(target_os = "macos"))]
+fn screenshot(_window: &WebviewWindow, _out: &Path) -> Result<(), String> {
+    Err("Screenshots are only taken on macOS.".into())
 }
 
 fn copy_to_clipboard(text: &str) {

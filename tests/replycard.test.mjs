@@ -212,19 +212,64 @@ I'd pick 1C.`)), {});
 
 test('a reply closes with a verdict, taken out of the card', async () => {
   const { readVerdict } = await import('../src/nebula/replycard.ts');
-  assert.deepEqual(readVerdict('Done.\n\n**✅ Safe to close.** #64 is in review; memory has it'), { kind: 'safe', reason: '#64 is in review; memory has it' });
-  assert.deepEqual(readVerdict('**🟠 Keep open:** waiting on your answer to 1'), { kind: 'keep', reason: 'waiting on your answer to 1' });
-  assert.deepEqual(readVerdict("🔴 Don't close: uncommitted work on main"), { kind: 'dont', reason: 'uncommitted work on main' });
-  assert.deepEqual(readVerdict('**✅ Safe to close**'), { kind: 'safe', reason: '' });
+  assert.deepEqual(readVerdict('Done.\n\n**✅ Safe to close.** #64 is in review; memory has it'), { tone: 'done', text: 'Safe to close. #64 is in review; memory has it' });
+  assert.deepEqual(readVerdict('**🟠 Keep open:** waiting on your answer to 1'), { tone: 'wait', text: 'Keep open: waiting on your answer to 1' });
+  assert.deepEqual(readVerdict("- 🔴 Do not close: uncommitted work on main\n"), { tone: 'bad', text: 'Do not close: uncommitted work on main' });
+  assert.deepEqual(readVerdict('**✅ Safe to close**'), { tone: 'done', text: 'Safe to close' });
   assert.equal(readVerdict('✅ Tests pass · 🟠 Not committed'), null);
-  // The last one wins: a quoted rule earlier doesn't count.
-  assert.equal(readVerdict('✅ Safe to close, it said.\n\n**🔴 Don\'t close:** unpushed').kind, 'dont');
+  // The last line counts: a quoted rule earlier doesn't.
+  assert.equal(readVerdict('✅ Safe to close, it said.\n\n**🔴 Don\'t close:** unpushed').tone, 'bad');
+  assert.equal(readVerdict('✅ Safe to close\n\nmore after'), null);
   const card = readCard(`**Shipped.**
 
 **Details**
 - Merged.
 
 **✅ Safe to close.**`);
-  assert.equal(card.verdict.kind, 'safe');
+  assert.deepEqual(card.verdict, { tone: 'done', text: 'Safe to close.' });
   assert.equal(card.details, '- Merged.');
+});
+
+const decisions = `9. ✅ **On my way looked already on:** her screenshot shows the bug fixed yesterday.
+
+**Decisions**
+2. Sticker button? A make "Stick something on" a real button · B that, plus tapping empty space opens the stickers
+3. Vibes? A they only dress the pets · B leave as is
+
+I'm also saving her feedback to the vault.
+
+🟠 Keep open: waiting on 2 to 3 (1 I'll do either way).`;
+
+test('a Decisions heading reads like Needs you', () => {
+  const c = readCard(decisions);
+  assert.deepEqual(c.asks.map((a) => [a.n, a.text, a.options.length]), [
+    [2, 'Sticker button?', 2],
+    [3, 'Vibes?', 2],
+  ]);
+  assert.equal(c.asksNote, "I'm also saving her feedback to the vault.");
+});
+
+test('the close verdict comes off the end as its own part', () => {
+  const c = readCard(decisions);
+  assert.deepEqual(c.verdict, { tone: 'wait', text: "Keep open: waiting on 2 to 3 (1 I'll do either way)." });
+  assert.doesNotMatch(c.asksNote, /Keep open/);
+  assert.deepEqual(readCard('Done.\n\n**✅ Safe to close.**').verdict, { tone: 'done', text: 'Safe to close.' });
+  assert.deepEqual(readCard('x\n\n🔴 **Don\'t close:** unpushed').verdict, { tone: 'bad', text: "Don't close: unpushed" });
+  assert.ok(isCard(readCard('Done.\n\n✅ Safe to close')));
+  // Only on the last line, and not a reply that's nothing else.
+  assert.equal(readCard('✅ Safe to close').verdict, null);
+  assert.equal(readCard('✅ Safe to close\n\nmore after').verdict, null);
+});
+
+test('decisions run together on one line split back apart', () => {
+  const c = readCard('**Decisions** 2. Sticker? A real button · B tap space 3. Vibes? A pets only · B leave 4. New chill? A shorter · B trim');
+  assert.deepEqual(c.asks.map((a) => [a.n, a.text, a.options.map((o) => o.label)]), [
+    [2, 'Sticker?', ['real button', 'tap space']],
+    [3, 'Vibes?', ['pets only', 'leave']],
+    [4, 'New chill?', ['shorter', 'trim']],
+  ]);
+  // A number inside a question that isn't the next decision stays put.
+  const one = readCard('**Needs you**\n1. Keep it under 2. Then what?  A yes · B no');
+  assert.equal(one.asks.length, 1);
+  assert.equal(one.asks[0].text, 'Keep it under 2. Then what?');
 });
