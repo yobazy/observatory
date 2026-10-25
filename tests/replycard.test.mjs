@@ -339,3 +339,16 @@ test('a reply saved as a note is named after its headline and says where it came
   assert.match(n.body, /^---\ntags: \[observatory\]\nthread: "Card \\"replies\\""\nproject: "observatory"\nsaved: 2026-10-25\n---\n\n\*\*Yes\./);
   assert.equal(noteFor('Plain `answer`: here.', { thread: 't', project: 'p', date: 'd' }).name, 'Plain answer: here');
 });
+
+test('a thread waits on you when its latest reply asks and you have not answered', async () => {
+  const { pendingCard } = await import('../src/nebula/replycard.ts');
+  const asked = [
+    { n: 0, kind: 'you', text: 'go' },
+    { n: 1, kind: 'claude', text: reply },
+    { n: 2, kind: 'steps', text: '' },
+  ];
+  assert.equal(pendingCard(asked)?.n, 1);
+  assert.equal(pendingCard([...asked, { n: 3, kind: 'you', text: '1 A' }]), null);
+  assert.equal(pendingCard([...asked, { n: 3, kind: 'claude', text: 'Done.' }]), null);
+  assert.equal(pendingCard([]), null);
+});

@@ -251,10 +251,11 @@ function OtherAnswer({ value, live, sent, onSet }: { value: string; live: boolea
 
 /** A reply written as a card: headline, status, pictures, decisions to tap,
  *  and details folded away. Decisions only take taps on the latest reply. */
-function CardReply({
+export function CardReply({
   card,
   pair,
   ship = null,
+  compact = false,
   from,
   live,
   sent,
@@ -267,6 +268,8 @@ function CardReply({
   /** What git says is left to ship, offered beside a verdict that keeps the
    *  thread open: Commit & push, Push or Resolve. */
   ship?: Ship | null;
+  /** Just the headline, status and decisions, as Decisions lists it. */
+  compact?: boolean;
   from: string;
   live: boolean;
   /** The picks are what you answered with, not taps waiting to be sent. */
@@ -287,8 +290,8 @@ function CardReply({
           ))}
         </div>
       )}
-      <Pictures paths={card.images} from={from} pair={pair} />
-      {card.body && <Md text={card.body} />}
+      {!compact && <Pictures paths={card.images} from={from} pair={pair} />}
+      {!compact && card.body && <Md text={card.body} />}
       {card.asks.length > 0 && (
         <section className="rd-needs" aria-label="Needs you">
           <h4>Needs you</h4>
@@ -319,7 +322,7 @@ function CardReply({
           {card.asksNote && <Md text={card.asksNote} />}
         </section>
       )}
-      {card.details && (
+      {!compact && card.details && (
         <details className="rd-fold">
           <summary>Details</summary>
           <Md text={card.details} />

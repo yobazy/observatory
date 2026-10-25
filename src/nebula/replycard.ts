@@ -420,3 +420,12 @@ export function noteFor(text: string, from: { thread: string; project: string; d
   const body = ["---", "tags: [observatory]", `thread: ${yaml(from.thread)}`, `project: ${yaml(from.project)}`, `saved: ${from.date}`, "---", "", text.trim(), ""].join("\n");
   return { name, body };
 }
+
+/** The reply a thread is waiting on you to decide: its latest, when that
+ *  asks decisions and nothing you said came after it. */
+export function pendingCard(entries: { n: number; kind: string; text: string }[]): { n: number; text: string; card: Card } | null {
+  const last = [...entries].reverse().find((e) => e.kind === "claude" || e.kind === "you");
+  if (!last || last.kind !== "claude") return null;
+  const card = readCard(last.text);
+  return card.asks.some((a) => a.options.length) ? { n: last.n, text: last.text, card } : null;
+}

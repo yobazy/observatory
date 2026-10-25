@@ -6764,6 +6764,7 @@ button.board-main:hover .board-text {
 /* ---------- ideas (Ideas.tsx): things to start later ---------- */
 .side-entries {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 0 10px 12px;
 }
@@ -6772,7 +6773,7 @@ button.board-main:hover .board-text {
 }
 .side-entries > .uc-entry {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 90px;
   margin: 0;
 }
 .ideas-late {
@@ -7289,4 +7290,45 @@ button.board-main:hover .board-text {
   flex: 1;
   padding-top: 0;
   border-top: none;
+}
+
+/* Decisions (Inbox.tsx): each waiting thread's card, answered in place. */
+.inbox-body {
+  max-width: 80ch;
+  width: 100%;
+  margin: 0 auto;
+}
+.inbox-item {
+  display: grid;
+  gap: 8px;
+}
+.inbox-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.inbox-name {
+  font-weight: 600;
+}
+.inbox-project {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.inbox-head .link-btn {
+  margin-left: auto;
+}
+.inbox-compose {
+  display: flex;
+  gap: 8px;
+}
+.inbox-compose input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
 }
