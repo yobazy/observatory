@@ -306,3 +306,20 @@ test('an answer written in for "Other…" goes on its own line', () => {
   assert.equal(answerText({ 2: 'later' }, 'thanks'), '2: later\n\nthanks');
   assert.equal(answerText({ 1: 'A', 2: 'B' }, 'go'), '1 A, 2 B. go');
 });
+
+test('each turn in the outline takes the tone its last reply ended on', async () => {
+  const { turnsOf } = await import('../src/nebula/replycard.ts');
+  const entries = [
+    { n: 0, kind: 'you', text: '**fix** the build' },
+    { n: 1, kind: 'claude', text: 'Looking.' },
+    { n: 2, kind: 'claude', text: '**Fixed.**\n\n✅ Tests pass · 🟠 Not pushed' },
+    { n: 3, kind: 'you', text: 'push it' },
+    { n: 4, kind: 'claude', text: '**Pushed.**\n\n✅ done\n\n✅ Safe to close' },
+    { n: 5, kind: 'you', text: 'thanks' },
+  ];
+  assert.deepEqual(turnsOf(entries), [
+    { n: 0, prompt: 'fix the build', tone: 'wait' },
+    { n: 3, prompt: 'push it', tone: 'done' },
+    { n: 5, prompt: 'thanks', tone: null },
+  ]);
+});

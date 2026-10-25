@@ -8,7 +8,7 @@ import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
-import { answersIn, answerText, isCard, openDecisions, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
+import { answersIn, answerText, isCard, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { describe, openPreview, previewUrl } from "../nebula/preview";
@@ -564,11 +564,12 @@ export function Reader({
     () => openDecisions(t?.entries ?? [], latest).filter((d) => !dismissed.has(d.entry)),
     [t?.entries, latest, dismissed],
   );
-  const showReply = (n: number) => {
+  const turns = useMemo(() => turnsOf(t?.entries ?? []), [t?.entries]);
+  const showReply = (n: number, which = ".rd-reply") => {
     if (foldTo !== null && n < foldTo) setUnfolded(true);
     // After the fold opens, if it had to.
     requestAnimationFrame(() => {
-      const el = scroller.current?.querySelector<HTMLElement>(`.rd-reply[data-n="${n}"]`);
+      const el = scroller.current?.querySelector<HTMLElement>(`${which}[data-n="${n}"]`);
       if (!el) return;
       stick.current = false;
       el.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -704,6 +705,19 @@ export function Reader({
             }}
           />
         )}
+        {turns.length >= 3 && (
+          <nav className="rd-rail" aria-label="Turns in this thread">
+            {turns.map((x) => (
+              <button
+                key={x.n}
+                className={`rd-rail-dot${x.tone ? ` is-${x.tone}` : ""}`}
+                title={x.prompt}
+                aria-label={`Go to “${x.prompt}”`}
+                onClick={() => showReply(x.n, ".rd-you")}
+              />
+            ))}
+          </nav>
+        )}
         <div
           className="rd-scroll"
           tabIndex={-1}
@@ -751,7 +765,7 @@ export function Reader({
                       ]
                     : []),
                   e.kind === "you" ? (
-                    <div key={e.n} className={`rd-you${fresh(e) ? " is-new" : ""}`}>
+                    <div key={e.n} data-n={e.n} className={`rd-you${fresh(e) ? " is-new" : ""}`}>
                       {e.text}
                     </div>
                   ) : e.kind === "claude" ? (

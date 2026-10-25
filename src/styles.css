@@ -7024,7 +7024,8 @@ button.board-main:hover .board-text {
   color: var(--muted);
   text-align: left;
 }
-.rd-reply.is-flash {
+.rd-reply.is-flash,
+.rd-you.is-flash {
   animation: rd-flash 1.4s ease-out;
 }
 @keyframes rd-flash {
@@ -7036,7 +7037,8 @@ button.board-main:hover .board-text {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rd-reply.is-flash {
+  .rd-reply.is-flash,
+  .rd-you.is-flash {
     animation: none;
   }
 }
@@ -7138,4 +7140,53 @@ button.board-main:hover .board-text {
 ::highlight(rd-find-now) {
   background-color: var(--amber);
   color: var(--night);
+}
+
+/* The thread's turns down its edge: one dot each, colored by how the turn
+   ended. */
+.rd-rail {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 70%;
+  overflow: hidden;
+  transform: translateY(-50%);
+}
+.rd-rail-dot {
+  --tone: var(--line);
+  width: 16px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.rd-rail-dot::before {
+  content: "";
+  display: block;
+  width: 7px;
+  height: 7px;
+  margin: auto;
+  border-radius: 50%;
+  background: var(--tone);
+  transition: transform 120ms;
+}
+.rd-rail-dot:hover::before {
+  transform: scale(1.5);
+}
+.rd-rail-dot.is-done {
+  --tone: var(--st-done);
+}
+.rd-rail-dot.is-wait {
+  --tone: var(--st-waiting);
+}
+.rd-rail-dot.is-bad {
+  --tone: var(--st-error);
+}
+.rd-rail-dot.is-idle {
+  --tone: var(--st-idle);
 }

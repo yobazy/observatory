@@ -374,3 +374,19 @@ export function passageText(passage: string, said: string, max = 600): string {
     .join("\n");
   return `About this part of your reply:\n${quoted}\n\n${said.trim()}`;
 }
+
+/** The thread's turns for the outline beside it: each of your messages,
+ *  and how the last reply to it ended (its verdict, else its worst chip). */
+export function turnsOf(entries: { n: number; kind: string; text: string }[]): { n: number; prompt: string; tone: Tone | null }[] {
+  const out: { n: number; prompt: string; tone: Tone | null }[] = [];
+  for (const e of entries) {
+    if (e.kind === "you") out.push({ n: e.n, prompt: replyQuote(e.text, 60), tone: null });
+    else if (e.kind === "claude" && out.length) {
+      const c = readCard(e.text);
+      const worst = (["bad", "wait", "done", "idle"] as Tone[]).find((t) => c.chips.some((x) => x.tone === t)) ?? null;
+      const tone = c.verdict?.tone ?? worst;
+      if (tone) out[out.length - 1].tone = tone;
+    }
+  }
+  return out;
+}
