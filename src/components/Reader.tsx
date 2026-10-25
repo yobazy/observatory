@@ -10,6 +10,8 @@ import { enqueue, isIdle, unqueue } from "../nebula/queue";
 import { clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { answersIn, answerText, beforeAfter, isCard, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
+import { shipKind } from "../nebula/git";
+import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
 import { highlightUnder } from "../nebula/highlight";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { describe, openPreview, previewUrl } from "../nebula/preview";
@@ -252,6 +254,7 @@ function OtherAnswer({ value, live, sent, onSet }: { value: string; live: boolea
 function CardReply({
   card,
   pair,
+  ship = null,
   from,
   live,
   sent,
@@ -261,6 +264,9 @@ function CardReply({
   card: Card;
   /** Its two pictures as before and after, when it says which is which. */
   pair: [string, string] | null;
+  /** What git says is left to ship, offered beside a verdict that keeps the
+   *  thread open: Commit & push, Push or Resolve. */
+  ship?: Ship | null;
   from: string;
   live: boolean;
   /** The picks are what you answered with, not taps waiting to be sent. */
@@ -320,13 +326,23 @@ function CardReply({
         </details>
       )}
       {card.verdict && (
-        <p className={`rd-verdict is-${card.verdict.tone}`} dangerouslySetInnerHTML={{ __html: toHtml(card.verdict.text, true) }} />
+        <div className="rd-verdict-row">
+          <p className={`rd-verdict is-${card.verdict.tone}`} dangerouslySetInnerHTML={{ __html: toHtml(card.verdict.text, true) }} />
+          {ship && card.verdict.tone !== "done" && (
+            <button className="btn btn-sm" onClick={ship.run} title={ship.title}>
+              {ship.label}
+            </button>
+          )}
+        </div>
       )}
     </article>
   );
 }
 
+type Ship = { label: string; title: string; run: () => void };
+
 function Reply(props: {
+  ship?: Ship | null;
   text: string;
   from: string;
   live: boolean;
@@ -596,6 +612,24 @@ export function Reader({
     [t?.entries, latest, dismissed],
   );
   const turns = useMemo(() => turnsOf(t?.entries ?? []), [t?.entries]);
+  // What's left to ship on this thread's checkout, asked of the agent itself.
+  const ship = useMemo((): Ship | null => {
+    const g = state.git[agent.worktree_id];
+    const wt = state.worktrees[agent.worktree_id];
+    if (!g || "error" in g || !wt) return null;
+    const kind = shipKind(g, wt);
+    if (!kind) return null;
+    const what = shipWhat(kind, g.branch ?? "this branch");
+    return {
+      label: SHIP_LABEL[kind],
+      title: `Ask ${agent.name} to ${what}`,
+      run: () =>
+        void enqueue(agent, shipPrompt(kind, g)).then(
+          (how) => flash(how === "queued" ? `Queued for ${agent.name}: ${what}` : `Asked ${agent.name} to ${what}`),
+          () => flash(`Couldn't ask ${agent.name} to ${what}`, 6000),
+        ),
+    };
+  }, [state.git, state.worktrees, agent]);
   const showReply = (n: number, which = ".rd-reply") => {
     if (foldTo !== null && n < foldTo) setUnfolded(true);
     // After the fold opens, if it had to.
@@ -809,6 +843,7 @@ export function Reader({
                       className={`rd-reply${pointed?.entry === e.n ? " is-pointed" : ""}${fresh(e) ? " is-new" : ""}`}
                     >
                       <Reply
+                        ship={e.n === latest && !waiting ? ship : null}
                         text={e.text}
                         from={agent.id}
                         live={e.n === latest && !waiting}

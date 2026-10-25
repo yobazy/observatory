@@ -7276,3 +7276,17 @@ button.board-main:hover .board-text {
 .rd-elapsed::before {
   content: "· ";
 }
+
+/* A verdict that keeps the thread open, with what's left to ship beside it. */
+.rd-verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.rd-verdict-row .rd-verdict {
+  flex: 1;
+  padding-top: 0;
+  border-top: none;
+}
