@@ -189,6 +189,47 @@ function Pictures({ paths, from }: { paths: string[]; from: string }) {
   );
 }
 
+/** "Other…" after a decision's options: an answer of your own, written in. */
+function OtherAnswer({ value, live, sent, onSet }: { value: string; live: boolean; sent: boolean; onSet: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(value);
+  if (editing)
+    return (
+      <input
+        className="rd-other"
+        autoFocus
+        value={text}
+        placeholder="Your answer"
+        aria-label="Your own answer"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          if (text.trim() !== value) onSet(text.trim() || value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          else if (e.key === "Escape") {
+            setText(value);
+            setEditing(false);
+          }
+        }}
+      />
+    );
+  return (
+    <button
+      className={`rd-opt${value ? (sent ? " is-on is-sent" : " is-on") : ""}`}
+      disabled={!live}
+      aria-pressed={!!value}
+      onClick={() => {
+        setText(value);
+        setEditing(true);
+      }}
+    >
+      {value || "Other…"}
+    </button>
+  );
+}
+
 /** A reply written as a card: headline, status, pictures, decisions to tap,
  *  and details folded away. Decisions only take taps on the latest reply. */
 function CardReply({
@@ -242,6 +283,9 @@ function CardReply({
                       <b>{o.letter}</b> <span dangerouslySetInnerHTML={{ __html: toHtml(o.label, true) }} />
                     </button>
                   ))}
+                  {(live || (picks[a.n] ?? "").length > 1) && (
+                    <OtherAnswer value={(picks[a.n] ?? "").length > 1 ? picks[a.n] : ""} live={live} sent={sent} onSet={(v) => onPick(a.n, v)} />
+                  )}
                 </span>
               )}
             </div>

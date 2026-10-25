@@ -7066,3 +7066,17 @@ button.board-main:hover .board-text {
     animation: none;
   }
 }
+
+/* An answer of your own to a decision, written in place of the options. */
+.rd-other {
+  min-height: 30px;
+  width: 18ch;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}

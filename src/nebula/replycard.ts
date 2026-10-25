@@ -250,13 +250,16 @@ export const isCard = (c: Card) => !!(c.headline || c.chips.length || c.asks.len
 
 /** What tapping answers sends: "1 A, 2 B", then anything typed after it. */
 export function answerText(picks: Record<number, string>, typed: string): string {
-  const said = Object.entries(picks)
-    .filter(([, l]) => l)
-    .sort(([a], [b]) => Number(a) - Number(b))
-    .map(([n, l]) => `${n} ${l}`)
-    .join(", ");
+  const all = Object.entries(picks)
+    .filter(([, l]) => l.trim())
+    .sort(([a], [b]) => Number(a) - Number(b));
+  // A lettered answer is "2 B"; one written in ("Other…") gets a line of its own.
+  const letters = all.filter(([, l]) => /^[A-Z]$/.test(l));
+  const written = all.filter(([, l]) => !/^[A-Z]$/.test(l)).map(([n, l]) => `${n}: ${l.trim()}`);
+  const said = [letters.map(([n, l]) => `${n} ${l}`).join(", "), ...written].filter(Boolean).join("\n");
   const rest = typed.trim();
-  return said && rest ? `${said}. ${rest}` : said || rest;
+  if (!said || !rest) return said || rest;
+  return written.length ? `${said}\n\n${rest}` : `${said}. ${rest}`;
 }
 
 /** A reply's opening words, to say which one you mean: its first line with

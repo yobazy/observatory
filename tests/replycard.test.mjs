@@ -300,3 +300,9 @@ test('a passage you select is quoted ahead of what you say about it', async () =
   assert.equal(passageText(' two\nlines ', 'why?'), 'About this part of your reply:\n> two\n> lines\n\nwhy?');
   assert.equal(passageText('abcdef', 'x', 4), 'About this part of your reply:\n> abc…\n\nx');
 });
+
+test('an answer written in for "Other…" goes on its own line', () => {
+  assert.equal(answerText({ 1: 'A', 2: 'use a mutex' }, ''), '1 A\n2: use a mutex');
+  assert.equal(answerText({ 2: 'later' }, 'thanks'), '2: later\n\nthanks');
+  assert.equal(answerText({ 1: 'A', 2: 'B' }, 'go'), '1 A, 2 B. go');
+});
