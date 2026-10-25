@@ -15,6 +15,7 @@ import { describe, openPreview, previewUrl } from "../nebula/preview";
 import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
 import { AskChoices } from "./AskStrip";
+import { ReaderFind } from "./ReaderFind";
 
 /** What you were typing to each agent, kept when the reader remounts for a
  *  new session (/clear, resume). */
@@ -514,6 +515,47 @@ export function Reader({
     if (Object.keys(typed.picks).length) setDraft(typed.rest);
     setTapped({ entry: latest, picks: { ...base, [n]: base[n] === letter ? "" : letter } });
   };
+  // ⌘F finds in the thread while you're in it; ⌘↑/⌘↓ go from one of your
+  // messages to the one before or after, ⇧⌘↑/⇧⌘↓ to either end.
+  const [finding, setFinding] = useState(false);
+  const readerEl = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const inside = readerEl.current?.contains(document.activeElement);
+      if (!e.metaKey || e.altKey || e.ctrlKey || !inside) return;
+      if (e.key === "f") {
+        e.preventDefault();
+        setUnfolded(true);
+        setFinding(true);
+        return;
+      }
+      if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || (document.activeElement as HTMLElement).matches("textarea, input")) return;
+      const el = scroller.current;
+      if (!el) return;
+      e.preventDefault();
+      const up = e.key === "ArrowUp";
+      if (e.shiftKey) {
+        if (up) {
+          setUnfolded(true);
+          stick.current = false;
+          el.scrollTop = 0;
+        } else toBottom("auto");
+        return;
+      }
+      const top = el.getBoundingClientRect().top;
+      const mine = [...el.querySelectorAll<HTMLElement>(".rd-you:not(.is-queued)")];
+      const next = up
+        ? mine.filter((m) => m.getBoundingClientRect().top < top - 4).pop()
+        : mine.find((m) => m.getBoundingClientRect().top > top + 20);
+      if (next) {
+        stick.current = false;
+        el.scrollTop += next.getBoundingClientRect().top - top - 16;
+      } else if (up && foldTo !== null) setUnfolded(true);
+      else if (!up) toBottom("auto");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   // Decisions earlier replies asked that you haven't answered, kept in view
   // until you answer or put them away.
   const [dismissed, setDismissed] = useState<Set<number>>(() => dismissedFor.get(agent.id) ?? new Set());
@@ -651,9 +693,20 @@ export function Reader({
 
   return (
     <Where.Provider value={where}>
-      <div className="reader">
+      <div className="reader" ref={readerEl}>
+        {finding && (
+          <ReaderFind
+            scroller={scroller}
+            version={t?.entries}
+            onClose={() => {
+              setFinding(false);
+              scroller.current?.focus();
+            }}
+          />
+        )}
         <div
           className="rd-scroll"
+          tabIndex={-1}
           ref={scroller}
           onMouseUp={readSelection}
           onKeyUp={(e) => e.shiftKey && readSelection()}

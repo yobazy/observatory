@@ -41,3 +41,10 @@ test('working lines skip the cd and shorten mcp names', async () => {
   assert.equal(doingLine({ tool: 'Bash', target: 'cd /a/b && npm test', ok: null }), 'Running npm test');
   assert.equal(doingLine({ tool: 'mcp__claude_ai_Gmail__send_message', target: '', ok: null }), 'Using send message');
 });
+
+test('finding in the thread ignores case and doesn\'t overlap', async () => {
+  const { findAll } = await import('../src/nebula/transcript.ts');
+  assert.deepEqual(findAll('Sync the sync, SYNC', 'sync'), [0, 9, 15]);
+  assert.deepEqual(findAll('aaaa', 'aa'), [0, 2]);
+  assert.deepEqual(findAll('abc', ''), []);
+});

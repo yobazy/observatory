@@ -155,6 +155,8 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey || e.altKey || e.ctrlKey || e.key !== "f" || getState().view !== "sessions") return;
+      // In the Read view, ⌘F finds in the thread instead.
+      if (document.activeElement?.closest(".reader")) return;
       e.preventDefault();
       searchBox.current?.focus();
       searchBox.current?.select();

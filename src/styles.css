@@ -7099,3 +7099,43 @@ button.board-main:hover .board-text {
 .rd-queued-bar > span {
   margin-right: auto;
 }
+
+/* Find in the thread, over the top of it. */
+.rd-find {
+  position: absolute;
+  top: 10px;
+  right: 18px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: var(--shadow-pop);
+  font-size: 12.5px;
+}
+.rd-find input {
+  width: 22ch;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.rd-find-count {
+  min-width: 6ch;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.rd-scroll:focus {
+  outline: none;
+}
+::highlight(rd-find) {
+  background-color: color-mix(in srgb, var(--amber) 35%, transparent);
+}
+::highlight(rd-find-now) {
+  background-color: var(--amber);
+  color: var(--night);
+}

@@ -77,3 +77,13 @@ export function doingLine(s: TStep): string {
   if (s.tool === "Agent" || s.tool === "Task") return "Waiting on a subagent";
   return `Using ${s.tool.replace(/^mcp__.+?__/, "").replace(/_/g, " ")}`;
 }
+
+/** Where `query` occurs in `text`, ignoring case: each start offset. */
+export function findAll(text: string, query: string): number[] {
+  const q = query.toLowerCase();
+  if (!q) return [];
+  const t = text.toLowerCase();
+  const out: number[] = [];
+  for (let at = t.indexOf(q); at >= 0; at = t.indexOf(q, at + q.length)) out.push(at);
+  return out;
+}
