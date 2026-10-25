@@ -7214,3 +7214,57 @@ button.board-main:hover .board-text {
   color: var(--muted);
   text-align: center;
 }
+
+/* The Read view's text size and width (Settings → Read view). */
+.reader.is-text-small .rd-col {
+  zoom: 0.9;
+}
+.reader.is-text-large .rd-col {
+  zoom: 1.15;
+}
+.reader.is-wide .rd-col,
+.reader.is-wide .rd-compose,
+.reader.is-wide .rd-open {
+  max-width: none;
+}
+
+/* Code in a reply, colored by language (highlight.ts). */
+.rd-md .hljs-keyword,
+.rd-md .hljs-variable.language_,
+.rd-md .hljs-selector-tag,
+.rd-md .hljs-meta .hljs-keyword {
+  color: var(--accent);
+}
+.rd-md .hljs-string,
+.rd-md .hljs-regexp,
+.rd-md .hljs-addition {
+  color: var(--st-done);
+}
+.rd-md .hljs-number,
+.rd-md .hljs-literal,
+.rd-md .hljs-symbol {
+  color: var(--amber);
+}
+.rd-md .hljs-comment,
+.rd-md .hljs-quote {
+  color: var(--faint);
+  font-style: italic;
+}
+.rd-md .hljs-title,
+.rd-md .hljs-title.function_,
+.rd-md .hljs-section {
+  color: var(--st-running);
+}
+.rd-md .hljs-built_in,
+.rd-md .hljs-type,
+.rd-md .hljs-attr,
+.rd-md .hljs-attribute {
+  color: var(--st-waiting);
+}
+.rd-md .hljs-deletion {
+  color: var(--st-error);
+}
+.rd-md .hljs-meta,
+.rd-md .hljs-punctuation {
+  color: var(--muted);
+}

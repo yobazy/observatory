@@ -96,6 +96,7 @@ export function SettingsView() {
             <>
               <Rows rows={GENERAL} settings={settings} save={save} />
               <Previews />
+              <ReadView />
               <DispatchSettings />
               <Updates />
               <UsageLog />
@@ -159,6 +160,68 @@ function Handoffs() {
           >
             {copied ? "Copied" : "Copy"}
           </button>
+        </div>
+      </div>
+    </Group>
+  );
+}
+
+const READER_TEXT = [
+  { id: "small", label: "Small" },
+  { id: undefined, label: "Medium" },
+  { id: "large", label: "Large" },
+] as const;
+
+const READER_WIDTH = [
+  { id: undefined, label: "Reading width" },
+  { id: "wide", label: "Full width" },
+] as const;
+
+/** How the Read view (Reader.tsx) sets a thread: its text size and width. */
+function ReadView() {
+  const { prefs } = useAppState();
+  return (
+    <Group title="Read view">
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label" id="reader-text-label">
+            Text size
+          </span>
+          <span className="setting-hint">How large replies read when a thread is shown as Read.</span>
+        </div>
+        <div className="segmented segmented-sm" role="radiogroup" aria-labelledby="reader-text-label">
+          {READER_TEXT.map((o) => (
+            <button
+              key={o.label}
+              role="radio"
+              aria-checked={prefs.readerText === o.id}
+              className={prefs.readerText === o.id ? "is-on" : ""}
+              onClick={() => void savePrefs({ ...prefs, readerText: o.id })}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label" id="reader-width-label">
+            Width
+          </span>
+          <span className="setting-hint">A column kept to a comfortable line length, or the whole pane.</span>
+        </div>
+        <div className="segmented segmented-sm" role="radiogroup" aria-labelledby="reader-width-label">
+          {READER_WIDTH.map((o) => (
+            <button
+              key={o.label}
+              role="radio"
+              aria-checked={prefs.readerWidth === o.id}
+              className={prefs.readerWidth === o.id ? "is-on" : ""}
+              onClick={() => void savePrefs({ ...prefs, readerWidth: o.id })}
+            >
+              {o.label}
+            </button>
+          ))}
         </div>
       </div>
     </Group>

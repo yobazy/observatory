@@ -10,6 +10,7 @@ import { enqueue, isIdle, unqueue } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { answersIn, answerText, beforeAfter, isCard, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
+import { highlightUnder } from "../nebula/highlight";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { describe, openPreview, previewUrl } from "../nebula/preview";
 import type { Agent } from "../nebula/types";
@@ -99,8 +100,9 @@ function copy(text: string, what: string) {
 function Md({ text, className = "" }: { text: string; className?: string }) {
   const html = useMemo(() => toHtml(text), [text]);
   const el = useRef<HTMLDivElement>(null);
-  // Each code block gets a Copy for what's in it.
+  // Each code block is colored by its language, and gets a Copy for what's in it.
   useEffect(() => {
+    if (el.current) highlightUnder(el.current);
     const added: HTMLElement[] = [];
     for (const pre of el.current?.querySelectorAll("pre") ?? []) {
       const b = document.createElement("button");
@@ -712,7 +714,10 @@ export function Reader({
 
   return (
     <Where.Provider value={where}>
-      <div className="reader" ref={readerEl}>
+      <div
+        ref={readerEl}
+        className={`reader${state.prefs.readerText ? ` is-text-${state.prefs.readerText}` : ""}${state.prefs.readerWidth === "wide" ? " is-wide" : ""}`}
+      >
         {finding && (
           <ReaderFind
             scroller={scroller}
