@@ -8,7 +8,7 @@ import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
-import { answersIn, answerText, isCard, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
+import { answersIn, answerText, beforeAfter, isCard, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { describe, openPreview, previewUrl } from "../nebula/preview";
@@ -167,7 +167,7 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
 }
 
 /** The images a reply names, shown in it; a click opens the preview. */
-function Pictures({ paths, from }: { paths: string[]; from: string }) {
+function Pictures({ paths, from, pair = null }: { paths: string[]; from: string; pair?: [string, string] | null }) {
   const [ready, setReady] = useState<string[]>([]);
   useEffect(() => {
     let live = true;
@@ -179,6 +179,20 @@ function Pictures({ paths, from }: { paths: string[]; from: string }) {
     };
   }, [paths.join("\n")]);
   if (!ready.length) return null;
+  // Before and after side by side, at the same size, to compare.
+  if (pair && pair.every((p) => ready.includes(p)))
+    return (
+      <div className="rd-pics is-pair">
+        {pair.map((p, i) => (
+          <figure key={p}>
+            <button className="rd-pic" onClick={() => void openPreview(pair, from)} title={`Open ${p}`}>
+              <img src={previewUrl(p)} alt={i ? "After" : "Before"} onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+            </button>
+            <figcaption>{i ? "After" : "Before"}</figcaption>
+          </figure>
+        ))}
+      </div>
+    );
   return (
     <div className="rd-pics">
       {ready.map((p) => (
@@ -235,6 +249,7 @@ function OtherAnswer({ value, live, sent, onSet }: { value: string; live: boolea
  *  and details folded away. Decisions only take taps on the latest reply. */
 function CardReply({
   card,
+  pair,
   from,
   live,
   sent,
@@ -242,6 +257,8 @@ function CardReply({
   onPick,
 }: {
   card: Card;
+  /** Its two pictures as before and after, when it says which is which. */
+  pair: [string, string] | null;
   from: string;
   live: boolean;
   /** The picks are what you answered with, not taps waiting to be sent. */
@@ -262,7 +279,7 @@ function CardReply({
           ))}
         </div>
       )}
-      <Pictures paths={card.images} from={from} />
+      <Pictures paths={card.images} from={from} pair={pair} />
       {card.body && <Md text={card.body} />}
       {card.asks.length > 0 && (
         <section className="rd-needs" aria-label="Needs you">
@@ -316,7 +333,8 @@ function Reply(props: {
   onPick: (n: number, letter: string) => void;
 }) {
   const card = useMemo(() => readCard(props.text), [props.text]);
-  return isCard(card) ? <CardReply card={card} {...props} /> : <Md text={props.text} />;
+  const pair = useMemo(() => beforeAfter(card.images, props.text), [card.images, props.text]);
+  return isCard(card) ? <CardReply card={card} pair={pair} {...props} /> : <Md text={props.text} />;
 }
 
 /** What a step changed, or how it failed: a failure shows at once, a

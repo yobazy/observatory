@@ -7190,3 +7190,27 @@ button.board-main:hover .board-text {
 .rd-rail-dot.is-idle {
   --tone: var(--st-idle);
 }
+
+/* Before and after, side by side at the same size. */
+.rd-pics.is-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.rd-pics.is-pair figure {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  min-width: 0;
+}
+.rd-pics.is-pair .rd-pic img {
+  width: 100%;
+  height: 220px;
+  max-height: none;
+  object-fit: contain;
+}
+.rd-pics.is-pair figcaption {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+}

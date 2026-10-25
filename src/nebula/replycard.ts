@@ -390,3 +390,23 @@ export function turnsOf(entries: { n: number; kind: string; text: string }[]): {
   }
   return out;
 }
+
+/** A reply's two pictures as before and after, when it says which is which:
+ *  by their names ("reader-before.png") or on the lines naming them. */
+export function beforeAfter(images: string[], text: string): [string, string] | null {
+  if (images.length !== 2) return null;
+  const said = (p: string) => {
+    const name = p.split("/").pop() ?? p;
+    const line = text.split("\n").find((l) => l.includes(p)) ?? "";
+    for (const where of [name, line]) {
+      const before = /\bbefore\b/i.test(where.replace(/[-_.]/g, " "));
+      const after = /\bafter\b/i.test(where.replace(/[-_.]/g, " "));
+      if (before !== after) return before ? "before" : "after";
+    }
+    return null;
+  };
+  const [a, b] = images.map(said);
+  if (a === "before" && b === "after") return [images[0], images[1]];
+  if (a === "after" && b === "before") return [images[1], images[0]];
+  return null;
+}

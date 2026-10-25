@@ -323,3 +323,11 @@ test('each turn in the outline takes the tone its last reply ended on', async ()
     { n: 5, prompt: 'thanks', tone: null },
   ]);
 });
+
+test('two pictures read as before and after when the reply says which', async () => {
+  const { beforeAfter } = await import('../src/nebula/replycard.ts');
+  assert.deepEqual(beforeAfter(['/s/after.png', '/s/before.png'], ''), ['/s/before.png', '/s/after.png']);
+  assert.deepEqual(beforeAfter(['/s/a.png', '/s/b.png'], 'Before: `/s/a.png`\nAfter: `/s/b.png`'), ['/s/a.png', '/s/b.png']);
+  assert.equal(beforeAfter(['/s/a.png', '/s/b.png'], 'two shots'), null);
+  assert.equal(beforeAfter(['/s/before.png'], ''), null);
+});
