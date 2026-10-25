@@ -294,3 +294,9 @@ test('answering an earlier decision from the tray closes it', async () => {
   assert.deepEqual(openDecisions(entries.slice(0, 3), -1).length, 1);
   assert.deepEqual(openDecisions(entries, -1), []);
 });
+
+test('a passage you select is quoted ahead of what you say about it', async () => {
+  const { passageText } = await import('../src/nebula/replycard.ts');
+  assert.equal(passageText(' two\nlines ', 'why?'), 'About this part of your reply:\n> two\n> lines\n\nwhy?');
+  assert.equal(passageText('abcdef', 'x', 4), 'About this part of your reply:\n> abc…\n\nx');
+});

@@ -360,3 +360,14 @@ export function openDecisions(
   }
   return out.filter((o) => o.asks.length);
 }
+
+/** What "Reply about this" sends: the passage you selected in a reply,
+ *  quoted, then what you said about it. */
+export function passageText(passage: string, said: string, max = 600): string {
+  const clipped = passage.trim().length > max ? `${passage.trim().slice(0, max - 1).trimEnd()}…` : passage.trim();
+  const quoted = clipped
+    .split("\n")
+    .map((l) => `> ${l}`.trimEnd())
+    .join("\n");
+  return `About this part of your reply:\n${quoted}\n\n${said.trim()}`;
+}

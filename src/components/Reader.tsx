@@ -8,7 +8,7 @@ import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle } from "../nebula/queue";
 import { doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
-import { answersIn, answerText, isCard, openDecisions, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
+import { answersIn, answerText, isCard, openDecisions, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { describe, openPreview, previewUrl } from "../nebula/preview";
@@ -493,7 +493,24 @@ export function Reader({
   };
   // "Point at this": a reply you want looked at, with a screenshot of how it
   // showed, sent along with whatever you say about it.
-  const [pointed, setPointed] = useState<{ entry: number; quote: string; shot: string | null } | null>(null);
+  const [pointed, setPointed] = useState<{ entry: number; quote: string; shot: string | null; passage?: boolean } | null>(null);
+  // Text selected in a reply, offered as "Reply about this" beside it.
+  const [selected, setSelected] = useState<{ entry: number; text: string; x: number; y: number } | null>(null);
+  const readSelection = () => {
+    const sel = window.getSelection();
+    const text = sel?.toString().trim() ?? "";
+    const reply = sel?.anchorNode?.parentElement?.closest<HTMLElement>(".rd-reply[data-n]");
+    const reader = scroller.current?.parentElement;
+    if (!text || !reply || !sel?.rangeCount || !reader || !reply.contains(sel.focusNode)) return setSelected(null);
+    const box = sel.getRangeAt(0).getBoundingClientRect();
+    const at = reader.getBoundingClientRect();
+    setSelected({ entry: Number(reply.dataset.n), text, x: box.left - at.left + box.width / 2, y: box.top - at.top });
+  };
+  useEffect(() => {
+    const clear = () => !window.getSelection()?.toString().trim() && setSelected(null);
+    document.addEventListener("selectionchange", clear);
+    return () => document.removeEventListener("selectionchange", clear);
+  }, []);
   const [pointing, setPointing] = useState<number | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   // What the latest card recommends, offered in the empty box like the
@@ -501,7 +518,14 @@ export function Reader({
   const recommended = useMemo(() => (latestCard ? suggested(latestCard) : {}), [latestCard]);
   const ghost = !draft && !answerText(picks, "") && !pointed && !showQueued ? answerText(recommended, "") : "";
   const said = answerText(picks, draft);
-  const outgoing = pointed && said ? pointerText(pointed.quote, pointed.shot, said) : pointed ? "" : said;
+  const outgoing =
+    pointed && said
+      ? pointed.passage
+        ? passageText(pointed.quote, said)
+        : pointerText(pointed.quote, pointed.shot, said)
+      : pointed
+        ? ""
+        : said;
   const point = async (e: Entry) => {
     if (pointing !== null) return;
     setPointing(e.n);
@@ -587,7 +611,10 @@ export function Reader({
         <div
           className="rd-scroll"
           ref={scroller}
+          onMouseUp={readSelection}
+          onKeyUp={(e) => e.shiftKey && readSelection()}
           onScroll={(e) => {
+            if (selected) setSelected(null);
             // Only scrolling up lets go of the bottom, so a smooth glide down
             // to a new entry doesn't count as leaving it.
             const el = e.currentTarget;
@@ -677,6 +704,21 @@ export function Reader({
               </>
             )}
           </div>
+          {selected && (
+            <button
+              className="rd-about"
+              style={{ left: selected.x, top: selected.y }}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setPointed({ entry: selected.entry, quote: selected.text, shot: null, passage: true });
+                setSelected(null);
+                window.getSelection()?.removeAllRanges();
+                box.current?.focus();
+              }}
+            >
+              Reply about this
+            </button>
+          )}
           {behind && (
             <div className="rd-latest-at">
               <button className="rd-latest" onClick={() => toBottom("smooth")}>
@@ -714,7 +756,7 @@ export function Reader({
             <>
               {pointed && (
                 <span className="rd-picked rd-pointed" title={pointed.shot ?? "No screenshot"}>
-                  <span className="rd-quote">About “{pointed.quote}”</span>
+                  <span className="rd-quote">{pointed.passage ? "On" : "About"} “{pointed.quote}”</span>
                   <button className="link-btn" onClick={() => setPointed(null)} aria-label="Stop pointing at that reply">
                     ×
                   </button>
@@ -736,7 +778,9 @@ export function Reader({
                   ghost
                     ? `${ghost}    Tab to use it`
                     : pointed
-                    ? "What should change about it?"
+                    ? pointed.passage
+                      ? "What do you want to ask or change about it?"
+                      : "What should change about it?"
                     : answerText(picks, "")
                     ? "Add anything else, or just send"
                     : isIdle(agent)
