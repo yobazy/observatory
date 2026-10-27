@@ -4200,10 +4200,14 @@ td.task-last {
 .rd-md pre {
   position: relative;
 }
-.rd-copy {
+.rd-code-acts {
   position: absolute;
   top: 6px;
   right: 6px;
+  display: flex;
+  gap: 4px;
+}
+.rd-copy {
   padding: 2px 8px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
@@ -4220,6 +4224,22 @@ td.task-last {
   opacity: 1;
 }
 .rd-copy:hover {
+  color: var(--text);
+}
+/* A command wraps rather than scrolls, clear of its Run and Copy, so all
+   of it can be read before running it. */
+.rd-md pre.is-command {
+  padding-right: 104px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rd-card > *,
+.rd-needs > * {
+  min-width: 0;
+}
+/* Run is what the block is for, so it doesn't wait for a hover. */
+.rd-run {
+  opacity: 1;
   color: var(--text);
 }
 .rd-you {
