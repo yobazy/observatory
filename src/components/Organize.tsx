@@ -1,10 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { PROJECT_COLORS } from "../nebula/icons";
-import { followUpAgents, isAutoFollowUp, setTaskColor, toggleFlag } from "../nebula/organize";
+import { cleanTag } from "../nebula/folders";
+import {
+  addThreadTag,
+  deleteThreadTag,
+  followUpAgents,
+  isAutoFollowUp,
+  renameThreadTag,
+  setTaskColor,
+  tagThread,
+  toggleFlag,
+} from "../nebula/organize";
 import { PRIORITIES, priorityLabel, type Priority } from "../nebula/priority";
+import { tagCounts, tagList, threadTagsOf } from "../nebula/threadtags";
 import { relativeTime } from "../nebula/status";
-import { flash, projectOfWorktree, useAppState } from "../nebula/store";
+import { flash, getState, projectOfWorktree, projectWorktrees, useAppState } from "../nebula/store";
 import type { Agent } from "../nebula/types";
+import { useEscape } from "./Dialogs";
 import { ProjectDot, selectAgent } from "./Sidebar";
 
 /** The eight colors and "none", as a radio row. */
@@ -79,6 +91,84 @@ export function TaskColorDialog({ agent, onClose }: { agent: Agent; onClose: () 
   );
 }
 
+/** Which of its project's tags a thread carries: a checkbox each, and a
+ *  field that adds a new one to the project and to the thread. Each change
+ *  saves as you make it, as yours. */
+export function ThreadTagsDialog({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+  const state = useAppState();
+  const repo = projectOfWorktree(state, agent.worktree_id)?.repo_path;
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+  useEscape(onClose, false);
+  useEffect(() => field.current?.focus(), [editing]);
+  if (!repo) return null;
+  if (editing) return <TagListDialog repo={repo} onClose={onClose} />;
+  const list = tagList(state.prefs, repo);
+  const carried = threadTagsOf(state.prefs, agent.id);
+
+  const toggle = (tag: string, on: boolean) =>
+    void tagThread(agent.id, on ? [...carried, tag] : carried.filter((t) => t !== tag));
+  const add = async () => {
+    const tag = cleanTag(name);
+    if (!(await addThreadTag(repo, name))) return;
+    setName("");
+    const now = threadTagsOf(getState().prefs, agent.id);
+    if (!now.includes(tag)) await tagThread(agent.id, [...now, tag]);
+  };
+
+  return (
+    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dialog dialog-narrow thread-tags" role="dialog" aria-modal="true" aria-labelledby="thread-tags-title">
+        <h2 id="thread-tags-title">Tags on {agent.name}</h2>
+        {list.length > 0 ? (
+          <ul className="tt-list" aria-labelledby="thread-tags-title">
+            {list.map((t) => (
+              <li key={t}>
+                <label className="tt-check">
+                  <input type="checkbox" checked={carried.includes(t)} onChange={(e) => toggle(t, e.target.checked)} />#{t}
+                </label>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="dialog-note">This project has no tags yet. Add one below, and it goes on this thread too.</p>
+        )}
+        <form
+          className="tt-add"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void add();
+          }}
+        >
+          <input
+            ref={field}
+            className="setting-input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="New tag"
+            aria-label="New tag"
+            spellCheck={false}
+          />
+          <button type="submit" className="btn" disabled={!cleanTag(name)}>
+            Add
+          </button>
+        </form>
+        <footer className="dialog-foot">
+          <span className="hint">
+            <button type="button" className="link-btn" onClick={() => setEditing(true)}>
+              Edit tags…
+            </button>
+          </span>
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Done
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 /** Pick a priority for a task or project: one click picks and closes. */
 export function PriorityDialog({
   name,
@@ -126,6 +216,110 @@ export function PriorityDialog({
         <p className="priority-note">Urgent and high sort to the top of their list, low to the bottom. On a selected task, P steps through them.</p>
       </div>
     </div>
+  );
+}
+
+/** The project's own tags for its threads: add, rename and delete them.
+ *  A rename or delete reaches every thread that carries the tag. */
+export function TagListDialog({ repo, onClose }: { repo: string; onClose: () => void }) {
+  const state = useAppState();
+  const [name, setName] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+  useEscape(onClose, false);
+  useEffect(() => field.current?.focus(), []);
+  const list = tagList(state.prefs, repo);
+  const project = Object.values(state.projects).find((p) => p.repo_path === repo);
+  const wts = new Set(project ? projectWorktrees(state, project.id).map((w) => w.id) : []);
+  const counts = tagCounts(
+    Object.values(state.agents).filter((a) => wts.has(a.worktree_id)),
+    state.prefs,
+    repo,
+  );
+
+  return (
+    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dialog dialog-narrow thread-tags" role="dialog" aria-modal="true" aria-labelledby="tag-list-title">
+        <h2 id="tag-list-title">Tags for {project?.name ?? "this project"}’s threads</h2>
+        {list.length > 0 && (
+          <ul className="tt-list">
+            {list.map((t) => (
+              <TagListRow key={t} repo={repo} tag={t} count={counts.get(t) ?? 0} />
+            ))}
+          </ul>
+        )}
+        <form
+          className="tt-add"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void addThreadTag(repo, name).then((ok) => ok && setName(""));
+          }}
+        >
+          <input
+            ref={field}
+            className="setting-input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="New tag"
+            aria-label="New tag"
+            spellCheck={false}
+          />
+          <button type="submit" className="btn" disabled={!cleanTag(name)}>
+            Add
+          </button>
+        </form>
+        <p className="dialog-note">Tag a thread from its menu (Tags…), then pick a tag above the list to see only its threads.</p>
+        <footer className="dialog-foot">
+          <span className="hint" />
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Done
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+/** One tag in the editor: its name, renamed when you leave the field or
+ *  press Enter, and a delete button. */
+function TagListRow({ repo, tag, count }: { repo: string; tag: string; count: number }) {
+  const [value, setValue] = useState(tag);
+  useEffect(() => setValue(tag), [tag]);
+  const commit = () => {
+    if (cleanTag(value) === tag) return setValue(tag);
+    void renameThreadTag(repo, tag, value).then((ok) => ok || setValue(tag));
+  };
+  return (
+    <li className="tt-row">
+      <span className="tt-hash" aria-hidden>
+        #
+      </span>
+      <input
+        className="setting-input"
+        value={value}
+        aria-label={`Rename #${tag}`}
+        spellCheck={false}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      <span className="tt-count" title={`${count} ${count === 1 ? "thread carries" : "threads carry"} it`}>
+        {count}
+      </span>
+      <button
+        type="button"
+        className="btn btn-sm"
+        onClick={() => void deleteThreadTag(repo, tag)}
+        title={count ? `Delete #${tag} and take it off ${count} ${count === 1 ? "thread" : "threads"}` : `Delete #${tag}`}
+      >
+        Delete
+      </button>
+    </li>
+
   );
 }
 

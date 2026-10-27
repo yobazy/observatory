@@ -2,7 +2,6 @@
 
 - Cross-project tasks as linked subtasks: one subtask per project, each in its own worktree, grouped under a parent row. Plans are approved together, and each subtask gets its sibling's approved plan as a contract. Optional ordering: a dependent subtask starts after the other finishes and receives its diff summary. The parent is done when all children are done. Why: valuable, but MVP routing works fine with single-project tasks.
 - Persistent rolling to-do list: unfinished items carry over from day to day. Why: moves Dispatch toward replacing a scheduling app, which is not needed to prove routing and dispatch.
-- Cheap Haiku progress summaries per running task. Why: the last screen line is enough for "what it's doing now" in the MVP.
 - Learning from routing corrections: offer to update a project card when the user re-routes a task. Why: needs real correction data first; cards can be edited by hand in the meantime.
 - Smarter file-contention handling in Shared projects beyond concurrency caps. Why: per-project caps (plus the project's own writer locks) cover the MVP risk.
 - Other input sources beyond paste (for example, pulling lists from Notion). Why: paste plus quick capture covers the core loop, and integrations go against the "nothing hardwired" principle unless they are done through agents.
@@ -19,3 +18,9 @@
 - Pick the sidebar pet: a cat or a dog, in Settings beside the on/off switch; the dog needs its own frames for every activity. Why: wanted, set aside for now (2026-10-16).
 - Drag folders to reorder them in the sidebar; today a folder's menu moves it up or down one place. Why: wanted, set aside for now (2026-10-16).
 - A picked color fills the whole row, not a hint of it: a project (Icon & color) or a task (Color…) colored by you shows as a solid, clearly colored row in the sidebar and task list, so it's recognized at a glance without reading its name. Today a color is a thin stripe and a faint tint (`.has-color` and `--pc` in styles.css). Text and badges on it need to stay readable in both themes, and the selected and hover states still need to show. Why: wanted, set aside until the user's Claude limit resets (Sunday 2026-10-18).
+- Enable and disable a launchd job from the Automations view (`launchctl bootstrap` / `bootout`, with a confirm), and the same for a cloud routine (`enabled` through the routines API). Why: the panel starts read-only plus Run now (2026-10-22).
+- A banner when a job turns red, through `notify.ts` and respecting quiet hours. Why: the footer dot covers it until the view has proven which failures are real.
+- Add a job from the Automations view (write a plist, or create a routine). Why: jobs are made in agent threads today; the view only watches them.
+- Thread tags, beyond S15 and S16: several chips on at once, tag colors, tagging several picked threads from the multi-select menu, and a tag filter across projects (⌘K or the sidebar). Why: one chip in one project covers the one-repo, several-clients case (2026-10-22).
+- Tagging prompt suggestions for new tags: the prompt proposes a tag that isn't in the project's list for the user to accept. Why: S16 only picks from the list, so a hand-made list stays the source of truth.
+- Thread tags: archived threads' menu has no "Tags…", since it lacks the arrange group; their tags can only be changed by unarchiving (S15).

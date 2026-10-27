@@ -14,7 +14,7 @@ import { flash, getState, useAppState } from "../nebula/store";
 import type { Project } from "../nebula/types";
 import { ContextMenu, type MenuItem } from "./Menu";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
-import { ColorRow, PriorityDialog } from "./Organize";
+import { ColorRow, PriorityDialog, TagListDialog } from "./Organize";
 import { moveToFolder, resetProjectOrder, setProjectPriority } from "../nebula/organize";
 import { priorityLabel } from "../nebula/priority";
 import { FolderDialog, ProjectDetailsDialog } from "./ProjectOrganize";
@@ -200,6 +200,7 @@ export function useProjectMenu() {
   const [card, setCard] = useState<CardTarget | null>(null);
   const [details, setDetails] = useState<Project | null>(null);
   const [filing, setFiling] = useState<Project | null>(null);
+  const [tagging, setTagging] = useState<Project | null>(null);
   const [ranking, setRanking] = useState<Project | null>(null);
   const { prefs, missingProjects } = useAppState();
   const cards = useCards();
@@ -217,6 +218,7 @@ export function useProjectMenu() {
       separated: items.length > 0,
     });
     items.push({ label: "Name and tags…", run: () => setDetails(project) });
+    items.push({ label: "Thread tags…", run: () => setTagging(project) });
     items.push({ label: "Icon & color…", run: () => setPicking(project) });
     const level = priorityLabel(prefs.projectPriorities?.[project.repo_path]);
     items.push({ label: level ? `Priority: ${level}…` : "Priority…", run: () => setRanking(project) });
@@ -266,6 +268,7 @@ export function useProjectMenu() {
       {card && <CardDialog target={card} onClose={() => setCard(null)} />}
       {details && <ProjectDetailsDialog project={details} onClose={() => setDetails(null)} />}
       {filing && <FolderDialog project={filing} onClose={() => setFiling(null)} />}
+      {tagging && <TagListDialog repo={tagging.repo_path} onClose={() => setTagging(null)} />}
       {ranking && (
         <PriorityDialog
           name={ranking.name}

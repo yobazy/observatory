@@ -2,7 +2,8 @@
 //! headless mode (`claude -p`, `codex exec`, ...) with the prompt on stdin,
 //! and its reply comes back for the webview to read as a plan. Which CLI is
 //! the desktop app's `routerCommand` pref. It's split into words and run
-//! directly, never through a shell, in an empty folder of its own.
+//! directly, never through a shell, in an empty folder of its own. The
+//! tagging prompt (tagging.ts) runs the same way, through `tagCommand`.
 
 use serde_json::Value;
 use std::io::{Read, Write};
@@ -55,7 +56,7 @@ pub fn split_command(line: &str) -> Result<Vec<String>, String> {
         }
     }
     if quote.is_some() {
-        return Err("The router command has an unclosed quote".into());
+        return Err("The command has an unclosed quote".into());
     }
     if in_word {
         words.push(word);
@@ -94,15 +95,14 @@ fn resolve(program: &str, path: &str) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// The router command from desktop.json, or the default.
-fn configured(app: &AppHandle) -> String {
+/// A command pref from desktop.json, when it's set.
+fn configured(app: &AppHandle, key: &str) -> Option<String> {
     crate::settings::read_desktop_prefs(app.clone())
-        .get("routerCommand")
+        .get(key)
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|c| !c.is_empty())
-        .unwrap_or(DEFAULT_COMMAND)
-        .to_string()
+        .map(str::to_string)
 }
 
 /// An empty folder to run in, so the CLI picks up no project's notes.
@@ -134,9 +134,11 @@ fn run(
     path: &str,
     timeout: Duration,
 ) -> Result<String, String> {
-    let (program, args) = words.split_first().ok_or("The router command is empty")?;
+    let (program, args) = words.split_first().ok_or("The command is empty")?;
     let bin = resolve(program, path).ok_or_else(|| {
-        format!("Couldn't find {program}. Install it, or set the router command in Settings to one that's installed.")
+        format!(
+            "Couldn't find {program}. Install it, or set a command in Settings that's installed."
+        )
     })?;
     let mut child = Command::new(&bin)
         .args(args)
@@ -172,7 +174,7 @@ fn run(
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(format!(
-                    "{program} took longer than {}s to route the list",
+                    "{program} took longer than {}s to reply",
                     timeout.as_secs()
                 ));
             }
@@ -207,7 +209,30 @@ fn run(
 /// its reply back as text.
 #[tauri::command]
 pub async fn route_list(app: AppHandle, prompt: String) -> Result<String, String> {
-    let words = split_command(&configured(&app))?;
+    let command = configured(&app, "routerCommand").unwrap_or_else(|| DEFAULT_COMMAND.into());
+    let words = split_command(&command)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        run(&words, prompt, &neutral_dir(), login_path(), TIMEOUT)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The tagging command as words; Err when it isn't set, since tagging has
+/// no default and is off until it is.
+fn tag_words(command: Option<&str>) -> Result<Vec<String>, String> {
+    let words = split_command(command.unwrap_or_default())?;
+    if words.is_empty() {
+        return Err("No tagging command is set".into());
+    }
+    Ok(words)
+}
+
+/// Tag threads: the tagging prompt (tagging.ts) to the `tagCommand` CLI,
+/// its reply back as text.
+#[tauri::command]
+pub async fn tag_threads(app: AppHandle, prompt: String) -> Result<String, String> {
+    let words = tag_words(configured(&app, "tagCommand").as_deref())?;
     tauri::async_runtime::spawn_blocking(move || {
         run(&words, prompt, &neutral_dir(), login_path(), TIMEOUT)
     })
@@ -311,6 +336,25 @@ mod tests {
         )
         .unwrap();
         assert_eq!(out.len() as u64, MAX_OUTPUT);
+    }
+
+    #[test]
+    fn tags_through_the_tagging_command_and_not_without_one() {
+        let command = r#"sh -c 'cat >/dev/null; echo "{\"threads\":[]}"'"#;
+        let words = tag_words(Some(command)).unwrap();
+        let out = run(
+            &words,
+            "the tagging prompt".into(),
+            &neutral_dir(),
+            "/bin:/usr/bin",
+            TIMEOUT,
+        );
+        assert_eq!(out.unwrap().trim(), r#"{"threads":[]}"#);
+        assert_eq!(tag_words(None).unwrap_err(), "No tagging command is set");
+        assert_eq!(
+            tag_words(Some("  ")).unwrap_err(),
+            "No tagging command is set"
+        );
     }
 
     /// One real call of the default router: `cargo test -- --ignored router_smoke`.

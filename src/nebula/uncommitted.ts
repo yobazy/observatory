@@ -34,8 +34,9 @@ function threadsOf(s: State, worktreeId: string): Agent[] {
   return Object.values(s.agents).filter((a) => a.worktree_id === worktreeId && a.kind === "claude" && !!a.session_id);
 }
 
-/** Each thread's edits by agent id, read from the logs in one call. */
-async function editsByAgent(s: State, agents: Agent[]): Promise<Record<string, ThreadEdit[]>> {
+/** Each thread's edits by agent id, read from the logs in one call. The
+ *  tagging prompt reads them too (taggingRunner.ts). */
+export async function editsByAgent(s: State, agents: Agent[]): Promise<Record<string, ThreadEdit[]>> {
   if (!agents.length) return {};
   const sessions = agents.map((a) => a.session_id!);
   const bySession: Record<string, ThreadEdit[]> = isPreview()

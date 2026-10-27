@@ -6,8 +6,10 @@ import { useEffect } from "react";
 import { onAgentStatus } from "./client";
 import { afterStatus, settled } from "./followupRules";
 import { isWatching } from "./notify";
-import { flash, getState, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
+import { flash, getState, projectWorktrees, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
 import { moveWithin, placeIn, type ProjectFolder } from "./folders";
+import { pruned } from "./prune";
+import { addTag, deleteTag, renameTag, setThreadTags } from "./threadtags";
 import { savePrefs, type DesktopPrefs } from "./theme";
 import { nextPriority, priorityLabel, type Priority } from "./priority";
 import type { Agent } from "./types";
@@ -17,39 +19,6 @@ function moved(ids: string[], id: string, to: number): string[] {
   const rest = ids.filter((k) => k !== id);
   rest.splice(Math.max(0, Math.min(to, rest.length)), 0, id);
   return rest;
-}
-
-/** Per-task prefs whose task is gone, dropped, so deleted tasks don't
- *  pile up in the prefs file. Left alone before the first snapshot. */
-function pruned(s: State, prefs: DesktopPrefs): DesktopPrefs {
-  if (!s.loaded) return prefs;
-  const keep = <V>(rec: Record<string, V> | undefined) =>
-    rec && Object.fromEntries(Object.entries(rec).filter(([id]) => id in s.agents));
-  const pinnedTasks =
-    prefs.pinnedTasks &&
-    Object.fromEntries(
-      Object.entries(prefs.pinnedTasks)
-        .filter(([wt]) => wt in s.worktrees)
-        .map(([wt, ids]) => [wt, ids.filter((id) => id in s.agents)] as const)
-        .filter(([, ids]) => ids.length > 0),
-    );
-  const repos = new Set(Object.values(s.projects).map((p) => p.repo_path));
-  const ofRepo = <V>(rec: Record<string, V> | undefined) => rec && Object.fromEntries(Object.entries(rec).filter(([r]) => repos.has(r)));
-  return {
-    ...prefs,
-    projectOrder: prefs.projectOrder?.filter((r) => repos.has(r)),
-    // Folders stay, emptied or not: a project removed and added again
-    // goes back to the list, not into a folder it left.
-    projectFolders: prefs.projectFolders?.map((f) => ({ ...f, projects: f.projects.filter((r) => repos.has(r)) })),
-    projectAliases: ofRepo(prefs.projectAliases),
-    projectTags: ofRepo(prefs.projectTags),
-    projectPriorities: ofRepo(prefs.projectPriorities),
-    pinnedTasks,
-    taskColors: keep(prefs.taskColors),
-    taskPriorities: keep(prefs.taskPriorities),
-    followUps: keep(prefs.followUps),
-    autoFollowUps: keep(prefs.autoFollowUps),
-  };
 }
 
 /** Apply `change` to the prefs and write them; a failed write is said in
@@ -201,6 +170,53 @@ export function setTaskColor(agentId: string, name: string | null) {
     else delete taskColors[agentId];
     return { ...prefs, taskColors };
   });
+}
+
+// ---- tags on threads (threadtags.ts) ----
+
+/** The ids of every thread in the project at `repo`, archived ones too. */
+function threadIds(s: State, repo: string): string[] {
+  const project = Object.values(s.projects).find((p) => p.repo_path === repo);
+  if (!project) return [];
+  const wts = new Set(projectWorktrees(s, project.id).map((w) => w.id));
+  return Object.values(s.agents)
+    .filter((a) => wts.has(a.worktree_id))
+    .map((a) => a.id);
+}
+
+/** A tag at the end of the project's list; false, said in the notice
+ *  line, when nothing is left of the name once cleaned. */
+export function addThreadTag(repo: string, name: string) {
+  if (!addTag(getState().prefs, repo, name)) {
+    flash("A tag needs a letter or number in it");
+    return Promise.resolve(false);
+  }
+  return save((prefs) => addTag(prefs, repo, name) ?? prefs);
+}
+
+export function renameThreadTag(repo: string, from: string, to: string) {
+  if (!renameTag(getState().prefs, repo, from, to)) {
+    flash("A tag needs a letter or number in it");
+    return Promise.resolve(false);
+  }
+  const ids = threadIds(getState(), repo);
+  return save((prefs) => renameTag(prefs, repo, from, to, ids) ?? prefs);
+}
+
+export function deleteThreadTag(repo: string, tag: string) {
+  const ids = threadIds(getState(), repo);
+  return save((prefs) => deleteTag(prefs, repo, tag, ids));
+}
+
+/** A change worked out by the tagging prompt (tagging.ts), against the
+ *  prefs as they are when it's written. */
+export function saveTagging(change: (prefs: DesktopPrefs) => DesktopPrefs) {
+  return save(change);
+}
+
+/** A thread's tags, as you set them from its menu. */
+export function tagThread(agentId: string, tags: string[]) {
+  return save((prefs) => setThreadTags(prefs, agentId, tags));
 }
 
 export function setTaskPriority(agentId: string, priority: Priority | null) {
