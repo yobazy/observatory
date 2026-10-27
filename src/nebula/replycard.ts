@@ -37,6 +37,9 @@ export interface Card {
   details: string | null;
   /** Absolute paths of the images the reply names, in order. */
   images: string[];
+  /** Absolute paths of the videos it names: in backticks a path may have
+   *  spaces, as a render's file name often does. */
+  videos: string[];
   /** The closing line: "✅ Safe to close", "🟠 Keep open: …". */
   verdict: Chip | null;
 }
@@ -131,6 +134,7 @@ export function readVerdict(text: string): Chip | null {
 // "2. Ship today?", "- 2. Ship today?", "- **2. Ship today?** A …".
 const ITEM = /^\s*(?:[-*]\s+)?(\*\*|__)?(\d+)[.)]\s+(.+)$/;
 const IMAGE = /(?:^|[\s`("'[])(\/[^\s`)"'\]]+\.(?:png|jpe?g|gif|webp|svg|avif))/gi;
+const VIDEO = /`(\/[^`\n]+\.(?:mp4|m4v|mov|webm))`|(?:^|[\s("'[])(\/[^\s`)"'\]]+\.(?:mp4|m4v|mov|webm))/gi;
 
 /** Paragraphs, with fenced code kept whole. */
 function paragraphs(text: string): string[] {
@@ -242,6 +246,7 @@ export function readCard(text: string): Card {
 
   const details = sections.details.join("\n").trim();
   const images = [...new Set([...text.matchAll(IMAGE)].map((m) => m[1]))];
+  const videos = [...new Set([...text.matchAll(VIDEO)].map((m) => m[1] ?? m[2]))];
   return {
     headline,
     chips,
@@ -250,6 +255,7 @@ export function readCard(text: string): Card {
     asksNote: note.join("\n").trim(),
     details: details || null,
     images,
+    videos,
     verdict,
   };
 }

@@ -15,7 +15,7 @@ import { shipKind } from "../nebula/git";
 import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
 import { highlightUnder } from "../nebula/highlight";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
-import { describe, openPreview, previewUrl } from "../nebula/preview";
+import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
 import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
 import { AskChoices } from "./AskStrip";
@@ -209,6 +209,37 @@ function Pictures({ paths, from, pair = null }: { paths: string[]; from: string;
   );
 }
 
+/** The videos a reply names, ready to play in it; Open puts one in the
+ *  preview, bigger. */
+function Videos({ paths, from }: { paths: string[]; from: string }) {
+  const [ready, setReady] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    void Promise.all(paths.map((p) => describe(p).then(() => p, () => null))).then((got) => {
+      if (live) setReady(got.filter((p): p is string => !!p));
+    });
+    return () => {
+      live = false;
+    };
+  }, [paths.join("\n")]);
+  if (!ready.length) return null;
+  return (
+    <div className="rd-pics">
+      {ready.map((p) => (
+        <figure key={p} className="rd-video">
+          <video src={previewUrl(p)} controls playsInline preload="metadata" />
+          <figcaption>
+            <span title={p}>{baseName(p)}</span>
+            <button className="btn btn-sm" onClick={() => void openPreview([p], from)} title="Open in the preview">
+              Open
+            </button>
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+  );
+}
+
 /** How the reply closes: safe to close, with the button that does it while
  *  this is the latest reply, or what's keeping it open, with what's left to
  *  ship beside it. */
@@ -317,6 +348,7 @@ export function CardReply({
         </div>
       )}
       {!compact && <Pictures paths={card.images} from={from} pair={pair} />}
+      {!compact && <Videos paths={card.videos} from={from} />}
       {!compact && card.body && <Md text={card.body} />}
       {card.asks.length > 0 && (
         <section className="rd-needs" aria-label="Needs you">
