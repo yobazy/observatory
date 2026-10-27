@@ -108,3 +108,25 @@ test('a block of output an app wrapped joins only so far, so reading it stays ch
   assert.ok(last > 1000 && last < 1100, `stops near the row it starts on, not at ${last}`);
   assert.ok(reads < 1000, `read ${reads} rows`);
 });
+
+test('a path with spaces in its names is found whole, ahead of the runs inside it', () => {
+  assert.deepEqual(paths('Saved: /Users/me/vault/Career/Call - Ryan - Oct 2026.md'), [
+    '/Users/me/vault/Career/Call - Ryan - Oct 2026.md',
+    '2026.md',
+  ]);
+  assert.deepEqual(paths('Notes in `~/vault/My Notes/plan.md`.'), ['~/vault/My Notes/plan.md', 'Notes/plan.md']);
+  assert.deepEqual(paths('see /a/b.md and /c/d.md'), ['/a/b.md', '/c/d.md'], 'two paths stay two');
+  assert.deepEqual(paths('Wrote /tmp/x and moved /Users/a/My Notes/b.md'), ['/Users/a/My Notes/b.md', 'Notes/b.md']);
+});
+
+test('a path with spaces an app wrapped at a space is found whole, the space put back', () => {
+  const rows = screen(['  /Users/me/My Notes/A -', '  Oct 2026.md', '', 'Saved /a/b.md and then', '  more prose here.md']);
+  for (const y of [0, 1]) {
+    const { text, at } = line(rows, y);
+    const [f] = findPaths(text);
+    assert.equal(f.text, '/Users/me/My Notes/A - Oct 2026.md');
+    assert.deepEqual(at[f.start], { x: 3, y: 1 });
+    assert.deepEqual(at[f.start + f.text.length - 1], { x: 13, y: 2 });
+  }
+  assert.equal(line(rows, 3).text, 'Saved /a/b.md and then', 'a finished path then prose stays apart');
+});

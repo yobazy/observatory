@@ -88,9 +88,14 @@ export function linkPaths(t: Terminal, cwd: () => string | null, owner: () => st
         cwd(),
       ).then((abs) => {
         const links: ILink[] = [...web];
+        // A path with spaces that is a file covers the runs inside it.
+        const taken: [number, number][] = [];
         found.forEach((f, i) => {
           const path = abs[i];
           if (!path) return;
+          const end = f.start + f.text.length;
+          if (taken.some(([a, b]) => f.start < b && end > a)) return;
+          taken.push([f.start, end]);
           const range = rangeOf(f.start, f.text.length);
           if (!range) return;
           links.push({
