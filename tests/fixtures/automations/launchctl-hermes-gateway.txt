@@ -1,0 +1,20 @@
+gui/501/ai.hermes.gateway = {
+	active count = 1
+	path = /Users/x/Library/LaunchAgents/ai.hermes.gateway.plist
+	type = LaunchAgent
+	state = running
+
+	program = /Users/x/.hermes/hermes-agent/venv/bin/python
+	working directory = /Users/x/.hermes
+
+	domain = gui/501 [100005]
+	runs = 1
+	pid = 1980
+	immediate reason = speculative
+	forks = 12
+	execs = 1
+	last exit code = (never exited)
+
+	job state = running
+	properties = keepalive | runatload | inferred program | managed LWCR | has LWCR
+}

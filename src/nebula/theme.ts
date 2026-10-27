@@ -105,6 +105,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   dispatchCap?: number;
   /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */
   keepUseLog?: boolean;
+  /** Label prefixes of the launchd agents the Automations view lists
+   *  (automations.ts); unset is every prefix not from Apple, Google, Adobe or Valve. */
+  automationLabels?: string[];
 }
 
 export type ProjectIconChoice = { kind: "emoji"; value: string } | { kind: "image"; value: string };

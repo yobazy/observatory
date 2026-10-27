@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { GitState } from "./git";
 import type { UsageReport } from "./usage";
+import type { AutomationsReport, Watches } from "./automations";
 import type { DesktopPrefs } from "./theme";
 import { byPriority, rank } from "./priority.ts";
 import type { PrState } from "./prs";
@@ -37,7 +38,7 @@ export interface State {
   /** Git state per worktree id, from `useGitPolling`. */
   git: Record<string, GitState>;
   /** Which main view fills the space right of the sidebar. */
-  view: "sessions" | "usage" | "activity" | "ideas" | "settings" | "review" | "compare" | "dispatch" | "uncommitted" | "inbox";
+  view: "sessions" | "usage" | "activity" | "automations" | "ideas" | "settings" | "review" | "compare" | "dispatch" | "uncommitted" | "inbox";
   /** The checkout the review view shows (Review.tsx). */
   review: string | null;
   /** The thread a review was opened from, whose turn tops it. */
@@ -53,6 +54,12 @@ export interface State {
   /** The last usage scan (`usage.ts`), and why the latest one failed. */
   usage: UsageReport | null;
   usageError: string | null;
+  /** The last read of background jobs (`automationsLoad.ts`), and why the
+   *  latest one failed. */
+  automations: AutomationsReport | null;
+  automationsError: string | null;
+  /** Each job's `runs` count as the app has watched it (automations.ts). */
+  automationWatch: Watches;
   /** nebula's shared `theme` setting (the accent), and the desktop app's own prefs. */
   theme: string;
   prefs: DesktopPrefs;
@@ -140,6 +147,9 @@ let state: State = {
   minute: Math.floor(Date.now() / 60_000),
   usage: null,
   usageError: null,
+  automations: null,
+  automationsError: null,
+  automationWatch: {},
   ...loadSelection(),
 };
 

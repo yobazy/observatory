@@ -1,0 +1,15 @@
+gui/501/com.bazil.career-ops.mailwatch = {
+	active count = 0
+	path = /Users/x/Library/LaunchAgents/com.bazil.career-ops.mailwatch.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /bin/bash
+	runs = 12
+	last exit code = 1
+
+	run interval = 7200 seconds
+
+	job state = exited
+	properties = runatload | inferred program
+}

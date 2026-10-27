@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.bazil.todos-notion</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/python3</string>
+		<string>/Users/x/.local/bin/todos-notion</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>NOTION_TOKEN</key>
+		<string>fixture-not-a-secret</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StartInterval</key>
+	<integer>300</integer>
+	<key>WatchPaths</key>
+	<array>
+		<string>/Users/x/Documents/Programming/link-app/TODO.md</string>
+		<string>/Users/x/Documents/Programming/portfolio-site/docs/TODO.md</string>
+		<string>/Users/x/Documents/Programming/career-ops/data/agent-inbox.md</string>
+	</array>
+	<key>StandardOutPath</key>
+	<string>/Users/x/Library/Logs/todos-notion.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/x/Library/Logs/todos-notion.log</string>
+</dict>
+</plist>

@@ -21,6 +21,7 @@ import { fitColumns, Resizer, SESSIONS, SIDEBAR, startSlide, useColumnWidth, use
 import { PanelGlyph } from "./components/Sidebar";
 import { UsageView } from "./components/Usage";
 import { ActivityView } from "./components/Activity";
+import { AutomationsView } from "./components/Automations";
 import { IdeasView } from "./components/Ideas";
 import { addIdea, markStarted } from "./nebula/ideas";
 import type { Idea } from "./nebula/ideaList";
@@ -28,6 +29,7 @@ import { useActivityPolling } from "./nebula/activity";
 import { InboxView } from "./components/Inbox";
 import { SettingsView } from "./components/Settings";
 import { useUsagePolling } from "./nebula/usage";
+import { useAutomationsPolling } from "./nebula/automationsLoad";
 import { savePrefs, useTheme } from "./nebula/theme";
 import { termFont, zoomed } from "./nebula/termfont";
 import { useRunWatch, useServingWatch } from "./nebula/runs";
@@ -179,6 +181,7 @@ export default function App() {
   useBatchRunner();
   useTaggingRunner();
   useUsagePolling();
+  useAutomationsPolling();
   useActivityPolling();
   useTheme();
   useRunWatch();
@@ -360,6 +363,7 @@ export default function App() {
       </div>
       {view === "usage" && <UsageView />}
       {view === "activity" && <ActivityView />}
+      {view === "automations" && <AutomationsView />}
       {view === "ideas" && (
         <IdeasView
           onStart={startIdea}

@@ -12,6 +12,7 @@ import {
 import { lastPrompt, relativeTime } from "../nebula/status";
 import type { Agent, Project } from "../nebula/types";
 import { UsageChip } from "./Usage";
+import { AutomationsButton } from "./Automations";
 import { ActivityGlyph, LoadMeter } from "./Activity";
 import { Pet } from "./Pet";
 import { restartToUpdate, useUpdateState } from "../nebula/updates";
@@ -370,6 +371,7 @@ export function Sidebar({
       <UpdateReady />
       <footer className="sidebar-foot">
         <UsageChip />
+        <AutomationsButton />
         <button
           className={`icon-btn foot-gear${state.view === "activity" ? " is-on" : ""}`}
           onClick={() => setState({ view: state.view === "activity" ? "sessions" : "activity" })}

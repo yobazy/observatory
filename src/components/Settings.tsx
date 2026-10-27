@@ -27,6 +27,7 @@ import { chosenEditor, useEditors } from "./Editor";
 import { getVersion } from "@tauri-apps/api/app";
 import { isPreview, pickFolder } from "../nebula/client";
 import { DEFAULT_CAP, globalCap } from "../nebula/batch";
+import { defaultPrefixes, parsePrefixes } from "../nebula/automations";
 import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
 import { clearUseLog, useLogPath } from "../nebula/uselog";
 import { momentsDir } from "../nebula/moments";
@@ -98,6 +99,7 @@ export function SettingsView() {
               <Previews />
               <ReadView />
               <DispatchSettings />
+              <AutomationsSettings />
               <Updates />
               <UsageLog />
             </>
@@ -386,6 +388,38 @@ function DispatchSettings() {
             </option>
           ))}
         </select>
+      </div>
+    </Group>
+  );
+}
+
+/** Which launchd agents the Automations view lists, by label prefix. */
+function AutomationsSettings() {
+  const { prefs, automations } = useAppState();
+  const defaults = defaultPrefixes(automations?.jobs.map((j) => j.label) ?? []);
+  return (
+    <Group title="Automations">
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-automation-labels">
+            Jobs to list
+          </label>
+          <span className="setting-hint">
+            Label prefixes of the launchd agents the Automations view shows, separated by commas. Empty lists every
+            agent not from Apple, Google, Adobe or Valve. Names come from{" "}
+            <code>~/.config/observatory/automations.json</code>, as{" "}
+            <code>{'{"jobs": [{"label": "…", "name": "…"}]}'}</code>.
+          </span>
+        </div>
+        <TextSetting
+          id="set-automation-labels"
+          value={(prefs.automationLabels ?? []).join(", ")}
+          placeholder={defaults.join(", ") || "com.example."}
+          onCommit={(v) => {
+            const list = parsePrefixes(v);
+            void savePrefs({ ...prefs, automationLabels: list.length ? list : undefined });
+          }}
+        />
       </div>
     </Group>
   );

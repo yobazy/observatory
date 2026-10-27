@@ -192,6 +192,8 @@ calling a model. In a fake agent, type `ask …` to make it wait on you.
 scripts/sandbox.sh app    # the app against the sandbox
 scripts/sandbox.sh e2e    # protocol check: worktree, agent, attach, input, statuses
 scripts/sandbox.sh stop
+scripts/sandbox.sh automations        # a throwaway launchd job for the Automations view
+scripts/sandbox.sh automations-clean  # remove it
 ```
 
 `npm run dev` on its own serves a browser preview with demo data and a canned terminal. It's

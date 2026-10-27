@@ -1,0 +1,9 @@
+synced 3 items to Notion
+Traceback (most recent call last):
+  File "/Users/x/.local/bin/todos-notion", line 212, in <module>
+    main()
+  File "/Users/x/.local/bin/todos-notion", line 188, in main
+    for path in scan(ROOT):
+  File "/Users/x/.local/bin/todos-notion", line 61, in scan
+    for entry in os.scandir(root):
+PermissionError: [Errno 1] Operation not permitted: '/Users/x/Documents/Programming'

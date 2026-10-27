@@ -3,6 +3,7 @@
 import { byId, fromDaemon, getState, setState } from "./store";
 import type { GitStatus } from "./git";
 import type { UsageBucket, UsageReport } from "./usage";
+import type { AutomationsReport, RawJob } from "./automations";
 import type { Agent, AgentStatus, EntityId, Project, SessionRef, Worktree } from "./types";
 import type { State } from "./store";
 import type { ThreadEdit } from "./threadfiles";
@@ -450,6 +451,31 @@ export function mockUsage(): UsageReport {
     { source: "open_code", roots: ["~/.local/share/opencode/opencode.db"], files: 0, status: "empty" },
     ...(["cursor", "muse", "grok", "custom"] as const).map((source) => ({ source, roots: [], files: 0, status: "unsupported" as const })),
   ], files: 42, buckets: buckets.sort((a, b) => a.hour - b.hour) };
+}
+
+/** A handful of launchd agents in each state the Automations view shows. */
+export function mockAutomations(): AutomationsReport {
+  const loaded = (label: string, extra: string) =>
+    `gui/501/${label} = {\n\tstate = not running\n\truns = 40\n${extra}\n}`;
+  const job = (label: string, plist: RawJob["plist"], launchctl: string, ago: number | null, tail: string[]): RawJob => ({
+    label,
+    plistPath: `/Users/dev/Library/LaunchAgents/${label}.plist`,
+    plist: { Label: label, ProgramArguments: ["/bin/bash", `/Users/dev/.local/bin/${label.split(".").pop()}`], StandardErrorPath: `/Users/dev/Library/Logs/${label}.log`, ...plist },
+    launchctl,
+    lastWrite: ago == null ? null : now - ago * 60_000,
+    tail,
+  });
+  return {
+    config: JSON.stringify({ jobs: [{ label: "com.dev.notes-sync", name: "Notes sync", statusCommand: "notes-sync --status" }] }),
+    jobs: [
+      job("com.dev.notes-sync", { StartInterval: 300, WatchPaths: ["/Users/dev/notes/TODO.md"] }, loaded("com.dev.notes-sync", "\tlast exit code = 0"), 3, ["synced 4 notes", "synced 0 notes"]),
+      job("com.dev.backup", { StartCalendarInterval: { Hour: 2, Minute: 30 } }, loaded("com.dev.backup", "\tlast exit code = 1"), 600, ["rsync: connection unexpectedly closed", "rsync error: error in rsync protocol data stream (code 12)"]),
+      job("com.dev.inbox-watch", { StartInterval: 120 }, loaded("com.dev.inbox-watch", "\tlast exit code = 0"), 25, ["checked inbox: nothing new"]),
+      job("com.dev.old-reminder", { StartInterval: 3600 }, 'Bad request.\nCould not find service "com.dev.old-reminder" in domain for user gui: 501', 4000, ["sent reminder"]),
+      job("ai.dev.gateway", { KeepAlive: true }, loaded("ai.dev.gateway", "\tpid = 4242\n\tlast exit code = (never exited)"), 1, ["listening on :8642"]),
+      job("com.google.keystone.agent", { StartInterval: 3600 }, loaded("com.google.keystone.agent", "\tlast exit code = 0"), 10, []),
+    ],
+  };
 }
 
 /** A small change set per demo worktree, as git.rs would report it. */
