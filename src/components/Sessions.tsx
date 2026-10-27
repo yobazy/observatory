@@ -3,6 +3,7 @@ import { ProjectIdeas } from "./Ideas";
 import {
   flash,
   getState,
+  projectAgents,
   projectWorktrees,
   setState,
   useAppState,
@@ -33,6 +34,7 @@ import { tagProjectNow } from "../nebula/taggingRunner";
 import type { DesktopPrefs } from "../nebula/theme";
 import { reorderKey, useReorder } from "./useReorder";
 import { useVerdict } from "../nebula/verdicts";
+import { Plate, plateTone } from "./Plate";
 
 /** Re-render once a minute so relative times stay honest. */
 function useMinuteTick() {
@@ -205,6 +207,7 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
       aria-label={`${project.name} sessions`}
     >
       <header className="sessions-head" data-tauri-drag-region>
+        <ProjectPlate projectId={project.id} seed={project.repo_path} />
         <div className="sessions-title" data-tauri-drag-region>
           <h1>
             <ProjectIcon project={project} size={22} />
@@ -727,10 +730,12 @@ function AgentRow({
       aria-keyshortcuts={agent.archived ? "F" : "F P Alt+ArrowUp Alt+ArrowDown"}
     >
       <span
-        className={`sdot dot-${agent.status}${agent.unseen ? " is-unseen" : ""}`}
+        className={`sdot has-plate dot-${agent.status}${agent.unseen ? " is-unseen" : ""}`}
         title={statusLabel(agent)}
         aria-label={statusLabel(agent)}
-      />
+      >
+        <Plate seed={agent.id} work={agent.recent_prompts.length} tone={plateTone(agent)} size={18} drift={agent.status === "running"} />
+      </span>
       <span className="row-main">
         <span className="row-name">
           <PriorityMark priority={priority} />
@@ -829,5 +834,21 @@ function ShellGlyph() {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+/** The project's plate: moved by every prompt across its threads, and
+ *  drifting while any of them runs. */
+function ProjectPlate({ projectId, seed }: { projectId: string; seed: string }) {
+  const agents = projectAgents(useAppState(), projectId);
+  return (
+    <Plate
+      className="sessions-plate"
+      seed={seed}
+      work={agents.reduce((n, a) => n + a.recent_prompts.length, 0)}
+      tone="sand"
+      size={64}
+      drift={agents.some((a) => a.status === "running")}
+    />
   );
 }
