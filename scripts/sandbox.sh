@@ -71,14 +71,19 @@ up() {
   exit 1
 }
 
+killtree() {
+  local child
+  for child in $(pgrep -P "$1"); do killtree "$child"; done
+  kill "$1" 2>/dev/null || true
+}
+
 down() {
   local pid
   pid=$(cat "$ROOT/app.pid" 2>/dev/null || true)
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-    # npm, then tauri, then the app: stop the whole group.
-    pkill -P "$pid" 2>/dev/null || true
-    kill "$pid" 2>/dev/null || true
-    pkill -f "$PWD/src-tauri/target/debug/observatory" 2>/dev/null || true
+    # npm starts tauri, which starts vite and the app: stop all of them,
+    # deepest first, or the app outlives its parents.
+    killtree "$pid"
     echo "stopped the app"
   else
     echo "app not running"
