@@ -227,7 +227,8 @@ ok "latest.json: $VERSION at $releases/download/v$VERSION/"
 
 # A visitor wants the download first, then a reason to try it: the button,
 # a screenshot, what's new in this version with its pictures, then how to
-# install. Every commit is still there, folded away at the end. Images come
+# install. Every commit is still there, folded away at the end, and the cat
+# signs off (docs/cat.gif, from scripts/cat-gif.py). Images come
 # from the release's own tag, so the page shows what shipped; what's new
 # names them as repo paths (docs/release/…), made absolute here.
 repo="${releases#https://github.com/}"
@@ -253,6 +254,7 @@ page_file="$(mktemp)"
   printf '<details>\n<summary>Every change in this version (%s)</summary>\n\n' "$changes"
   cat "$notes_file"
   printf '\n</details>\n'
+  printf '\n<p align="center">\n  <img src="%s/docs/cat.gif" width="432" alt="The %s cat at its telescope, watching a shooting star go by">\n</p>\n' "$raw" "$NAME"
 } >"$page_file"
 ok "release page: download button, what's new, install steps, $changes changes"
 
