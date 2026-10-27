@@ -26,6 +26,7 @@ import { IdeasView } from "./components/Ideas";
 import { addIdea, markStarted } from "./nebula/ideas";
 import type { Idea } from "./nebula/ideaList";
 import { useActivityPolling } from "./nebula/activity";
+import { InboxView } from "./components/Inbox";
 import { SettingsView } from "./components/Settings";
 import { useUsagePolling } from "./nebula/usage";
 import { useAutomationsPolling } from "./nebula/automationsLoad";
@@ -247,7 +248,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I writes an idea down, ⇧⌘I shows them all; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you; ⌘[ goes back to the thread open before this one.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I writes an idea down, ⇧⌘I shows them all; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you, ⌥⌘J shows every decision waiting; ⌘[ goes back to the thread open before this one.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -296,6 +297,9 @@ export default function App() {
       } else if (e.key === "[") {
         e.preventDefault();
         previousThread();
+      } else if (e.code === "KeyJ" && e.altKey) {
+        e.preventDefault();
+        setState((s) => ({ view: s.view === "inbox" ? "sessions" : "inbox" }));
       } else if (e.key === "j") {
         e.preventDefault();
         const s = getState();
@@ -368,6 +372,7 @@ export default function App() {
         />
       )}
       {view === "settings" && <SettingsView />}
+      {view === "inbox" && <InboxView />}
       {view === "review" && <ReviewView key={getState().review ?? ""} />}
       {view === "uncommitted" && <UncommittedView />}
       {view === "compare" && <CompareView />}

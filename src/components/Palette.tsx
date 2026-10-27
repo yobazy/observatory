@@ -137,6 +137,7 @@ function build(s: State, ctx: PaletteContext): Item[] {
   act("automations", "Automations: your background jobs and their health", () => setState({ view: "automations" }));
   act("new-idea", "New idea: write one down for later", ctx.newIdea, "⌘I");
   act("ideas", "Ideas: what you've written down to start later", () => setState({ view: "ideas" }), "⇧⌘I");
+  act("inbox", "Decisions: every thread waiting on you to decide something", () => setState({ view: "inbox" }), "⌥⌘J");
   act("settings", "Settings", () => setState({ view: "settings" }), "⌘,");
   act("add", "Add a project", ctx.addProject, "⌘O");
   act("projects", "Hide or show projects", ctx.toggleProjects, "⌘B");

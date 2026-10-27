@@ -22,6 +22,7 @@ import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon
 import { FlagGlyph, FollowUps, PriorityMark } from "./Organize";
 import { UncommittedEntry } from "./Uncommitted";
 import { IdeasEntry } from "./Ideas";
+import { InboxEntry } from "./Inbox";
 import { createFolder, deleteFolder, moveInFolder, moveProject, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
 import { allTags, layout, matches, type ProjectFolder } from "../nebula/folders";
 import { FolderGlyph } from "./ProjectOrganize";
@@ -245,6 +246,7 @@ export function Sidebar({
         <div className="side-entries">
           <UncommittedEntry />
           <IdeasEntry />
+          <InboxEntry />
         </div>
 
         <RecentPanel projects={projects} onMenu={projectMenu.openFor} />

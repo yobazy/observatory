@@ -9,6 +9,7 @@ mod git;
 mod icons;
 mod moments;
 mod nebula_setup;
+mod notes;
 mod preview;
 mod relocate;
 mod router;
@@ -79,6 +80,7 @@ pub fn run() {
             moments::save_moment,
             moments::annotate_moment,
             moments::moments_dir,
+            notes::save_note,
             serving::local_ports_open,
             activity::activity_report,
             activity::stop_process,
