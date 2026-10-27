@@ -262,9 +262,9 @@ export const PREVIEW_GATE = PREVIEW ? new URLSearchParams(location.search).get("
 
 export function nebulaStatus(): Promise<NebulaStatus> {
   if (isPreview()) {
-    const fakes: Record<string, string | null> = { missing: null, older: "0.39.0", newer: "0.41.0", incompatible: "0.45.0" };
-    const version = PREVIEW_GATE && PREVIEW_GATE in fakes ? fakes[PREVIEW_GATE] : "0.40.2";
-    return Promise.resolve({ pinned: "0.40.2", path: version ? "~/.local/bin/nebula" : null, version });
+    const fakes: Record<string, string | null> = { missing: null, older: "0.44.0", newer: "0.46.0", incompatible: "0.50.0" };
+    const version = PREVIEW_GATE && PREVIEW_GATE in fakes ? fakes[PREVIEW_GATE] : "0.45.0";
+    return Promise.resolve({ pinned: "0.45.0", path: version ? "~/.local/bin/nebula" : null, version });
   }
   return invoke("nebula_status");
 }
@@ -272,7 +272,7 @@ export function nebulaStatus(): Promise<NebulaStatus> {
 /** Install the nebula release this app is built for (nebula_setup.rs). */
 export function installNebula(): Promise<NebulaStatus> {
   if (isPreview()) {
-    return new Promise((r) => setTimeout(() => r({ pinned: "0.40.2", path: "~/.local/bin/nebula", version: "0.40.2" }), 1200));
+    return new Promise((r) => setTimeout(() => r({ pinned: "0.45.0", path: "~/.local/bin/nebula", version: "0.45.0" }), 1200));
   }
   return invoke("install_nebula");
 }
