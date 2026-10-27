@@ -22,6 +22,7 @@ import { watchForFiles, type FileWatch } from "../nebula/shelf";
 import { afterClosing } from "../nebula/recentThreads";
 import { isSliding } from "./Resizer";
 import { AgentServerLink } from "./Run";
+import { usePaneMode, useStandIn } from "../nebula/pane";
 import { closeThread, useVerdict } from "../nebula/verdicts";
 
 const THEME = {
@@ -311,7 +312,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
 
   const [mode, setMode] = usePaneMode();
   const summaryHidden = useTurnLineHidden();
-  const canRead = !!agent && hasLog(agent);
+  const standIn = useStandIn(agent?.id);
+  const canRead = !!agent && (hasLog(agent) || !!standIn);
   const reading = canRead && mode === "read";
   const toTerminal = () => {
     setMode("terminal");
@@ -496,30 +498,6 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       {dialog && <TextDialog d={dialog} onClose={() => setDialog(null)} />}
     </section>
   );
-}
-
-const MODE_KEY = "observatory.paneMode";
-
-/** Terminal or reader: how threads show, remembered on this Mac. */
-function usePaneMode(): ["terminal" | "read", (m: "terminal" | "read") => void] {
-  const [mode, setMode] = useState<"terminal" | "read">(() => {
-    try {
-      return localStorage.getItem(MODE_KEY) === "read" ? "read" : "terminal";
-    } catch {
-      return "terminal";
-    }
-  });
-  return [
-    mode,
-    (m) => {
-      setMode(m);
-      try {
-        localStorage.setItem(MODE_KEY, m);
-      } catch {
-        // Remembering it is a nicety.
-      }
-    },
-  ];
 }
 
 function queueDialog(agent: Agent): TextDialogSpec {

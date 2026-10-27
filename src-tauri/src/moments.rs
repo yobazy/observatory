@@ -1,8 +1,10 @@
 //! Marked moments (moments.ts): ⇧⌘M saves what the app was doing when you
 //! noticed something, so it can be handed to whoever looks into it. Each is
 //! a folder under `moments/` in the app's data directory: `moment.json` (the
-//! last minute of the usage log's events and the app's state) and, when
-//! macOS allows it, `screenshot.png` of the window. Its path goes on the
+//! last minute of the usage log's events and the app's state), when a thread
+//! was open `thread.json` (its last few entries, so `scripts/drive replay`
+//! can show it again in the sandbox) and, when macOS allows it,
+//! `screenshot.png` of the window. Its path goes on the
 //! clipboard. Nothing leaves this Mac.
 
 use serde::Serialize;
@@ -86,7 +88,7 @@ fn window_number(window: &WebviewWindow) -> Result<i64, String> {
 /// The window alone, even under others, into `out`. Screen Recording has
 /// to be allowed for the app; the first time, macOS asks.
 #[cfg(target_os = "macos")]
-fn screenshot(window: &WebviewWindow, out: &Path) -> Result<(), String> {
+pub(crate) fn screenshot(window: &WebviewWindow, out: &Path) -> Result<(), String> {
     if !unsafe { CGPreflightScreenCaptureAccess() } {
         unsafe { CGRequestScreenCaptureAccess() };
         return Err("Screen Recording isn't allowed for Observatory (System Settings › Privacy & Security), so there's no screenshot.".into());
@@ -107,7 +109,7 @@ fn screenshot(window: &WebviewWindow, out: &Path) -> Result<(), String> {
 /// Elsewhere the moment is saved without one, so the Rust side still builds
 /// and tests on Linux.
 #[cfg(not(target_os = "macos"))]
-fn screenshot(_window: &WebviewWindow, _out: &Path) -> Result<(), String> {
+pub(crate) fn screenshot(_window: &WebviewWindow, _out: &Path) -> Result<(), String> {
     Err("Screenshots are only taken on macOS.".into())
 }
 
@@ -145,6 +147,7 @@ pub async fn save_moment(
     window: WebviewWindow,
     stamp: String,
     moment: Value,
+    thread: Option<Value>,
 ) -> Result<Saved, String> {
     let root = root(&app)?;
     let name = folder_name(&stamp).ok_or("bad timestamp")?;
@@ -158,6 +161,10 @@ pub async fn save_moment(
         }
         let text = serde_json::to_string_pretty(&moment).map_err(|e| e.to_string())?;
         fs::write(dir.join("moment.json"), text).map_err(|e| e.to_string())?;
+        if let Some(thread) = thread.filter(|t| !t.is_null()) {
+            let text = serde_json::to_string_pretty(&thread).map_err(|e| e.to_string())?;
+            fs::write(dir.join("thread.json"), text).map_err(|e| e.to_string())?;
+        }
         copy_to_clipboard(&dir.display().to_string());
         prune(&root, KEEP);
         Ok(Saved { dir, no_screenshot })

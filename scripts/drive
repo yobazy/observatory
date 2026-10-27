@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Drive the sandbox app the way you would, from a shell: for an agent that
+needs to see a change working without you (control.rs, control.ts).
+
+Start the app with `scripts/sandbox.sh up` (or `app`), then:
+
+  scripts/drive state                  what's on screen, and every thread
+  scripts/drive text                   the window's text, to read
+  scripts/drive shot [OUT.png]         a screenshot of the window; prints its path
+  scripts/drive view sessions          sessions, usage, activity, ideas, settings, ...
+  scripts/drive select "Fix login"     open a thread, by name or id
+  scripts/drive pane read              read the thread, or `terminal`
+  scripts/drive open /abs/file ...     open files in the preview
+  scripts/drive click "Follow up"      click a control by its label or text
+  scripts/drive click Open --nth 1     the second of several that match
+  scripts/drive type "hello" --into Reply   fill a field (else the focused one)
+  scripts/drive key cmd+shift+m        press keys: esc, enter, cmd+k, ...
+  scripts/drive wait "Done" [--timeout 30]  until the window shows that text
+  scripts/drive replay MOMENT_DIR      put a marked moment back on screen
+
+Prints the answer (JSON for structures) and exits 1 with the error on failure.
+"""
+import argparse
+import json
+import os
+import socket
+import sys
+import time
+from pathlib import Path
+
+SOCKET = os.environ.get("OBSERVATORY_CONTROL", "/tmp/observatory-sandbox/control.sock")
+SHOTS = Path(os.environ.get("OBSERVATORY_SHOTS", "/tmp/observatory-sandbox/shots"))
+
+
+def call(req, timeout=30):
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            s.connect(SOCKET)
+            s.sendall((json.dumps(req) + "\n").encode())
+            buf = b""
+            while not buf.endswith(b"\n"):
+                chunk = s.recv(65536)
+                if not chunk:
+                    break
+                buf += chunk
+    except OSError as e:
+        sys.exit(f"can't reach the app at {SOCKET} ({e}). Start it with scripts/sandbox.sh up")
+    reply = json.loads(buf or b'{"ok": false, "error": "no answer"}')
+    if not reply.get("ok"):
+        sys.exit(reply.get("error", "failed"))
+    return reply.get("value")
+
+
+def show(value):
+    print(value if isinstance(value, str) else json.dumps(value, indent=2))
+
+
+def shot(out=None):
+    path = Path(out).resolve() if out else SHOTS / time.strftime("shot-%Y%m%d-%H%M%S.png")
+    return call({"cmd": "shot", "out": str(path)})
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("state")
+    sub.add_parser("text")
+    sub.add_parser("shot").add_argument("out", nargs="?")
+    sub.add_parser("view").add_argument("view")
+    sub.add_parser("select").add_argument("thread")
+    sub.add_parser("pane").add_argument("mode", choices=["read", "terminal"])
+    sub.add_parser("open").add_argument("paths", nargs="+")
+    c = sub.add_parser("click")
+    c.add_argument("text")
+    c.add_argument("--nth", type=int)
+    t = sub.add_parser("type")
+    t.add_argument("text")
+    t.add_argument("--into")
+    sub.add_parser("key").add_argument("keys")
+    w = sub.add_parser("wait")
+    w.add_argument("text")
+    w.add_argument("--timeout", type=float, default=30)
+    r = sub.add_parser("replay")
+    r.add_argument("moment")
+    a = p.parse_args()
+
+    if a.cmd == "shot":
+        show(shot(a.out))
+    elif a.cmd in ("state", "text"):
+        show(call({"cmd": a.cmd}))
+    elif a.cmd == "view":
+        show(call({"cmd": "view", "view": a.view}))
+    elif a.cmd == "select":
+        show(call({"cmd": "select", "thread": a.thread}))
+    elif a.cmd == "pane":
+        show(call({"cmd": "pane", "mode": a.mode}))
+    elif a.cmd == "open":
+        show(call({"cmd": "open", "paths": [str(Path(x).expanduser().resolve()) for x in a.paths]}))
+    elif a.cmd == "click":
+        req = {"cmd": "click", "text": a.text}
+        if a.nth is not None:
+            req["nth"] = a.nth
+        show(call(req))
+    elif a.cmd == "type":
+        req = {"cmd": "type", "text": a.text}
+        if a.into:
+            req["into"] = a.into
+        show(call(req))
+    elif a.cmd == "key":
+        show(call({"cmd": "key", "keys": a.keys}))
+    elif a.cmd == "wait":
+        end = time.time() + a.timeout
+        while a.text.lower() not in call({"cmd": "text"}).lower():
+            if time.time() > end:
+                sys.exit(f'"{a.text}" didn\'t show in {a.timeout:g}s')
+            time.sleep(0.5)
+        print(f'"{a.text}" is showing')
+    elif a.cmd == "replay":
+        d = Path(a.moment).expanduser()
+        moment = json.loads((d / "moment.json").read_text())
+        thread_file = d / "thread.json"
+        thread = json.loads(thread_file.read_text()) if thread_file.exists() else None
+        done = call({"cmd": "replay", "moment": moment, "thread": thread})
+        done["note"] = moment.get("note")
+        if not thread:
+            done["warning"] = "this moment has no thread.json (marked before replays could carry one), so the reader shows the sandbox thread"
+        show(done)
+
+
+if __name__ == "__main__":
+    main()

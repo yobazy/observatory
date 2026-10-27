@@ -6,6 +6,8 @@ import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { flash, getState, type State } from "./store.ts";
 import { recentEvents, type UseEvent } from "./uselog.ts";
+import { paneMode } from "./pane.ts";
+import type { Transcript } from "./transcript.ts";
 
 export interface Moment {
   t: string;
@@ -35,6 +37,7 @@ export function snapshot(s: State) {
       : terminal
         ? { kind: "terminal", id: terminal.id }
         : null,
+    pane: paneMode(),
     preview: s.preview ? s.preview.files.map((f) => base(f.path)) : null,
     notice: s.notice,
     agents: statuses,
@@ -70,14 +73,28 @@ let version: string | undefined;
 /** The browser preview has no app behind it: saving is pretended. */
 const inApp = () => "__TAURI_INTERNALS__" in globalThis;
 
+/** How many of the open thread's last entries a moment keeps. */
+const THREAD_ENTRIES = 12;
+
+/** The open thread's last few entries, for a replay to show again. None
+ *  when no thread with a log is open. */
+async function openThread(s: State): Promise<Transcript | null> {
+  const sel = s.selectedSession;
+  const agent = sel && "Agent" in sel ? s.agents[sel.Agent] : undefined;
+  if (!agent?.session_id || (agent.kind !== "claude" && agent.kind !== "codex")) return null;
+  const t = await invoke<Transcript | null>("thread_transcript", { session: agent.session_id, from: null, kind: agent.kind }).catch(() => null);
+  return t && t.entries.length ? { entries: t.entries.slice(-THREAD_ENTRIES), dropped: 0 } : null;
+}
+
 /** Save what's on screen now, screenshot included, without asking for a
  *  note: the reader's "Point at this" uses it for the reply you mean. */
 export async function saveMoment(): Promise<{ dir: string; noScreenshot: string | null }> {
   const now = new Date();
   version ??= await import("@tauri-apps/api/app").then((m) => m.getVersion()).catch(() => undefined);
-  const moment: Moment = { t: now.toISOString(), version, note: null, state: snapshot(getState()), events: recentEvents(now.getTime()) };
+  const s = getState();
+  const moment: Moment = { t: now.toISOString(), version, note: null, state: snapshot(s), events: recentEvents(now.getTime()) };
   return inApp()
-    ? await invoke<{ dir: string; noScreenshot: string | null }>("save_moment", { stamp: moment.t, moment })
+    ? await invoke<{ dir: string; noScreenshot: string | null }>("save_moment", { stamp: moment.t, moment, thread: await openThread(s) })
     : { dir: `~/Library/Application Support/dev.bazil.observatory/moments/${moment.t}`, noScreenshot: null };
 }
 

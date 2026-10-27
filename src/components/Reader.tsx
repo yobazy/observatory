@@ -11,6 +11,7 @@ import { clock, doingLine, merge, stepsLine, type Entry, type Transcript } from 
 import { closeThread } from "../nebula/verdicts";
 import { answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
+import { useStandIn } from "../nebula/pane";
 import { shipKind } from "../nebula/git";
 import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
 import { highlightUnder } from "../nebula/highlight";
@@ -29,6 +30,7 @@ const dismissedFor = new Map<string, Set<number>>();
 
 /** The thread's conversation, read again as it moves. */
 function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | null {
+  const standIn = useStandIn(agent.id);
   const [got, setGot] = useState<{ entries: Entry[]; dropped: number } | null>(null);
   const last = useRef<number | null>(null);
   const session = agent.session_id;
@@ -63,7 +65,7 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
       window.clearInterval(timer);
     };
   }, [session, agent.id, agent.status, agent.status_changed_at]);
-  return got;
+  return standIn ?? got;
 }
 
 // A line break in a reply is one on screen too, so lines written one under
