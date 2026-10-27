@@ -193,14 +193,15 @@ export function PreviewPane() {
   );
 }
 
-/** `path` somewhere other than here: the browser, the code editor picked in
- *  Settings, or Finder. Says so when it can't. */
-export async function openFileIn(path: string, what: "browser" | "editor" | "finder") {
+/** `path` somewhere other than here: the app macOS opens it with (the
+ *  browser, for a page), the code editor picked in Settings, or Finder. Says
+ *  so when it can't. */
+export async function openFileIn(path: string, what: "app" | "editor" | "finder") {
   if (isPreview()) return flash(`Would open ${baseName(path)} in the ${what}.`);
   try {
     const opener = await import("@tauri-apps/plugin-opener");
     if (what === "finder") await opener.revealItemInDir(path);
-    else if (what === "browser") await opener.openPath(path);
+    else if (what === "app") await opener.openPath(path);
     else {
       const app = currentEditor();
       if (!app) return flash("No code editor found. Pick one in Settings › General.");
@@ -211,12 +212,15 @@ export async function openFileIn(path: string, what: "browser" | "editor" | "fin
   }
 }
 
-/** Browser, editor, Finder: the file somewhere other than here. */
+/** What `openFileIn(path, "app")` opens it in, for a menu. */
+export const appLabel = (path: string) => (/\.html?$/i.test(path) ? "Browser" : "Default app");
+
+/** Its default app, editor, Finder: the file somewhere other than here. */
 function OpenMenu({ file }: { file: PreviewFile }) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
-  const run = (what: "browser" | "editor" | "finder") => openFileIn(file.path, what);
+  const run = (what: "app" | "editor" | "finder") => openFileIn(file.path, what);
   const items = [
-    ...(file.kind === "html" ? [{ label: "Browser", run: () => void run("browser") }] : []),
+    { label: appLabel(file.path), run: () => void run("app") },
     { label: "Editor", run: () => void run("editor") },
     { label: "Show in Finder", run: () => void run("finder"), separated: true },
   ];

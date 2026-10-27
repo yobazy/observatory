@@ -7,6 +7,7 @@ import { isPreview } from "./client";
 import { loadSettings } from "./settings";
 import { getState, setState, subscribe } from "./store";
 import type { FolderPrefs } from "./folders";
+import type { PriorityPrefs } from "./priority";
 import type { Idea } from "./ideaList";
 import type { TermFontPrefs } from "./termfont";
 
@@ -36,7 +37,7 @@ export const ACCENTS: Record<string, { dark: string; light: string }> = {
 
 /** The terminal's face, size and line spacing come from `TermFontPrefs`
  *  (termfont.ts). */
-export interface DesktopPrefs extends TermFontPrefs, FolderPrefs {
+export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs {
   mode?: Mode;
   /** The sidebar cat (`Pet.tsx`); on unless turned off. */
   pet?: boolean;
@@ -67,6 +68,12 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs {
   projectOrder?: string[];
   /** Where a preview opens: over the terminal (unset) or beside it. */
   previewPlacement?: "over" | "beside";
+  /** The Read view's text size; medium when unset. */
+  readerText?: "small" | "large";
+  /** The Read view's column: a reading width when unset, or the pane's. */
+  readerWidth?: "wide";
+  /** Where Save as note writes a reply (notes.rs), such as an Obsidian vault. */
+  notesFolder?: string;
   /** Hovering a path in a terminal shows its preview card; on unless off. */
   previewOnHover?: boolean;
   /** Files an agent shows with `nebula open` open in the preview; on unless off. */

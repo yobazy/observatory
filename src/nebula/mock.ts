@@ -667,15 +667,27 @@ export function mockTranscript(s: State, agentId: string): Transcript | null {
   const entries: TranscriptEntry[] = [];
   const add = (kind: TranscriptEntry["kind"], text = "", steps: TranscriptEntry["steps"] = []) =>
     entries.push({ n: entries.length, kind, text, at: turn.started, steps });
+  // Two earlier turns, so the reader's fold and "since you left" line show.
+  add("you", "Where does the cart get written when two tabs are open?");
+  add("claude", "Both tabs write through `src/cart/sync.ts`. Each one sends its update as soon as it's made, so they can land out of order.");
+  add("you", "Can you show me where it goes wrong?");
+  add("claude", "It's the `Promise.all` in `applyAll`, at `src/cart/sync.ts:42`. Two updates start together, and whichever finishes last wins. The plan is in `checkout-plan.md`, and #128 has the first attempt.\n\n**Needs you**\n1. Fix it with a queue or a lock?  A queue · B lock\n2. Keep the old sync behind a flag?  A yes · B no");
   add("you", turn.prompt);
   add("claude", "I'll read the sync code first, then make the change and run the tests.");
   const half = Math.ceil(turn.steps.length / 2);
-  add("steps", "", turn.steps.slice(0, half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok })));
+  // What each step changed or printed, so the reader's diffs show.
+  const detail = (st: { tool: string; ok: boolean | null }) =>
+    st.tool === "Edit"
+      ? "- await Promise.all(pending.map((u) => this.apply(u)));\n+ for (const update of pending) {\n+   await this.apply(update);\n+ }"
+      : st.tool === "Bash" && st.ok === false
+        ? "FAIL src/cart/sync.test.ts\n  ✕ applies updates in order (12 ms)\n    Expected: [1, 2]\n    Received: [2, 1]"
+        : undefined;
+  add("steps", "", turn.steps.slice(0, half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok, detail: detail(st) })));
   add(
     "claude",
     "Sync applied every update with `Promise.all`, so they **raced**. Now a worker applies the next update when the current one settles:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\n- Updates apply in order\n- A failure stops the queue instead of being lost",
   );
-  add("steps", "", turn.steps.slice(half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok })));
+  add("steps", "", turn.steps.slice(half).map((st) => ({ tool: st.tool, target: st.target, ok: st.ok, detail: detail(st) })));
   if (turn.said) add("claude", turn.said);
   // A reply written as a card, so the reader's card shows in the demo.
   add(

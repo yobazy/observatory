@@ -2,6 +2,8 @@
 // sorting a long list, kept in the desktop prefs by repo path (the daemon,
 // and so the TUI, knows none of it). Pure, so its tests run under Node.
 
+import { byPriority, type PriorityPrefs } from "./priority.ts";
+
 export interface ProjectFolder {
   id: string;
   name: string;
@@ -23,19 +25,22 @@ interface Named {
 
 /** The sidebar's layout: each folder with its projects, then the projects
  *  in none. `projects` is already in the sidebar's order; a folder keeps its
- *  own. A project in two folders (a hand-edited prefs file) shows in the
+ *  own, under their priorities. A project in two folders (a hand-edited prefs file) shows in the
  *  first; a folder's repos that aren't projects any more are left out. */
-export function layout<P extends Named>(projects: P[], prefs: FolderPrefs): { folders: { folder: ProjectFolder; projects: P[] }[]; loose: P[] } {
+export function layout<P extends Named>(projects: P[], prefs: FolderPrefs & PriorityPrefs): { folders: { folder: ProjectFolder; projects: P[] }[]; loose: P[] } {
   const byRepo = new Map(projects.map((p) => [p.repo_path, p]));
   const placed = new Set<string>();
   const folders = (prefs.projectFolders ?? []).map((folder) => ({
     folder,
-    projects: folder.projects.flatMap((repo) => {
-      const p = byRepo.get(repo);
-      if (!p || placed.has(repo)) return [];
-      placed.add(repo);
-      return [p];
-    }),
+    projects: byPriority(
+      folder.projects.flatMap((repo) => {
+        const p = byRepo.get(repo);
+        if (!p || placed.has(repo)) return [];
+        placed.add(repo);
+        return [p];
+      }),
+      (p) => prefs.projectPriorities?.[p.repo_path],
+    ),
   }));
   return { folders, loose: projects.filter((p) => !placed.has(p.repo_path)) };
 }
