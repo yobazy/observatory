@@ -8,7 +8,8 @@ import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
 import { clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
-import { answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card } from "../nebula/replycard";
+import { closeThread } from "../nebula/verdicts";
+import { answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { useStandIn } from "../nebula/pane";
 import { shipKind } from "../nebula/git";
@@ -210,6 +211,29 @@ function Pictures({ paths, from, pair = null }: { paths: string[]; from: string;
   );
 }
 
+/** How the reply closes: safe to close, with the button that does it while
+ *  this is the latest reply, or what's keeping it open, with what's left to
+ *  ship beside it. */
+function VerdictLine({ verdict, onClose, ship }: { verdict: Chip; onClose?: () => void; ship?: Ship | null }) {
+  return (
+    <div className="rd-verdict-row">
+      <p className={`rd-verdict is-${verdict.tone}`}>
+        <span className="rd-verdict-text" dangerouslySetInnerHTML={{ __html: toHtml(verdict.text, true) }} />
+      </p>
+      {verdict.tone === "done" && onClose && (
+        <button className="btn btn-primary btn-sm" onClick={onClose} title="Archives the thread; Undo brings it back">
+          Close thread
+        </button>
+      )}
+      {ship && verdict.tone !== "done" && (
+        <button className="btn btn-sm" onClick={ship.run} title={ship.title}>
+          {ship.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** "Other…" after a decision's options: an answer of your own, written in. */
 function OtherAnswer({ value, live, sent, onSet }: { value: string; live: boolean; sent: boolean; onSet: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
@@ -263,6 +287,7 @@ export function CardReply({
   sent,
   picks,
   onPick,
+  onClose,
 }: {
   card: Card;
   /** Its two pictures as before and after, when it says which is which. */
@@ -278,6 +303,7 @@ export function CardReply({
   sent: boolean;
   picks: Record<number, string>;
   onPick: (n: number, letter: string) => void;
+  onClose?: () => void;
 }) {
   const headline = useMemo(() => (card.headline ? toHtml(card.headline, true) : ""), [card.headline]);
   return (
@@ -330,16 +356,7 @@ export function CardReply({
           <Md text={card.details} />
         </details>
       )}
-      {card.verdict && (
-        <div className="rd-verdict-row">
-          <p className={`rd-verdict is-${card.verdict.tone}`} dangerouslySetInnerHTML={{ __html: toHtml(card.verdict.text, true) }} />
-          {ship && card.verdict.tone !== "done" && (
-            <button className="btn btn-sm" onClick={ship.run} title={ship.title}>
-              {ship.label}
-            </button>
-          )}
-        </div>
-      )}
+      {card.verdict && <VerdictLine verdict={card.verdict} onClose={onClose} ship={ship} />}
     </article>
   );
 }
@@ -354,6 +371,7 @@ function Reply(props: {
   sent: boolean;
   picks: Record<number, string>;
   onPick: (n: number, letter: string) => void;
+  onClose?: () => void;
 }) {
   const card = useMemo(() => readCard(props.text), [props.text]);
   const pair = useMemo(() => beforeAfter(card.images, props.text), [card.images, props.text]);
@@ -879,6 +897,7 @@ export function Reader({
                         sent={e.n !== latest || showQueued}
                         picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : shown}
                         onPick={pick}
+                        onClose={e.n === latest && agent.status === "finished" && !agent.archived ? () => closeThread(agent) : undefined}
                       />
                       <div className="rd-tools">
                         <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">

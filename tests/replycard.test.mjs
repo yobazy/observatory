@@ -210,6 +210,26 @@ test('a card offers the answers it recommends', async () => {
 I'd pick 1C.`)), {});
 });
 
+test('a reply closes with a verdict, taken out of the card', async () => {
+  const { readVerdict } = await import('../src/nebula/replycard.ts');
+  assert.deepEqual(readVerdict('Done.\n\n**✅ Safe to close.** #64 is in review; memory has it'), { tone: 'done', text: 'Safe to close. #64 is in review; memory has it' });
+  assert.deepEqual(readVerdict('**🟠 Keep open:** waiting on your answer to 1'), { tone: 'wait', text: 'Keep open: waiting on your answer to 1' });
+  assert.deepEqual(readVerdict("- 🔴 Do not close: uncommitted work on main\n"), { tone: 'bad', text: 'Do not close: uncommitted work on main' });
+  assert.deepEqual(readVerdict('**✅ Safe to close**'), { tone: 'done', text: 'Safe to close' });
+  assert.equal(readVerdict('✅ Tests pass · 🟠 Not committed'), null);
+  // The last line counts: a quoted rule earlier doesn't.
+  assert.equal(readVerdict('✅ Safe to close, it said.\n\n**🔴 Don\'t close:** unpushed').tone, 'bad');
+  assert.equal(readVerdict('✅ Safe to close\n\nmore after'), null);
+  const card = readCard(`**Shipped.**
+
+**Details**
+- Merged.
+
+**✅ Safe to close.**`);
+  assert.deepEqual(card.verdict, { tone: 'done', text: 'Safe to close.' });
+  assert.equal(card.details, '- Merged.');
+});
+
 const decisions = `9. ✅ **On my way looked already on:** her screenshot shows the bug fixed yesterday.
 
 **Decisions**

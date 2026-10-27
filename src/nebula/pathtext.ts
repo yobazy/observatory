@@ -15,14 +15,25 @@ export interface Found {
 /** Text that may be a path: `~/`, `/`, `./` or `../` and segments, or bare
  *  segments ending in a file name with an extension. */
 const CANDIDATE = /(?:~\/|\.{1,2}\/|\/)?(?:[\w@%+=,.-]+\/)*[\w@%+=,-][\w@%+=,.-]*\.[A-Za-z][A-Za-z0-9]{0,7}(?![\w/])/g;
+/** An absolute or `~/` path with spaces in its names, as a vault note's
+ *  ("~/vault/Career/Call - Oct 2026.md"): it runs to the first file name
+ *  with an extension. Whether it's a file is checked on disk, so a guess
+ *  that swallows prose ("/tmp/x and notes.md") just doesn't become a link. */
+const SPACED = /(?:~\/|(?<![\w.~-])\/)(?:[^/\s`'"](?:[^/`'"]*[^/\s`'"])?\/)+[^/\s`'"][^/`'"]*?\.[A-Za-z][A-Za-z0-9]{0,7}(?![\w/])/g;
 /** URLs are someone else's links; their paths aren't files here. */
 const URL = /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi;
 
 /** The path-like runs in `text`. A bare name with no slash counts only with
- *  an extension worth previewing, so prose like "v1.2" or "e.g." stays put. */
+ *  an extension worth previewing, so prose like "v1.2" or "e.g." stays put.
+ *  Paths with spaces come first; the shorter runs inside them are only
+ *  links when the longer one isn't a file. */
 export function findPaths(text: string): Found[] {
   const masked = text.replace(URL, (m) => " ".repeat(m.length));
   const found: Found[] = [];
+  for (const m of masked.matchAll(SPACED)) {
+    const path = m[0].replace(/[.,]+$/, "");
+    if (path.includes(" ")) found.push({ start: m.index!, text: path });
+  }
   for (const m of masked.matchAll(CANDIDATE)) {
     let path = m[0];
     // A sentence's full stop or a closing quote is not part of the name.
@@ -75,6 +86,9 @@ export interface Logical {
 /** The rows at most this far from the right edge still count as full. */
 const EDGE = 4;
 const PATHISH = /[\w./~@%+=,:?&#-]/;
+/** The last absolute or `~/` path a row ends in, still going, and what
+ *  follows its first slash. */
+const OPEN_PATH = /(?:^|.*[\s(\[`'"])(?:~\/|\/)([^/\s`'"][^`'"]*\/[^/`'"]*)$/;
 /** The most rows an app's own wrapping joins into one line, each way. */
 const MAX_APP_ROWS = 32;
 
@@ -95,18 +109,27 @@ export function logicalLine(row: (i: number) => Row | undefined, y: number, cols
     while (n < r.cells.length && r.cells[n] === " ") n++;
     return n;
   };
-  /** Whether the row after `i` carries on row `i`'s line. */
-  const goesOn = (i: number) => {
+  /** Whether the row after `i` carries on row `i`'s line: "glued" when the
+   *  app broke it mid-word, "spaced" when it broke a path with spaces at
+   *  one of them, so the space goes back in. */
+  const goesOn = (i: number): false | "glued" | "spaced" => {
     const here = row(i);
     const next = row(i + 1);
     if (!here || !next) return false;
-    if (next.wrapped) return true;
+    if (next.wrapped) return "glued";
     const last = end(here);
-    if (last < cols - EDGE || !PATHISH.test(here.cells[last - 1] ?? "")) return false;
-    const tail = here.cells.slice(0, last).join("").split(" ").pop() ?? "";
-    if (!tail.includes("/")) return false;
     const first = next.cells[indent(next)] ?? "";
-    return PATHISH.test(first);
+    if (!PATHISH.test(here.cells[last - 1] ?? "") || !PATHISH.test(first)) return false;
+    const text = here.cells.slice(0, last).join("");
+    const tail = text.split(" ").pop() ?? "";
+    if (last >= cols - EDGE && tail.includes("/")) return "glued";
+    // Wrapped at a space: the next row's first word didn't fit on this one,
+    // and this row ends inside a path with spaces that hasn't reached its
+    // file name yet.
+    const word = next.cells.slice(indent(next)).join("").split(" ")[0];
+    if (last + 1 + word.length <= cols - EDGE) return false;
+    const open = OPEN_PATH.exec(text);
+    return open && open[1].includes(" ") && !/\.[A-Za-z][A-Za-z0-9]{0,7}(?:\s|$)/.test(open[1]) ? "spaced" : false;
   };
   // Rows the app wrapped join only so far: past that it's a block of output
   // (base64, a minified file), and joining all of it would make reading each
@@ -125,6 +148,11 @@ export function logicalLine(row: (i: number) => Row | undefined, y: number, cols
   for (let i = first; i <= last; i++) {
     const r = row(i);
     if (!r) break;
+    // The space an app wrapped at sits on the row above's last cell.
+    if (i > first && at.length && goesOn(i - 1) === "spaced") {
+      text += " ";
+      at.push(at[at.length - 1]);
+    }
     const from = i === first || r.wrapped ? 0 : indent(r);
     const to = i === last ? end(r) : row(i + 1)?.wrapped ? r.cells.length : end(r);
     for (let c = from; c < to; c++) {
