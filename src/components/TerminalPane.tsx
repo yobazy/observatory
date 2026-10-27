@@ -22,6 +22,7 @@ import { watchForFiles, type FileWatch } from "../nebula/shelf";
 import { afterClosing } from "../nebula/recentThreads";
 import { isSliding } from "./Resizer";
 import { AgentServerLink } from "./Run";
+import { closeThread, useVerdict } from "../nebula/verdicts";
 
 const THEME = {
   background: "#0f1524",
@@ -79,6 +80,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const state = useAppState();
   const session = state.selectedSession;
   const agent = session && "Agent" in session ? state.agents[session.Agent] : undefined;
+  // What its last reply said about closing it.
+  const verdict = useVerdict(agent);
   const tab = session && "Terminal" in session ? state.terminals[session.Terminal] : undefined;
   const exists = !!(agent || tab);
 
@@ -386,6 +389,20 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
             )}
             {agent && !agent.archived && (
               <>
+                {verdict?.tone === "done" && (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => closeThread(agent)}
+                    title={`Its last reply says “${verdict.text}”. Archives it; Undo brings it back.`}
+                  >
+                    Close thread
+                  </button>
+                )}
+                {verdict && verdict.tone !== "done" && (
+                  <span className={`pane-verdict is-${verdict.tone}`} title={verdict.text}>
+                    {verdict.text}
+                  </span>
+                )}
                 <button
                   className="btn"
                   onClick={() => setDialog(queueDialog(agent))}

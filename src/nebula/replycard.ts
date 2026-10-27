@@ -116,8 +116,20 @@ export function readAsk(n: number, line: string): Ask {
 const SECTION = /^\s*(?:#{1,4}\s*)?(?:\*\*|__)?\s*(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?[\s:*_]*$/i;
 // "**Needs you:** nothing tonight." starts the section and says it too.
 const SECTION_INLINE = /^\s*(?:\*\*|__)(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?:?(?:\*\*|__):?\s+(\S.*)$/i;
-// The close verdict a reply ends on, bold or not.
-const VERDICT = /^\s*(?:\*\*|__)?\s*(✅|🟠|🔴)\uFE0F?\s*(?:\*\*|__)?\s*((?:Safe to close|Keep open|Don['’]t close)\b.*)$/u;
+// The close verdict a reply ends on, once its bold is gone, also as a bullet.
+const VERDICT = /^\s*(?:[-*]\s+)?(✅|🟠|🔴)\uFE0F?\s*((?:Safe to close|Keep open|Don['’]t close|Do not close)\b.*)$/u;
+
+/** A line like "**🟠 Keep open:** waiting on 2", read as a close verdict. */
+function verdictOf(line: string): Chip | null {
+  const m = VERDICT.exec(line.replace(/\*\*|__/g, ""));
+  return m ? { tone: toneOf(m[1])!, text: m[2].trim() } : null;
+}
+
+/** The close verdict a reply ends on, from its last line. */
+export function readVerdict(text: string): Chip | null {
+  const last = text.trimEnd().split("\n").pop();
+  return last ? verdictOf(last) : null;
+}
 // A numbered decision, also as a bullet or with its number in bold:
 // "2. Ship today?", "- 2. Ship today?", "- **2. Ship today?** A …".
 const ITEM = /^\s*(?:[-*]\s+)?(\*\*|__)?(\d+)[.)]\s+(.+)$/;
@@ -161,14 +173,11 @@ function splitAsks(line: string): string[] {
 
 export function readCard(text: string): Card {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
-  // The verdict on the last line comes off before anything else reads it.
-  let verdict: Chip | null = null;
+  // The verdict on the last line comes off before anything else reads it,
+  // unless it's all the reply says.
   while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-  const last = lines.length > 1 ? VERDICT.exec(lines[lines.length - 1].replace(/(\*\*|__)(?=\s*$)/, "")) : null;
-  if (last) {
-    verdict = { tone: toneOf(last[1])!, text: last[2].replace(/\*\*|__/g, "").trim() };
-    lines.pop();
-  }
+  const verdict = lines.length > 1 ? verdictOf(lines[lines.length - 1]) : null;
+  if (verdict) lines.pop();
   // Split into the part before any section, and the sections by name.
   const lead: string[] = [];
   const sections: Record<"needs" | "details", string[]> = { needs: [], details: [] };

@@ -145,10 +145,21 @@ export function AddProjectDialog({
 }
 
 export function Notice() {
-  const notice = useAppState().notice;
+  const { notice, noticeAction } = useAppState();
   return notice ? (
     <div className="notice" role="status">
       {notice}
+      {noticeAction && (
+        <button
+          className="link-btn notice-action"
+          onClick={() => {
+            noticeAction.run();
+            setState({ notice: null, noticeAction: null });
+          }}
+        >
+          {noticeAction.label}
+        </button>
+      )}
     </div>
   ) : null;
 }
