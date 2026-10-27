@@ -26,8 +26,8 @@ import { PanelGlyph } from "./Sidebar";
 import { ProjectIcon, useProjectColorStyle } from "./ProjectIcon";
 import { locateProject } from "../nebula/relocate";
 import { sameSession, type Agent, type SessionRef, type TerminalTab, type Worktree } from "../nebula/types";
-import { isFollowUp, isPinned, moveTask, toggleFlag } from "../nebula/organize";
-import { FlagGlyph, PinGlyph, TagListDialog, useTaskColorStyle } from "./Organize";
+import { cyclePriority, isFollowUp, isPinned, moveTask, toggleFlag } from "../nebula/organize";
+import { FlagGlyph, PinGlyph, PriorityMark, TagListDialog, useTaskColorStyle } from "./Organize";
 import { hasTerms, searchTerms, tagCounts, tagList, threadShows } from "../nebula/threadtags";
 import { tagProjectNow } from "../nebula/taggingRunner";
 import type { DesktopPrefs } from "../nebula/theme";
@@ -695,6 +695,7 @@ function AgentRow({
   const detail = prompt || [agent.model, agent.effort].filter(Boolean).join(", ");
   const pinned = !agent.archived && isPinned(state, agent);
   const flagged = isFollowUp(state, agent.id);
+  const priority = agent.archived ? undefined : state.prefs.taskPriorities?.[agent.id];
   const colorStyle = useTaskColorStyle(agent);
   const picks = useContext(PicksContext);
   const isPicked = picks?.ids.has(agent.id) ?? false;
@@ -708,14 +709,18 @@ function AgentRow({
       onContextMenu={(e) => onMenu(e, { Agent: agent })}
       aria-pressed={picks?.ids.size ? isPicked : undefined}
       onKeyDown={(e) => {
-        // F flags the task to come back to, or clears the flag.
-        if (e.key === "f" && e.target === e.currentTarget && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // F flags the task to come back to, or clears the flag; P steps its priority.
+        const bare = e.target === e.currentTarget && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey;
+        if (bare && e.key === "f") {
           e.preventDefault();
           void toggleFlag(agent);
+        } else if (bare && e.key === "p" && !agent.archived) {
+          e.preventDefault();
+          void cyclePriority(agent);
         } else onKeyDown?.(e);
       }}
       aria-current={selected ? "true" : undefined}
-      aria-keyshortcuts={agent.archived ? "F" : "F Alt+ArrowUp Alt+ArrowDown"}
+      aria-keyshortcuts={agent.archived ? "F" : "F P Alt+ArrowUp Alt+ArrowDown"}
     >
       <span
         className={`sdot dot-${agent.status}${agent.unseen ? " is-unseen" : ""}`}
@@ -723,7 +728,10 @@ function AgentRow({
         aria-label={statusLabel(agent)}
       />
       <span className="row-main">
-        <span className="row-name">{agent.name}</span>
+        <span className="row-name">
+          <PriorityMark priority={priority} />
+          {agent.name}
+        </span>
         <span className="row-detail" title={agentSpec(agent)}>
           {/* The usual harness goes without saying; another one is named. */}
           {usual !== harnessLabel(agent) && (

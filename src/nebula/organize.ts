@@ -1,6 +1,6 @@
 // The desktop app's own arranging of the tree: projects dragged into order,
-// tasks pinned to the top of their branch, task colors, and tasks marked to
-// come back to. All of it lives in the desktop prefs beside the project
+// tasks pinned to the top of their branch, task colors, priorities, and tasks
+// marked to come back to. All of it lives in the desktop prefs beside the project
 // icons; the daemon (and so the TUI) keeps its own order.
 import { useEffect } from "react";
 import { onAgentStatus } from "./client";
@@ -11,6 +11,7 @@ import { moveWithin, placeIn, type ProjectFolder } from "./folders";
 import { pruned } from "./prune";
 import { addTag, deleteTag, renameTag, setThreadTags } from "./threadtags";
 import { savePrefs, type DesktopPrefs } from "./theme";
+import { nextPriority, priorityLabel, type Priority } from "./priority";
 import type { Agent } from "./types";
 
 /** `ids` with `id` taken out and put back at `to`. */
@@ -216,6 +217,31 @@ export function saveTagging(change: (prefs: DesktopPrefs) => DesktopPrefs) {
 /** A thread's tags, as you set them from its menu. */
 export function tagThread(agentId: string, tags: string[]) {
   return save((prefs) => setThreadTags(prefs, agentId, tags));
+}
+
+export function setTaskPriority(agentId: string, priority: Priority | null) {
+  return save((prefs) => {
+    const taskPriorities = { ...prefs.taskPriorities };
+    if (priority) taskPriorities[agentId] = priority;
+    else delete taskPriorities[agentId];
+    return { ...prefs, taskPriorities };
+  });
+}
+
+/** Step a task to its next priority (P), and say which. */
+export async function cyclePriority(agent: Agent) {
+  const next = nextPriority(getState().prefs.taskPriorities?.[agent.id]);
+  if (!(await setTaskPriority(agent.id, next))) return;
+  flash(next ? `${agent.name}: ${priorityLabel(next)} priority` : `${agent.name}: no priority`);
+}
+
+export function setProjectPriority(repo: string, priority: Priority | null) {
+  return save((prefs) => {
+    const projectPriorities = { ...prefs.projectPriorities };
+    if (priority) projectPriorities[repo] = priority;
+    else delete projectPriorities[repo];
+    return { ...prefs, projectPriorities };
+  });
 }
 
 export function isFollowUp(s: State, agentId: string): boolean {

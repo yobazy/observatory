@@ -11,6 +11,7 @@ import {
   tagThread,
   toggleFlag,
 } from "../nebula/organize";
+import { PRIORITIES, priorityLabel, type Priority } from "../nebula/priority";
 import { tagCounts, tagList, threadTagsOf } from "../nebula/threadtags";
 import { relativeTime } from "../nebula/status";
 import { flash, getState, projectOfWorktree, projectWorktrees, useAppState } from "../nebula/store";
@@ -168,6 +169,56 @@ export function ThreadTagsDialog({ agent, onClose }: { agent: Agent; onClose: ()
   );
 }
 
+/** Pick a priority for a task or project: one click picks and closes. */
+export function PriorityDialog({
+  name,
+  value,
+  onPick,
+  onClose,
+}: {
+  name: string;
+  value: Priority | undefined;
+  onPick: (priority: Priority | null) => Promise<unknown>;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    dialog.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const pick = (p: Priority | null) => {
+    void onPick(p).catch((e) => flash(`Couldn't save the priority: ${e}`));
+    onClose();
+  };
+  const choices: { id: Priority | null; label: string }[] = [...PRIORITIES, { id: null, label: "None" }];
+  return (
+    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div ref={dialog} className="dialog dialog-narrow task-color" role="dialog" aria-modal="true" aria-labelledby="priority-title">
+        <h2 id="priority-title">Priority for {name}</h2>
+        <div className="priority-row" role="radiogroup" aria-labelledby="priority-title">
+          {choices.map((c) => (
+            <button
+              key={c.label}
+              role="radio"
+              aria-checked={(value ?? null) === c.id}
+              className={`priority-choice${(value ?? null) === c.id ? " is-on" : ""}`}
+              onClick={() => pick(c.id)}
+            >
+              {c.id ? <PriorityGlyph priority={c.id} /> : <span className="priority-none" aria-hidden />}
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <p className="priority-note">Urgent and high sort to the top of their list, low to the bottom. On a selected task, P steps through them.</p>
+      </div>
+    </div>
+  );
+}
+
 /** The project's own tags for its threads: add, rename and delete them.
  *  A rename or delete reaches every thread that carries the tag. */
 export function TagListDialog({ repo, onClose }: { repo: string; onClose: () => void }) {
@@ -268,6 +319,37 @@ function TagListRow({ repo, tag, count }: { repo: string; tag: string; count: nu
         Delete
       </button>
     </li>
+
+  );
+}
+
+/** A priority's mark: an exclamation for urgent, chevrons for the rest. */
+export function PriorityGlyph({ priority }: { priority: string }) {
+  if (priority === "urgent") {
+    return (
+      <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden className="prio prio-urgent">
+        <rect x="1.5" y="1.5" width="13" height="13" rx="3.5" fill="currentColor" />
+        <path d="M8 4.5v4.2M8 11.3v.2" stroke="var(--panel)" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  // Chevrons, not bars: bars already mean the project's load (LoadMeter).
+  const d = priority === "high" ? "M3.5 8 8 3.5 12.5 8M3.5 13 8 8.5l4.5 4.5" : "M3.5 6 8 10.5 12.5 6";
+  return (
+    <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden className={`prio prio-${priority}`}>
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** The mark beside a task's or project's name, when it has a priority. */
+export function PriorityMark({ priority }: { priority: string | undefined }) {
+  const label = priorityLabel(priority);
+  if (!label || !priority) return null;
+  return (
+    <span className="priority-mark" role="img" title={`${label} priority (P to change)`} aria-label={`${label} priority`}>
+      <PriorityGlyph priority={priority} />
+    </span>
   );
 }
 
