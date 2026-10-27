@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { GitState } from "./git";
 import type { UsageReport } from "./usage";
 import type { DesktopPrefs } from "./theme";
+import { byPriority, rank } from "./priority.ts";
 import type { PrState } from "./prs";
 import type { Queued } from "./queue";
 import type { FanOut } from "./fanout";
@@ -239,13 +240,14 @@ export function withoutProject(s: State, id: string): Partial<State> {
 
 // ---- derived views ----
 
-/** Projects in the order dragged into (prefs.projectOrder), the rest after
- *  them in the daemon's order. */
+/** Projects by priority, and within one, in the order dragged into
+ *  (prefs.projectOrder), the rest after them in the daemon's order. */
 export function sortedProjects(s: State): Project[] {
   const daemon = Object.values(s.projects).sort(
     (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name),
   );
-  return pinnedFirst(daemon, s.prefs.projectOrder, (p) => p.repo_path);
+  const ordered = pinnedFirst(daemon, s.prefs.projectOrder, (p) => p.repo_path);
+  return byPriority(ordered, (p) => s.prefs.projectPriorities?.[p.repo_path]);
 }
 
 /** `items` with those named in `order` first, in that order; the rest keep
@@ -282,12 +284,13 @@ export function urgency(a: Agent): number {
 }
 
 /** A branch's tasks: those pinned (dragged into place) first, in their
- *  order, then the rest by urgency. */
+ *  order, then the rest by priority, then urgency. */
 export function worktreeAgents(s: State, worktreeId: string, archived = false): Agent[] {
   const auto = Object.values(s.agents)
     .filter((a) => a.worktree_id === worktreeId && a.archived === archived)
     .sort(
       (a, b) =>
+        rank(s.prefs.taskPriorities?.[a.id]) - rank(s.prefs.taskPriorities?.[b.id]) ||
         urgency(a) - urgency(b) ||
         b.status_changed_at - a.status_changed_at ||
         a.sort_order - b.sort_order,
@@ -313,7 +316,11 @@ export function projectAgents(s: State, projectId: string): Agent[] {
 export function waitingAgents(s: State): Agent[] {
   return Object.values(s.agents)
     .filter((a) => !a.archived && a.status === "needs_feedback")
-    .sort((a, b) => a.status_changed_at - b.status_changed_at);
+    .sort(
+      (a, b) =>
+        rank(s.prefs.taskPriorities?.[a.id]) - rank(s.prefs.taskPriorities?.[b.id]) ||
+        a.status_changed_at - b.status_changed_at,
+    );
 }
 
 export const STATUS_ORDER: AgentStatus[] = [

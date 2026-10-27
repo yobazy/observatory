@@ -18,7 +18,7 @@ import { restartToUpdate, useUpdateState } from "../nebula/updates";
 import { QuickAnswer } from "./QuickAnswer";
 import { AwayDigest } from "./AwayDigest";
 import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon";
-import { FlagGlyph, FollowUps } from "./Organize";
+import { FlagGlyph, FollowUps, PriorityMark } from "./Organize";
 import { UncommittedEntry } from "./Uncommitted";
 import { IdeasEntry } from "./Ideas";
 import { InboxEntry } from "./Inbox";
@@ -208,6 +208,7 @@ export function Sidebar({
                       <span className="sdot dot-needs_feedback" aria-hidden />
                       <span className="waiting-name">
                         {a.name}
+                        <PriorityMark priority={state.prefs.taskPriorities?.[a.id]} />
                         {state.prefs.followUps?.[a.id] !== undefined && (
                           <span className="waiting-flag" role="img" aria-label="Flagged for follow-up" title="Flagged for follow-up">
                             <FlagGlyph />
@@ -655,6 +656,7 @@ function ProjectRow({
       <span className="project-line">
         <ProjectIcon project={project} />
         <span className="project-name">{project.name}</span>
+        <PriorityMark priority={prefs.projectPriorities?.[project.repo_path]} />
         {live && <span className="live-dot" title="Dev server running" aria-label="Dev server running" />}
         <span className="project-meta">
           <LoadMeter projectId={project.id} />
