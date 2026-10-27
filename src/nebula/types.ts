@@ -1,5 +1,5 @@
 // Mirrors of nebula-core's serde shapes (externally tagged enums, snake_case
-// status/kind strings). Pinned to nebula v0.40.2, protocol 44.
+// status/kind strings). Pinned to nebula v0.45.0, protocol 51.
 
 export type AgentStatus =
   | "fresh"
@@ -18,6 +18,9 @@ export type AgentKind =
   | "grok"
   | "open_code"
   | "custom";
+
+/** Only an orchestrator row may use nebula's orchestrator-only requests. */
+export type AgentRole = "worker" | "orchestrator";
 
 export interface Project {
   id: string;
@@ -56,6 +59,7 @@ export interface Agent {
   session_id: string | null;
   cloud_session_id: string | null;
   issue_url: string | null;
+  role: AgentRole;
   sort_order: number;
   alive: boolean;
   recent_prompts: PromptEntry[];

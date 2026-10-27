@@ -428,19 +428,20 @@ function useNeedsOnly(): [boolean, (on: boolean) => void] {
   ];
 }
 
-/** The last few projects you were in, other than this one, above the full
- *  list so switching back never takes a scroll or a search. */
+/** The last few projects you were in, this one marked among them, above
+ *  the full list so switching back never takes a scroll or a search. */
 function RecentPanel({ projects, onMenu }: { projects: Project[]; onMenu: (e: React.MouseEvent, project: Project) => void }) {
   const state = useAppState();
   const visits = useVisits();
   const [count, setCount] = useRecentCount();
   const current = state.selectedProject ? state.projects[state.selectedProject] : undefined;
   const recent = useMemo(() => recentProjects(visits, projects, current, count), [visits, projects, current, count]);
-  if (recent.length === 0) return null;
+  // Only you being here isn't a list yet.
+  if (recent.length < 2) return null;
   return (
     <section className="recent" aria-label="Recent projects">
       <div className="recent-head">
-        <h2 title="The projects you were in last, newest first, leaving out the one you're in.">Recent</h2>
+        <h2 title="The projects you were in last, newest first, with the one you're in highlighted.">Recent</h2>
         <select
           className="recent-count"
           value={count}
@@ -456,17 +457,18 @@ function RecentPanel({ projects, onMenu }: { projects: Project[]; onMenu: (e: Re
         </select>
       </div>
       <ul>
-        {recent.map(({ project, at }) => {
+        {recent.map(({ project, at, here }) => {
           const agents = projectAgents(state, project.id);
           const needs = agents.filter((a) => a.status === "needs_feedback").length;
           const running = agents.filter((a) => a.status === "running").length;
           return (
             <li key={project.id}>
               <button
-                className="recent-row"
+                className={`recent-row${here ? " is-selected" : ""}`}
+                aria-current={here ? "page" : undefined}
                 onClick={() => setState({ selectedProject: project.id })}
                 onContextMenu={(e) => onMenu(e, project)}
-                title={`${project.name}\n${project.repo_path}\nLast opened: ${relativeTime(at)}`}
+                title={here ? `${project.name}\n${project.repo_path}\nYou're here` : `${project.name}\n${project.repo_path}\nLast opened: ${relativeTime(at)}`}
               >
                 <ProjectIcon project={project} />
                 <span className="project-name">{project.name}</span>
@@ -482,7 +484,7 @@ function RecentPanel({ projects, onMenu }: { projects: Project[]; onMenu: (e: Re
                       {needs}
                     </span>
                   )}
-                  <span className="recent-age">{relativeTime(at)}</span>
+                  <span className="recent-age">{here ? "here" : relativeTime(at)}</span>
                 </span>
               </button>
             </li>

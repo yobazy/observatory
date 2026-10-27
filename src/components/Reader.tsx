@@ -22,7 +22,6 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
   const [got, setGot] = useState<{ entries: Entry[]; dropped: number } | null>(null);
   const last = useRef<number | null>(null);
   const session = agent.session_id;
-  const running = agent.status === "running";
   useEffect(() => {
     if (!session) return;
     let live = true;
@@ -34,6 +33,9 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
           : await invoke<Transcript | null>("thread_transcript", { session, from, kind: agent.kind });
         if (!live || !t) return;
         setGot((prev) => {
+          // Nothing new since the last read: keep what's shown as it is.
+          const same = prev && from !== null && t.dropped === prev.dropped;
+          if (same && JSON.stringify(t.entries) === JSON.stringify(prev.entries.filter((e) => e.n >= from))) return prev;
           const entries = from === null || !prev ? t.entries : merge(prev.entries, t.entries, t.dropped);
           last.current = entries.length ? entries[entries.length - 1].n : null;
           return { entries, dropped: t.dropped };
@@ -43,17 +45,23 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
       }
     };
     void read();
-    const timer = running ? window.setInterval(read, 2500) : undefined;
+    // Keep reading whatever the status says: a turn's last reply can reach
+    // the log after the thread shows finished, and nothing else fetches it.
+    const timer = window.setInterval(read, 2500);
     return () => {
       live = false;
       window.clearInterval(timer);
     };
-  }, [session, agent.id, running, agent.status, agent.status_changed_at]);
+  }, [session, agent.id, agent.status, agent.status_changed_at]);
   return got;
 }
 
+// A line break in a reply is one on screen too, so lines written one under
+// another (a list after a bold label, with no blank line) don't run together.
 const toHtml = (md: string, inline = false) =>
-  DOMPurify.sanitize((inline ? marked.parseInline(md, { async: false }) : marked.parse(md, { async: false })) as string);
+  DOMPurify.sanitize(
+    (inline ? marked.parseInline(md, { async: false, breaks: true }) : marked.parse(md, { async: false, breaks: true })) as string,
+  );
 
 /** Links in a reply open in the browser, not in the app's webview. */
 function openLink(e: MouseEvent) {
@@ -63,9 +71,35 @@ function openLink(e: MouseEvent) {
   if (/^https?:/i.test(href)) void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href)).catch(() => {});
 }
 
+/** Put `text` on the clipboard and say so. */
+function copy(text: string, what: string) {
+  navigator.clipboard.writeText(text).then(
+    () => flash(`Copied ${what}`, 1500),
+    () => flash("Couldn't copy that", 4000),
+  );
+}
+
 function Md({ text, className = "" }: { text: string; className?: string }) {
   const html = useMemo(() => toHtml(text), [text]);
-  return <div className={`md-doc rd-md ${className}`} dangerouslySetInnerHTML={{ __html: html }} onClick={openLink} />;
+  const el = useRef<HTMLDivElement>(null);
+  // Each code block gets a Copy for what's in it.
+  useEffect(() => {
+    const added: HTMLElement[] = [];
+    for (const pre of el.current?.querySelectorAll("pre") ?? []) {
+      const b = document.createElement("button");
+      b.className = "rd-copy";
+      b.textContent = "Copy";
+      b.title = "Copy this block";
+      b.onclick = (e) => {
+        e.stopPropagation();
+        copy((pre.querySelector("code") ?? pre).textContent?.replace(/\n$/, "") ?? "", "the block");
+      };
+      pre.append(b);
+      added.push(b);
+    }
+    return () => added.forEach((b) => b.remove());
+  }, [html]);
+  return <div ref={el} className={`md-doc rd-md ${className}`} dangerouslySetInnerHTML={{ __html: html }} onClick={openLink} />;
 }
 
 /** The images a reply names, shown in it; a click opens the preview. */
@@ -157,6 +191,9 @@ function CardReply({
           <summary>Details</summary>
           <Md text={card.details} />
         </details>
+      )}
+      {card.verdict && (
+        <p className={`rd-verdict is-${card.verdict.tone}`} dangerouslySetInnerHTML={{ __html: toHtml(card.verdict.text, true) }} />
       )}
     </article>
   );
@@ -400,16 +437,21 @@ export function Reader({
                       picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : picks}
                       onPick={pick}
                     />
-                    {!waiting && (
-                      <button
-                        className={`rd-point${pointing === e.n ? " is-busy" : ""}`}
-                        disabled={pointing !== null}
-                        onClick={() => void point(e)}
-                        title="Take a screenshot of this reply and tell the agent what to change about it"
-                      >
-                        {pointing === e.n ? "Capturing…" : "Point at this"}
+                    <div className="rd-tools">
+                      <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">
+                        Copy
                       </button>
-                    )}
+                      {!waiting && (
+                        <button
+                          className={`rd-point${pointing === e.n ? " is-busy" : ""}`}
+                          disabled={pointing !== null}
+                          onClick={() => void point(e)}
+                          title="Take a screenshot of this reply and tell the agent what to change about it"
+                        >
+                          {pointing === e.n ? "Capturing…" : "Point at this"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : e.kind === "steps" ? (
                   <Steps key={e.n} entry={e} root={root.replace(/\/+$/, "")} fresh={fresh(e)} />

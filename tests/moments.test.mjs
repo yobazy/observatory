@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
 const { within, RECENT_MS } = await import('../src/nebula/uselog.ts');
-const { snapshot, isMarkKey } = await import('../src/nebula/moments.ts');
+const mod = await import('../src/nebula/moments.ts');
+const { snapshot, isMarkKey } = mod;
 
 test('a moment keeps only the last minute of events', () => {
   const now = Date.parse('2026-10-18T14:02:11Z');
@@ -51,4 +52,25 @@ test('the snapshot names what was on screen', () => {
     agents: { waiting: 1, running: 1 },
     mode: 'dark',
   });
+});
+
+test('a task started from a moment points the agent at it', () => {
+  const { momentPrompt } = mod;
+  const p = momentPrompt('/m/2026-10-22T19-52-43-529Z', '  copying from the reader is hard ');
+  assert.ok(p.startsWith('copying from the reader is hard\n\n'));
+  assert.ok(p.includes('/m/2026-10-22T19-52-43-529Z'));
+  assert.ok(p.includes('screenshot.png'));
+  assert.ok(momentPrompt('/m/x', '').startsWith('Look into what I marked'));
+});
+
+test('a moment task goes to the last project picked, else the one you are in', () => {
+  const { momentProject } = mod;
+  const s = { projects: { p1: {}, p2: {} }, selectedProject: 'p1' };
+  assert.equal(momentProject(s), 'p1');
+  globalThis.localStorage.getItem = () => 'p2';
+  assert.equal(momentProject(s), 'p2');
+  globalThis.localStorage.getItem = () => 'gone';
+  assert.equal(momentProject(s), 'p1');
+  assert.equal(momentProject({ projects: {}, selectedProject: null }), null);
+  globalThis.localStorage.getItem = () => null;
 });

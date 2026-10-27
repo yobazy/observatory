@@ -10,27 +10,22 @@
   underneath on its own.
 -->
 
-### See where an agent's dev server is running
+### Works with nebula 0.45
 
-When an agent starts a dev server itself, its address now shows on the thread's row and above its terminal, as it already did for **Start**. No more scrolling back through the chat for `localhost:5173`. Only addresses that answer are shown, newest first, and one that stops goes grey.
+This version talks to nebula 0.45.0. If yours is older, the start screen offers **Update nebula to 0.45.0**. The daemon that's running keeps the old version until it restarts, so run `nebula kill` once your agents are idle. With 0.45, **Locate…** follows a project folder you've moved instead of saying it can't yet.
 
-### Hop between your last few projects
+### Answer a reply without typing
 
-A **Recent** panel above Projects lists the ones you were just in, newest first, with their badges. Click to switch; pick 3, 5 or 7 from its heading.
+Replies written as cards (a bold headline, status dots, a **Needs you** list, folded **Details**) now read as cards. Lettered options are buttons that build `1 A, 2 B` in the reply box, and when there's a recommended answer the empty box suggests it and **Tab** takes it. **Enter** sends and **⇧↵** adds a line. A card you've answered keeps a ✓ on what you sent.
 
-<img src="docs/release/recent.jpg" width="250" alt="The Recent panel: billing-api, marketing-site with one waiting, and admin-dashboard, above the project list">
+### Go back to the thread you were just in
 
-### Page through a long terminal
+**⌘[** returns to the thread you had open before this one, and **⌘K** lists your recent threads before you type. Archiving a thread now lands you on the one before it instead of an empty pane.
 
-**⌘↑ / ⌘↓** move a page at a time through a terminal's output, and **⇧⌘↑ / ⇧⌘↓** jump to either end. While you're scrolled up, **Jump to latest** takes you back. The scrollbar is a thin pill again, and a terminal holding a big block of wrapped output stays responsive.
+### Write an idea down with ⌘I
 
-### Restart a nebula that's stuck
+**⌘I** opens a small **New idea** box over whatever you're doing: type, pick a project if it isn't the one you're in, and **↵** saves it. The full Ideas view moves to **⇧⌘I**.
 
-If an older nebula is still running but the app can't reach it, the start screen now says so and offers **Restart nebula**, telling you first how many sessions a restart ends. Before, **Start nebula** just flipped back with nothing said.
+### And a smaller thing
 
-### And a few smaller things
-
-- The icon picker offers the project's own logos and icons, and **Choose image…** opens in the project's folder.
-- Quick capture's yellow button saves what you typed as an idea, and says where it goes.
-- The Ideas card stays in the sidebar when there are none.
-- An optional usage log (Settings › General) and **⇧⌘M** to mark a moment: they save what the app was doing, on your Mac only, so a rough spot is easy to report.
+- The project you're in stays in **Recent**, highlighted, so the list doesn't reshuffle every time you switch.
