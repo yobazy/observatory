@@ -255,6 +255,12 @@ function FileView({ file, rev, width, ...picking }: { file: PreviewFile; rev: nu
           <img src={previewUrl(file.path, rev)} alt={baseName(file.path)} />
         </div>
       );
+    case "video":
+      return (
+        <div className="fpv-stage fpv-image">
+          <video key={rev} src={previewUrl(file.path, rev)} controls autoPlay playsInline />
+        </div>
+      );
     case "pdf":
       return <iframe className="fpv-frame fpv-pdf" title={baseName(file.path)} src={previewUrl(file.path, rev)} />;
     default:
@@ -539,6 +545,8 @@ export function HoverCard() {
           />
         ) : file.kind === "image" ? (
           <img className="fpv-card-img" src={previewUrl(file.path)} alt="" />
+        ) : file.kind === "video" ? (
+          <video className="fpv-card-img" src={previewUrl(file.path)} muted autoPlay loop playsInline />
         ) : file.kind === "markdown" && text !== null ? (
           <article className="md-doc md-doc-mini" dangerouslySetInnerHTML={{ __html: renderMarkdown(text.slice(0, 4000), file.path) }} />
         ) : text !== null ? (
