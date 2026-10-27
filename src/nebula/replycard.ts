@@ -259,13 +259,17 @@ export const isCard = (c: Card) => !!(c.headline || c.chips.length || c.asks.len
 
 /** What tapping answers sends: "1 A, 2 B", then anything typed after it. */
 export function answerText(picks: Record<number, string>, typed: string): string {
-  const said = Object.entries(picks)
-    .filter(([, l]) => l)
-    .sort(([a], [b]) => Number(a) - Number(b))
-    .map(([n, l]) => `${n} ${l}`)
-    .join(", ");
+  const all = Object.entries(picks)
+    .filter(([, l]) => l.trim())
+    .sort(([a], [b]) => Number(a) - Number(b));
+  // A lettered answer is "2 B"; one written in ("Other…") gets a line of its own.
+  const letters = all.filter(([, l]) => /^[A-Z]$/.test(l));
+  const written = all.filter(([, l]) => !/^[A-Z]$/.test(l)).map(([n, l]) => `${n}: ${l.trim()}`);
+  const said = [letters.map(([n, l]) => `${n} ${l}`).join(", "), ...written].filter(Boolean).join("\n");
   const rest = typed.trim();
-  return said && rest ? `${said}. ${rest}` : said || rest;
+  if (!said || !rest) return said || rest;
+  // Answers to earlier replies, from the tray, keep a paragraph of their own.
+  return written.length || rest.startsWith("About your reply") ? `${said}\n\n${rest}` : `${said}. ${rest}`;
 }
 
 /** A reply's opening words, to say which one you mean: its first line with
@@ -292,6 +296,19 @@ export function pointerText(quote: string, shot: string | null, said: string): s
  *  so a reply can show what you picked. Nothing for anything else, like
  *  "3D printing". */
 export function answersIn(text: string): Record<number, string> {
+  return leadingAnswers(text).picks;
+}
+
+/** Every answer a message gives: the lettered ones it opens with, and any
+ *  written in on a line of their own ("2: keep it for a week"). */
+export function answersSaid(text: string): Record<number, string> {
+  const out = { ...answersIn(text) };
+  for (const m of text.matchAll(/^(\d+): (\S.*)$/gm)) out[Number(m[1])] ??= m[2].trim();
+  return out;
+}
+
+/** The answers a message opens with and what it says after them. */
+function leadingAnswers(text: string): { picks: Record<number, string>; rest: string } {
   // "1 A, 2 B", and the ways dictation writes it: "1a 2b", "1: A and 2: B".
   // Read one pair at a time, so a long message can't make it backtrack.
   const pair = /\s*(?:[,;]\s*)?(?:and\s+)?(\d+)[ \t]*(?::[ \t]*)?([a-z])(?![a-z]|\.[a-z])/iy;
@@ -303,7 +320,18 @@ export function answersIn(text: string): Record<number, string> {
   // Two answers or more can run into whatever else you said; one alone needs
   // punctuation or the end after it, so "3D printing" isn't an answer.
   const rest = text.slice(at);
-  return count && (/^\s*($|[.;,!\n])/.test(rest) || (count >= 2 && /^\s/.test(rest))) ? out : {};
+  return count && (/^\s*($|[.;,!\n])/.test(rest) || (count >= 2 && /^\s/.test(rest)))
+    ? { picks: out, rest: rest.replace(/^\s*[.;,!]?\s*/, "") }
+    : { picks: {}, rest: text };
+}
+
+/** The answers you're typing or dictating into the box ("2 a, 3 b"), as
+ *  taps on the card they answer, with the rest of what you said. Only
+ *  answers the card offers count; anything else leaves the text alone. */
+export function typedAnswers(card: Card | null, text: string): { picks: Record<number, string>; rest: string } {
+  const got = card?.asks.length ? leadingAnswers(text) : { picks: {}, rest: text };
+  const known = Object.entries(got.picks).every(([n, l]) => card!.asks.some((a) => a.n === Number(n) && a.options.some((o) => o.letter === l)));
+  return Object.keys(got.picks).length && known ? got : { picks: {}, rest: text };
 }
 
 /** The answers a card recommends, for the reply box to offer: what follows
@@ -320,4 +348,102 @@ export function suggested(card: Card): Record<number, string> {
     if (rec) out[a.n] = rec.letter;
   }
   return out;
+}
+
+/** Decisions earlier replies asked that the message after them didn't
+ *  answer, newest last, for the reader to keep in view. The latest reply's
+ *  own are on its card, so they don't count. */
+export function openDecisions(
+  entries: { n: number; kind: string; text: string }[],
+  latest: number,
+): { entry: number; quote: string; asks: Ask[] }[] {
+  const out: { entry: number; quote: string; asks: Ask[] }[] = [];
+  let pending: { entry: number; quote: string; asks: Ask[] } | null = null;
+  for (const e of entries) {
+    if (e.kind === "claude") {
+      const asks = readCard(e.text).asks.filter((a) => a.options.length);
+      if (asks.length && e.n !== latest) pending = { entry: e.n, quote: replyQuote(e.text), asks };
+    } else if (e.kind === "you") {
+      // "About your reply that starts "…": 2 B" answers an earlier one.
+      for (const m of e.text.matchAll(/^About your reply that starts "(.+)": ([^\n]+)$/gm)) {
+        const said = answersSaid(m[2]);
+        for (const o of out) if (o.quote === m[1]) o.asks = o.asks.filter((a) => !said[a.n]);
+      }
+    }
+    if (e.kind === "you" && pending) {
+      // A message pointing at a reply says which first, then the answers.
+      const said = answersSaid(e.text);
+      const got = Object.keys(said).length ? said : answersSaid(e.text.split(/\n\s*\n/).slice(1).join("\n\n"));
+      const left = pending.asks.filter((a) => !got[a.n]);
+      if (left.length) out.push({ ...pending, asks: left });
+      pending = null;
+    }
+  }
+  return out.filter((o) => o.asks.length);
+}
+
+/** What "Reply about this" sends: the passage you selected in a reply,
+ *  quoted, then what you said about it. */
+export function passageText(passage: string, said: string, max = 600): string {
+  const clipped = passage.trim().length > max ? `${passage.trim().slice(0, max - 1).trimEnd()}…` : passage.trim();
+  const quoted = clipped
+    .split("\n")
+    .map((l) => `> ${l}`.trimEnd())
+    .join("\n");
+  return `About this part of your reply:\n${quoted}\n\n${said.trim()}`;
+}
+
+/** The thread's turns for the outline beside it: each of your messages,
+ *  and how the last reply to it ended (its verdict, else its worst chip). */
+export function turnsOf(entries: { n: number; kind: string; text: string }[]): { n: number; prompt: string; tone: Tone | null }[] {
+  const out: { n: number; prompt: string; tone: Tone | null }[] = [];
+  for (const e of entries) {
+    if (e.kind === "you") out.push({ n: e.n, prompt: replyQuote(e.text, 60), tone: null });
+    else if (e.kind === "claude" && out.length) {
+      const c = readCard(e.text);
+      const worst = (["bad", "wait", "done", "idle"] as Tone[]).find((t) => c.chips.some((x) => x.tone === t)) ?? null;
+      const tone = c.verdict?.tone ?? worst;
+      if (tone) out[out.length - 1].tone = tone;
+    }
+  }
+  return out;
+}
+
+/** A reply's two pictures as before and after, when it says which is which:
+ *  by their names ("reader-before.png") or on the lines naming them. */
+export function beforeAfter(images: string[], text: string): [string, string] | null {
+  if (images.length !== 2) return null;
+  const said = (p: string) => {
+    const name = p.split("/").pop() ?? p;
+    const line = text.split("\n").find((l) => l.includes(p)) ?? "";
+    for (const where of [name, line]) {
+      const before = /\bbefore\b/i.test(where.replace(/[-_.]/g, " "));
+      const after = /\bafter\b/i.test(where.replace(/[-_.]/g, " "));
+      if (before !== after) return before ? "before" : "after";
+    }
+    return null;
+  };
+  const [a, b] = images.map(said);
+  if (a === "before" && b === "after") return [images[0], images[1]];
+  if (a === "after" && b === "before") return [images[1], images[0]];
+  return null;
+}
+
+/** A reply kept as a Markdown note: named after its headline (else its
+ *  opening words), with where it came from in the note's properties. */
+export function noteFor(text: string, from: { thread: string; project: string; date: string }): { name: string; body: string } {
+  const card = readCard(text);
+  const name = (card.headline ?? replyQuote(text, 80)).replace(/\*\*|__|`/g, "").replace(/[.:]+$/, "").trim() || "Reply";
+  const yaml = (s: string) => JSON.stringify(s);
+  const body = ["---", "tags: [observatory]", `thread: ${yaml(from.thread)}`, `project: ${yaml(from.project)}`, `saved: ${from.date}`, "---", "", text.trim(), ""].join("\n");
+  return { name, body };
+}
+
+/** The reply a thread is waiting on you to decide: its latest, when that
+ *  asks decisions and nothing you said came after it. */
+export function pendingCard(entries: { n: number; kind: string; text: string }[]): { n: number; text: string; card: Card } | null {
+  const last = [...entries].reverse().find((e) => e.kind === "claude" || e.kind === "you");
+  if (!last || last.kind !== "claude") return null;
+  const card = readCard(last.text);
+  return card.asks.some((a) => a.options.length) ? { n: last.n, text: last.text, card } : null;
 }
