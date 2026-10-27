@@ -27,7 +27,10 @@ import { ProjectIcon, useProjectColorStyle } from "./ProjectIcon";
 import { locateProject } from "../nebula/relocate";
 import { sameSession, type Agent, type SessionRef, type TerminalTab, type Worktree } from "../nebula/types";
 import { cyclePriority, isFollowUp, isPinned, moveTask, toggleFlag } from "../nebula/organize";
-import { FlagGlyph, PinGlyph, PriorityMark, useTaskColorStyle } from "./Organize";
+import { FlagGlyph, PinGlyph, PriorityMark, TagListDialog, useTaskColorStyle } from "./Organize";
+import { hasTerms, searchTerms, tagCounts, tagList, threadShows } from "../nebula/threadtags";
+import { tagProjectNow } from "../nebula/taggingRunner";
+import type { DesktopPrefs } from "../nebula/theme";
 import { reorderKey, useReorder } from "./useReorder";
 import { useVerdict } from "../nebula/verdicts";
 
@@ -47,31 +50,27 @@ type NewTask = (worktree?: string, seed?: Seed) => void;
 type Picks = { ids: Set<string>; click: (e: React.MouseEvent, id: string) => boolean };
 const PicksContext = createContext<Picks | null>(null);
 
-/** A search's words, each of which must appear somewhere in a row. */
-function searchTerms(query: string): string[] {
-  return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-}
+/** What the list is narrowed to: a search's words, and a tag chip. */
+type Filter = { terms: string[]; tag: string | null; prefs: DesktopPrefs };
 
-function matches(terms: string[], ...parts: (string | null | undefined)[]): boolean {
-  const text = parts.filter(Boolean).join("\n").toLowerCase();
-  return terms.every((t) => text.includes(t));
-}
-
-/** A task matches on its name, prompts, agent, model or branch. */
-function agentMatches(a: Agent, wt: Worktree, terms: string[]): boolean {
-  return matches(
-    terms,
+/** A task matches on its name, prompts, agent, model or branch, and on
+ *  the chip's tag when one is on. */
+function agentMatches(a: Agent, wt: Worktree, f: Filter): boolean {
+  return threadShows(f.prefs, a.id, f.tag, f.terms, [
     a.name,
     a.custom_harness ?? KIND_LABEL[a.kind],
     a.model,
     wt.branch,
     ...a.recent_prompts.map((p) => p.text),
-  );
+  ]);
 }
 
-function terminalMatches(t: TerminalTab, wt: Worktree, terms: string[]): boolean {
-  return matches(terms, t.name, t.run_command, wt.branch);
+/** Terminals carry no tags, so a chip hides them. */
+function terminalMatches(t: TerminalTab, wt: Worktree, f: Filter): boolean {
+  return !f.tag && hasTerms(f.terms, [t.name, t.run_command, wt.branch]);
 }
+
+const filtering = (f: Filter) => f.terms.length > 0 || f.tag !== null;
 
 export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: () => void }) {
   const state = useAppState();
@@ -87,20 +86,39 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
   const [query, setQuery] = useState("");
   const searchBox = useRef<HTMLInputElement>(null);
   const terms = useMemo(() => searchTerms(query), [query]);
-  // A search belongs to the project it was typed in.
-  useEffect(() => setQuery(""), [project?.id]);
-  // The first row a search shows, top to bottom: Enter opens it.
+  // The tag chip that's on: only its threads show.
+  const [chip, setChip] = useState<string | null>(null);
+  const [editingTags, setEditingTags] = useState(false);
+  const [tagging, setTagging] = useState(false);
+  // A search and a chip belong to the project they were set in.
+  useEffect(() => {
+    setQuery("");
+    setChip(null);
+  }, [project?.id]);
+  const tags = project ? tagList(state.prefs, project.repo_path) : [];
+  // A chip whose tag was deleted or renamed lets go.
+  const tag = chip && tags.includes(chip) ? chip : null;
+  const filter = useMemo((): Filter => ({ terms, tag, prefs: state.prefs }), [terms, tag, state.prefs]);
+  const threads = useMemo(() => {
+    const wts = new Set(worktrees.map((w) => w.id));
+    return Object.values(state.agents).filter((a) => wts.has(a.worktree_id));
+  }, [state.agents, worktrees]);
+  const counts = useMemo(
+    () => (project ? tagCounts(threads, state.prefs, project.repo_path) : new Map<string, number>()),
+    [threads, state.prefs, project],
+  );
+  // The first row a search or chip shows, top to bottom: Enter opens it.
   const firstMatch = useMemo((): SessionRef | null => {
-    if (!terms.length) return null;
+    if (!filtering(filter)) return null;
     for (const wt of worktrees) {
       const agents = [...worktreeAgents(state, wt.id), ...worktreeAgents(state, wt.id, true)];
-      const a = agents.find((a) => agentMatches(a, wt, terms));
+      const a = agents.find((a) => agentMatches(a, wt, filter));
       if (a) return { Agent: a.id };
-      const t = worktreeTerminals(state, wt.id).find((t) => terminalMatches(t, wt, terms));
+      const t = worktreeTerminals(state, wt.id).find((t) => terminalMatches(t, wt, filter));
       if (t) return { Terminal: t.id };
     }
     return null;
-  }, [state, worktrees, terms]);
+  }, [state, worktrees, filter]);
 
   const bandsRef = useRef<HTMLDivElement>(null);
   const [pickedIds, setPicked] = useState<Set<string>>(() => new Set());
@@ -112,7 +130,7 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
   useEffect(() => {
     clearPicks();
     anchor.current = null;
-  }, [project?.id, query]);
+  }, [project?.id, query, tag]);
   const openAgent = state.selectedSession && "Agent" in state.selectedSession ? state.selectedSession.Agent : null;
   const picks: Picks = {
     ids: pickedIds,
@@ -220,6 +238,41 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
         </div>
       )}
 
+      {/* Before the project has a tag, only the link to make some. */}
+      <div className="thread-chips" role="group" aria-label="Show threads tagged">
+        {tags.map((t) => (
+          <button
+            key={t}
+            className={`tag-chip${tag === t ? " is-on" : ""}`}
+            aria-pressed={tag === t}
+            title={tag === t ? "Show every thread again" : `Show only threads tagged #${t}`}
+            onClick={() => setChip(tag === t ? null : t)}
+          >
+            #{t} <span className="thread-chip-count">{counts.get(t) ?? 0}</span>
+          </button>
+        ))}
+        <button
+          className={`link-btn thread-chips-edit${tags.length ? "" : " is-alone"}`}
+          title="Add, rename or delete this project's tags for its threads"
+          onClick={() => setEditingTags(true)}
+        >
+          Edit tags…
+        </button>
+        {tags.length > 0 && project && (
+          <button
+            className="link-btn thread-chips-edit"
+            title="Have the tagging command tag this project's untagged threads now"
+            disabled={tagging}
+            onClick={() => {
+              setTagging(true);
+              void tagProjectNow(project.repo_path).finally(() => setTagging(false));
+            }}
+          >
+            {tagging ? "Tagging…" : "Tag untagged"}
+          </button>
+        )}
+      </div>
+
       <div className="sessions-search">
         <input
           ref={searchBox}
@@ -264,14 +317,25 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
       <PicksContext.Provider value={picks}>
       <div className="bands" ref={bandsRef} onMouseOver={preview.onMouseOver} onMouseLeave={preview.onMouseLeave}>
         {worktrees.map((wt) => (
-          <Band key={wt.id} worktree={wt} terms={terms} onNewTask={onNewTask} onMenu={onMenu} />
+          <Band key={wt.id} worktree={wt} filter={filter} onNewTask={onNewTask} onMenu={onMenu} />
         ))}
-        {terms.length > 0 && !firstMatch && <p className="sessions-no-match">No tasks match “{query.trim()}”.</p>}
+        {tag && !firstMatch ? (
+          <p className="sessions-no-match">
+            No threads tagged #{tag}
+            {terms.length > 0 && <> match “{query.trim()}”</>}.{" "}
+            <button className="link-btn" onClick={() => setChip(null)}>
+              Show all
+            </button>
+          </p>
+        ) : (
+          terms.length > 0 && !firstMatch && <p className="sessions-no-match">No tasks match “{query.trim()}”.</p>
+        )}
       </div>
       </PicksContext.Provider>
       {picked.length > 1 && <PickBar agents={picked} onClear={clearPicks} />}
       {rowMenu.element}
       {preview.element}
+      {editingTags && <TagListDialog repo={project.repo_path} onClose={() => setEditingTags(false)} />}
     </section>
   );
 }
@@ -280,19 +344,19 @@ type OpenMenu = ReturnType<typeof useRowMenu>["openFor"];
 
 function Band({
   worktree,
-  terms,
+  filter,
   onNewTask,
   onMenu,
 }: {
   worktree: Worktree;
-  terms: string[];
+  filter: Filter;
   onNewTask: NewTask;
   onMenu: OpenMenu;
 }) {
   const state = useAppState();
   const [showArchived, setShowArchived] = useState(false);
   // A filtered list is no order to drag rows into.
-  const searching = terms.length > 0;
+  const searching = filtering(filter);
   const reorder = useReorder((id, to, seen) => {
     const a = getState().agents[id];
     if (a) void moveTask(a, to, seen);
@@ -302,11 +366,11 @@ function Band({
   const ordered = reorder.frozen
     ? [...sorted].sort((a, b) => rank(reorder.frozen!, a.id) - rank(reorder.frozen!, b.id))
     : sorted;
-  const agents = searching ? ordered.filter((a) => agentMatches(a, worktree, terms)) : ordered;
+  const agents = searching ? ordered.filter((a) => agentMatches(a, worktree, filter)) : ordered;
   const allArchived = worktreeAgents(state, worktree.id, true);
-  const archived = searching ? allArchived.filter((a) => agentMatches(a, worktree, terms)) : allArchived;
+  const archived = searching ? allArchived.filter((a) => agentMatches(a, worktree, filter)) : allArchived;
   const allTerminals = worktreeTerminals(state, worktree.id);
-  const terminals = searching ? allTerminals.filter((t) => terminalMatches(t, worktree, terms)) : allTerminals;
+  const terminals = searching ? allTerminals.filter((t) => terminalMatches(t, worktree, filter)) : allTerminals;
   // Picking an archived task elsewhere (the follow-up list) shows it here;
   // archiving the open one leaves the list as it was.
   const selectedId = state.selectedSession && "Agent" in state.selectedSession ? state.selectedSession.Agent : null;
@@ -320,7 +384,7 @@ function Band({
   const git = state.git[worktree.id];
 
   if (searching && !agents.length && !archived.length && !terminals.length) return null;
-  // A search shows the archived tasks it finds without being asked.
+  // A search or chip shows the archived tasks it finds without being asked.
   const archivedOpen = showArchived || searching;
 
   return (
