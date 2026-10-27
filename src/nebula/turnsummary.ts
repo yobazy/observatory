@@ -25,6 +25,8 @@ export interface Turn {
   steps: Step[];
   dropped: number;
   said: string | null;
+  /** The end of what it said, which `said` cuts off (turns.rs). */
+  saidEnd?: string | null;
   interrupted: boolean;
 }
 

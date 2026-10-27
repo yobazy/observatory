@@ -43,7 +43,15 @@ test('a card reply reads as its parts', () => {
   assert.equal(c.asksNote, "I'd pick **1A, 2B**.");
   assert.match(c.details, /^- The data side is done\./);
   assert.deepEqual(c.images, ['/tmp/shots/reader-after.png']);
+  assert.deepEqual(c.videos, []);
   assert.ok(isCard(c));
+});
+
+test('a card names its videos, spaces and all when in backticks', () => {
+  const c = readCard(
+    '**The cut is open.**\n\nWatch: `/Users/me/Movies/Shiver shroom - side by side.mp4` (17 seconds)\n\nAlso /tmp/raw.MOV and `/tmp/notes.txt`.',
+  );
+  assert.deepEqual(c.videos, ['/Users/me/Movies/Shiver shroom - side by side.mp4', '/tmp/raw.MOV']);
 });
 
 test('a plain reply stays prose', () => {
@@ -208,6 +216,26 @@ test('a card offers the answers it recommends', async () => {
 1. Ship?  A today · B Monday
 
 I'd pick 1C.`)), {});
+});
+
+test('a reply closes with a verdict, taken out of the card', async () => {
+  const { readVerdict } = await import('../src/nebula/replycard.ts');
+  assert.deepEqual(readVerdict('Done.\n\n**✅ Safe to close.** #64 is in review; memory has it'), { tone: 'done', text: 'Safe to close. #64 is in review; memory has it' });
+  assert.deepEqual(readVerdict('**🟠 Keep open:** waiting on your answer to 1'), { tone: 'wait', text: 'Keep open: waiting on your answer to 1' });
+  assert.deepEqual(readVerdict("- 🔴 Do not close: uncommitted work on main\n"), { tone: 'bad', text: 'Do not close: uncommitted work on main' });
+  assert.deepEqual(readVerdict('**✅ Safe to close**'), { tone: 'done', text: 'Safe to close' });
+  assert.equal(readVerdict('✅ Tests pass · 🟠 Not committed'), null);
+  // The last line counts: a quoted rule earlier doesn't.
+  assert.equal(readVerdict('✅ Safe to close, it said.\n\n**🔴 Don\'t close:** unpushed').tone, 'bad');
+  assert.equal(readVerdict('✅ Safe to close\n\nmore after'), null);
+  const card = readCard(`**Shipped.**
+
+**Details**
+- Merged.
+
+**✅ Safe to close.**`);
+  assert.deepEqual(card.verdict, { tone: 'done', text: 'Safe to close.' });
+  assert.equal(card.details, '- Merged.');
 });
 
 const decisions = `9. ✅ **On my way looked already on:** her screenshot shows the bug fixed yesterday.

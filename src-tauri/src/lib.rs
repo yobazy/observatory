@@ -2,6 +2,7 @@ mod activity;
 mod automations;
 mod cards;
 mod codex_log;
+mod control;
 mod daemon;
 mod editor;
 mod gh;
@@ -43,6 +44,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
             tray::install(app.handle())?;
+            control::start(app.handle());
             Ok(())
         })
         .manage(daemon::DaemonState::default())
@@ -52,6 +54,7 @@ pub fn run() {
         .manage(turns::TurnsState::default())
         .manage(transcript::TranscriptState::default())
         .manage(preview::PreviewScope::default())
+        .manage(control::ControlState::default())
         .register_uri_scheme_protocol("preview", preview::serve)
         .invoke_handler(tauri::generate_handler![
             daemon::connect,
@@ -80,6 +83,7 @@ pub fn run() {
             moments::save_moment,
             moments::annotate_moment,
             moments::moments_dir,
+            control::control_reply,
             notes::save_note,
             serving::local_ports_open,
             activity::activity_report,

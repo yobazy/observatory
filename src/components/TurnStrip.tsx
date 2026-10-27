@@ -6,6 +6,7 @@ import { getState, useAppState } from "../nebula/store";
 import { changedFiles } from "../nebula/git";
 import { relativeTime } from "../nebula/status";
 import { duration, summarize, type Turn } from "../nebula/turnsummary";
+import { noteTurn } from "../nebula/verdicts";
 import { Resizer, TURN_STRIP, useColumnWidth } from "./Resizer";
 import type { Agent, Worktree } from "../nebula/types";
 
@@ -78,7 +79,10 @@ export function useTurn(agent: Agent): Turn | null {
         const t = isPreview()
           ? (await import("../nebula/mock")).mockTurn(getState(), agent.id)
           : await invoke<Turn | null>("thread_turn", { session, kind: agent.kind });
-        if (live) setTurn(t);
+        if (live) {
+          setTurn(t);
+          noteTurn(getState().agents[agent.id] ?? agent, t);
+        }
       } catch {
         // No log to read: the strip just doesn't show.
       }

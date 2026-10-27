@@ -23,6 +23,15 @@ cd src-tauri && cargo fmt --check && cargo clippy --all-targets --locked -- -D w
   from its menu"), not "feat:" prefixes.
 - Match the surrounding code's style and comment density. Rust is formatted by `cargo fmt`.
 
+## Seeing it work
+
+Drive the sandbox app yourself with `scripts/drive`, instead of asking the user to click:
+`scripts/sandbox.sh up` starts it in the background (the first build takes minutes), then
+`scripts/drive select|open|click|type|key|text|shot …` (run it with `-h` for the list).
+`scripts/drive replay <moment dir>` puts a marked moment's view and thread back on screen.
+Screenshots need Screen Recording allowed for the terminal app that started it. `scripts/sandbox.sh
+down` stops it.
+
 ## Reviewing
 
 When reviewing a PR, flag correctness bugs, breaks in the rules above, and protocol changes

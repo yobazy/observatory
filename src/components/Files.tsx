@@ -12,10 +12,11 @@ import { useTurn } from "./TurnStrip";
 
 const KIND_MARK: Record<string, string> = { html: "◧", htm: "◧", md: "¶", markdown: "¶", pdf: "⎘" };
 const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif|ico|bmp)$/i;
+const VIDEO = /\.(mp4|m4v|mov|webm)$/i;
 
 function mark(path: string): string {
   const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  return KIND_MARK[ext] ?? (IMAGE.test(path) ? "▣" : "≡");
+  return KIND_MARK[ext] ?? (IMAGE.test(path) ? "▣" : VIDEO.test(path) ? "▶" : "≡");
 }
 
 /** Where a file sits, said the short way: inside the checkout from its root,

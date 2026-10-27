@@ -5,6 +5,8 @@
 #
 #   scripts/sandbox.sh start   # boot it (idempotent)
 #   scripts/sandbox.sh app     # run the app in dev mode against it
+#   scripts/sandbox.sh up      # the same in the background, ready for scripts/drive
+#   scripts/sandbox.sh down    # stop what `up` started
 #   scripts/sandbox.sh e2e     # protocol test: worktree, agent, attach, statuses
 #   scripts/sandbox.sh stop    # stop the sandbox daemon (never the real one)
 #   scripts/sandbox.sh automations        # install a throwaway launchd job
@@ -18,6 +20,8 @@ ROOT="${NEBULA_SANDBOX:-$PWD/.sandbox}"
 export NEBULA_RUNTIME_DIR=/tmp/observatory-sandbox
 export NEBULA_DATA_DIR="$ROOT/data"
 export NEBULA_AGENT_CMD="$PWD/scripts/fake-agent.sh"
+# The dev build listens here for scripts/drive (control.rs).
+export OBSERVATORY_CONTROL="$NEBULA_RUNTIME_DIR/control.sock"
 
 start() {
   mkdir -p "$NEBULA_DATA_DIR" "$NEBULA_RUNTIME_DIR"
@@ -93,12 +97,53 @@ automations_clean() {
   echo "removed $JOB"
 }
 
+# The app in the background, its log in the sandbox, back once scripts/drive
+# can reach it (the first build takes minutes).
+up() {
+  start
+  if scripts/drive state >/dev/null 2>&1; then echo "app already up"; return; fi
+  # Vite's port, past any dev build already running (the usual one is 1420).
+  local port=1430
+  while lsof -iTCP:$port -sTCP:LISTEN >/dev/null 2>&1; do port=$((port + 1)); done
+  OBSERVATORY_DEV_PORT=$port nohup npm run tauri dev -- --config "{\"build\":{\"devUrl\":\"http://localhost:$port\"}}" >"$ROOT/app.log" 2>&1 &
+  echo $! >"$ROOT/app.pid"
+  for _ in $(seq 1 600); do
+    scripts/drive state >/dev/null 2>&1 && { echo "app up (log $ROOT/app.log)"; return; }
+    kill -0 "$(cat "$ROOT/app.pid")" 2>/dev/null || { echo "app exited; see $ROOT/app.log" >&2; tail -20 "$ROOT/app.log" >&2; exit 1; }
+    sleep 1
+  done
+  echo "app not reachable after 10 minutes; see $ROOT/app.log" >&2
+  exit 1
+}
+
+killtree() {
+  local child
+  for child in $(pgrep -P "$1"); do killtree "$child"; done
+  kill "$1" 2>/dev/null || true
+}
+
+down() {
+  local pid
+  pid=$(cat "$ROOT/app.pid" 2>/dev/null || true)
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    # npm starts tauri, which starts vite and the app: stop all of them,
+    # deepest first, or the app outlives its parents.
+    killtree "$pid"
+    echo "stopped the app"
+  else
+    echo "app not running"
+  fi
+  rm -f "$ROOT/app.pid"
+}
+
 case "${1:-}" in
   start) start ;;
   stop) stop ;;
   app) start && npm run tauri dev ;;
+  up) up ;;
+  down) down ;;
   e2e) start && (cd src-tauri && cargo run -q --example e2e) ;;
   automations) automations ;;
   automations-clean) automations_clean ;;
-  *) echo "usage: $0 start|app|e2e|stop|automations|automations-clean" >&2; exit 2 ;;
+  *) echo "usage: $0 start|app|up|down|e2e|stop|automations|automations-clean" >&2; exit 2 ;;
 esac

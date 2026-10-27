@@ -28,6 +28,9 @@ import { startMoments } from "./nebula/moments";
 
 startUseLog();
 startMoments();
+// The control socket an agent drives the dev build with (control.ts); a
+// release build leaves it out.
+if (import.meta.env.DEV && "__TAURI_INTERNALS__" in globalThis) void import("./nebula/control").then((m) => m.startControl());
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

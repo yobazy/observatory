@@ -14,7 +14,8 @@ export default defineConfig(() => ({
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
-    port: 1420,
+    // `scripts/sandbox.sh up` picks another, beside a dev build already running.
+    port: Number(process.env.OBSERVATORY_DEV_PORT) || 1420,
     strictPort: true,
     host: host || false,
     hmr: host
