@@ -10,22 +10,28 @@
   underneath on its own.
 -->
 
-### Works with nebula 0.45
+### Stay in the Read view
 
-This version talks to nebula 0.45.0. If yours is older, the start screen offers **Update nebula to 0.45.0**. The daemon that's running keeps the old version until it restarts, so run `nebula kill` once your agents are idle. With 0.45, **Locate…** follows a project folder you've moved instead of saying it can't yet.
+The Read view now does most of what you'd go to the terminal for. Say or type `2 a, 3 b` and those options light up on the card. Decisions you haven't answered wait in a tray above the reply box, and **Other…** takes an answer in your own words. Select part of a reply and click **Reply about this** to quote just that part, or **Copy** it. A "New since you were here" line marks where you left off, and older turns fold away. **⌘F** searches the thread, and **⌘↑**/**⌘↓** jump between your messages. Edits show a **Diff**, and a failed step shows the end of its output. The view also keeps up on its own now: a reply that lands just as the thread finishes shows up without switching to the terminal and back.
 
-### Answer a reply without typing
+### Close a thread in one click
 
-Replies written as cards (a bold headline, status dots, a **Needs you** list, folded **Details**) now read as cards. Lettered options are buttons that build `1 A, 2 B` in the reply box, and when there's a recommended answer the empty box suggests it and **Tab** takes it. **Enter** sends and **⇧↵** adds a line. A card you've answered keeps a ✓ on what you sent.
+When an agent ends a reply with **✅ Safe to close**, a **Close thread** button appears in the header and at the foot of the reply. Clicking it archives the thread and takes you back to the thread you had open before, with **Undo** in case you didn't mean it. **🟠 Keep open** and **🔴 Don't close** show their reason in the header instead.
 
-### Go back to the thread you were just in
+### Tags and priorities
 
-**⌘[** returns to the thread you had open before this one, and **⌘K** lists your recent threads before you type. Archiving a thread now lands you on the one before it instead of an empty pane.
+Tag threads from their menu, then tap a tag's chip above a project's list to see only those threads. **Tag untagged** asks an agent to tag the rest from the project's own tags. Right-click a thread or project and choose **Priority…**, or press **P** on a selected thread: urgent and high go to the top of their list, low to the bottom.
 
-### Write an idea down with ⌘I
+### See your scheduled jobs
 
-**⌘I** opens a small **New idea** box over whatever you're doing: type, pick a project if it isn't the one you're in, and **↵** saves it. The full Ideas view moves to **⇧⌘I**.
+A new **Automations** view lists your launchd jobs with when each last ran and its schedule, and flags jobs that are stale or failing. A health dot in the footer shows when something needs a look. Run a job now, or open its log.
 
-### And a smaller thing
+### Watch videos a reply names
 
-- The project you're in stays in **Recent**, highlighted, so the list doesn't reshuffle every time you switch.
+A reply that names a `.mp4`, `.mov` or `.webm` file shows a player right in the Read view, and the preview plays it too.
+
+### And smaller things
+
+- Start a task straight from a marked moment (**⇧⌘M**), in the project you pick, without leaving what you're doing.
+- **Open** in the preview and Files menus opens any file in its default app, not just pages in the browser.
+- Paths with spaces in the terminal are clickable, even when the line wraps at a space.
