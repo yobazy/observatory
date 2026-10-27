@@ -47,6 +47,7 @@ test('the snapshot names what was on screen', () => {
     loaded: true,
     project: 'demo-api',
     session: { kind: 'agent', id: 'a1', name: 'Fix login', harness: 'claude', status: 'waiting', branch: 'fix-login' },
+    pane: 'terminal',
     preview: ['mock.html'],
     notice: null,
     agents: { waiting: 1, running: 1 },
