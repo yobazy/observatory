@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
-import { flash, setState, useAppState } from "../nebula/store";
+import { flash, getState, setState, useAppState } from "../nebula/store";
 import {
   AGENTS_HEAD,
   EXPERIMENTAL,
@@ -25,7 +25,7 @@ import { QUICK_CAPTURE_CHOICES, QUICK_CAPTURE_DEFAULT } from "../nebula/desktop"
 import { play } from "../nebula/delight";
 import { chosenEditor, useEditors } from "./Editor";
 import { getVersion } from "@tauri-apps/api/app";
-import { isPreview } from "../nebula/client";
+import { isPreview, pickFolder } from "../nebula/client";
 import { DEFAULT_CAP, globalCap } from "../nebula/batch";
 import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
 import { clearUseLog, useLogPath } from "../nebula/uselog";
@@ -96,6 +96,7 @@ export function SettingsView() {
             <>
               <Rows rows={GENERAL} settings={settings} save={save} />
               <Previews />
+              <ReadView />
               <DispatchSettings />
               <Updates />
               <UsageLog />
@@ -158,6 +159,99 @@ function Handoffs() {
             }
           >
             {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+      </div>
+    </Group>
+  );
+}
+
+const READER_TEXT = [
+  { id: "small", label: "Small" },
+  { id: undefined, label: "Medium" },
+  { id: "large", label: "Large" },
+] as const;
+
+const READER_WIDTH = [
+  { id: undefined, label: "Reading width" },
+  { id: "wide", label: "Full width" },
+] as const;
+
+/** How the Read view (Reader.tsx) sets a thread: its text size and width. */
+function ReadView() {
+  const { prefs } = useAppState();
+  return (
+    <Group title="Read view">
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label" id="reader-text-label">
+            Text size
+          </span>
+          <span className="setting-hint">How large replies read when a thread is shown as Read.</span>
+        </div>
+        <div className="segmented segmented-sm" role="radiogroup" aria-labelledby="reader-text-label">
+          {READER_TEXT.map((o) => (
+            <button
+              key={o.label}
+              role="radio"
+              aria-checked={prefs.readerText === o.id}
+              className={prefs.readerText === o.id ? "is-on" : ""}
+              onClick={() => void savePrefs({ ...prefs, readerText: o.id })}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label" id="reader-width-label">
+            Width
+          </span>
+          <span className="setting-hint">A column kept to a comfortable line length, or the whole pane.</span>
+        </div>
+        <div className="segmented segmented-sm" role="radiogroup" aria-labelledby="reader-width-label">
+          {READER_WIDTH.map((o) => (
+            <button
+              key={o.label}
+              role="radio"
+              aria-checked={prefs.readerWidth === o.id}
+              className={prefs.readerWidth === o.id ? "is-on" : ""}
+              onClick={() => void savePrefs({ ...prefs, readerWidth: o.id })}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label">Notes folder</span>
+          <span className="setting-hint">
+            {prefs.notesFolder ? (
+              <>
+                Save as note writes a reply to <code>{prefs.notesFolder}</code>.
+              </>
+            ) : (
+              "Where Save as note on a reply writes it, as Markdown: an Obsidian vault, or any folder."
+            )}
+          </span>
+        </div>
+        <div className="setting-inline">
+          {prefs.notesFolder && (
+            <button className="btn" onClick={() => void savePrefs({ ...prefs, notesFolder: undefined })}>
+              Clear
+            </button>
+          )}
+          <button
+            className="btn"
+            onClick={() =>
+              void pickFolder(prefs.notesFolder, "Choose where notes go").then((dir) => {
+                if (dir) void savePrefs({ ...getState().prefs, notesFolder: dir });
+              })
+            }
+          >
+            {prefs.notesFolder ? "Change…" : "Choose…"}
           </button>
         </div>
       </div>

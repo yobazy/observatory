@@ -69,6 +69,12 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   projectOrder?: string[];
   /** Where a preview opens: over the terminal (unset) or beside it. */
   previewPlacement?: "over" | "beside";
+  /** The Read view's text size; medium when unset. */
+  readerText?: "small" | "large";
+  /** The Read view's column: a reading width when unset, or the pane's. */
+  readerWidth?: "wide";
+  /** Where Save as note writes a reply (notes.rs), such as an Obsidian vault. */
+  notesFolder?: string;
   /** Hovering a path in a terminal shows its preview card; on unless off. */
   previewOnHover?: boolean;
   /** Files an agent shows with `nebula open` open in the preview; on unless off. */

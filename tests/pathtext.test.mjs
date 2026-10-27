@@ -108,3 +108,24 @@ test('a block of output an app wrapped joins only so far, so reading it stays ch
   assert.ok(last > 1000 && last < 1100, `stops near the row it starts on, not at ${last}`);
   assert.ok(reads < 1000, `read ${reads} rows`);
 });
+
+test('a code span that is only a path reads as that path', async () => {
+  const { pathInCode } = await import('../src/nebula/pathtext.ts');
+  assert.equal(pathInCode('src/cart/sync.ts'), 'src/cart/sync.ts');
+  assert.equal(pathInCode('src/cart/sync.ts:42'), 'src/cart/sync.ts');
+  assert.equal(pathInCode('~/notes/plan.md:3:1'), '~/notes/plan.md');
+  assert.equal(pathInCode('Promise.all'), null);
+  assert.equal(pathInCode('npm run build'), null);
+  assert.equal(pathInCode('cat src/a.ts'), null);
+});
+
+test('"#75" in prose names a PR, and links like any other of its repo', async () => {
+  const { findPrRefs, prLink } = await import('../src/nebula/pathtext.ts');
+  assert.deepEqual(findPrRefs('Merged #75 and (#76), not issue-#3 or #12abc.'), [
+    { start: 7, length: 3, number: 75 },
+    { start: 16, length: 3, number: 76 },
+  ]);
+  assert.deepEqual(findPrRefs('#5 first'), [{ start: 0, length: 2, number: 5 }]);
+  assert.deepEqual(findPrRefs('#075'), [{ start: 0, length: 4, number: 75 }]);
+  assert.equal(prLink('https://github.com/o/r/pull/12', 75), 'https://github.com/o/r/pull/75');
+});
