@@ -4,7 +4,7 @@
 // you can paste it to whoever looks into it instead of describing it.
 import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { getState, type State } from "./store.ts";
+import { flash, getState, type State } from "./store.ts";
 import { recentEvents, type UseEvent } from "./uselog.ts";
 
 export interface Moment {
@@ -100,6 +100,62 @@ export async function noteMoment(note: string) {
   setMark({ kind: "idle" });
   if (m.kind !== "saved" || !note.trim() || !inApp()) return;
   await invoke("annotate_moment", { dir: m.dir, note: note.trim() });
+}
+
+/** The prompt for a task started from a moment: what you noticed, and where
+ *  the moment is so the agent can see it too. */
+export function momentPrompt(dir: string, note: string): string {
+  return [
+    note.trim() || "Look into what I marked in Observatory.",
+    `I marked this moment in Observatory: ${dir}\nRead its moment.json (the last minute of what I did, what was on screen, and my note) and look at screenshot.png before you start.`,
+  ].join("\n\n");
+}
+
+const PROJECT_KEY = "observatory.momentProject";
+
+/** The project a moment's task goes to: the one you sent the last one to,
+ *  since moments are mostly about one app, else the one you're in. */
+export function momentProject(s: State): string | null {
+  let last: string | null = null;
+  try {
+    last = localStorage.getItem(PROJECT_KEY);
+  } catch {
+    // No storage: fall back to where you are.
+  }
+  if (last && s.projects[last]) return last;
+  return s.selectedProject && s.projects[s.selectedProject] ? s.selectedProject : null;
+}
+
+/** Start a task on the moment just saved, in `projectId`'s main checkout,
+ *  without leaving what you're looking at: the notice says it started. */
+export async function taskMoment(projectId: string, note: string) {
+  const m = mark;
+  if (m.kind !== "saved") return;
+  setMark({ kind: "idle" });
+  try {
+    localStorage.setItem(PROJECT_KEY, projectId);
+  } catch {
+    // Not remembered next time; that's all.
+  }
+  const s = getState();
+  const project = s.projects[projectId];
+  const main = Object.values(s.worktrees).find((w) => w.project_id === projectId && w.is_main);
+  if (!project || !main) {
+    flash("Couldn't start a task: that project has no main checkout", 6000);
+    return;
+  }
+  try {
+    if (note.trim() && inApp()) await invoke("annotate_moment", { dir: m.dir, note: note.trim() });
+    // Imported here so the tests, which load this file in node, don't need the daemon client.
+    const { createAgent, defaultKind } = await import("./actions.ts");
+    const { readSettings } = await import("./client.ts");
+    const settings = await readSettings();
+    const id = await createAgent({ worktree: main.id, kind: defaultKind(settings), settings, prompt: momentPrompt(m.dir, note), select: false });
+    if (!id) throw new Error("the daemon didn't start it");
+    flash(`Started a task in ${project.name}`, 3000);
+  } catch (e) {
+    flash(`Couldn't start a task: ${e instanceof Error ? e.message : String(e)}`, 6000);
+  }
 }
 
 export function dismissMoment() {

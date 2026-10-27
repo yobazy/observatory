@@ -66,9 +66,8 @@ it would do without changing anything, and `--help` lists the other options.
 - **New task** (`⌘N`): on an existing branch or a new worktree (the branch name is suggested from
   the task), with your choice of agent and preset.
 - **Moved a project's folder?** Its row says the folder is missing, and **Locate…** points the
-  project at the new place, carrying its icon, color, settings and Claude Code history with it
-  (this needs a nebula release with `SetProjectPath`; until then it says so). Right-click a
-  project to **Remove from list**; nothing on disk is touched.
+  project at the new place, carrying its icon, color, settings and Claude Code history with it.
+  Right-click a project to **Remove from list**; nothing on disk is touched.
 
 **Previews**
 
@@ -151,9 +150,13 @@ folder under `moments/` beside the log, copies the folder's path, and takes a li
 saw. Paste the path wherever you're reporting it. The minute is kept in memory whether or not the
 log is on, and only written when you press it. The screenshot needs Screen Recording allowed.
 
+<p align="center">
+  <img src="docs/cat.gif" width="432" alt="The pixel cat at its telescope under a night sky: a shooting star goes by, and it sits up to watch">
+</p>
+
 **And** a pixel cat that plays at the bottom of the sidebar. It chases a
-yarn ball, naps, and sits up when an agent starts waiting on you. Click it to say hi, or turn it
-off in Settings.
+yarn ball, naps, watches the sky through its telescope, and sits up when an agent starts waiting
+on you. Click it to say hi, or turn it off in Settings.
 
 ## Building from source
 
@@ -171,7 +174,7 @@ The daemon only accepts clients built with its exact `PROTOCOL_VERSION`. `nebula
 by tag in `src-tauri/Cargo.toml`:
 
 ```toml
-nebula-core = { git = "https://github.com/AgentSystemLabs/nebula", tag = "v0.40.2" }
+nebula-core = { git = "https://github.com/AgentSystemLabs/nebula", tag = "v0.45.0" }
 ```
 
 After `nebula upgrade`, bump the tag and rebuild (`./scripts/setup.sh` picks up the new tag and

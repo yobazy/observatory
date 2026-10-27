@@ -116,15 +116,6 @@ export async function locateProject(project: Project): Promise<void> {
     await request("SetProjectPath", { id: project.id, path: info.path });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // The protocol this app speaks has no such request yet: nebula's own
-    // types refuse it before it leaves the app.
-    if (/Malformed request|unknown variant/i.test(msg)) {
-      return flash(
-        `This version of nebula can't follow a moved folder yet. Move it back to ${tilde(old)} for now; ` +
-          `an update will add this (AgentSystemLabs/nebula#129).`,
-        10_000,
-      );
-    }
     return flash(`Couldn't move ${project.name}: ${msg}`, 8000);
   }
 
