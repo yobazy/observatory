@@ -43,7 +43,15 @@ test('a card reply reads as its parts', () => {
   assert.equal(c.asksNote, "I'd pick **1A, 2B**.");
   assert.match(c.details, /^- The data side is done\./);
   assert.deepEqual(c.images, ['/tmp/shots/reader-after.png']);
+  assert.deepEqual(c.videos, []);
   assert.ok(isCard(c));
+});
+
+test('a card names its videos, spaces and all when in backticks', () => {
+  const c = readCard(
+    '**The cut is open.**\n\nWatch: `/Users/me/Movies/Shiver shroom - side by side.mp4` (17 seconds)\n\nAlso /tmp/raw.MOV and `/tmp/notes.txt`.',
+  );
+  assert.deepEqual(c.videos, ['/Users/me/Movies/Shiver shroom - side by side.mp4', '/tmp/raw.MOV']);
 });
 
 test('a plain reply stays prose', () => {

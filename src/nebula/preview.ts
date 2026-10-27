@@ -10,7 +10,7 @@ import { isPreview, onFilesOpened } from "./client";
 import { flash, getState, setState } from "./store";
 import { addToShelf } from "./shelf";
 
-export type PreviewKind = "html" | "markdown" | "image" | "pdf" | "text";
+export type PreviewKind = "html" | "markdown" | "image" | "video" | "pdf" | "text";
 
 export interface PreviewFile {
   path: string;
@@ -45,6 +45,7 @@ function kindOf(path: string): PreviewKind {
   if (ext === "html" || ext === "htm") return "html";
   if (ext === "md" || ext === "markdown" || ext === "mdx") return "markdown";
   if (["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "ico", "bmp"].includes(ext)) return "image";
+  if (["mp4", "m4v", "mov", "webm"].includes(ext)) return "video";
   if (ext === "pdf") return "pdf";
   return "text";
 }

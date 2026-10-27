@@ -54,11 +54,19 @@ test('a falling star is caught or lands, never left hanging', () => {
 });
 
 test('grooming and stretching end on their own', () => {
-  for (const r of [0.78, 0.85]) {
-    let c = pickNext(cat(), 220, r);
-    const mode = c.mode;
-    assert.ok(mode === 'groom' || mode === 'stretch', mode);
-    for (let i = 0; i < 60 && c.mode === mode; i++) c = step(c, 220);
-    assert.notEqual(c.mode, mode);
+  // When one ends, the next pick is random and can be the same mode again,
+  // so pin the next pick to a walk.
+  const random = Math.random;
+  try {
+    Math.random = () => 0.1;
+    for (const r of [0.78, 0.85]) {
+      let c = pickNext(cat(), 220, r);
+      const mode = c.mode;
+      assert.ok(mode === 'groom' || mode === 'stretch', mode);
+      for (let i = 0; i < 60 && c.mode === mode; i++) c = step(c, 220);
+      assert.notEqual(c.mode, mode);
+    }
+  } finally {
+    Math.random = random;
   }
 });

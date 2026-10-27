@@ -1,4 +1,5 @@
-//! Previews of files an agent made: an HTML mockup, a Markdown doc, an image.
+//! Previews of files an agent made: an HTML mockup, a Markdown doc, an image,
+//! a video.
 //! The webview can't read the disk, so files reach it through `preview://`,
 //! which serves only what was opened for preview: the file, and for a page
 //! or a doc its folder, so relative CSS, scripts and images load. Never a
@@ -7,6 +8,7 @@
 
 use serde::Serialize;
 use std::borrow::Cow;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
@@ -70,7 +72,7 @@ pub fn resolve_paths(candidates: Vec<String>, cwd: Option<String>) -> Vec<Option
 #[derive(Serialize)]
 pub struct PreviewFile {
     path: String,
-    /// "html", "markdown", "image", "pdf" or "text".
+    /// "html", "markdown", "image", "video", "pdf" or "text".
     kind: &'static str,
     size: u64,
     modified: u64,
@@ -85,6 +87,7 @@ fn kind_of(path: &Path) -> &'static str {
         "html" | "htm" => "html",
         "md" | "markdown" | "mdx" => "markdown",
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "avif" | "ico" | "bmp" => "image",
+        "mp4" | "m4v" | "mov" | "webm" => "video",
         "pdf" => "pdf",
         _ => "text",
     }
@@ -189,6 +192,8 @@ fn mime(path: &Path) -> &'static str {
         "ttf" => "font/ttf",
         "otf" => "font/otf",
         "mp4" => "video/mp4",
+        "m4v" => "video/x-m4v",
+        "mov" => "video/quicktime",
         "webm" => "video/webm",
         "md" | "markdown" | "txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
@@ -221,6 +226,10 @@ pub fn serve<R: Runtime>(
         .uri()
         .query()
         .is_some_and(|q| q.split('&').any(|kv| kv == "pick=1"));
+    // WebKit plays a video only when it can ask for it a piece at a time.
+    if let Some(range) = request.headers().get("range") {
+        return serve_range(&path, range.to_str().unwrap_or("")).unwrap_or_else(not_found);
+    }
     match std::fs::read(&path) {
         Ok(bytes) if picking && kind_of(&path) == "html" => Response::builder()
             .header("Content-Type", mime(&path))
@@ -235,6 +244,60 @@ pub fn serve<R: Runtime>(
             .unwrap(),
         Err(_) => not_found(),
     }
+}
+
+/// The first and last byte `range` (a `Range: bytes=…` header) asks for, in
+/// a file of `len` bytes. None when it asks for none of it.
+fn byte_range(range: &str, len: u64) -> Option<(u64, u64)> {
+    let spec = range
+        .trim()
+        .strip_prefix("bytes=")?
+        .split(',')
+        .next()?
+        .trim();
+    let (start, end) = spec.split_once('-')?;
+    let (start, end) = if start.is_empty() {
+        // `-500`: the last 500 bytes.
+        let n: u64 = end.parse().ok()?;
+        (len.checked_sub(n.min(len))?, len.checked_sub(1)?)
+    } else {
+        let start: u64 = start.parse().ok()?;
+        let end = if end.is_empty() {
+            len.checked_sub(1)?
+        } else {
+            end.parse::<u64>().ok()?.min(len.checked_sub(1)?)
+        };
+        (start, end)
+    };
+    (start <= end && start < len).then_some((start, end))
+}
+
+/// The part of `path` a `Range` header asks for: a 206, or a 416 when the
+/// range is outside the file. Read in pieces of at most 4 MB, so a long
+/// video isn't read whole for each one.
+fn serve_range(path: &Path, range: &str) -> Option<Response<Cow<'static, [u8]>>> {
+    const PIECE: u64 = 4 * 1024 * 1024;
+    let mut file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let Some((start, end)) = byte_range(range, len) else {
+        return Response::builder()
+            .status(StatusCode::RANGE_NOT_SATISFIABLE)
+            .header("Content-Range", format!("bytes */{len}"))
+            .body(Cow::Borrowed(&b""[..]))
+            .ok();
+    };
+    let end = end.min(start + PIECE - 1);
+    let mut bytes = vec![0; (end - start + 1) as usize];
+    file.seek(SeekFrom::Start(start)).ok()?;
+    file.read_exact(&mut bytes).ok()?;
+    Response::builder()
+        .status(StatusCode::PARTIAL_CONTENT)
+        .header("Content-Type", mime(path))
+        .header("Accept-Ranges", "bytes")
+        .header("Content-Range", format!("bytes {start}-{end}/{len}"))
+        .header("Cache-Control", "no-store")
+        .body(Cow::Owned(bytes))
+        .ok()
 }
 
 /// Comment mode's script (pick.js), for a page opened with `?pick=1`.
@@ -298,6 +361,36 @@ mod tests {
         assert_eq!(kind_of(Path::new("/a/Mock.HTML")), "html");
         assert_eq!(kind_of(Path::new("/a/notes.md")), "markdown");
         assert_eq!(kind_of(Path::new("/a/shot.png")), "image");
+        assert_eq!(kind_of(Path::new("/a/cut.MP4")), "video");
+        assert_eq!(kind_of(Path::new("/a/take.mov")), "video");
         assert_eq!(kind_of(Path::new("/a/main.rs")), "text");
+    }
+
+    #[test]
+    fn ranges_ask_for_part_of_the_file() {
+        assert_eq!(byte_range("bytes=0-1", 100), Some((0, 1)));
+        assert_eq!(byte_range("bytes=10-", 100), Some((10, 99)));
+        assert_eq!(byte_range("bytes=90-500", 100), Some((90, 99)));
+        assert_eq!(byte_range("bytes=-20", 100), Some((80, 99)));
+        assert_eq!(byte_range("bytes=100-", 100), None, "past the end");
+        assert_eq!(byte_range("bytes=5-2", 100), None);
+        assert_eq!(byte_range("bytes=0-", 0), None, "an empty file");
+        assert_eq!(byte_range("lines=1-2", 100), None);
+    }
+
+    #[test]
+    fn a_range_is_served_as_a_206() {
+        let dir = std::env::temp_dir().join(format!("obs-range-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("clip.mp4");
+        std::fs::write(&path, b"0123456789").unwrap();
+        let res = serve_range(&path, "bytes=2-4").unwrap();
+        assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(res.headers()["Content-Range"], "bytes 2-4/10");
+        assert_eq!(res.headers()["Content-Type"], "video/mp4");
+        assert_eq!(&res.body()[..], b"234");
+        let res = serve_range(&path, "bytes=20-").unwrap();
+        assert_eq!(res.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
