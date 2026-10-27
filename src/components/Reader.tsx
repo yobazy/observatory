@@ -23,7 +23,6 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
   const [got, setGot] = useState<{ entries: Entry[]; dropped: number } | null>(null);
   const last = useRef<number | null>(null);
   const session = agent.session_id;
-  const running = agent.status === "running";
   useEffect(() => {
     if (!session) return;
     let live = true;
@@ -35,6 +34,9 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
           : await invoke<Transcript | null>("thread_transcript", { session, from, kind: agent.kind });
         if (!live || !t) return;
         setGot((prev) => {
+          // Nothing new since the last read: keep what's shown as it is.
+          const same = prev && from !== null && t.dropped === prev.dropped;
+          if (same && JSON.stringify(t.entries) === JSON.stringify(prev.entries.filter((e) => e.n >= from))) return prev;
           const entries = from === null || !prev ? t.entries : merge(prev.entries, t.entries, t.dropped);
           last.current = entries.length ? entries[entries.length - 1].n : null;
           return { entries, dropped: t.dropped };
@@ -44,12 +46,14 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
       }
     };
     void read();
-    const timer = running ? window.setInterval(read, 2500) : undefined;
+    // Keep reading whatever the status says: a turn's last reply can reach
+    // the log after the thread shows finished, and nothing else fetches it.
+    const timer = window.setInterval(read, 2500);
     return () => {
       live = false;
       window.clearInterval(timer);
     };
-  }, [session, agent.id, running, agent.status, agent.status_changed_at]);
+  }, [session, agent.id, agent.status, agent.status_changed_at]);
   return got;
 }
 
