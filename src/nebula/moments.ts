@@ -119,18 +119,33 @@ export async function noteMoment(note: string) {
   await invoke("annotate_moment", { dir: m.dir, note: note.trim() });
 }
 
+/** The branch a moment's task works on, named after the moment's folder so
+ *  two moments started at once never share a worktree. */
+export function momentBranch(dir: string): string {
+  const stamp = (dir.split("/").filter(Boolean).pop() ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `moment-${stamp || Date.now()}`;
+}
+
 /** The prompt for a task started from a moment: what you noticed, where the
  *  moment is so the agent can see it too, and how far to take it: its own
- *  worktree, a PR, and a second agent that reviews and merges that PR. */
+ *  worktree, a PR, and a second agent that reviews and merges that PR. Other
+ *  moments' tasks may be running beside it, so it checks for a PR already
+ *  covering the same thing, and the reviewer brings the PR up to date with
+ *  whatever merged first. */
 export function momentPrompt(dir: string, note: string): string {
+  const branch = momentBranch(dir);
   return [
     note.trim() || "Look into what I marked in Observatory.",
     `I marked this moment in Observatory: ${dir}\nRead its moment.json (the last minute of what I did, what was on screen, and my note) and look at screenshot.png before you start.`,
-    "If it needs a change, take it all the way:\n" +
-      "1. Before you edit anything, move into your own worktree with `nebula worktree <short-kebab-name>`. Other sessions share this checkout, so don't switch its branch.\n" +
-      "2. Make the change, run the checks this project's CLAUDE.md or README asks for, and commit.\n" +
-      "3. Push the branch and open a PR.\n" +
-      '4. Hand the review to a separate agent: `nebula spawn "Review PR #<number> (<url>) as a fresh reviewer: read the diff, look for correctness bugs and breaks in this project\'s rules, and run its checks. If it holds up, merge it with gh pr merge. If not, leave a PR comment saying what\'s wrong and don\'t merge."`\n' +
+    "Other agents may be working on other moments at the same time, in this project. If it needs a change, take it all the way:\n" +
+      "1. Check `gh pr list` first. If an open PR already covers this, add what you found to it as a comment and stop there.\n" +
+      `2. Before you edit anything, run \`git fetch origin\` and then \`nebula worktree ${branch} --base origin/<default branch>\` to move into your own worktree. Use that exact name, since it's unique to this moment. Other sessions share this checkout, so don't switch its branch.\n` +
+      "3. Make the change, run the checks this project's CLAUDE.md or README asks for, and commit.\n" +
+      "4. Push the branch and open a PR.\n" +
+      '5. Hand the review to a separate agent: `nebula spawn "Review PR #<number> (<url>) as a fresh reviewer: read the diff, look for correctness bugs and breaks in this project\'s rules. Other PRs may have merged since it was opened: if it is behind or conflicts, rebase it on the default branch, resolve the conflicts and push. Then run its checks. If it holds up, merge it with gh pr merge. If not, or the conflicts are not clear-cut, leave a PR comment saying what is wrong and don\'t merge."`\n' +
       "If it turns out no change is needed, say what you found instead.",
   ].join("\n\n");
 }
