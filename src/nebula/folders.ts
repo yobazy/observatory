@@ -89,6 +89,15 @@ export function moveWithin(order: string[], group: string[], id: string, to: num
   return order.map((k) => (inGroup.has(k) ? rest[i++] : k));
 }
 
+/** The folders with `id` moved to `to` among them, the way a drag leaves it. */
+export function reorderFolders(folders: ProjectFolder[], id: string, to: number): ProjectFolder[] {
+  const from = folders.findIndex((f) => f.id === id);
+  if (from < 0) return folders;
+  const rest = folders.filter((f) => f.id !== id);
+  rest.splice(Math.max(0, Math.min(to, rest.length)), 0, folders[from]);
+  return rest;
+}
+
 /** The folders with `repo` in `folderId` (at its end) and in no other;
  *  `null` takes it out of them all. */
 export function placeIn(folders: ProjectFolder[], repo: string, folderId: string | null): ProjectFolder[] {

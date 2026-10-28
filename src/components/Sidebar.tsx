@@ -23,16 +23,26 @@ import { FlagGlyph, FollowUps, PriorityMark } from "./Organize";
 import { UncommittedEntry } from "./Uncommitted";
 import { IdeasEntry } from "./Ideas";
 import { InboxEntry } from "./Inbox";
-import { createFolder, deleteFolder, moveInFolder, moveProject, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
+import { createFolder, deleteFolder, moveFolder, moveInFolder, moveProject, moveToFolder, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
 import { allTags, layout, matches, type ProjectFolder } from "../nebula/folders";
 import { FolderGlyph } from "./ProjectOrganize";
 import { ContextMenu, type MenuItem } from "./Menu";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
-import { reorderKey, useReorder } from "./useReorder";
+import { reorderKey, useReorder, type DropInto } from "./useReorder";
 import { useBatches } from "../nebula/batch";
 import { useRecentCount, useVisits } from "../nebula/recent";
 import { RECENT_COUNTS, recentProjects, type RecentCount } from "../nebula/recentList";
 import { Plate } from "./Plate";
+
+/** The drop group (useReorder's `data-drop-into`) of the projects in no
+ *  folder; a folder's is its id. */
+const LOOSE = "";
+
+/** A project held over a folder goes into it; over the list, out of its folder. */
+const fileInto = (own: string): DropInto => ({
+  own,
+  onDrop: (repo, into) => void moveToFolder(repo, into === LOOSE ? null : into),
+});
 
 export function selectAgent(agent: Agent) {
   setState((s) => ({
@@ -70,7 +80,8 @@ export function Sidebar({
   // Unfiltered, the list is folders first, then the projects in none.
   const grouped = useMemo(() => layout(projects, state.prefs), [projects, state.prefs]);
   const looseRepos = grouped.loose.map((p) => p.repo_path);
-  const reorder = useReorder((repo, to) => void moveProject(repo, to, looseRepos), !filtered);
+  const reorder = useReorder((repo, to) => void moveProject(repo, to, looseRepos), !filtered, fileInto(LOOSE));
+  const folderOrder = useReorder((id, to) => void moveFolder(id, to), !filtered);
   const tags = useMemo(() => allTags(state.prefs, projects.map((p) => p.repo_path)), [projects, state.prefs]);
   const waiting = useMemo(() => waitingAgents(state), [state]);
   const shown = useMemo(() => {
@@ -267,7 +278,7 @@ export function Sidebar({
                 label: "Folder name",
                 initial: "",
                 submit: "Create folder",
-                note: "Put projects in it from their right-click menu: Move to folder.",
+                note: "Put projects in it by dragging them onto it, or from their right-click menu: Move to folder.",
                 onSubmit: async (name) => void (await createFolder(name)),
               })
             }
@@ -331,12 +342,28 @@ export function Sidebar({
           </div>
         )}
 
-        {!filtered &&
-          grouped.folders.map(({ folder, projects: inside }) => (
-            <FolderGroup key={folder.id} folder={folder} projects={inside} row={row} onMenu={openFolderMenu} />
-          ))}
+        {!filtered && grouped.folders.length > 0 && (
+          <ul className="folder-list" ref={folderOrder.list} aria-label="Folders">
+            {grouped.folders.map(({ folder, projects: inside }, i, all) => {
+              // Folders drag by their heading; their projects drag on their own.
+              const { onPointerDown, ...item } = folderOrder.item(folder.id);
+              return (
+                <li key={folder.id} {...item}>
+                  <FolderGroup
+                    folder={folder}
+                    projects={inside}
+                    row={row}
+                    onMenu={openFolderMenu}
+                    onHeadDown={onPointerDown}
+                    onHeadKey={(e) => reorderKey(e, i, all.length, (to) => void moveFolder(folder.id, to))}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-        <ul className="project-list" ref={reorder.list}>
+        <ul className="project-list is-loose" ref={reorder.list} data-drop-into={filtered ? undefined : LOOSE}>
           {(filtered ? shown : grouped.loose).map((p, i, list) => (
             <li key={p.id} {...reorder.item(p.repo_path)}>
               {row(p, i, list.length, (to) => void moveProject(p.repo_path, to, looseRepos))}
@@ -539,33 +566,42 @@ function UpdateReady() {
 }
 
 /** A folder of projects: its header folds it away, keeping what's inside
- *  waiting, working or unread in sight; its projects drag among themselves. */
+ *  waiting, working or unread in sight, and drags it among the folders. Its
+ *  projects drag among themselves, onto another folder, or out to the list;
+ *  a project dragged onto it goes in. */
 function FolderGroup({
   folder,
   projects,
   row,
   onMenu,
+  onHeadDown,
+  onHeadKey,
 }: {
   folder: ProjectFolder;
   projects: Project[];
   row: (p: Project, i: number, count: number, move: (to: number) => void) => React.ReactNode;
   onMenu: (e: React.MouseEvent, folder: ProjectFolder) => void;
+  onHeadDown: (e: React.PointerEvent<HTMLElement>) => void;
+  onHeadKey: (e: React.KeyboardEvent) => void;
 }) {
   const state = useAppState();
-  const reorder = useReorder((repo, to) => void moveInFolder(folder.id, repo, to));
+  const reorder = useReorder((repo, to) => void moveInFolder(folder.id, repo, to), true, fileInto(folder.id));
   const agents = projects.flatMap((p) => projectAgents(state, p.id));
   const needs = agents.filter((a) => a.status === "needs_feedback").length;
   const running = agents.filter((a) => a.status === "running").length;
   const unseen = agents.filter((a) => a.status === "finished" && a.unseen).length;
   const open = !folder.collapsed;
   return (
-    <section className={`folder${open ? " is-open" : ""}`} aria-label={`${folder.name} folder`}>
+    <section className={`folder${open ? " is-open" : ""}`} aria-label={`${folder.name} folder`} data-drop-into={folder.id}>
       <button
         className="folder-head"
         onClick={() => void toggleFolder(folder.id)}
         onContextMenu={(e) => onMenu(e, folder)}
+        onPointerDown={onHeadDown}
+        onKeyDown={onHeadKey}
         aria-expanded={open}
-        title={`${folder.name}: ${projects.length} ${projects.length === 1 ? "project" : "projects"}. Click to ${open ? "fold it away" : "open it"}; right-click to rename, move or delete it.`}
+        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+        title={`${folder.name}: ${projects.length} ${projects.length === 1 ? "project" : "projects"}. Click to ${open ? "fold it away" : "open it"}; drag to move it; right-click to rename or delete it. Drag a project onto it to put it in.`}
       >
         <span className="folder-chev" aria-hidden>
           {open ? "▾" : "▸"}
@@ -601,7 +637,7 @@ function FolderGroup({
               {row(p, i, projects.length, (to) => void moveInFolder(folder.id, p.repo_path, to))}
             </li>
           ))}
-          {projects.length === 0 && <li className="folder-empty">Empty. Right-click a project and pick Move to folder.</li>}
+          {projects.length === 0 && <li className="folder-empty">Empty. Drag a project here, or right-click one and pick Move to folder.</li>}
         </ul>
       )}
     </section>

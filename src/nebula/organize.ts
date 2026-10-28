@@ -7,7 +7,7 @@ import { onAgentStatus } from "./client";
 import { afterStatus, settled } from "./followupRules";
 import { isWatching } from "./notify";
 import { flash, getState, projectWorktrees, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
-import { moveWithin, placeIn, type ProjectFolder } from "./folders";
+import { moveWithin, placeIn, reorderFolders, type ProjectFolder } from "./folders";
 import { pruned } from "./prune";
 import { addTag, deleteTag, renameTag, setThreadTags } from "./threadtags";
 import { savePrefs, type DesktopPrefs } from "./theme";
@@ -77,6 +77,11 @@ export function shiftFolder(id: string, by: -1 | 1) {
     [all[i], all[j]] = [all[j], all[i]];
     return { ...prefs, projectFolders: all };
   });
+}
+
+/** Put folder `id` at `to` among the folders: a drag in the sidebar. */
+export function moveFolder(id: string, to: number) {
+  return save((prefs) => ({ ...prefs, projectFolders: reorderFolders(folders(prefs), id, to) }));
 }
 
 /** Put `repo` in a folder, or (null) back in the list. */
