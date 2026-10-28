@@ -415,6 +415,15 @@ mod tests {
     }
 
     #[test]
+    fn a_pasted_message_shows_without_its_wrapper() {
+        let r = read(&[
+            r#"{"type":"user","message":{"content":"\n\n<pasted_content id=\"3aef\">\nRegister client\n</pasted_content id=\"3aef\">\n"}}"#,
+        ]);
+        assert_eq!(r.entries[0].kind, "you");
+        assert_eq!(r.entries[0].text, "Register client");
+    }
+
+    #[test]
     fn a_long_thread_keeps_its_latest_entries_and_numbers() {
         let mut r = Reading::default();
         for i in 0..MAX_ENTRIES + 3 {

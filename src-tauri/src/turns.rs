@@ -160,11 +160,28 @@ pub(crate) fn typed_prompt(content: &serde_json::Value) -> Option<String> {
         }
         _ => return None,
     };
+    let text = unwrap_pastes(&text);
     let t = text.trim_start();
     let harness = t.starts_with('<')
         || t.starts_with("Another Claude session sent a message")
         || t.starts_with("Base directory for this skill");
-    (!t.is_empty() && !harness).then_some(text)
+    (!t.is_empty() && !harness).then(|| t.trim_end().to_string())
+}
+
+/// Text you pasted arrives between `<pasted_content id="…">` lines; drop the
+/// wrapper so a message that's only a paste isn't taken for harness text.
+fn unwrap_pastes(text: &str) -> String {
+    if !text.contains("<pasted_content") {
+        return text.to_string();
+    }
+    text.lines()
+        .filter(|l| {
+            let l = l.trim();
+            !(l.starts_with("<pasted_content") || l.starts_with("</pasted_content"))
+                || !l.ends_with('>')
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 impl Reading {
@@ -427,6 +444,19 @@ mod tests {
         all.extend(lines);
         let t = read(&all).turn.unwrap();
         assert_eq!((t.number, t.prompt.as_str()), (1, "fix the build"));
+    }
+
+    #[test]
+    fn a_message_thats_only_a_paste_is_a_prompt() {
+        let paste = r#"{"type":"user","message":{"content":[{"type":"text","text":"\n\n<pasted_content id=\"3aef\">\nRegister client\nLegal name\n</pasted_content id=\"3aef\">\n"}]}}"#;
+        let t = read(&[PROMPT, BASH, RESULTS, paste]).turn.unwrap();
+        assert_eq!(
+            (t.number, t.prompt.as_str()),
+            (2, "Register client\nLegal name")
+        );
+        let note = r#"{"type":"user","message":{"content":"Heres our convo: \n\n<pasted_content id=\"3aef\">\nhi\n</pasted_content id=\"3aef\">\n"}}"#;
+        let t = read(&[note]).turn.unwrap();
+        assert_eq!(t.prompt, "Heres our convo: \n\nhi");
     }
 
     #[test]
