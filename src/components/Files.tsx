@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
+import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview, showPreviewFile } from "../nebula/preview";
 import { clearShelf, pinOnShelf, removeFromShelf, type ShelfItem } from "../nebula/shelf";
+import { bySource, pickRange, togglePick } from "../nebula/shelfList";
 import { flash, getState, useAppState } from "../nebula/store";
 import { sendInput } from "../nebula/client";
 import { shellQuote } from "../nebula/dropfiles";
@@ -189,6 +190,9 @@ function FilesPanel({
   const panel = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ row: Row; x: number; y: number } | null>(null);
+  // Files picked to open together as tabs, and the one a Shift-click runs from.
+  const [picked, setPicked] = useState<string[]>([]);
+  const [runFrom, setRunFrom] = useState<string | null>(null);
   const root = worktree?.path ?? "";
 
   const own: Row[] = items.map((i) => ({ path: i.path, note: relativeTime(i.at), from: agent.id, own: true, pinned: i.pinned }));
@@ -246,6 +250,21 @@ function FilesPanel({
     onClose();
     void openPreview([r.path], r.from);
   };
+  const listed = [...own, ...others, ...changed].filter(match);
+  const pick = (r: Row, run: boolean) => {
+    setPicked((p) => (run ? pickRange(listed.map((x) => x.path), p, runFrom, r.path) : togglePick(p, r.path)));
+    setRunFrom(r.path);
+  };
+  // Every picked file as a tab, the first of them in front.
+  const openPicked = async () => {
+    const groups = bySource([...own, ...others, ...changed], picked);
+    hideCard();
+    onClose();
+    for (const g of groups) await openPreview(g.paths, g.from);
+    const first = groups[0]?.paths[0];
+    const at = getState().preview?.files.findIndex((f) => f.path === first) ?? -1;
+    if (at >= 0) showPreviewFile(at);
+  };
   const actions = (r: Row): MenuItem[] => [
     { label: "Open here", run: () => open(r) },
     {
@@ -282,12 +301,26 @@ function FilesPanel({
           {shown.map((r) => (
             <li
               key={r.path}
+              className={picked.includes(r.path) ? "is-picked" : undefined}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ row: r, x: e.clientX, y: e.clientY });
               }}
             >
-              <button className="fl-open" onClick={() => open(r)} title={r.path}>
+              <input
+                type="checkbox"
+                className="fl-pick"
+                checked={picked.includes(r.path)}
+                onChange={() => {}}
+                onClick={(e) => pick(r, e.shiftKey)}
+                aria-label={`Pick ${baseName(r.path)}, to open it with others as tabs`}
+                title="Pick it, to open several as tabs (or ⌘-click the file; Shift-click picks a run)"
+              />
+              <button
+                className="fl-open"
+                onClick={(e) => (e.metaKey || e.shiftKey ? pick(r, e.shiftKey) : open(r))}
+                title={`${r.path}\n⌘-click to pick it, to open several as tabs`}
+              >
                 <FileMark path={r.path} pinned={r.pinned} />
                 <span className="fl-name">{baseName(r.path)}</span>
                 <span className="fl-where">{folder(r.path, root)}</span>
@@ -340,18 +373,30 @@ function FilesPanel({
         {section("Changed in the last turn", changed)}
         {empty && <p className="fl-empty">No file matches “{query.trim()}”.</p>}
       </div>
-      <footer className="fl-foot">
-        <span>Right-click a file to send it to {agent.name}, and more</span>
-        <button
-          className="link-btn"
-          onClick={() => {
-            clearShelf(agent.id);
-            onClose();
-          }}
-        >
-          {items.some((i) => i.pinned) ? "Clear all but pinned" : "Clear the shelf"}
-        </button>
-      </footer>
+      {picked.length > 0 ? (
+        <footer className="fl-foot is-picking">
+          <span>{picked.length === 1 ? "1 file picked" : `${picked.length} files picked`}</span>
+          <button className="link-btn" onClick={() => setPicked([])}>
+            Unpick
+          </button>
+          <button className="btn btn-sm btn-primary" onClick={() => void openPicked()}>
+            {picked.length === 1 ? "Open it" : `Open ${picked.length} as tabs`}
+          </button>
+        </footer>
+      ) : (
+        <footer className="fl-foot">
+          <span>⌘-click to open several as tabs. Right-click to send one to {agent.name}, and more</span>
+          <button
+            className="link-btn"
+            onClick={() => {
+              clearShelf(agent.id);
+              onClose();
+            }}
+          >
+            {items.some((i) => i.pinned) ? "Clear all but pinned" : "Clear the shelf"}
+          </button>
+        </footer>
+      )}
       {menu && <ContextMenu items={actions(menu.row)} x={menu.x} y={menu.y} label={baseName(menu.row.path)} onClose={() => setMenu(null)} />}
     </div>,
     document.body,

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleared, pin, pinnedFirst, shelve } from '../src/nebula/shelfList.ts';
+import { bySource, cleared, pickRange, pin, pinnedFirst, shelve, togglePick } from '../src/nebula/shelfList.ts';
 
 const item = (path, at = 0, pinned = false) => (pinned ? { path, at, pinned } : { path, at });
 const paths = (items) => items.map((i) => i.path + (i.pinned ? '*' : ''));
@@ -33,4 +33,27 @@ test('clearing keeps the pinned files, and a stray pin is put first', () => {
   const had = [item('a', 1), item('b', 2, true)];
   assert.deepEqual(paths(cleared(had)), ['b*']);
   assert.deepEqual(paths(pinnedFirst(had)), ['b*', 'a']);
+});
+
+test('picking files: a click toggles one, a Shift-click adds the run from the last', () => {
+  const order = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(togglePick([], 'b'), ['b']);
+  assert.deepEqual(togglePick(['b', 'c'], 'b'), ['c']);
+  assert.deepEqual(pickRange(order, ['b'], 'b', 'd'), ['b', 'c', 'd']);
+  assert.deepEqual(pickRange(order, ['d'], 'd', 'a'), ['d', 'a', 'b', 'c']);
+  assert.deepEqual(pickRange(order, [], null, 'c'), ['c']);
+  assert.deepEqual(pickRange(order, ['a'], 'a', 'gone'), ['a']);
+});
+
+test('picked files open in list order, gathered by the session that showed them', () => {
+  const rows = [
+    { path: 'a', from: 't1' },
+    { path: 'b', from: 't2' },
+    { path: 'c', from: 't1' },
+    { path: 'd', from: 't2' },
+  ];
+  assert.deepEqual(bySource(rows, ['d', 'c', 'a']), [
+    { from: 't1', paths: ['a', 'c'] },
+    { from: 't2', paths: ['d'] },
+  ]);
 });

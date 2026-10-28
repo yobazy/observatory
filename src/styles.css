@@ -6334,6 +6334,36 @@ th:last-child > .col-grip {
   color: var(--muted);
   font-size: 11.5px;
 }
+/* Picking several to open as tabs: a box shows on the row under the
+   pointer, and on every row once one is picked. */
+.fl-pick {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin: 0 0 0 8px;
+  accent-color: var(--accent);
+  opacity: 0;
+  cursor: pointer;
+}
+.fl-section li:hover .fl-pick,
+.fl-pick:focus-visible,
+.fl-pick:checked,
+.files-panel:has(.fl-pick:checked) .fl-pick {
+  opacity: 1;
+}
+.fl-section li.is-picked {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.fl-section li .fl-open {
+  padding-left: 6px;
+}
+.fl-foot.is-picking {
+  justify-content: flex-start;
+  color: var(--text);
+}
+.fl-foot.is-picking .btn {
+  margin-left: auto;
+}
 
 /* ---------- comments on a preview (Comments.tsx) ---------- */
 

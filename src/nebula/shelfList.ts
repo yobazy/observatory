@@ -43,3 +43,36 @@ export function pin(items: ShelfItem[], path: string, on: boolean): ShelfItem[] 
 export function cleared(items: ShelfItem[]): ShelfItem[] {
   return items.filter((i) => i.pinned);
 }
+
+// ---- picking several, to open them as tabs ----
+
+/** `picked` with `path` in it, or out of it if it was. */
+export function togglePick(picked: string[], path: string): string[] {
+  return picked.includes(path) ? picked.filter((p) => p !== path) : [...picked, path];
+}
+
+/** `picked` with every path from `anchor` to `path` in `order` added, the
+ *  way Shift-click picks a run of rows. No anchor (or one no longer in the
+ *  list) picks `path` alone. */
+export function pickRange(order: string[], picked: string[], anchor: string | null, path: string): string[] {
+  const a = anchor ? order.indexOf(anchor) : -1;
+  const b = order.indexOf(path);
+  if (b < 0) return picked;
+  if (a < 0) return togglePick(picked, path);
+  const run = order.slice(Math.min(a, b), Math.max(a, b) + 1);
+  return [...picked, ...run.filter((p) => !picked.includes(p))];
+}
+
+/** The picked files in the order they're listed, gathered by the session
+ *  each came from (comments on a file go back to it), the groups in the
+ *  order of their first file. */
+export function bySource<R extends { path: string; from: string }>(order: R[], picked: string[]): { from: string; paths: string[] }[] {
+  const groups: { from: string; paths: string[] }[] = [];
+  for (const r of order) {
+    if (!picked.includes(r.path)) continue;
+    const g = groups.find((x) => x.from === r.from);
+    if (g) g.paths.push(r.path);
+    else groups.push({ from: r.from, paths: [r.path] });
+  }
+  return groups;
+}
