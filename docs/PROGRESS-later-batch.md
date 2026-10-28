@@ -2,7 +2,7 @@
 
 Branch `later-batch-files-and-rows`, from `origin/main` (f6c25fd). Six "wanted, set aside" items
 from LATER.md, one commit each (plus one fix from the self-review), each taken off LATER.md
-when done. Draft PR against main.
+when done. Draft PR: https://github.com/yobazy/observatory/pull/102
 
 ## Done
 
