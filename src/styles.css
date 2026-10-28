@@ -4216,7 +4216,8 @@ td.task-last {
 .rd-you,
 .rd-md,
 .rd-head,
-.rd-q-text {
+.rd-q-text,
+.rd-verdict-text {
   user-select: text;
   cursor: text;
 }
@@ -4296,6 +4297,12 @@ td.task-last {
   background: var(--panel);
   border: 1px solid var(--line);
 }
+/* A block with no language is usually a message to paste somewhere, so it
+   wraps like prose; code keeps its lines and scrolls inside its box. */
+.rd-md pre code:not([class*="language-"]) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 /* A reply written as a card: headline, status chips, pictures, decisions to
    tap and details folded away. Prose replies don't get one. */
 .rd-card {
@@ -4305,6 +4312,11 @@ td.task-last {
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--panel);
+}
+/* Grid items won't shrink below their content by default, so a long code line
+   would widen the whole card past the pane, and its Copy buttons with it. */
+.rd-card > * {
+  min-width: 0;
 }
 .rd-head {
   margin: 0;
