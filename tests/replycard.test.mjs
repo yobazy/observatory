@@ -394,3 +394,28 @@ test('answers written in, or given in the tray alongside taps, count as answered
   assert.equal(entries[3].text, `1 A\n\nAbout your reply that starts "${quote}": 2 B`);
   assert.deepEqual(openDecisions(entries, -1).map((o) => [o.entry, o.asks.map((a) => a.n)]), [[3, [2]]]);
 });
+
+test('letters alone take their labels from the lines that spelled them out', () => {
+  const c = readCard(`**Two lines to choose from.**
+
+- A "From sneakers to snowboards." Specific, and people scroll.
+- B Shoes and boards. Spells out more.
+
+**Decision**
+6. The line?  A · B · or your own words, and I'll tighten them`);
+  assert.deepEqual(c.asks, [
+    {
+      n: 6,
+      text: "The line? Or your own words, and I'll tighten them",
+      options: [
+        { letter: 'A', label: '"From sneakers to snowboards."' },
+        { letter: 'B', label: 'Shoes and boards.' },
+      ],
+    },
+  ]);
+  assert.deepEqual(readAsk(1, 'Pick one  A · C').options, []);
+  assert.deepEqual(readAsk(1, 'Which?  A · B').options, [
+    { letter: 'A', label: '' },
+    { letter: 'B', label: '' },
+  ]);
+});

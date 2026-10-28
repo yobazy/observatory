@@ -109,8 +109,31 @@ export function readAsk(n: number, line: string): Ask {
   }));
   const valid = starts.filter((s) => optionsFrom(s.at));
   const pick = valid.find((s) => s.wide) ?? valid[valid.length - 1];
-  if (!pick) return { n, text: line.trim(), options: [] };
+  if (!pick) return lettersOnly(n, line) ?? { n, text: line.trim(), options: [] };
   return { n, text: line.slice(0, pick.at).trim(), options: optionsFrom(pick.at)! };
+}
+
+/** "The line?  A · B · C · or your own words": letters alone, when the
+ *  options were spelled out above. Their labels come from those lines; what
+ *  follows the last letter stays with the question. */
+function lettersOnly(n: number, line: string): Ask | null {
+  const [first, ...rest] = line.trim().split(/\s+·\s+/);
+  const lead = /\sA$/.test(first) ? first.slice(0, -1).trimEnd() : "";
+  const letters = ["A"];
+  while (rest.length && rest[0] === String.fromCharCode(65 + letters.length)) letters.push(rest.shift()!);
+  if (!lead || letters.length < 2) return null;
+  const more = rest.join(" · ");
+  const tail = more ? ` ${more[0].toUpperCase()}${more.slice(1)}` : "";
+  return { n, text: `${lead}${tail}`, options: letters.map((letter) => ({ letter, label: "" })) };
+}
+
+/** A lettered line elsewhere in the reply, "- A "From sneakers…" Specific…",
+ *  as the label for a letter-only option: its quote, or its first sentence. */
+function labelFrom(text: string, letter: string): string {
+  const m = new RegExp(`^\\s*[-*]\\s+(?:\\*\\*|__)?${letter}(?:\\*\\*|__)?[:.)]?\\s+(\\S.*)$`, "m").exec(text);
+  if (!m) return "";
+  const quote = /^(["“][^"”]+["”])/.exec(m[1]);
+  return quote ? quote[1] : m[1].replace(/([.!?])\s.*$/, "$1");
 }
 
 const SECTION = /^\s*(?:#{1,4}\s*)?(?:\*\*|__)?\s*(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?[\s:*_]*$/i;
@@ -242,6 +265,7 @@ export function readCard(text: string): Card {
       a.text += `\n${lined.get(a)!.join("\n")}`;
       a.options = [];
     }
+    for (const o of a.options) if (!o.label) o.label = labelFrom(paras.join("\n"), o.letter);
   }
 
   const details = sections.details.join("\n").trim();
