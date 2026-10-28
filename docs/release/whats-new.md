@@ -10,18 +10,10 @@
   underneath on its own.
 -->
 
-### A new look: Night watch
+### Answers to a sleeping thread get sent
 
-Observatory is night blue now, with ivory text and names set in Bricolage Grotesque. Light mode is the same design by day, with ivory pages and ink-blue text. The terminal follows whichever mode you're in.
+A thread goes to sleep after it's been idle for a while. If you answered one from the Read view, your reply stayed stuck at "Queued, sent when its turn ends", even though its turn was already over. Now the thread you're looking at wakes up and takes the reply. Sleeping threads you aren't looking at still wait until you open them.
 
-### Sand plates show what each thread is doing
+### Tables you can read
 
-Every thread's status dot is now a small plate of sand. Each prompt or tool step moves the sand into a new figure: a working thread's plate keeps shifting, a waiting one holds and pulses, and finished ones settle. A larger plate tops the Read view, and each project gets its own as an emblem.
-
-### The Live strip
-
-A row of lenses under the pane header shows every thread that's working, waiting on you or unread, across all your projects. Click one to open that thread.
-
-### And a smaller thing
-
-- In dark mode the terminal no longer gets stuck on the light theme.
+Tables in the Read view now wrap at whole words instead of breaking them, scroll sideways when they're wide, and have columns you can drag to resize.
