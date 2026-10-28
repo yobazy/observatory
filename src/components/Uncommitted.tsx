@@ -167,14 +167,27 @@ export function UncommittedEntry() {
   const files = dirty.reduce((n, d) => n + d.files, 0);
   return (
     <button
-      className={`uc-entry${state.view === "uncommitted" ? " is-on" : ""}`}
+      className={`side-stat${state.view === "uncommitted" ? " is-on" : ""}`}
       onClick={() => setState((s) => ({ view: s.view === "uncommitted" ? "sessions" : "uncommitted" }))}
-      title="See uncommitted work, by the thread that left it"
+      title={`Uncommitted: ${files} ${files === 1 ? "file" : "files"} on ${dirty.length} ${dirty.length === 1 ? "branch" : "branches"}. See them by the thread that left them.`}
     >
-      <span className="uc-entry-title">Uncommitted</span>
-      <span className="uc-entry-sub">
-        {files} {files === 1 ? "file" : "files"} on {dirty.length} {dirty.length === 1 ? "branch" : "branches"}
+      <span className="side-stat-top">
+        <BranchGlyph />
       </span>
+      <span className="side-stat-value">{files}</span>
+      <span className="side-stat-label">Uncommitted</span>
     </button>
+  );
+}
+
+/** A branch forking off: Uncommitted. */
+function BranchGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+      <path d="M5 4.5v7M11 4.5v1.5a3 3 0 0 1-3 3H5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="5" cy="3" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="11" cy="3" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="5" cy="13" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
   );
 }

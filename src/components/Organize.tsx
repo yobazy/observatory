@@ -353,8 +353,8 @@ export function PriorityMark({ priority }: { priority: string | undefined }) {
   );
 }
 
-/** How many flagged tasks show before "Show all". */
-const FOLLOW_UP_ROWS = 3;
+/** How many flagged tasks show before "N more". */
+const FOLLOW_UP_ROWS = 2;
 
 /** Tasks flagged to come back to, across projects: those you flagged, and
  *  those whose turn ended while you were away, until you act on them.
@@ -367,13 +367,13 @@ export function FollowUps() {
   if (flagged.length === 0) return null;
   const shown = all ? flagged : flagged.slice(0, FOLLOW_UP_ROWS);
   return (
-    <section className="followups" aria-label="Flagged for follow-up">
+    <section className="side-card followups" aria-label="Flagged for follow-up">
       <h2
-        className="followups-title"
+        className="side-card-head"
         title="Tasks to come back to: those you flagged, and those that finished while you weren't looking. ✓ clears one; replying or archiving clears it too."
       >
         <FlagGlyph />
-        Follow up <span className="followups-count">{flagged.length}</span>
+        <span className="side-card-title">Follow up</span> <span className="side-card-count">{flagged.length}</span>
       </h2>
       <ul>
         {shown.map(({ agent, at }) => {
@@ -381,22 +381,22 @@ export function FollowUps() {
           return (
             <li key={agent.id}>
               <button
-                className="followup-row"
+                className="side-row"
                 onClick={() => selectAgent(agent)}
                 title={`${agent.name}, in ${project?.name ?? "its project"}${agent.archived ? " (archived)" : ""}.\nClick to open it; ✓ when you're done with it.`}
               >
-                <span className="followup-name">{agent.name}</span>
-                <span className="followup-where">
-                  <span className="followup-project">
-                    <ProjectDot project={project} />
+                <span className="side-row-name">{agent.name}</span>
+                <span
+                  className="side-row-age"
+                  title={`${isAutoFollowUp(state, agent.id) ? "Finished while you were away," : "Flagged"} ${new Date(at).toLocaleString()}`}
+                >
+                  {relativeTime(at)}
+                </span>
+                <span className="side-row-sub">
+                  <ProjectDot project={project} />
+                  <span className="side-row-text">
                     {project?.name}
                     {agent.archived && " · archived"}
-                  </span>
-                  <span
-                    className="followup-age"
-                    title={`${isAutoFollowUp(state, agent.id) ? "Finished while you were away," : "Flagged"} ${new Date(at).toLocaleString()}`}
-                  >
-                    {relativeTime(at)}
                   </span>
                 </span>
               </button>
@@ -414,11 +414,18 @@ export function FollowUps() {
       </ul>
       {flagged.length > FOLLOW_UP_ROWS && (
         <button
-          className="link-btn followups-more"
+          className="link-btn side-card-more"
           onClick={() => setAll((v) => !v)}
-          title={all ? "Back to the three most recent" : "Every task flagged to come back to"}
+          title={all ? "Back to the two oldest" : "Every task flagged to come back to"}
         >
-          {all ? "Show fewer" : `Show all ${flagged.length}`}
+          {all ? (
+            "Show fewer"
+          ) : (
+            <>
+              {flagged.length - FOLLOW_UP_ROWS} more
+              <span className="side-card-more-note"> · newest {relativeTime(flagged[flagged.length - 1].at)}</span>
+            </>
+          )}
         </button>
       )}
     </section>
@@ -448,7 +455,7 @@ export function PinGlyph() {
   );
 }
 
-function CheckGlyph() {
+export function CheckGlyph() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
       <path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />

@@ -4,6 +4,8 @@ import { lastPrompt, relativeTime } from "../nebula/status";
 import { projectOfWorktree, useAppState } from "../nebula/store";
 import { summarize } from "../nebula/turnsummary";
 import type { Agent } from "../nebula/types";
+import { CheckGlyph } from "./Organize";
+import { ProjectDot } from "./Sidebar";
 import { useTurn } from "./TurnStrip";
 
 /** Rows shown before "Show all". */
@@ -21,16 +23,15 @@ function Row({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
   return (
     <li>
       <button
-        className="waiting-row away-row"
+        className="side-row"
         onClick={onOpen}
         title={`${agent.name}, in ${project?.name ?? "its project"}, ${failed ? "stopped with an error" : "finished"} ${relativeTime(agent.status_changed_at) === "now" ? "just now" : `${relativeTime(agent.status_changed_at)} ago`}.${did ? `\n${did}` : ""}\nClick to open it; it leaves this list.`}
       >
-        <span className={`sdot dot-${agent.status}`} aria-hidden />
-        <span className="waiting-name">{agent.name}</span>
-        <span className="away-did">{failed ? "Stopped with an error" : did}</span>
-        <span className="waiting-where">
-          <span>{project?.name}</span>
-          <span className="waiting-age">{relativeTime(agent.status_changed_at)}</span>
+        <span className="side-row-name">{agent.name}</span>
+        <span className="side-row-age">{relativeTime(agent.status_changed_at)}</span>
+        <span className={`side-row-sub${failed ? " is-error" : ""}`}>
+          <ProjectDot project={project} />
+          <span className="side-row-text">{failed ? "Stopped with an error" : did}</span>
         </span>
       </button>
     </li>
@@ -55,13 +56,14 @@ export function AwayDigest({ onOpen }: { onOpen: (agent: Agent) => void }) {
     .sort((a, b) => b.status_changed_at - a.status_changed_at);
   if (!done.length) return null;
   return (
-    <section className="waiting away" aria-label="Finished while you were away">
+    <section className="side-card away" aria-label="Finished while you were away">
       <h2
-        className="waiting-title"
+        className="side-card-head"
         title="What finished while the window was in the background for ten minutes or more, or since the app opened. A task leaves once you open it; × puts the list away."
       >
-        While you were away <span className="waiting-count">{done.length}</span>
-        <button className="icon-btn away-close" onClick={dismissAway} aria-label="Dismiss" title="Dismiss">
+        <CheckGlyph />
+        <span className="side-card-title">While you were away</span> <span className="side-card-count">{done.length}</span>
+        <button className="icon-btn side-card-close" onClick={dismissAway} aria-label="Dismiss" title="Dismiss">
           ×
         </button>
       </h2>
@@ -72,7 +74,7 @@ export function AwayDigest({ onOpen }: { onOpen: (agent: Agent) => void }) {
       </ul>
       {done.length > MAX_ROWS && (
         <button
-          className="link-btn away-more"
+          className="link-btn side-card-more"
           onClick={() => setAll((v) => !v)}
           title={all ? "Back to the three most recent" : "Every task that finished while you were away"}
         >
