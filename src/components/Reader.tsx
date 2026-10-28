@@ -646,6 +646,9 @@ export function Reader({
     how: "sent",
   });
   const picks = tapped.entry === latest ? tapped.picks : {};
+  // A reply on its way, shown in the thread until the agent's copy lands.
+  const [outbox, setOutbox] = useState<{ text: string; after: number; sent: boolean } | null>(null);
+  const landed = !!outbox && (t?.entries ?? []).some((e) => e.kind === "you" && e.n > outbox.after);
   // A queued message you took back out of the queue no longer counts.
   const stillGoing = queued.how === "sent" || (getState().queue[agent.id] ?? []).some((q) => q.text === queued.text);
   // What you answered each earlier reply with, read from the message after it.
@@ -717,7 +720,7 @@ export function Reader({
         return;
       }
       const top = el.getBoundingClientRect().top;
-      const mine = [...el.querySelectorAll<HTMLElement>(".rd-you:not(.is-queued)")];
+      const mine = [...el.querySelectorAll<HTMLElement>(".rd-you:not(.is-queued, .is-sending)")];
       const next = up
         ? mine.filter((m) => m.getBoundingClientRect().top < top - 4).pop()
         : mine.find((m) => m.getBoundingClientRect().top > top + 20);
@@ -889,11 +892,16 @@ export function Reader({
     setTapped({ entry: -1, picks: {} });
     setPointed(null);
     stick.current = true;
+    const after = t?.entries.length ? t.entries[t.entries.length - 1].n : -1;
+    setOutbox({ text, after, sent: false });
     try {
       const how = await enqueue(agent, text);
       setQueued({ entry: latest, picks, text, how });
+      // A queued one shows in the queue instead.
+      setOutbox(how === "queued" ? null : { text, after, sent: true });
       if (how === "queued") flash(`Queued for ${agent.name}: sent when its turn ends`);
     } catch {
+      setOutbox(null);
       // It didn't go: put back what you wrote and picked.
       setDraft(was.draft);
       setTapped(was.tapped);
@@ -1033,6 +1041,20 @@ export function Reader({
                     </p>
                   ),
                 ])}
+                {outbox && !landed && (
+                  <div className="rd-you is-sending">
+                    {outbox.text}
+                    <span className="rd-queued-bar" role="status">
+                      <span>
+                        {!outbox.sent
+                          ? agent.alive
+                            ? "Sending…"
+                            : `Waking ${agent.name} to send it…`
+                          : `Sent. ${agent.name} is picking it up`}
+                      </span>
+                    </span>
+                  </div>
+                )}
                 {(state.queue[agent.id] ?? []).map((q) => (
                   <div key={q.id} className="rd-you is-queued">
                     {q.text}
