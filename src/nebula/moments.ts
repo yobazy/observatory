@@ -119,12 +119,19 @@ export async function noteMoment(note: string) {
   await invoke("annotate_moment", { dir: m.dir, note: note.trim() });
 }
 
-/** The prompt for a task started from a moment: what you noticed, and where
- *  the moment is so the agent can see it too. */
+/** The prompt for a task started from a moment: what you noticed, where the
+ *  moment is so the agent can see it too, and how far to take it: its own
+ *  worktree, a PR, and a second agent that reviews and merges that PR. */
 export function momentPrompt(dir: string, note: string): string {
   return [
     note.trim() || "Look into what I marked in Observatory.",
     `I marked this moment in Observatory: ${dir}\nRead its moment.json (the last minute of what I did, what was on screen, and my note) and look at screenshot.png before you start.`,
+    "If it needs a change, take it all the way:\n" +
+      "1. Before you edit anything, move into your own worktree with `nebula worktree <short-kebab-name>`. Other sessions share this checkout, so don't switch its branch.\n" +
+      "2. Make the change, run the checks this project's CLAUDE.md or README asks for, and commit.\n" +
+      "3. Push the branch and open a PR.\n" +
+      '4. Hand the review to a separate agent: `nebula spawn "Review PR #<number> (<url>) as a fresh reviewer: read the diff, look for correctness bugs and breaks in this project\'s rules, and run its checks. If it holds up, merge it with gh pr merge. If not, leave a PR comment saying what\'s wrong and don\'t merge."`\n' +
+      "If it turns out no change is needed, say what you found instead.",
   ].join("\n\n");
 }
 

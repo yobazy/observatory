@@ -218,7 +218,8 @@ type, and nothing is sent anywhere. It's there to show where the app gets in you
 **Mark this moment** (`⇧⌘M`): noticed something off? This saves the last minute of those events,
 what's on screen (the view, project, session and its status) and a screenshot of the window to a
 folder under `moments/` beside the log, copies the folder's path, and takes a line on what you
-saw. Paste the path wherever you're reporting it, or start a task from it. The minute is kept in
+saw. Paste the path wherever you're reporting it, or start a task from it: an agent fixes it in its
+own worktree and opens a PR, and a second agent reviews and merges it. The minute is kept in
 memory whether or not the log is on, and only written when you press it. The screenshot needs
 Screen Recording allowed.
 
