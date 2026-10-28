@@ -164,14 +164,17 @@ function screenFor(session: SessionRef): string {
       ? [
           `${c(215, "●")} I'll start with the layout, then the styles.`,
           "",
-          `  ${bold("Update")}(src/components/Hero.tsx)`,
-          `  ${c(114, "+  <PricingGrid featured />")}`,
-          `  ${c(203, "-  <Banner title={site.title} />")}`,
+          c(111, "────────────────────────────────────────────────────"),
+          ` ${bold("Bash command")}`,
           "",
-          "\x1b[48;5;236m Do you want to make this edit to Hero.tsx?          \x1b[0m",
-          `\x1b[48;5;236m ${c(111, "❯ 1. Yes")}\x1b[48;5;236m                                            \x1b[0m`,
-          "\x1b[48;5;236m   2. Yes, and don't ask again this session           \x1b[0m",
-          "\x1b[48;5;236m   3. No, and tell Claude what to do differently      \x1b[0m",
+          "   npm run build && npx playwright test pricing.spec.ts",
+          "",
+          `   ${c(244, "Build the site and run the pricing page tests")}`,
+          "",
+          " Do you want to proceed?",
+          ` ${c(111, "❯ 1. Yes")}`,
+          "   2. Yes, and don't ask again for npm run build commands",
+          "   3. No, and tell Claude what to do differently (esc)",
         ]
       : agent.status === "running"
         ? [

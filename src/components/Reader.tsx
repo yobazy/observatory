@@ -1060,6 +1060,7 @@ export function Reader({
         <div className="rd-compose">
           {waiting && question ? (
             <div className="rd-ask">
+              {question.detail && <pre className="rd-ask-detail">{question.detail.join("\n")}</pre>}
               {question.prompt && <p className="rd-wait">{question.prompt}</p>}
               <AskChoices question={question} onPick={onPick} />
             </div>
