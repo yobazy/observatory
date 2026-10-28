@@ -7496,6 +7496,42 @@ button.board-main:hover .board-text {
   border: 1px dashed var(--line);
   color: var(--muted);
 }
+/* A reply on its way, until the agent's own copy of it shows up. */
+.rd-you.is-sending {
+  animation: rd-sending-in 0.18s ease-out;
+}
+.rd-you.is-sending .rd-queued-bar {
+  font-size: 12px;
+  color: var(--muted);
+}
+.rd-you.is-sending .rd-queued-bar > span::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 1px;
+  animation: rd-sending-dot 1.2s ease-in-out infinite;
+}
+@keyframes rd-sending-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes rd-sending-dot {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-you.is-sending,
+  .rd-you.is-sending .rd-queued-bar > span::before {
+    animation: none;
+  }
+}
 .rd-queued-bar {
   display: flex;
   gap: 10px;
