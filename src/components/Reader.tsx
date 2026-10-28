@@ -15,6 +15,7 @@ import { useStandIn } from "../nebula/pane";
 import { shipKind } from "../nebula/git";
 import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
 import { highlightUnder } from "../nebula/highlight";
+import { fitTables } from "../nebula/tablecols";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
 import type { Agent } from "../nebula/types";
@@ -123,6 +124,8 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
     }
     return () => added.forEach((b) => b.remove());
   }, [html]);
+  // A table scrolls sideways when it's wide, and its columns drag to resize.
+  useEffect(() => (el.current ? fitTables(el.current) : undefined), [html]);
   // A code span that names a file on disk opens it; "#75" goes to that PR.
   const where = useContext(Where);
   useEffect(() => {

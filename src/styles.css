@@ -5878,14 +5878,79 @@ button.attempt-status:hover span:nth-child(2) {
   border-left: 3px solid var(--line);
   color: var(--muted);
 }
+/* A wide table scrolls inside its own box rather than squeezing its columns
+   until words break a letter at a time. */
+.md-table {
+  margin: 0 0 1em;
+  overflow-x: auto;
+  /* Its own width never counts toward the card's, so it can't widen it. */
+  contain: inline-size;
+}
+.md-doc .md-table > table {
+  margin: 0;
+}
 .md-doc table {
   border-collapse: collapse;
+  overflow-wrap: normal;
 }
 .md-doc th,
 .md-doc td {
+  position: relative;
   border: 1px solid var(--line);
   padding: 6px 10px;
   text-align: left;
+  vertical-align: top;
+}
+.md-doc th {
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--raised) 50%, transparent);
+}
+/* Once a column is dragged, the widths are yours: text wraps inside them,
+   and a word too long for its column breaks rather than spilling over. */
+.md-doc table.is-sized {
+  table-layout: fixed;
+}
+.md-doc table.is-sized th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.md-doc table.is-sized td {
+  overflow-wrap: anywhere;
+}
+.md-doc table.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+/* The edge of a column you drag to resize it. */
+.col-grip {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  z-index: 1;
+  cursor: col-resize;
+  user-select: none;
+}
+/* The last edge stays inside the scroller, or it would scroll by its width. */
+th:last-child > .col-grip {
+  right: 0;
+}
+.col-grip::after {
+  content: "";
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.col-grip:hover::after,
+.is-resizing .col-grip::after {
+  opacity: 0.8;
 }
 .md-doc img {
   max-width: 100%;
