@@ -41,9 +41,11 @@ export type FileTarget = "draft" | "queue" | "terminal";
 /** Where a file sent to an agent goes. The reply box, when the Read view is
  *  up; else the last queued prompt, when one waits; else the agent's own
  *  prompt line in its terminal. An agent asleep gets it in the reply box,
- *  since typing into its terminal would mean waking it. */
-export function fileTarget(on: { reading: boolean; queued: number; alive: boolean }): FileTarget {
+ *  since typing into its terminal would mean waking it, and so does one
+ *  waiting on you: its terminal is showing a question or a menu, which a
+ *  paste could answer. */
+export function fileTarget(on: { reading: boolean; queued: number; alive: boolean; waiting: boolean }): FileTarget {
   if (on.reading) return "draft";
   if (on.queued > 0) return "queue";
-  return on.alive ? "terminal" : "draft";
+  return on.alive && !on.waiting ? "terminal" : "draft";
 }

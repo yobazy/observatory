@@ -58,19 +58,31 @@ export async function sendFile(agent: Agent, path: string) {
     return;
   }
   const canRead = hasLog(agent);
+  const waiting = agent.status === "needs_feedback";
   const queued = getState().queue[agent.id] ?? [];
-  let to = fileTarget({ reading: canRead && paneMode() === "read", queued: queued.length, alive: agent.alive });
-  // Without a conversation to read, there's no reply box to put it in.
-  if (to === "draft" && !canRead) to = "terminal";
+  let to = fileTarget({ reading: canRead && paneMode() === "read", queued: queued.length, alive: agent.alive, waiting });
   const text = shellQuote(path);
+  if (to === "queue") {
+    const last = queued[queued.length - 1];
+    if (editQueued(agent.id, last.id, withPath(last.text, text))) {
+      flash(`Added ${name} to the prompt queued for ${agent.name}`);
+      return;
+    }
+    // Sent meanwhile: it goes where it would have without one.
+    to = fileTarget({ reading: false, queued: 0, alive: agent.alive, waiting });
+  }
+  // Without a conversation to read, there's no reply box to put it in.
+  if (to === "draft" && !canRead) {
+    if (waiting) {
+      flash(`${agent.name} is waiting on you. Answer it first, then send ${name}`);
+      return;
+    }
+    to = "terminal";
+  }
   if (to === "draft") {
     addToDraft(agent.id, text);
     if (paneMode() !== "read") setPaneMode("read");
-    flash(`Added ${name} to your reply`);
-  } else if (to === "queue") {
-    const last = queued[queued.length - 1];
-    editQueued(agent.id, last.id, withPath(last.text, text));
-    flash(`Added ${name} to the prompt queued for ${agent.name}`);
+    flash(waiting ? `Added ${name} to your reply, for once you've answered ${agent.name}` : `Added ${name} to your reply`);
   } else {
     try {
       // A bracketed paste, as a file dropped on the terminal is: the CLI

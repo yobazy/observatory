@@ -11,11 +11,15 @@ test('a path goes at the end of what you wrote, once', () => {
 });
 
 test('a file goes where the agent reads next', () => {
-  assert.equal(fileTarget({ reading: true, queued: 2, alive: true }), 'draft');
-  assert.equal(fileTarget({ reading: false, queued: 1, alive: true }), 'queue');
-  assert.equal(fileTarget({ reading: false, queued: 0, alive: true }), 'terminal');
+  const on = { reading: false, queued: 0, alive: true, waiting: false };
+  assert.equal(fileTarget({ ...on, reading: true, queued: 2 }), 'draft');
+  assert.equal(fileTarget({ ...on, queued: 1 }), 'queue');
+  assert.equal(fileTarget(on), 'terminal');
   // Asleep: into the reply box rather than waking it.
-  assert.equal(fileTarget({ reading: false, queued: 0, alive: false }), 'draft');
+  assert.equal(fileTarget({ ...on, alive: false }), 'draft');
+  // Waiting on a menu: a paste could answer it, so not the terminal.
+  assert.equal(fileTarget({ ...on, waiting: true }), 'draft');
+  assert.equal(fileTarget({ ...on, waiting: true, queued: 1 }), 'queue');
 });
 
 test('a file added from outside the box lands in the draft and says so', () => {

@@ -122,9 +122,13 @@ export async function handToBranch(worktreeId: string, prompt: string, what: str
     : `Queued for ${taker.agent.name}: sent when its turn ends`;
 }
 
-/** Change what a queued prompt says, before it goes. */
-export function editQueued(agentId: string, id: string, text: string) {
-  write(agentId, (getState().queue[agentId] ?? []).map((q) => (q.id === id ? { ...q, text } : q)));
+/** Change what a queued prompt says, before it goes. False when it's gone
+ *  (sent, or taken back) and there's nothing to change. */
+export function editQueued(agentId: string, id: string, text: string): boolean {
+  const items = getState().queue[agentId] ?? [];
+  if (!items.some((q) => q.id === id)) return false;
+  write(agentId, items.map((q) => (q.id === id ? { ...q, text } : q)));
+  return true;
 }
 
 export function unqueue(agentId: string, id: string) {
