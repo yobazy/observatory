@@ -3183,6 +3183,12 @@ td.task-last {
 .pet-bubble-sweat {
   font-size: 9px;
 }
+/* The working line's cat: a small yard of its own at the line's start. */
+.wc-desk {
+  position: relative;
+  flex: none;
+  height: 24px;
+}
 @keyframes pet-float {
   to {
     transform: translateY(-3px);

@@ -56,3 +56,14 @@ test('the working line says how long the turn has run', async () => {
   assert.equal(clock(3900), '1h 5m');
   assert.equal(clock(-3), '0s');
 });
+
+test('the step under way is sorted for the working line\'s cat', async () => {
+  const { actOf } = await import('../src/nebula/transcript.ts');
+  const s = (tool) => ({ tool, target: '', ok: null });
+  assert.equal(actOf(s('Write')), 'edit');
+  assert.equal(actOf(s('Grep')), 'read');
+  assert.equal(actOf(s('Bash')), 'run');
+  assert.equal(actOf(s('WebSearch')), 'web');
+  assert.equal(actOf(s('Agent')), 'wait');
+  assert.equal(actOf(s('mcp__pencil__execute')), 'other');
+});
