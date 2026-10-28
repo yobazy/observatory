@@ -78,6 +78,19 @@ export function doingLine(s: TStep): string {
   return `Using ${s.tool.replace(/^mcp__.+?__/, "").replace(/_/g, " ")}`;
 }
 
+/** What kind of thing the step under way is, for the cat on the working
+ *  line to act out. */
+export type Act = "edit" | "read" | "run" | "web" | "wait" | "other";
+
+export function actOf(s: TStep): Act {
+  if (EDITS.has(s.tool)) return "edit";
+  if (LOOKS.has(s.tool)) return "read";
+  if (s.tool === "Bash") return "run";
+  if (s.tool === "WebFetch" || s.tool === "WebSearch") return "web";
+  if (s.tool === "Agent" || s.tool === "Task") return "wait";
+  return "other";
+}
+
 /** Where `query` occurs in `text`, ignoring case: each start offset. */
 export function findAll(text: string, query: string): number[] {
   const q = query.toLowerCase();
