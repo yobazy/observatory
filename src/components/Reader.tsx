@@ -529,7 +529,12 @@ function OpenDecisions({
   const count = open.reduce((k, d) => k + d.asks.length, 0);
   return (
     <details className="rd-open">
-      <summary>{count === 1 ? "1 earlier decision still open" : `${count} earlier decisions still open`}</summary>
+      {/* Stays at the top while the list scrolls, with Hide at the right to
+          fold it from wherever you are. */}
+      <summary>
+        <span>{count === 1 ? "1 earlier decision still open" : `${count} earlier decisions still open`}</span>
+        <span className="rd-open-fold" aria-hidden />
+      </summary>
       {open.map((d) => (
         <div key={d.entry} className="rd-open-reply">
           <div className="rd-open-head">
