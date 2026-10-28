@@ -710,7 +710,7 @@ export function mockTranscript(s: State, agentId: string): Transcript | null {
   add("you", "Where does the cart get written when two tabs are open?");
   add("claude", "Both tabs write through `src/cart/sync.ts`. Each one sends its update as soon as it's made, so they can land out of order.");
   add("you", "Can you show me where it goes wrong?");
-  add("claude", "It's the `Promise.all` in `applyAll`, at `src/cart/sync.ts:42`. Two updates start together, and whichever finishes last wins. The plan is in `checkout-plan.md`, and #128 has the first attempt.\n\n**Needs you**\n1. Fix it with a queue or a lock?  A queue · B lock\n2. Keep the old sync behind a flag?  A yes · B no");
+  add("claude", "It's the `Promise.all` in `applyAll`, at `src/cart/sync.ts:42`. Two updates start together, and whichever finishes last wins. The plan is in `checkout-plan.md`, my notes on the race are in `/private/tmp/claude-501/storefront/scratchpad/two-tab-race-notes.md`, and #128 has the first attempt.\n\n**Needs you**\n1. Fix it with a queue or a lock?  A queue · B lock\n2. Keep the old sync behind a flag?  A yes · B no");
   add("you", turn.prompt);
   add("claude", "I'll read the sync code first, then make the change and run the tests.");
   const half = Math.ceil(turn.steps.length / 2);

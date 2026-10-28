@@ -205,6 +205,20 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
         c.dataset.path = abs[i]!;
         c.dataset.from = where.from;
         c.title = `Open ${abs[i]}`;
+        // A long path leads with its file name; its folders give way first.
+        const text = c.textContent ?? "";
+        const cut = text.lastIndexOf("/");
+        if (text.length > 32 && cut > 0 && cut < text.length - 1 && !c.querySelector(".rd-path-base")) {
+          const dir = document.createElement("span");
+          dir.className = "rd-path-dir";
+          dir.append(document.createElement("bdi"));
+          dir.firstChild!.textContent = text.slice(0, cut + 1);
+          const base = document.createElement("span");
+          base.className = "rd-path-base";
+          base.textContent = text.slice(cut + 1);
+          c.replaceChildren(dir, base);
+          c.classList.add("is-long");
+        }
       });
     });
     if (where.prUrl) {
