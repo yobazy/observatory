@@ -6180,6 +6180,14 @@ th:last-child > .col-grip {
   color: var(--accent);
   font-size: 11px;
 }
+.shelf-mark.is-pin {
+  display: inline-grid;
+}
+/* A pinned file stays first: its chip carries the accent's edge. */
+.shelf-strip li.is-pinned {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
 .shelf-x {
   padding: 2px 9px 2px 4px;
   border: 0;

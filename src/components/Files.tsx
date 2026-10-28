@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
-import { clearShelf, removeFromShelf, type ShelfItem } from "../nebula/shelf";
+import { clearShelf, pinOnShelf, removeFromShelf, type ShelfItem } from "../nebula/shelf";
 import { flash, getState, useAppState } from "../nebula/store";
 import { sendInput } from "../nebula/client";
 import { shellQuote } from "../nebula/dropfiles";
@@ -14,6 +14,7 @@ import type { Agent, Worktree } from "../nebula/types";
 import { ContextMenu, type MenuItem } from "./Menu";
 import { appLabel, openFileIn } from "./Preview";
 import { hasLog, useTurn } from "./TurnStrip";
+import { PinGlyph } from "./Organize";
 
 const KIND_MARK: Record<string, string> = { html: "◧", htm: "◧", md: "¶", markdown: "¶", pdf: "⎘" };
 const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif|ico|bmp)$/i;
@@ -22,6 +23,19 @@ const VIDEO = /\.(mp4|m4v|mov|webm)$/i;
 function mark(path: string): string {
   const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
   return KIND_MARK[ext] ?? (IMAGE.test(path) ? "▣" : VIDEO.test(path) ? "▶" : "≡");
+}
+
+/** What kind of file it is at a glance; a pin, once it's pinned. */
+function FileMark({ path, pinned }: { path: string; pinned?: boolean }) {
+  return pinned ? (
+    <span className="shelf-mark is-pin" role="img" aria-label="Pinned" title="Pinned: stays first">
+      <PinGlyph />
+    </span>
+  ) : (
+    <span className="shelf-mark" aria-hidden>
+      {mark(path)}
+    </span>
+  );
 }
 
 /** Where a file sits, said the short way: inside the checkout from its root,
@@ -79,7 +93,15 @@ interface Row {
   from: string;
   /** On this session's shelf, so it can come off it. */
   own: boolean;
+  /** Pinned on this session's shelf. */
+  pinned?: boolean;
 }
+
+/** Pin or unpin, said for a menu. */
+const pinItem = (agentId: string, path: string, pinned: boolean | undefined): MenuItem => ({
+  label: pinned ? "Unpin" : "Pin to the front",
+  run: () => pinOnShelf(agentId, path, !pinned),
+});
 
 /** The files this task has shown: a chip each for a quick click, and the
  *  whole list, with more to do, behind "All". */
@@ -93,6 +115,7 @@ export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree:
       run: () => void openPreview([path], agent.id),
     },
     { label: `Send to ${agent.name}`, run: () => void sendFile(agent, path) },
+    pinItem(agent.id, path, items.find((i) => i.path === path)?.pinned),
     { label: "Remove from the shelf", destructive: true, separated: true, run: () => removeFromShelf(agent.id, path) },
   ];
   return (
@@ -100,10 +123,10 @@ export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree:
       <span className="queue-label">Files</span>
       <ul>
         {items.map((item) => (
-          <li key={item.path}>
+          <li key={item.path} className={item.pinned ? "is-pinned" : undefined}>
             <button
               className="shelf-chip"
-              title={`${dirName(item.path)}/${baseName(item.path)}\nRight-click to send it to ${agent.name}`}
+              title={`${dirName(item.path)}/${baseName(item.path)}${item.pinned ? "\nPinned: stays first" : ""}\nRight-click to send it to ${agent.name}, or to ${item.pinned ? "unpin" : "pin"} it`}
               onClick={() => {
                 hideCard();
                 void openPreview([item.path], agent.id);
@@ -116,9 +139,7 @@ export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree:
                 setMenu({ path: item.path, x: e.clientX, y: e.clientY });
               }}
             >
-              <span className="shelf-mark" aria-hidden>
-                {mark(item.path)}
-              </span>
+              <FileMark path={item.path} pinned={item.pinned} />
               {baseName(item.path)}
             </button>
             <button
@@ -170,7 +191,7 @@ function FilesPanel({
   const [menu, setMenu] = useState<{ row: Row; x: number; y: number } | null>(null);
   const root = worktree?.path ?? "";
 
-  const own: Row[] = items.map((i) => ({ path: i.path, note: relativeTime(i.at), from: agent.id, own: true }));
+  const own: Row[] = items.map((i) => ({ path: i.path, note: relativeTime(i.at), from: agent.id, own: true, pinned: i.pinned }));
   const seen = new Set(items.map((i) => i.path));
   const others: Row[] = [];
   for (const [id, shelf] of Object.entries(state.shelf)) {
@@ -246,7 +267,9 @@ function FilesPanel({
           () => flash("Couldn't copy the path"),
         ),
     },
-    ...(r.own ? [{ label: "Remove from the shelf", destructive: true, run: () => removeFromShelf(agent.id, r.path) }] : []),
+    ...(r.own
+      ? [pinItem(agent.id, r.path, r.pinned), { label: "Remove from the shelf", destructive: true, run: () => removeFromShelf(agent.id, r.path) }]
+      : []),
   ];
 
   const section = (title: string, rows: Row[]) => {
@@ -265,9 +288,7 @@ function FilesPanel({
               }}
             >
               <button className="fl-open" onClick={() => open(r)} title={r.path}>
-                <span className="shelf-mark" aria-hidden>
-                  {mark(r.path)}
-                </span>
+                <FileMark path={r.path} pinned={r.pinned} />
                 <span className="fl-name">{baseName(r.path)}</span>
                 <span className="fl-where">{folder(r.path, root)}</span>
                 {r.note && <span className="fl-note">{r.note}</span>}
@@ -328,7 +349,7 @@ function FilesPanel({
             onClose();
           }}
         >
-          Clear the shelf
+          {items.some((i) => i.pinned) ? "Clear all but pinned" : "Clear the shelf"}
         </button>
       </footer>
       {menu && <ContextMenu items={actions(menu.row)} x={menu.x} y={menu.y} label={baseName(menu.row.path)} onClose={() => setMenu(null)} />}
