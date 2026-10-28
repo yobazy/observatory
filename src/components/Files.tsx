@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview, showPreviewFile } from "../nebula/preview";
 import { clearShelf, pinOnShelf, removeFromShelf, type ShelfItem } from "../nebula/shelf";
-import { bySource, pickRange, togglePick } from "../nebula/shelfList";
+import { byRecent, bySource, lastTouched, pickRange, togglePick } from "../nebula/shelfList";
 import { flash, getState, useAppState } from "../nebula/store";
 import { sendInput } from "../nebula/client";
 import { shellQuote } from "../nebula/dropfiles";
@@ -96,6 +96,8 @@ interface Row {
   own: boolean;
   /** Pinned on this session's shelf. */
   pinned?: boolean;
+  /** When it was shown, if it was. */
+  at?: number;
 }
 
 /** Pin or unpin, said for a menu. */
@@ -106,10 +108,13 @@ const pinItem = (agentId: string, path: string, pinned: boolean | undefined): Me
 
 /** The files this task has shown: a chip each for a quick click, and the
  *  whole list, with more to do, behind "All". */
-export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree: Worktree | undefined; items: ShelfItem[] | undefined }) {
+export function ShelfStrip({ agent, worktree, items: shelved }: { agent: Agent; worktree: Worktree | undefined; items: ShelfItem[] | undefined }) {
   const [at, setAt] = useState<DOMRect | null>(null);
   const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
-  if (!items?.length) return null;
+  const opened = useAppState().fileOpened;
+  // Most recent first: shown again with `nebula open`, or opened by you.
+  const items = useMemo(() => byRecent(shelved ?? [], opened), [shelved, opened]);
+  if (!items.length) return null;
   const chipActions = (path: string): MenuItem[] => [
     {
       label: "Open here",
@@ -195,23 +200,36 @@ function FilesPanel({
   const [runFrom, setRunFrom] = useState<string | null>(null);
   const root = worktree?.path ?? "";
 
-  const own: Row[] = items.map((i) => ({ path: i.path, note: relativeTime(i.at), from: agent.id, own: true, pinned: i.pinned }));
+  // Each section most recent first, by when a file was last shown or opened
+  // (`items` comes in that order already).
+  const opened = state.fileOpened;
+  const own: Row[] = items.map((i) => ({
+    path: i.path,
+    note: relativeTime(lastTouched(i, opened)),
+    from: agent.id,
+    own: true,
+    pinned: i.pinned,
+  }));
   const seen = new Set(items.map((i) => i.path));
-  const others: Row[] = [];
+  const shownByOthers: Row[] = [];
   for (const [id, shelf] of Object.entries(state.shelf)) {
     const other = state.agents[id];
     if (id === agent.id || !other || other.worktree_id !== agent.worktree_id) continue;
     for (const i of shelf) {
       if (seen.has(i.path)) continue;
       seen.add(i.path);
-      others.push({ path: i.path, note: other.name, from: id, own: false });
+      shownByOthers.push({ path: i.path, note: other.name, from: id, own: false, at: i.at });
     }
   }
+  const others = byRecent(shownByOthers, opened);
   const changed: Row[] = turn
-    ? summarize(turn, root)
-        .edited.map((p) => (p.startsWith("/") ? p : `${root}/${p}`))
-        .filter((p) => !seen.has(p))
-        .map((path) => ({ path, note: "", from: agent.id, own: false }))
+    ? byRecent(
+        summarize(turn, root)
+          .edited.map((p) => (p.startsWith("/") ? p : `${root}/${p}`))
+          .filter((p) => !seen.has(p))
+          .map((path) => ({ path, note: "", from: agent.id, own: false })),
+        opened,
+      )
     : [];
 
   const q = query.trim().toLowerCase();

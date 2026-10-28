@@ -87,8 +87,10 @@ export interface State {
   missingProjects: Record<string, true>;
   /** The files open in the preview, over or beside the terminal (preview.ts). */
   preview: PreviewState | null;
-  /** Files each task has shown, newest first, by agent id (shelf.ts). */
+  /** Files each task has shown, pinned first, by agent id (shelf.ts). */
   shelf: Record<string, ShelfItem[]>;
+  /** When each file was last opened in the preview, ms by path (shelf.ts). */
+  fileOpened: Record<string, number>;
   /** Comments on previewed files, by path (comments.ts). */
   comments: Record<string, MockComment[]>;
 }
@@ -140,6 +142,7 @@ let state: State = {
   missingProjects: {},
   preview: null,
   shelf: {},
+  fileOpened: {},
   comments: {},
   theme: "default",
   prefs: {},
