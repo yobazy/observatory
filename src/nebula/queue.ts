@@ -126,12 +126,19 @@ export function unqueue(agentId: string, id: string) {
   write(agentId, (getState().queue[agentId] ?? []).filter((q) => q.id !== id));
 }
 
+function onScreen(agentId: string): boolean {
+  const sel = getState().selectedSession;
+  return !!sel && "Agent" in sel && sel.Agent === agentId;
+}
+
 async function sendNext(agentId: string) {
   const first = getState().agents[agentId];
   const [next] = getState().queue[agentId] ?? [];
   // An agent asleep (reaped when idle) waits: waking it means attaching,
-  // which would switch the terminal out from under you.
-  if (!next || !first || !first.alive || !readyForNext(first)) return;
+  // which would switch the terminal out from under you. Unless it's the
+  // thread on screen: then nothing switches, and you're waiting on it.
+  if (!next || !first || !readyForNext(first)) return;
+  if (!first.alive && !onScreen(agentId)) return;
   if (Date.now() - (lastTyped.get(agentId) ?? 0) < TYPING_MS) return;
   sending.add(agentId);
   try {
