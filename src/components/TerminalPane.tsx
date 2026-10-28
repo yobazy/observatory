@@ -24,22 +24,24 @@ import { isSliding } from "./Resizer";
 import { AgentServerLink } from "./Run";
 import { usePaneMode, useStandIn } from "../nebula/pane";
 import { closeThread, useVerdict } from "../nebula/verdicts";
+import { Plate, plateTone } from "./Plate";
+import { LiveStrip } from "./LiveStrip";
 
 const THEME = {
-  background: "#0f1524",
-  foreground: "#dfe4f0",
-  cursor: "#9db4ff",
-  cursorAccent: "#0f1524",
-  selectionBackground: "#35456f",
-  black: "#1b2438",
-  red: "#ff7a6b",
+  background: "#0d1120",
+  foreground: "#e6e2d6",
+  cursor: "#f0a28b",
+  cursorAccent: "#0d1120",
+  selectionBackground: "#2b3450",
+  black: "#1a2032",
+  red: "#f0907a",
   green: "#5fd4b0",
   yellow: "#f2b84b",
   blue: "#7fa2ff",
   magenta: "#c49bff",
   cyan: "#62c7e6",
-  white: "#dfe4f0",
-  brightBlack: "#5c6682",
+  white: "#e6e2d6",
+  brightBlack: "#8f8c86",
   brightRed: "#ff9a8e",
   brightGreen: "#86e3c6",
   brightYellow: "#f7cd7a",
@@ -51,27 +53,27 @@ const THEME = {
 
 /** The terminal on the light surfaces: the same hues, deep enough to read. */
 const LIGHT_THEME = {
-  background: "#ffffff",
-  foreground: "#1b2233",
-  cursor: "#3d5bd9",
-  cursorAccent: "#ffffff",
-  selectionBackground: "#cdd7f7",
-  black: "#1b2233",
+  background: "#fbfaf7",
+  foreground: "#121726",
+  cursor: "#b5482c",
+  cursorAccent: "#fbfaf7",
+  selectionBackground: "#dfe3f2",
+  black: "#121726",
   red: "#c23a2b",
   green: "#1f8a67",
   yellow: "#946000",
   blue: "#2f55c9",
   magenta: "#8a44c2",
   cyan: "#10798f",
-  white: "#8a93a8",
-  brightBlack: "#5c6682",
+  white: "#8a8d99",
+  brightBlack: "#636878",
   brightRed: "#d4442f",
   brightGreen: "#23a079",
   brightYellow: "#a86a00",
   brightBlue: "#3d5bd9",
   brightMagenta: "#9d55d6",
   brightCyan: "#138aa3",
-  brightWhite: "#1b2233",
+  brightWhite: "#121726",
 };
 
 export const terminalTheme = (mode: string) =>
@@ -212,6 +214,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
         }
       }
       f.fit();
+      // The mode may have changed while it was being made.
+      t.options.theme = terminalTheme(getState().mode);
       term.current = t;
       fit.current = f;
       if (import.meta.env.DEV) (window as unknown as { __term: Terminal }).__term = t;
@@ -340,7 +344,11 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       {exists ? (
         <header className="pane-head" data-tauri-drag-region>
           <div className="pane-title" data-tauri-drag-region>
-            {agent && <span className={`sdot dot-${agent.status}`} aria-hidden />}
+            {agent && (
+              <span className={`sdot has-plate dot-${agent.status}`} aria-hidden>
+                <Plate seed={agent.id} work={agent.recent_prompts.length} tone={plateTone(agent)} size={18} drift={agent.status === "running"} />
+              </span>
+            )}
             <RenameableTitle
               key={agent?.id ?? tab?.id}
               name={(agent ?? tab)!.name}
@@ -447,6 +455,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       ) : (
         <header className="pane-head" data-tauri-drag-region />
       )}
+      <LiveStrip current={agent?.id} />
 
       {agent && <TurnStrip key={agent.id} agent={agent} worktree={wt} />}
       {asking && !reading && <AskStrip question={asking} onPick={answer} />}

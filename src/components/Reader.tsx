@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { isPreview } from "../nebula/client";
-import { flash, getState, useAppState } from "../nebula/store";
+import { flash, getState, projectOfWorktree, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
@@ -17,16 +17,40 @@ import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
 import { highlightUnder } from "../nebula/highlight";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
+import { harnessLabel, relativeTime, statusLabel } from "../nebula/status";
 import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
 import { AskChoices } from "./AskStrip";
 import { ReaderFind } from "./ReaderFind";
+import { Plate } from "./Plate";
 
 /** What you were typing to each agent, kept when the reader remounts for a
  *  new session (/clear, resume). */
 const drafts = new Map<string, string>();
 /** Earlier decisions you put away, per agent, for as long as the app runs. */
 const dismissedFor = new Map<string, Set<number>>();
+
+/** The thread's artwork and name at the top of what it said. Every prompt
+ *  and step it has taken moves the sand, so the plate is made by the work. */
+function ReaderHero({ agent, work }: { agent: Agent; work: number }) {
+  const state = useAppState();
+  const branch = state.worktrees[agent.worktree_id]?.branch;
+  const project = projectOfWorktree(state, agent.worktree_id)?.name;
+  return (
+    <header className="rd-hero">
+      <Plate seed={agent.id} work={work} tone="sand" size={128} drift={agent.status === "running"} />
+      <div className="rd-hero-text">
+        <p className={`rd-hero-status is-${agent.status}`}>{statusLabel(agent)}</p>
+        <h2 className="rd-hero-name">{agent.name}</h2>
+        <p className="rd-hero-where">
+          {[project && branch ? `${project} on ${branch}` : project ?? branch, harnessLabel(agent), relativeTime(agent.status_changed_at)]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      </div>
+    </header>
+  );
+}
 
 /** The thread's conversation, read again as it moves. */
 function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | null {
@@ -891,6 +915,7 @@ export function Reader({
           }}
         >
           <div className="rd-col">
+            <ReaderHero agent={agent} work={t ? t.entries.reduce((n, e) => n + 1 + e.steps.length, 0) : 0} />
             {!t ? (
               <p className="rd-note">Reading the thread…</p>
             ) : t.entries.length === 0 ? (

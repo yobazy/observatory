@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "@fontsource-variable/onest";
+import "@fontsource-variable/bricolage-grotesque/opsz.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
 // The other terminal faces (termfont.ts), Latin only: each loads on first use.
