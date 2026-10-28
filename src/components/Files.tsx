@@ -2,13 +2,18 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
 import { clearShelf, removeFromShelf, type ShelfItem } from "../nebula/shelf";
-import { flash, useAppState } from "../nebula/store";
+import { flash, getState, useAppState } from "../nebula/store";
+import { sendInput } from "../nebula/client";
+import { shellQuote } from "../nebula/dropfiles";
+import { addToDraft, fileTarget, withPath } from "../nebula/drafts";
+import { paneMode, setPaneMode } from "../nebula/pane";
+import { editQueued } from "../nebula/queue";
 import { relativeTime } from "../nebula/status";
 import { summarize } from "../nebula/turnsummary";
 import type { Agent, Worktree } from "../nebula/types";
 import { ContextMenu, type MenuItem } from "./Menu";
 import { appLabel, openFileIn } from "./Preview";
-import { useTurn } from "./TurnStrip";
+import { hasLog, useTurn } from "./TurnStrip";
 
 const KIND_MARK: Record<string, string> = { html: "◧", htm: "◧", md: "¶", markdown: "¶", pdf: "⎘" };
 const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif|ico|bmp)$/i;
@@ -27,6 +32,43 @@ function folder(path: string, root: string): string {
   return dirName(path);
 }
 
+/** Hand `path` to `agent` without typing it: into the reply you're writing
+ *  in the Read view, the prompt queued for its next turn, or its prompt line
+ *  in the terminal, whichever it would read next (fileTarget). */
+export async function sendFile(agent: Agent, path: string) {
+  const name = baseName(path);
+  // A control character could end the paste early and run the rest as input.
+  if (/[\x00-\x1f\x7f]/.test(path)) {
+    flash(`${name}'s name has a control character in it, so it wasn't sent`);
+    return;
+  }
+  const canRead = hasLog(agent);
+  const queued = getState().queue[agent.id] ?? [];
+  let to = fileTarget({ reading: canRead && paneMode() === "read", queued: queued.length, alive: agent.alive });
+  // Without a conversation to read, there's no reply box to put it in.
+  if (to === "draft" && !canRead) to = "terminal";
+  const text = shellQuote(path);
+  if (to === "draft") {
+    addToDraft(agent.id, text);
+    if (paneMode() !== "read") setPaneMode("read");
+    flash(`Added ${name} to your reply`);
+  } else if (to === "queue") {
+    const last = queued[queued.length - 1];
+    editQueued(agent.id, last.id, withPath(last.text, text));
+    flash(`Added ${name} to the prompt queued for ${agent.name}`);
+  } else {
+    try {
+      // A bracketed paste, as a file dropped on the terminal is: the CLI
+      // takes it as pasted text, and nothing goes until you press Enter.
+      await sendInput({ Agent: agent.id }, `\x1b[200~${text} \x1b[201~`);
+      document.querySelector<HTMLElement>(".column-terminal .xterm-helper-textarea")?.focus();
+      flash(`Added ${name} to ${agent.name}'s prompt`);
+    } catch (e) {
+      flash(`Couldn't send ${name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+}
+
 /** A row in the list: a file, where it came from, and what's left to do
  *  with it besides opening it. */
 interface Row {
@@ -43,7 +85,16 @@ interface Row {
  *  whole list, with more to do, behind "All". */
 export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree: Worktree | undefined; items: ShelfItem[] | undefined }) {
   const [at, setAt] = useState<DOMRect | null>(null);
+  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
   if (!items?.length) return null;
+  const chipActions = (path: string): MenuItem[] => [
+    {
+      label: "Open here",
+      run: () => void openPreview([path], agent.id),
+    },
+    { label: `Send to ${agent.name}`, run: () => void sendFile(agent, path) },
+    { label: "Remove from the shelf", destructive: true, separated: true, run: () => removeFromShelf(agent.id, path) },
+  ];
   return (
     <div className="shelf-strip" aria-label="Files this task has shown">
       <span className="queue-label">Files</span>
@@ -52,13 +103,18 @@ export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree:
           <li key={item.path}>
             <button
               className="shelf-chip"
-              title={`${dirName(item.path)}/${baseName(item.path)}`}
+              title={`${dirName(item.path)}/${baseName(item.path)}\nRight-click to send it to ${agent.name}`}
               onClick={() => {
                 hideCard();
                 void openPreview([item.path], agent.id);
               }}
               onMouseEnter={(e) => hoverPath(item.path, e.clientX, e.clientY + 12, agent.id)}
               onMouseLeave={() => leavePath()}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                hideCard();
+                setMenu({ path: item.path, x: e.clientX, y: e.clientY });
+              }}
             >
               <span className="shelf-mark" aria-hidden>
                 {mark(item.path)}
@@ -86,6 +142,7 @@ export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree:
         All {items.length} <span aria-hidden>▾</span>
       </button>
       {at && <FilesPanel agent={agent} worktree={worktree} items={items} anchor={at} onClose={() => setAt(null)} />}
+      {menu && <ContextMenu items={chipActions(menu.path)} x={menu.x} y={menu.y} label={baseName(menu.path)} onClose={() => setMenu(null)} />}
     </div>
   );
 }
@@ -170,6 +227,13 @@ function FilesPanel({
   };
   const actions = (r: Row): MenuItem[] => [
     { label: "Open here", run: () => open(r) },
+    {
+      label: `Send to ${agent.name}`,
+      run: () => {
+        onClose();
+        void sendFile(agent, r.path);
+      },
+    },
     { label: `Open in ${appLabel(r.path).toLowerCase()}`, run: () => void openFileIn(r.path, "app") },
     { label: "Open in editor", run: () => void openFileIn(r.path, "editor") },
     { label: "Show in Finder", run: () => void openFileIn(r.path, "finder") },
@@ -256,7 +320,7 @@ function FilesPanel({
         {empty && <p className="fl-empty">No file matches “{query.trim()}”.</p>}
       </div>
       <footer className="fl-foot">
-        <span>Right-click a file for more</span>
+        <span>Right-click a file to send it to {agent.name}, and more</span>
         <button
           className="link-btn"
           onClick={() => {

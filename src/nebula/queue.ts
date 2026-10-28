@@ -122,6 +122,11 @@ export async function handToBranch(worktreeId: string, prompt: string, what: str
     : `Queued for ${taker.agent.name}: sent when its turn ends`;
 }
 
+/** Change what a queued prompt says, before it goes. */
+export function editQueued(agentId: string, id: string, text: string) {
+  write(agentId, (getState().queue[agentId] ?? []).map((q) => (q.id === id ? { ...q, text } : q)));
+}
+
 export function unqueue(agentId: string, id: string) {
   write(agentId, (getState().queue[agentId] ?? []).filter((q) => q.id !== id));
 }
