@@ -10,28 +10,18 @@
   underneath on its own.
 -->
 
-### Stay in the Read view
+### A new look: Night watch
 
-The Read view now does most of what you'd go to the terminal for. Say or type `2 a, 3 b` and those options light up on the card. Decisions you haven't answered wait in a tray above the reply box, and **Other…** takes an answer in your own words. Select part of a reply and click **Reply about this** to quote just that part, or **Copy** it. A "New since you were here" line marks where you left off, and older turns fold away. **⌘F** searches the thread, and **⌘↑**/**⌘↓** jump between your messages. Edits show a **Diff**, and a failed step shows the end of its output. The view also keeps up on its own now: a reply that lands just as the thread finishes shows up without switching to the terminal and back.
+Observatory is night blue now, with ivory text and names set in Bricolage Grotesque. Light mode is the same design by day, with ivory pages and ink-blue text. The terminal follows whichever mode you're in.
 
-### Close a thread in one click
+### Sand plates show what each thread is doing
 
-When an agent ends a reply with **✅ Safe to close**, a **Close thread** button appears in the header and at the foot of the reply. Clicking it archives the thread and takes you back to the thread you had open before, with **Undo** in case you didn't mean it. **🟠 Keep open** and **🔴 Don't close** show their reason in the header instead.
+Every thread's status dot is now a small plate of sand. Each prompt or tool step moves the sand into a new figure: a working thread's plate keeps shifting, a waiting one holds and pulses, and finished ones settle. A larger plate tops the Read view, and each project gets its own as an emblem.
 
-### Tags and priorities
+### The Live strip
 
-Tag threads from their menu, then tap a tag's chip above a project's list to see only those threads. **Tag untagged** asks an agent to tag the rest from the project's own tags. Right-click a thread or project and choose **Priority…**, or press **P** on a selected thread: urgent and high go to the top of their list, low to the bottom.
+A row of lenses under the pane header shows every thread that's working, waiting on you or unread, across all your projects. Click one to open that thread.
 
-### See your scheduled jobs
+### And a smaller thing
 
-A new **Automations** view lists your launchd jobs with when each last ran and its schedule, and flags jobs that are stale or failing. A health dot in the footer shows when something needs a look. Run a job now, or open its log.
-
-### Watch videos a reply names
-
-A reply that names a `.mp4`, `.mov` or `.webm` file shows a player right in the Read view, and the preview plays it too.
-
-### And smaller things
-
-- Start a task straight from a marked moment (**⇧⌘M**), in the project you pick, without leaving what you're doing.
-- **Open** in the preview and Files menus opens any file in its default app, not just pages in the browser.
-- Paths with spaces in the terminal are clickable, even when the line wraps at a space.
+- In dark mode the terminal no longer gets stuck on the light theme.

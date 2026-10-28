@@ -1,6 +1,6 @@
 [package]
 name = "observatory"
-version = "0.9.0"
+version = "0.10.0"
 description = "Desktop client for the nebula agent daemon"
 authors = ["Bazil"]
 edition = "2021"
