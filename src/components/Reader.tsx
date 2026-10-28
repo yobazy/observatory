@@ -16,6 +16,7 @@ import { shipKind } from "../nebula/git";
 import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
 import { highlightUnder } from "../nebula/highlight";
 import { commandIn } from "../nebula/command";
+import { fitTables } from "../nebula/tablecols";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
 import { harnessLabel, relativeTime, statusLabel } from "../nebula/status";
@@ -185,6 +186,8 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
       el.current?.querySelectorAll("pre.is-command").forEach((p) => p.classList.remove("is-command"));
     };
   }, [html, where.from]);
+  // A table scrolls sideways when it's wide, and its columns drag to resize.
+  useEffect(() => (el.current ? fitTables(el.current) : undefined), [html]);
   // A code span that names a file on disk opens it; "#75" goes to that PR.
   useEffect(() => {
     const root = el.current;

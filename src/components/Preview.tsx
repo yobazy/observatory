@@ -25,6 +25,7 @@ import { currentEditor } from "./Editor";
 import { ContextMenu } from "./Menu";
 import { CommentBox, CommentPanel, type Spot } from "./Comments";
 import type { Target } from "../nebula/comments";
+import { fitTables } from "../nebula/tablecols";
 // The browser preview has no preview.rs to add comment mode's script, so
 // it puts it into the demo page itself.
 import PICK_JS from "../../src-tauri/src/pick.js?raw";
@@ -419,6 +420,9 @@ function MarkdownView({
     if (wrap.current) watch.observe(wrap.current);
     return () => watch.disconnect();
   }, [comments, html]);
+
+  // A table scrolls sideways when it's wide, and its columns drag to resize.
+  useEffect(() => (doc.current ? fitTables(doc.current) : undefined), [html]);
 
   // Leaving comment mode clears the outline.
   useEffect(() => {
