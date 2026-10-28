@@ -23,6 +23,34 @@ test('a Claude Code permission prompt reads as its question and choices', () => 
   ]);
 });
 
+test("a Bash prompt carries the command it's asking about", () => {
+  const q = findQuestion([
+    '⏺ Checking whether each branch adds anything:',
+    '',
+    '────────────────────────────────────────────────',
+    ' Bash command',
+    '',
+    '   git merge-tree --write-tree origin/main thread-tags',
+    '',
+    '   Check what the branch would add',
+    '',
+    ' Do you want to proceed?',
+    ' ❯ 1. Yes',
+    '   2. No, and tell Claude what to do differently (esc)',
+    '',
+    ' Esc to cancel · Tab to amend',
+  ]);
+  assert.equal(q.prompt, 'Do you want to proceed?');
+  assert.deepEqual(q.detail, [
+    'Bash command',
+    '',
+    'git merge-tree --write-tree origin/main thread-tags',
+    '',
+    'Check what the branch would add',
+  ]);
+  assert.equal(findQuestion(claudeEdit).detail, undefined);
+});
+
 test('a hint line under the choices is fine', () => {
   const q = findQuestion(['Allow this command?', '› 1. Yes', '  2. No', '', 'Esc to cancel']);
   assert.equal(q.prompt, 'Allow this command?');

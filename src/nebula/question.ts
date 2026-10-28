@@ -12,12 +12,18 @@ export interface Choice {
 export interface Question {
   /** The question's own line(s), above the choices. */
   prompt: string;
+  /** What it's asking about, when the prompt sits in a panel that says:
+   *  Claude Code's "Bash command" and the command, above "Do you want to
+   *  proceed?". Blank rows between paragraphs stay as "". */
+  detail?: string[];
   choices: Choice[];
 }
 
 /** Box-drawing edges and the marks a picker puts before its current row. */
 const EDGE = /^[\s│┃|╭╰╮╯─]+|[\s│┃|╭╰╮╯─]+$/g;
 const CHOICE = /^([❯›>▶●]\s*)?(\d{1,2})[.)]\s+(.+)$/;
+/** The rule or box top a permission panel starts under. */
+const RULE = /^\s*[╭─━]{3}[─━╮]*\s*$/;
 
 /** The screen without the blank rows under its last text: a short session
  *  draws its prompt partway down a tall pane, not on the bottom row. */
@@ -79,7 +85,8 @@ export function findQuestion(screen: string[]): Question | null {
   // marks none.
   if (choices.filter((c) => c.selected).length !== 1) return null;
   const above: string[] = [];
-  for (let j = i; j >= 0 && above.length < 3; j--) {
+  let j = i;
+  for (; j >= 0 && above.length < 3; j--) {
     const t = rows[j].trim();
     if (!t) {
       if (above.length) break;
@@ -87,7 +94,26 @@ export function findQuestion(screen: string[]): Question | null {
     }
     above.unshift(t);
   }
-  return { prompt: above.join(" "), choices };
+  const detail = panelAbove(lines, rows, j);
+  return detail ? { prompt: above.join(" "), detail, choices } : { prompt: above.join(" "), choices };
+}
+
+/** The panel rows above the prompt, up to the rule or box top the panel
+ *  starts under. Without one close by, the rows above are the agent's
+ *  prose, not part of the question, so there's no detail. */
+function panelAbove(lines: string[], rows: string[], from: number): string[] | undefined {
+  const out: string[] = [];
+  for (let j = from; j >= 0 && from - j < 40; j--) {
+    if (RULE.test(lines[j])) {
+      while (out.length && !out[0]) out.shift();
+      while (out.length && !out[out.length - 1]) out.pop();
+      // One blank row between paragraphs is enough.
+      const kept = out.filter((t, n) => t || out[n - 1]);
+      return kept.length ? kept : undefined;
+    }
+    out.unshift(rows[j].trim());
+  }
+  return undefined;
 }
 
 /** Whether the screen's bottom rows hold a picker this module couldn't

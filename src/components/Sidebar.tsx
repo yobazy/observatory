@@ -32,6 +32,7 @@ import { reorderKey, useReorder } from "./useReorder";
 import { useBatches } from "../nebula/batch";
 import { useRecentCount, useVisits } from "../nebula/recent";
 import { RECENT_COUNTS, recentProjects, type RecentCount } from "../nebula/recentList";
+import { Plate } from "./Plate";
 
 export function selectAgent(agent: Agent) {
   setState((s) => ({
@@ -206,7 +207,9 @@ export function Sidebar({
                       onClick={() => selectAgent(a)}
                       title={`${a.name}, in ${projectOfWorktree(state, a.worktree_id)?.name ?? "its project"}, is waiting on you.${lastPrompt(a) ? `\nYou asked: ${lastPrompt(a)}` : ""}\nClick to open it.`}
                     >
-                      <span className="sdot dot-needs_feedback" aria-hidden />
+                      <span className="sdot has-plate dot-needs_feedback" aria-hidden>
+                        <Plate seed={a.id} work={a.recent_prompts.length} tone="needs_feedback" size={18} />
+                      </span>
                       <span className="waiting-name">
                         {a.name}
                         <PriorityMark priority={state.prefs.taskPriorities?.[a.id]} />

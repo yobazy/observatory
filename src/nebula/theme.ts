@@ -22,9 +22,9 @@ export const MODES: { id: Mode; label: string }[] = [
 
 /** Each TUI theme's accent (its xterm-256 color), and a deeper step of the
  *  same hue that holds contrast on the light surfaces. `default` keeps the
- *  desktop app's own periwinkle rather than the TUI's ANSI cyan. */
+ *  desktop app's own coral rather than the TUI's ANSI cyan. */
 export const ACCENTS: Record<string, { dark: string; light: string }> = {
-  default: { dark: "#9db4ff", light: "#3d5bd9" },
+  default: { dark: "#f0a28b", light: "#b5482c" },
   ocean: { dark: "#00afff", light: "#0077b3" },
   forest: { dark: "#87d787", light: "#2f8a3a" },
   rose: { dark: "#ff87af", light: "#c2386b" },
@@ -150,8 +150,9 @@ function apply() {
   const accent = ACCENTS[themeName(theme)];
   const root = document.documentElement;
   root.dataset.mode = mode;
+  root.dataset.accent = themeName(theme);
   root.style.setProperty("--accent", mode === "light" ? accent.light : accent.dark);
-  root.style.setProperty("--accent-ink", mode === "light" ? "#ffffff" : "#0f1524");
+  root.style.setProperty("--accent-ink", mode === "light" ? "#ffffff" : "#121726");
   root.style.colorScheme = mode === "light" ? "light" : "dark";
   if (getState().mode !== mode) setState({ mode });
 }

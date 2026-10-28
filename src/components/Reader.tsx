@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { isPreview } from "../nebula/client";
-import { flash, getState, useAppState } from "../nebula/store";
+import { flash, getState, projectOfWorktree, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
@@ -15,19 +15,44 @@ import { useStandIn } from "../nebula/pane";
 import { shipKind } from "../nebula/git";
 import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
 import { highlightUnder } from "../nebula/highlight";
+import { commandIn } from "../nebula/command";
 import { fitTables } from "../nebula/tablecols";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
+import { harnessLabel, relativeTime, statusLabel } from "../nebula/status";
 import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
 import { AskChoices } from "./AskStrip";
 import { ReaderFind } from "./ReaderFind";
+import { Plate } from "./Plate";
 
 /** What you were typing to each agent, kept when the reader remounts for a
  *  new session (/clear, resume). */
 const drafts = new Map<string, string>();
 /** Earlier decisions you put away, per agent, for as long as the app runs. */
 const dismissedFor = new Map<string, Set<number>>();
+
+/** The thread's artwork and name at the top of what it said. Every prompt
+ *  and step it has taken moves the sand, so the plate is made by the work. */
+function ReaderHero({ agent, work }: { agent: Agent; work: number }) {
+  const state = useAppState();
+  const branch = state.worktrees[agent.worktree_id]?.branch;
+  const project = projectOfWorktree(state, agent.worktree_id)?.name;
+  return (
+    <header className="rd-hero">
+      <Plate seed={agent.id} work={work} tone="sand" size={128} drift={agent.status === "running"} />
+      <div className="rd-hero-text">
+        <p className={`rd-hero-status is-${agent.status}`}>{statusLabel(agent)}</p>
+        <h2 className="rd-hero-name">{agent.name}</h2>
+        <p className="rd-hero-where">
+          {[project && branch ? `${project} on ${branch}` : project ?? branch, harnessLabel(agent), relativeTime(agent.status_changed_at)]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      </div>
+    </header>
+  );
+}
 
 /** The thread's conversation, read again as it moves. */
 function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | null {
@@ -103,31 +128,67 @@ function copy(text: string, what: string) {
   );
 }
 
+/** Have the thread's agent run `command` itself, as "! <command>", so its
+ *  output lands in the thread; one mid-turn gets it when its turn ends. */
+async function runIn(agentId: string, command: string) {
+  const agent = getState().agents[agentId];
+  if (!agent) return;
+  try {
+    const how = await enqueue(agent, `! ${command}`);
+    flash(how === "queued" ? `Queued for ${agent.name}: runs when its turn ends` : `Running it in ${agent.name}`, 2500);
+  } catch {
+    flash(`Couldn't send that to ${agent.name}. Copy it instead.`, 6000);
+  }
+}
+
 function Md({ text, className = "" }: { text: string; className?: string }) {
   const html = useMemo(() => toHtml(text), [text]);
   const el = useRef<HTMLDivElement>(null);
-  // Each code block is colored by its language, and gets a Copy for what's in it.
+  const where = useContext(Where);
+  // Each code block is colored by its language, and gets a Copy for what's
+  // in it; a command gets a Run too, when its thread is Claude's.
   useEffect(() => {
     if (el.current) highlightUnder(el.current);
     const added: HTMLElement[] = [];
+    const runs = getState().agents[where.from]?.kind === "claude";
     for (const pre of el.current?.querySelectorAll("pre") ?? []) {
+      const code = pre.querySelector("code") ?? pre;
+      const body = code.textContent?.replace(/\n$/, "") ?? "";
+      const acts = document.createElement("span");
+      acts.className = "rd-code-acts";
+      const command = runs ? commandIn(/language-([\w+-]+)/.exec(code.className)?.[1] ?? "", body) : null;
+      if (command) {
+        const r = document.createElement("button");
+        r.className = "rd-copy rd-run";
+        r.textContent = "Run";
+        r.title = `Have the agent run this, as "! ${command}"`;
+        r.onclick = (e) => {
+          e.stopPropagation();
+          void runIn(where.from, command);
+        };
+        acts.append(r);
+        pre.classList.add("is-command");
+      }
       const b = document.createElement("button");
       b.className = "rd-copy";
       b.textContent = "Copy";
       b.title = "Copy this block";
       b.onclick = (e) => {
         e.stopPropagation();
-        copy((pre.querySelector("code") ?? pre).textContent?.replace(/\n$/, "") ?? "", "the block");
+        copy(body, "the block");
       };
-      pre.append(b);
-      added.push(b);
+      acts.append(b);
+      pre.append(acts);
+      added.push(acts);
     }
-    return () => added.forEach((b) => b.remove());
-  }, [html]);
+    return () => {
+      added.forEach((b) => b.remove());
+      el.current?.querySelectorAll("pre.is-command").forEach((p) => p.classList.remove("is-command"));
+    };
+  }, [html, where.from]);
   // A table scrolls sideways when it's wide, and its columns drag to resize.
   useEffect(() => (el.current ? fitTables(el.current) : undefined), [html]);
   // A code span that names a file on disk opens it; "#75" goes to that PR.
-  const where = useContext(Where);
   useEffect(() => {
     const root = el.current;
     if (!root) return;
@@ -355,7 +416,9 @@ export function CardReply({
       {!compact && <Pictures paths={card.images} from={from} pair={pair} />}
       {!compact && <Videos paths={card.videos} from={from} />}
       {!compact && card.body && <Md text={card.body} />}
-      {card.asks.length > 0 && (
+      {/* Needs you without numbered decisions still says what you're to do:
+          a command to run, a file to look at. */}
+      {(card.asks.length > 0 || (!compact && card.asksNote)) && (
         <section className="rd-needs" aria-label="Needs you">
           <h4>Needs you</h4>
           {card.asks.map((a) => (
@@ -894,6 +957,7 @@ export function Reader({
           }}
         >
           <div className="rd-col">
+            <ReaderHero agent={agent} work={t ? t.entries.reduce((n, e) => n + 1 + e.steps.length, 0) : 0} />
             {!t ? (
               <p className="rd-note">Reading the thread…</p>
             ) : t.entries.length === 0 ? (
@@ -1038,6 +1102,7 @@ export function Reader({
         <div className="rd-compose">
           {waiting && question ? (
             <div className="rd-ask">
+              {question.detail && <pre className="rd-ask-detail">{question.detail.join("\n")}</pre>}
               {question.prompt && <p className="rd-wait">{question.prompt}</p>}
               <AskChoices question={question} onPick={onPick} />
             </div>

@@ -1,24 +1,25 @@
+/* Night watch: night blue stepping lighter toward what you touch, ivory
+   text, and sand plates as the lenses you watch your threads through. */
 :root {
-  /* Surfaces: night navy, stepping lighter toward what you touch. */
-  --night: #131a2a;
-  --panel: #182033;
-  --raised: #212b43;
-  --line: #2a3550;
-  --term: #0f1524;
+  --night: #0f1320;
+  --panel: #121726;
+  --raised: #1e2538;
+  --line: #1f2638;
+  --term: #0d1120;
 
-  --text: #e6e9f2;
-  --muted: #8a93ab;
-  --faint: #5c6682;
-  --accent: #9db4ff;
-  --accent-ink: #0f1524;
+  --text: #efeadf;
+  --muted: #b7b3a8;
+  --faint: #8f8c86;
+  --accent: #f0a28b;
+  --accent-ink: #121726;
 
   /* Status is the only loud color in the app, and only what needs you is
      loud: working sits back in a quiet blue and says so by moving. */
-  --st-waiting: #ff7a6b;
-  --st-running: #8fa2d6;
-  --st-done: #5fd4b0;
-  --st-idle: #6b7591;
-  --st-error: #d9668d;
+  --st-waiting: #f2917b;
+  --st-running: #a0b6ff;
+  --st-done: #8fd6b4;
+  --st-idle: #7f879c;
+  --st-error: #e0708f;
   /* A merged pull request: GitHub's purple, kept for the one word it marks. */
   --st-merged: #b58cff;
   /* Git's modified and CI's pending, in the yellow everyone reads them in. */
@@ -26,15 +27,29 @@
   /* A button filled yellow. Light mode's --amber is dark enough for text, too dark to fill. */
   --amber-fill: #f2b84b;
 
-  --ui: "Onest Variable", -apple-system, system-ui, sans-serif;
+  /* The interface speaks in the system's face; names and headlines in a
+     grotesque with some character. */
+  --ui: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --display: "Bricolage Grotesque Variable", -apple-system, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 
-  --r-sm: 5px;
-  --r-md: 8px;
+  /* Sand plates (Plate.tsx): the night-sky metal and the grains on it. */
+  --plate-hi: #1e2640;
+  --plate-lo: #080b15;
+  --sand: #efeadf;
+  /* Plates are night in every mode, so their sand keeps night's colors. */
+  --plate-waiting: #f2917b;
+  --plate-running: #a0b6ff;
+  --plate-done: #8fd6b4;
+  --plate-idle: #9aa2b8;
+  --plate-error: #e0708f;
+
+  --r-sm: 6px;
+  --r-md: 9px;
   --r-lg: 14px;
   --r-pill: 999px;
   /* Popovers over the app: the preview, menus. */
-  --shadow-pop: 0 18px 50px rgb(5 8 16 / 0.45);
+  --shadow-pop: 0 18px 50px rgb(0 0 0 / 0.5);
 
   color-scheme: dark;
 }
@@ -43,28 +58,40 @@
    shared theme). Status colors step darker on light so they hold contrast. */
 :root[data-mode="black"] {
   --night: #000000;
-  --panel: #0a0b0f;
-  --raised: #17181f;
-  --line: #24262f;
+  --panel: #07080d;
+  --raised: #161a26;
+  --line: #1c2030;
   --term: #000000;
 }
+/* Night watch by day: ivory pages and ink-blue type. The plates stay night,
+   so each lens is a piece of dark sky in the window. */
 :root[data-mode="light"] {
-  --night: #eef0f5;
-  --panel: #fbfbfd;
-  --raised: #e4e7ef;
-  --line: #d6dae5;
-  --term: #ffffff;
-  --text: #1b2233;
-  --muted: #555e72;
-  --faint: #7f889c;
-  --st-waiting: #d4442f;
-  --st-running: #5468a8;
-  --st-done: #1f8a67;
-  --st-idle: #8a93a8;
-  --st-error: #c2386b;
+  --night: #eceae4;
+  --panel: #f6f5f1;
+  --raised: #e2e0d8;
+  --line: #dddad1;
+  --term: #fbfaf7;
+  --text: #121726;
+  --muted: #4f5466;
+  --faint: #636878;
+  --st-waiting: #b5482c;
+  --st-running: #4a5fc4;
+  --st-done: #1d7a57;
+  --st-idle: #8a8d99;
+  --st-error: #b8365f;
   --st-merged: #7c4dd6;
-  --amber: #a86a00;
-  --shadow-pop: 0 14px 40px rgb(27 34 51 / 0.16);
+  --amber: #96600a;
+  --shadow-pop: 0 14px 40px rgb(18 23 38 / 0.18);
+}
+/* The main action is ivory on night (ink on ivory by day), unless a theme
+   picked a color for it. */
+:root[data-accent="default"] .btn-primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--panel);
+}
+:root[data-accent="default"] .btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 85%, var(--panel));
 }
 
 * {
@@ -1247,7 +1274,7 @@ body.is-resizing-rows * {
   bottom: 18px;
   z-index: 12;
   background: var(--raised);
-  box-shadow: 0 8px 20px rgb(5 8 16 / 0.35);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
 }
 .pane-latest kbd {
   margin-left: 6px;
@@ -1276,7 +1303,7 @@ body.is-resizing-rows * {
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   color: var(--muted);
-  box-shadow: 0 12px 30px rgb(5 8 16 / 0.45);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.45);
 }
 
 /* ---------- buttons ---------- */
@@ -1335,7 +1362,7 @@ body.is-resizing-rows * {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: 0 30px 80px rgb(5 8 16 / 0.6);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.6);
   animation: rise 160ms ease-out;
 }
 .dialog h2 {
@@ -1896,7 +1923,7 @@ body.is-resizing-rows * {
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   color: var(--text);
-  box-shadow: 0 12px 30px rgb(5 8 16 / 0.45);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.45);
   animation: rise 160ms ease-out;
 }
 
@@ -2104,7 +2131,7 @@ body.is-resizing-rows * {
 }
 .foot-gear {
   flex: none;
-  width: 32px;
+  width: 28px;
   height: 32px;
 }
 .foot-gear.is-on {
@@ -3230,7 +3257,7 @@ td.task-last {
   background: var(--raised);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  box-shadow: 0 14px 34px rgb(5 8 16 / 0.45);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.45);
   outline: none;
   animation: fade 90ms ease-out;
 }
@@ -4189,7 +4216,8 @@ td.task-last {
 .rd-you,
 .rd-md,
 .rd-head,
-.rd-q-text {
+.rd-q-text,
+.rd-verdict-text {
   user-select: text;
   cursor: text;
 }
@@ -4200,10 +4228,14 @@ td.task-last {
 .rd-md pre {
   position: relative;
 }
-.rd-copy {
+.rd-code-acts {
   position: absolute;
   top: 6px;
   right: 6px;
+  display: flex;
+  gap: 4px;
+}
+.rd-copy {
   padding: 2px 8px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
@@ -4220,6 +4252,22 @@ td.task-last {
   opacity: 1;
 }
 .rd-copy:hover {
+  color: var(--text);
+}
+/* A command wraps rather than scrolls, clear of its Run and Copy, so all
+   of it can be read before running it. */
+.rd-md pre.is-command {
+  padding-right: 104px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rd-card > *,
+.rd-needs > * {
+  min-width: 0;
+}
+/* Run is what the block is for, so it doesn't wait for a hover. */
+.rd-run {
+  opacity: 1;
   color: var(--text);
 }
 .rd-you {
@@ -4249,6 +4297,12 @@ td.task-last {
   background: var(--panel);
   border: 1px solid var(--line);
 }
+/* A block with no language is usually a message to paste somewhere, so it
+   wraps like prose; code keeps its lines and scrolls inside its box. */
+.rd-md pre code:not([class*="language-"]) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 /* A reply written as a card: headline, status chips, pictures, decisions to
    tap and details folded away. Prose replies don't get one. */
 .rd-card {
@@ -4258,6 +4312,11 @@ td.task-last {
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--panel);
+}
+/* Grid items won't shrink below their content by default, so a long code line
+   would widen the whole card past the pane, and its Copy buttons with it. */
+.rd-card > * {
+  min-width: 0;
 }
 .rd-head {
   margin: 0;
@@ -4827,6 +4886,21 @@ td.task-last {
   flex: 1;
   min-width: 0;
 }
+.rd-ask-detail {
+  margin: 0;
+  max-height: 9.5em;
+  overflow: auto;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--term);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .queue-strip {
   display: flex;
@@ -4969,7 +5043,7 @@ td.task-last {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  box-shadow: 0 30px 80px rgb(5 8 16 / 0.6);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.6);
   overflow: hidden;
   animation: rise 140ms ease-out;
 }
@@ -5049,7 +5123,7 @@ body.is-reordering * {
 .is-reordering > .is-dragging > .project-row,
 .is-reordering > .is-dragging > .row {
   background: var(--raised);
-  box-shadow: 0 10px 28px rgb(5 8 16 / 0.45), inset 0 0 0 1px var(--line);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.45), inset 0 0 0 1px var(--line);
 }
 :root[data-mode="black"] .is-reordering > .is-dragging > .project-row,
 :root[data-mode="black"] .is-reordering > .is-dragging > .row {
@@ -7738,4 +7812,191 @@ button.board-main:hover .board-text {
 }
 .priority-choice .prio-urgent {
   color: var(--amber);
+}
+
+/* ---------- Night watch ---------- */
+
+/* Status as sand: a thread's dot is its plate (Plate.tsx), and the plate
+   carries the color and the motion the plain dots used to. */
+.sdot.has-plate {
+  width: 18px;
+  height: 18px;
+  background: none;
+  box-shadow: none;
+  animation: none;
+  border-radius: 50%;
+}
+.sdot.has-plate .plate {
+  display: block;
+}
+.row {
+  grid-template-columns: 18px 1fr auto;
+}
+.row .sdot.has-plate {
+  margin-top: 0;
+}
+/* A finished turn you haven't read yet: a ring of its green around the plate. */
+.sdot.has-plate.dot-finished.is-unseen {
+  box-shadow: 0 0 0 1.5px var(--panel), 0 0 0 3px var(--st-done);
+}
+
+/* A selected thread is a lit surface, not a stripe. */
+.row.is-selected {
+  background: var(--raised);
+  box-shadow: none;
+}
+:root[data-mode="light"] .row.is-selected {
+  background: var(--term);
+  box-shadow: 0 0 0 1px var(--line), 0 2px 8px -2px rgb(18 23 38 / 0.12);
+}
+
+/* Names and headlines are set in the display face. */
+.sessions-head {
+  align-items: center;
+  column-gap: 16px;
+}
+.sessions-plate {
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 10px 24px -12px rgb(0 0 0 / 0.7);
+}
+.sessions-title h1 {
+  font-family: var(--display);
+  font-size: 27px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+.pane-name {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.pane-head {
+  background: var(--term);
+}
+
+.rd-hero {
+  display: flex;
+  align-items: flex-end;
+  gap: 22px;
+  margin-bottom: 10px;
+}
+.rd-hero .plate {
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 28px 50px -24px rgb(0 0 0 / 0.85);
+}
+:root[data-mode="light"] .rd-hero .plate,
+:root[data-mode="light"] .sessions-plate {
+  box-shadow: 0 22px 40px -22px rgb(18 23 38 / 0.55);
+}
+.rd-hero-text {
+  min-width: 0;
+  padding-bottom: 4px;
+}
+.rd-hero-status {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.rd-hero-status.is-needs_feedback {
+  color: var(--st-waiting);
+}
+.rd-hero-status.is-running {
+  color: var(--st-running);
+}
+.rd-hero-status.is-terminated {
+  color: var(--st-error);
+}
+.rd-hero-name {
+  margin: 6px 0 6px;
+  font-family: var(--display);
+  font-size: 34px;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.rd-hero-where {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.md-doc.rd-md {
+  font-size: 15px;
+  line-height: 1.62;
+}
+.rd-head {
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  line-height: 1.25;
+}
+.rd-card {
+  border-radius: 16px;
+}
+
+/* The eyepiece row (LiveStrip.tsx): one lens per live thread. */
+.live-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lens {
+  flex: none;
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+.lens .plate {
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line);
+  transition: transform 160ms ease;
+}
+.lens:hover .plate {
+  transform: scale(1.06);
+}
+.lens.is-on {
+  color: var(--text);
+  font-weight: 600;
+}
+.lens.is-on .plate {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--accent);
+}
+.lens-name {
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+.live-more {
+  align-self: center;
+  padding: 0 8px;
+  color: var(--faint);
+  font-size: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lens .plate {
+    transition: none;
+  }
+}
+.waiting-row {
+  grid-template-columns: 18px 1fr;
 }
