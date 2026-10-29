@@ -19,6 +19,8 @@ cd src-tauri && cargo fmt --check && cargo clippy --all-targets --locked -- -D w
 - `src/nebula/types.ts` mirrors nebula's protocol at the tag pinned in `src-tauri/Cargo.toml`.
   Change them together; `scripts/sandbox.sh e2e` catches drift.
 - Don't bump versions or touch `latest.json`; `scripts/release.sh` handles releases.
+- A reviewer agent on `pc` merges yobazy's PRs into main once checks pass and its review
+  passes. Open a PR as a draft, or label it `hold`, when the user should try it first.
 - Commit subjects say what the app now does, in plain words ("Remove a project from the list,
   from its menu"), not "feat:" prefixes.
 - Match the surrounding code's style and comment density. Rust is formatted by `cargo fmt`.
