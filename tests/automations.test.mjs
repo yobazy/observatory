@@ -24,8 +24,18 @@ import {
 
 const dir = new URL('./fixtures/automations/', import.meta.url);
 const text = (name) => readFileSync(new URL(name, dir), 'utf8');
-/** The way automations.rs reads a plist. */
-const plist = (name) => JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', new URL(name, dir).pathname], { encoding: 'utf8' }));
+/** The way automations.rs reads a plist; Python's plistlib where there's no
+ *  plutil (Linux). */
+const plist = (name) => {
+  const path = new URL(name, dir).pathname;
+  try {
+    return JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', path], { encoding: 'utf8' }));
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+    const py = 'import json, plistlib, sys; print(json.dumps(plistlib.load(open(sys.argv[1], "rb"))))';
+    return JSON.parse(execFileSync('python3', ['-I', '-c', py, path], { encoding: 'utf8' }));
+  }
+};
 
 const NOW = new Date(2026, 9, 22, 12, 0).getTime();
 const MIN = 60_000;
