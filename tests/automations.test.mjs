@@ -15,6 +15,7 @@ import {
   runNow,
   scheduleText,
   shownLabels,
+  toneOf,
   track,
   until,
   worstHealth,
@@ -142,6 +143,16 @@ test('health: a KeepAlive job with a pid is running', () => {
   const r = raw({ plist: plist('ai.hermes.gateway.plist'), launchctl: text('launchctl-hermes-gateway.txt') });
   assert.equal(parseLaunchctl(r.launchctl).pid, 1980);
   assert.equal(health(r, NOW).health, 'running');
+});
+
+test('health: a KeepAlive job with a pid whose log ends in an error is running with errors, orange', () => {
+  const tail = ['  File "hermes_state.py", line 377, in apply_wal_with_fallback', 'sqlite3.OperationalError: disk I/O error'];
+  const r = raw({ plist: plist('ai.hermes.gateway.plist'), launchctl: text('launchctl-hermes-gateway.txt'), tail });
+  const h = health(r, NOW);
+  assert.equal(h.health, 'running with errors');
+  assert.match(h.reason, /^Running, pid 1980, but its log ends in: sqlite3\.OperationalError: disk I\/O error$/);
+  assert.equal(toneOf(h.health), 'orange');
+  assert.equal(worstHealth(['ok', h.health]), 'orange');
 });
 
 // ---- which jobs, and names ----

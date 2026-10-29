@@ -20,6 +20,7 @@ function useJobs() {
 const HEALTH_LABEL: Record<Job["health"], string> = {
   ok: "OK",
   running: "Running",
+  "running with errors": "Running, with errors",
   failing: "Failing",
   stale: "Stale",
   "not loaded": "Not loaded",

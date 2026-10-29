@@ -51,7 +51,7 @@ export interface AutomationsReport {
   config: string | null;
 }
 
-export type Health = "ok" | "failing" | "not loaded" | "stale" | "running";
+export type Health = "ok" | "failing" | "not loaded" | "stale" | "running" | "running with errors";
 export type Tone = "green" | "orange" | "red";
 
 export interface Job {
@@ -306,7 +306,12 @@ export function health(
 ): { health: Health; reason: string } {
   const ld = parseLaunchctl(raw.launchctl);
   if (!ld.loaded) return { health: "not loaded", reason: lastError(raw.tail) ? clip(lastError(raw.tail)!) : "Not loaded in launchd" };
-  if (alwaysOn(raw.plist) && ld.pid != null) return { health: "running", reason: `Running, pid ${ld.pid}` };
+  if (alwaysOn(raw.plist) && ld.pid != null) {
+    // Up, but its log ends in an error: it may be old, so orange, not red.
+    const err = lastError(raw.tail);
+    if (err) return { health: "running with errors", reason: clip(`Running, pid ${ld.pid}, but its log ends in: ${err}`) };
+    return { health: "running", reason: `Running, pid ${ld.pid}` };
+  }
   if (ld.lastExitCode != null && ld.lastExitCode !== 0) return { health: "failing", reason: `Exited with code ${ld.lastExitCode}` };
   const err = lastError(raw.tail);
   if (err) return { health: "failing", reason: clip(err) };
@@ -334,7 +339,14 @@ function roundTo(ms: number): number {
   return Math.round(ms / DAY) * DAY;
 }
 
-const TONE: Record<Health, Tone> = { ok: "green", running: "green", stale: "orange", "not loaded": "orange", failing: "red" };
+const TONE: Record<Health, Tone> = {
+  ok: "green",
+  running: "green",
+  "running with errors": "orange",
+  stale: "orange",
+  "not loaded": "orange",
+  failing: "red",
+};
 export const toneOf = (h: Health): Tone => TONE[h];
 
 /** The footer dot: red if anything fails, orange if anything is stale or
@@ -395,7 +407,7 @@ export function parseConfig(text: string | null): { entries: ConfigEntry[]; erro
   }
 }
 
-const ORDER: Record<Health, number> = { failing: 0, "not loaded": 1, stale: 2, running: 3, ok: 4 };
+const ORDER: Record<Health, number> = { failing: 0, "not loaded": 1, stale: 2, "running with errors": 3, running: 4, ok: 5 };
 
 /** The rows: shown labels only, named from the config, worst first. */
 export function jobList(
