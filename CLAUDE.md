@@ -34,6 +34,11 @@ Drive the sandbox app yourself with `scripts/drive`, instead of asking the user 
 Screenshots need Screen Recording allowed for the terminal app that started it. `scripts/sandbox.sh
 down` stops it.
 
+Prefer the always-on PC when `ssh pc` answers. Push the branch, then run `scripts/pc up` and
+`scripts/pc drive …`. It's the same commands, `replay` copies the moment over and `shot` copies
+the screenshot back. It renders with WebKitGTK, which doesn't play video over `preview://`, so
+check video and anything only macOS does on the Mac.
+
 ## Reviewing
 
 When reviewing a PR, flag correctness bugs, breaks in the rules above, and protocol changes

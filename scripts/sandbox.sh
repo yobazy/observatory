@@ -104,8 +104,15 @@ up() {
   if scripts/drive state >/dev/null 2>&1; then echo "app already up"; return; fi
   # Vite's port, past any dev build already running (the usual one is 1420).
   local port=1430
-  while lsof -iTCP:$port -sTCP:LISTEN >/dev/null 2>&1; do port=$((port + 1)); done
-  OBSERVATORY_DEV_PORT=$port nohup npm run tauri dev -- --config "{\"build\":{\"devUrl\":\"http://localhost:$port\"}}" >"$ROOT/app.log" 2>&1 &
+  while (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null; do port=$((port + 1)); done
+  local config="{\"build\":{\"devUrl\":\"http://localhost:$port\"}}"
+  # Linux with no screen (the always-on PC over ssh): a virtual one, the
+  # size of a laptop window, for the app and its screenshots.
+  if [ "$(uname)" = Linux ] && [ -z "${DISPLAY:-}" ]; then
+    OBSERVATORY_DEV_PORT=$port nohup xvfb-run -a -s "-screen 0 1440x900x24" npm run tauri dev -- --config "$config" >"$ROOT/app.log" 2>&1 &
+  else
+    OBSERVATORY_DEV_PORT=$port nohup npm run tauri dev -- --config "$config" >"$ROOT/app.log" 2>&1 &
+  fi
   echo $! >"$ROOT/app.pid"
   for _ in $(seq 1 600); do
     scripts/drive state >/dev/null 2>&1 && { echo "app up (log $ROOT/app.log)"; return; }

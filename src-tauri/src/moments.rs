@@ -106,11 +106,35 @@ pub(crate) fn screenshot(window: &WebviewWindow, out: &Path) -> Result<(), Strin
     Ok(())
 }
 
-/// Elsewhere the moment is saved without one, so the Rust side still builds
-/// and tests on Linux.
-#[cfg(not(target_os = "macos"))]
+/// On Linux, the X display's whole screen, with `xwd` and `ffmpeg`: the
+/// sandbox app on the always-on PC runs alone on a virtual display
+/// (`scripts/sandbox.sh up`), so the screen is the window.
+#[cfg(target_os = "linux")]
+pub(crate) fn screenshot(_window: &WebviewWindow, out: &Path) -> Result<(), String> {
+    if std::env::var_os("DISPLAY").is_none() {
+        return Err("No X display to take a screenshot of.".into());
+    }
+    let dump = Command::new("xwd")
+        .args(["-root", "-silent"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("xwd: {e} (install x11-apps)"))?;
+    let status = Command::new("ffmpeg")
+        .args(["-loglevel", "error", "-y", "-f", "xwd_pipe", "-i", "-"])
+        .arg(out)
+        .stdin(dump.stdout.ok_or("xwd gave no output")?)
+        .status()
+        .map_err(|e| format!("ffmpeg: {e}"))?;
+    if !status.success() || !out.exists() {
+        return Err(format!("ffmpeg couldn't save the screenshot ({status})."));
+    }
+    Ok(())
+}
+
+/// Elsewhere the moment is saved without one, so the Rust side still builds.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub(crate) fn screenshot(_window: &WebviewWindow, _out: &Path) -> Result<(), String> {
-    Err("Screenshots are only taken on macOS.".into())
+    Err("Screenshots are only taken on macOS and Linux.".into())
 }
 
 fn copy_to_clipboard(text: &str) {

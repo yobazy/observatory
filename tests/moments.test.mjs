@@ -71,6 +71,13 @@ test('a moment task works in its own worktree and ends in a PR a second agent re
   assert.ok(p.includes('gh pr merge'));
 });
 
+test('a moment task sees the app itself: replay before the fix, screenshots after, on the PC when it answers', () => {
+  const p = mod.momentPrompt('/m/moments/2026-10-29T10-00-00-000Z', 'fix it');
+  assert.ok(p.includes('scripts/drive replay /m/moments/2026-10-29T10-00-00-000Z'));
+  assert.ok(p.includes('scripts/pc up'));
+  assert.ok(p.indexOf('scripts/drive replay') < p.indexOf('open a PR'));
+});
+
 test('moments started at once get their own worktrees', () => {
   const { momentBranch, momentPrompt } = mod;
   const a = momentBranch('/m/moments/2026-10-22T19-52-43-529Z');
