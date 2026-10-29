@@ -64,6 +64,23 @@ test('a task started from a moment points the agent at it', () => {
   assert.ok(momentPrompt('/m/x', '').startsWith('Look into what I marked'));
 });
 
+test('a moment task works in its own worktree and ends in a PR a second agent reviews', () => {
+  const p = mod.momentPrompt('/m/x', 'fix it');
+  assert.ok(p.indexOf('nebula worktree') < p.indexOf('open a PR'));
+  assert.ok(p.includes('nebula spawn "Review PR'));
+  assert.ok(p.includes('gh pr merge'));
+});
+
+test('moments started at once get their own worktrees', () => {
+  const { momentBranch, momentPrompt } = mod;
+  const a = momentBranch('/m/moments/2026-10-22T19-52-43-529Z');
+  const b = momentBranch('/m/moments/2026-10-22T19-52-44-001Z/');
+  assert.equal(a, 'moment-2026-10-22t19-52-43-529z');
+  assert.notEqual(a, b);
+  assert.ok(momentPrompt('/m/moments/2026-10-22T19-52-43-529Z', '').includes(`nebula worktree ${a} `));
+  assert.ok(momentPrompt('/m/x', '').includes('gh pr list'));
+});
+
 test('a moment task goes to the last project picked, else the one you are in', () => {
   const { momentProject } = mod;
   const s = { projects: { p1: {}, p2: {} }, selectedProject: 'p1' };
