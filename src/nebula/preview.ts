@@ -62,9 +62,10 @@ export async function readText(path: string): Promise<string> {
   return invoke<string>("read_preview_text", { path });
 }
 
-/** Open `paths` in the preview, the first of them in front. Files already
- *  open stay, so an agent showing three mockups in a row gets three tabs. */
-export async function openPreview(paths: string[], from?: string | null): Promise<void> {
+/** Open `paths` in the preview, `front` (or the first of them) in front.
+ *  Files already open stay, so an agent showing three mockups in a row gets
+ *  three tabs. */
+export async function openPreview(paths: string[], from?: string | null, front?: string): Promise<void> {
   const opened: PreviewFile[] = [];
   for (const path of paths) {
     try {
@@ -85,6 +86,8 @@ export async function openPreview(paths: string[], from?: string | null): Promis
       else files.push(f);
       if (active < 0) active = files.findIndex((g) => g.path === f.path);
     }
+    const asked = front ? files.findIndex((g) => g.path === front) : -1;
+    if (asked >= 0) active = asked;
     return { preview: { files, active } };
   });
 }

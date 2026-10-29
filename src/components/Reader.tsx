@@ -250,7 +250,8 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
   return <div ref={el} className={`md-doc rd-md ${className}`} dangerouslySetInnerHTML={{ __html: html }} onClick={openLink} />;
 }
 
-/** The images a reply names, shown in it; a click opens the preview. */
+/** The images a reply names, shown in it; a click opens them all in the
+ *  preview, that one in front, for ← and → to step through. */
 function Pictures({ paths, from, pair = null }: { paths: string[]; from: string; pair?: [string, string] | null }) {
   const [ready, setReady] = useState<string[]>([]);
   useEffect(() => {
@@ -280,7 +281,7 @@ function Pictures({ paths, from, pair = null }: { paths: string[]; from: string;
   return (
     <div className="rd-pics">
       {ready.map((p) => (
-        <button key={p} className="rd-pic" onClick={() => void openPreview([p], from)} title={`Open ${p}`}>
+        <button key={p} className="rd-pic" onClick={() => void openPreview(ready, from, p)} title={`Open ${p}`}>
           <img src={previewUrl(p)} alt="" onError={(e) => (e.currentTarget.closest(".rd-pic") as HTMLElement).remove()} />
         </button>
       ))}

@@ -99,6 +99,17 @@ export function PreviewPane() {
           if (picked) setPicked(null);
           else if (commenting) stopCommenting();
           else close();
+        } else if (
+          (e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+          !typing &&
+          !(e.target as HTMLElement).closest("video") &&
+          !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey &&
+          preview.files.length > 1
+        ) {
+          // ← and → step through the open files, round from the last to the first.
+          e.preventDefault();
+          const n = preview.files.length;
+          showPreviewFile((preview.active + (e.key === "ArrowRight" ? 1 : n - 1)) % n);
         } else if (e.key === "c" && !typing && !e.metaKey && !e.ctrlKey && canComment) {
           setCommenting((c) => !c);
           setPicked(null);
