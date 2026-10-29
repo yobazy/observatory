@@ -1,6 +1,7 @@
 # Small fixes, 2026-10-29 (overnight run f-obs-small)
 
 Branch `small-fixes-oct29`, worktree `/data/tmp/overnight-2026-10-29/wt/f-obs-small`.
+Draft PR: #121 small fixes (https://github.com/yobazy/observatory/pull/121). Status: all three items done.
 
 ## Plan
 
