@@ -57,9 +57,10 @@ function saveRed(red: string[]) {
   }
 }
 
-/** A banner (notify.ts, so hushed in quiet hours) for each shown job that
- *  turned red since the last read: the rows the view lists, red as it
- *  shows them. Not while you're looking at the view. */
+/** A banner (notify.ts, so hushed in quiet hours) when shown jobs turned
+ *  red since the last read: the rows the view lists, red as it shows them.
+ *  Not while you're looking at the view; a job hushed either way stays
+ *  red without a banner until it recovers. */
 async function bannerRed(report: AutomationsReport, watches: Watches) {
   // Settings' label prefixes as saved: before the app's prefs have loaded,
   // the default prefixes could show (and banner) a job you've hidden.
