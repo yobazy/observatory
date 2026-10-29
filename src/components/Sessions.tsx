@@ -16,6 +16,7 @@ import { changedFiles, neverPushed, shipKind, type GitState, type GitStatus } fr
 import { runOnWorktree, SHIP_LABEL, shipPrompt, shipWhat, takerFor } from "../nebula/actions";
 import { AgentServerMark, BandRunButton, BandRunLine, ProjectRun } from "./Run";
 import { PrLine } from "./Pr";
+import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import { useHoverPreview } from "./HoverPreview";
 import { fanOutOf, openCompare } from "../nebula/fanout";
 import { useSessionCosts } from "../nebula/budget";
@@ -545,9 +546,35 @@ function CompareLink({ worktreeId }: { worktreeId: string }) {
   );
 }
 
+/** A checkout whose folder was deleted outside nebula: git can't say
+ *  anything about it, so offer to take it off the list instead. */
+function MissingLine({ worktree }: { worktree: Worktree }) {
+  const [dialog, setDialog] = useState<ConfirmDialogSpec | null>(null);
+  const remove = () =>
+    setDialog({
+      kind: "confirm",
+      title: `Remove ${worktree.branch} from the list?`,
+      message: `Its folder at ${worktree.path} is already gone. The sessions in it are removed too. The branch stays.`,
+      confirm: "Remove",
+      onConfirm: () => request("DeleteWorktree", { id: worktree.id, force: true }).then(() => {}),
+    });
+  return (
+    <>
+      <p className="git-line" title={worktree.path}>
+        <span className="git-warn">The folder is gone</span>
+        <button className="link-btn" onClick={remove}>
+          Remove from list
+        </button>
+      </p>
+      {dialog && <ConfirmDialog d={dialog} onClose={() => setDialog(null)} />}
+    </>
+  );
+}
+
 /** Where the branch's code stands, in the order it matters: conflicts, then
  *  uncommitted work, then commits that aren't on the remote yet. */
 function GitLine({ git, worktree }: { git: GitState; worktree: Worktree }) {
+  if ("error" in git && git.missing) return <MissingLine worktree={worktree} />;
   if ("error" in git) {
     return (
       <p className="git-line" title={git.error}>

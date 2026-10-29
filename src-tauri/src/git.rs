@@ -47,6 +47,10 @@ pub struct LastCommit {
     time: i64,
 }
 
+/// What `git_status` fails with when the checkout's folder is gone — deleted
+/// outside nebula, which still lists it. The app offers to drop it then.
+const MISSING: &str = "missing";
+
 pub(crate) fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
     let mut child = Command::new("git")
         .arg("-C")
@@ -153,6 +157,10 @@ fn parse_shortstat(out: &str, s: &mut GitStatus) {
 }
 
 fn status(dir: &Path, base: Option<&str>) -> Result<GitStatus, String> {
+    // git would only say "cannot change to …", once per poll.
+    if !dir.is_dir() {
+        return Err(MISSING.to_string());
+    }
     let mut s = GitStatus::default();
     parse_status(
         &git(dir, &["status", "--porcelain=v2", "--branch", "-z"])?,
@@ -358,6 +366,12 @@ pub async fn delete_branch(repo: PathBuf, branch: String, force: bool) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_folder_is_reported_as_missing() {
+        let gone = std::env::temp_dir().join("observatory-no-such-checkout");
+        assert_eq!(status(&gone, None).err().as_deref(), Some(MISSING));
+    }
 
     #[test]
     fn parses_porcelain_v2() {

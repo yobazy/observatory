@@ -29,7 +29,8 @@ export interface GitStatus {
   lastCommit: { subject: string; time: number } | null;
 }
 
-export type GitState = GitStatus | { error: string };
+/** `missing`: the checkout's folder is gone, though nebula still lists it. */
+export type GitState = GitStatus | { error: string; missing?: boolean };
 
 export type ShipKind = "resolve" | "commit" | "push";
 
@@ -81,6 +82,8 @@ async function fetchStatus(wt: Worktree): Promise<GitState> {
     }
     return await invoke<GitStatus>("git_status", { path: wt.path, base: mainBranch(wt) });
   } catch (e) {
+    // git.rs's MISSING.
+    if (String(e) === "missing") return { error: "The folder is gone", missing: true };
     return { error: String(e) };
   }
 }
