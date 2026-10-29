@@ -127,7 +127,10 @@ export function ConfirmDialog({ d, onClose }: { d: ConfirmDialogSpec; onClose: (
   const cancel = useRef<HTMLButtonElement>(null);
   useEscape(onClose, busy);
   // Focus lands on Cancel: Enter on a destructive dialog shouldn't delete.
-  useEffect(() => cancel.current?.focus(), []);
+  // Again for a follow-up question, once its buttons are live.
+  useEffect(() => {
+    if (!busy) cancel.current?.focus();
+  }, [d, busy]);
 
   return (
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
@@ -153,7 +156,11 @@ export function ConfirmDialog({ d, onClose }: { d: ConfirmDialogSpec; onClose: (
             onClick={async () => {
               setBusy(true);
               try {
-                if ((await d.onConfirm()) !== false) onClose();
+                if ((await d.onConfirm()) !== false) return onClose();
+                // It put up another question in this same dialog, which
+                // must answer to Cancel and Escape like the first did.
+                setError(null);
+                setBusy(false);
               } catch (e) {
                 setError(errText(e));
                 setBusy(false);
