@@ -97,6 +97,10 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const [scrolledUp, setScrolledUp] = useState(false);
   // The numbered menu at the bottom of the screen, if there is one.
   const [menu, setMenu] = useState<Question | null>(null);
+  // The choice you just picked, until the session moves on. nebula only
+  // hears a permission prompt was answered once the command it allowed
+  // finishes or the next one starts, so a long command stays "waiting".
+  const [picked, setPicked] = useState<{ id: string; label: string } | null>(null);
   const [dialog, setDialog] = useState<TextDialogSpec | null>(null);
   // The session's checkout: what a relative path in its output is under.
   const cwd = useRef<string | null>(null);
@@ -327,12 +331,18 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   // Offered only while the session says it's waiting, so a menu left on
   // screen after it moved on isn't.
   const asking = agent?.status === "needs_feedback" ? menu : null;
+  // Spent once it moves on, so the next prompt isn't taken as answered.
+  useEffect(() => {
+    if (agent?.status !== "needs_feedback") setPicked(null);
+  }, [agent?.status]);
+  const answered = agent && picked?.id === agent.id && agent.status === "needs_feedback" && !menu ? picked.label : null;
   // The pick is read off this very screen, so unlike the sidebar's quick
   // answers there's no need to read it again first.
   const answer = (c: Choice) => {
     const ref = current.current;
     if (!ref || !asking) return;
     setMenu(null);
+    if (agent) setPicked({ id: agent.id, label: c.label });
     void sendInput(ref, c.key);
   };
 
@@ -463,7 +473,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       {agent && <ShelfStrip agent={agent} worktree={wt} items={state.shelf[agent.id]} />}
       <div className="pane-body" data-drop-session={key ?? undefined}>
         <div ref={host} className={`xterm-host${exists ? "" : " is-hidden"}`} />
-        {reading && agent && <Reader key={`${agent.id}:${agent.session_id}`} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} question={asking} onPick={answer} />}
+        {reading && agent && <Reader key={`${agent.id}:${agent.session_id}`} agent={agent} root={wt?.path ?? ""} onTerminal={toTerminal} question={asking} picked={answered} onPick={answer} />}
         {exists && scrolledUp && !reading && (
           <button
             className="btn pane-latest"

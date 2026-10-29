@@ -4744,6 +4744,15 @@ td.task-last {
   font-size: 12.5px;
   white-space: nowrap;
 }
+/* The choice you just picked on a prompt, while the command it allowed runs. */
+.rd-picked.rd-said {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 10px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--muted);
+}
 .rd-steps {
   font-size: 13px;
   color: var(--faint);
