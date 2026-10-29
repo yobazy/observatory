@@ -1,6 +1,6 @@
 # Thread tags, beyond S15 and S16
 
-Branch `thread-tags-plus` (local `ov/f-obs-tags`), from `origin/main` (4c5095d). The LATER.md
+Branch `thread-tags-plus` (local `ov/f-obs-tags`), from `origin/main` (4c5095d). Draft PR: https://github.com/yobazy/observatory/pull/120 The LATER.md
 item "Thread tags, beyond S15 and S16", built in four parts. This was an overnight run with
 nobody to ask, so the calls I made are listed under Decisions.
 
