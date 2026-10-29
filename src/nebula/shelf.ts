@@ -72,7 +72,7 @@ export function addToShelf(agentId: string, paths: string[], again = false) {
   const had = getState().shelf[agentId] ?? [];
   // Already there and nothing new: leave the order alone, so a scan that
   // keeps finding the same paths doesn't keep reshuffling the strip.
-  const items = shelve(had, paths, Date.now(), { again });
+  const items = shelve(had, paths, Date.now(), { again, opened: getState().fileOpened });
   if (items !== had) write(agentId, items);
 }
 
