@@ -442,3 +442,23 @@ test('a command fenced under a question keeps its lines', () => {
   assert.equal(c.asks[0].text, '**Deploy it.** Run this:\n```\n! npx deploy --a\n1. not an item\n```');
   assert.deepEqual(c.asks[1].options.map((o) => o.letter), ['A', 'B']);
 });
+
+test("a dot inside an option's quote or brackets stays in it, and prose after the last option goes back to the question", async () => {
+  const { suggested } = await import('../src/nebula/replycard.ts');
+  const c = readCard(`**Needs you**
+1. Which look for event chills?  A as built today (poster behind our title) · B poster tile (card takes the poster's colour) · C admit one (B plus a stub: "ADMIT ONE · Standard Time · DOORS 10 PM") · D marquee (blurred poster with a venue strip). I'd go with **C**. Option A shows the real problem.
+2. Can you test one thing on your phone? Search a show and send the chill to yourself.`);
+  assert.deepEqual(c.asks[0], {
+    n: 1,
+    text: "Which look for event chills? I'd go with **C**. Option A shows the real problem.",
+    options: [
+      { letter: 'A', label: 'as built today (poster behind our title)' },
+      { letter: 'B', label: "poster tile (card takes the poster's colour)" },
+      { letter: 'C', label: 'admit one (B plus a stub: "ADMIT ONE · Standard Time · DOORS 10 PM")' },
+      { letter: 'D', label: 'marquee (blurred poster with a venue strip)' },
+    ],
+  });
+  assert.deepEqual(c.asks[1].options, []);
+  assert.deepEqual(suggested(c), { 1: 'C' });
+  assert.deepEqual(readAsk(1, 'Ship?  A today · B Monday').options[1], { letter: 'B', label: 'Monday' });
+});

@@ -83,16 +83,53 @@ function readOptionLine(line: string): Option | null {
   return { letter: m[2], label: aside ? `${aside} ${m[7].trim()}` : m[7].trim() };
 }
 
+/** Split on the " · " between options, but not one inside brackets or
+ *  quotes: "C stub ("ADMIT ONE · DOORS 10 PM")" is one option. */
+function splitDots(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let quoted = false;
+  let from = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '"') quoted = !quoted;
+    else if (c === "“") quoted = true;
+    else if (c === "”") quoted = false;
+    else if ("([".includes(c)) depth++;
+    else if (")]".includes(c)) depth = Math.max(0, depth - 1);
+    else if (c === "·" && !depth && !quoted && /\s/.test(s[i - 1] ?? "") && /\s/.test(s[i + 1] ?? "")) {
+      out.push(s.slice(from, i));
+      from = i + 1;
+    }
+  }
+  return [...out, s.slice(from)].map((p) => p.trim()).filter(Boolean);
+}
+
+/** Where the last option's label ends and prose about the choice begins:
+ *  "D marquee (a venue strip). I'd go with C." ends at the first sentence
+ *  outside brackets. */
+function sentenceEnd(s: string): number {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if ("([".includes(c)) depth++;
+    else if (")]".includes(c)) depth = Math.max(0, depth - 1);
+    else if (!depth && ".!?".includes(c) && /^\s+[A-Z"“*_]/.test(s.slice(i + 1, i + 4))) return i + 1;
+  }
+  return -1;
+}
+
 /** "Ship today?  A today · B Monday" into the question and its options,
  *  lettered from A in order. No options when it doesn't read that way. */
 export function readAsk(n: number, line: string): Ask {
   const optionsFrom = (at: number): Option[] | null => {
-    const options = line
-      .slice(at)
-      // "A · today" separates the letter with a dot too; make it "A: today"
-      // so splitting on the dots between options leaves it whole.
-      .replace(/(^|\s)((?:\*\*|__)?[A-Z](?:\*\*|__)?)\s+·\s+/g, "$1$2: ")
-      .split(/\s+·\s+/)
+    const options = splitDots(
+      line
+        .slice(at)
+        // "A · today" separates the letter with a dot too; make it "A: today"
+        // so splitting on the dots between options leaves it whole.
+        .replace(/(^|\s)((?:\*\*|__)?[A-Z](?:\*\*|__)?)\s+·\s+/g, "$1$2: "),
+    )
       .map((p, i) => {
         const got = OPTION.exec(p.trim());
         if (!got || got[1] !== String.fromCharCode(65 + i)) return null;
@@ -110,7 +147,17 @@ export function readAsk(n: number, line: string): Ask {
   const valid = starts.filter((s) => optionsFrom(s.at));
   const pick = valid.find((s) => s.wide) ?? valid[valid.length - 1];
   if (!pick) return lettersOnly(n, line) ?? { n, text: line.trim(), options: [] };
-  return { n, text: line.slice(0, pick.at).trim(), options: optionsFrom(pick.at)! };
+  const options = optionsFrom(pick.at)!;
+  let text = line.slice(0, pick.at).trim();
+  // Sentences after the last option are about the choice, not part of it;
+  // they stay with the question.
+  const last = options[options.length - 1];
+  const end = options.length > 1 ? sentenceEnd(last.label) : -1;
+  if (end > 0) {
+    text += ` ${last.label.slice(end).trim()}`;
+    last.label = last.label.slice(0, end - 1).trim();
+  }
+  return { n, text, options };
 }
 
 /** "The line?  A · B · C · or your own words": letters alone, when the
@@ -384,6 +431,12 @@ export function suggested(card: Card): Record<number, string> {
   if (known.length) return Object.fromEntries(known.map(([n, l]) => [Number(n), l]));
   const out: Record<number, string> = {};
   for (const a of card.asks) {
+    // "I'd go with **C**." said under the question itself.
+    const own = /\bI(?:'d| would)?\s+(?:pick|go with|recommend|lean(?: towards?)?)\s+(?:\*\*|__)?([A-Z])\b/.exec(a.text);
+    if (own && a.options.some((o) => o.letter === own[1])) {
+      out[a.n] = own[1];
+      continue;
+    }
     const rec = a.options.find((o) => /^\(recommended\)/i.test(o.label) || /\(recommended\)\s*$/i.test(o.label));
     if (rec) out[a.n] = rec.letter;
   }
