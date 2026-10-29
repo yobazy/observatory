@@ -305,7 +305,11 @@ function ImageView({ file, rev }: { file: PreviewFile; rev: number }) {
     const el = img.current;
     const box = stage.current;
     if (!el?.naturalWidth || !box) return 1;
-    return Math.min(1, (box.clientWidth - 32) / el.naturalWidth, (box.clientHeight - 32) / el.naturalHeight);
+    // The room inside the padding, which is taller at the bottom for the bar.
+    const pad = getComputedStyle(box);
+    const w = box.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+    const h = box.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
+    return Math.min(1, w / el.naturalWidth, h / el.naturalHeight);
   };
   const measure = () => setFit(fitScale());
 
@@ -356,7 +360,7 @@ function ImageView({ file, rev }: { file: PreviewFile; rev: number }) {
     const pane = stage.current?.closest<HTMLElement>(".fpv");
     if (!pane) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest("textarea, input, select") || e.ctrlKey || e.altKey) return;
+      if ((e.target as HTMLElement).closest("textarea, input, select") || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "=" || e.key === "+") zoomBy(1.25);
       else if (e.key === "-") zoomBy(0.8);
       else if (e.key === "0") zoomTo(null);
