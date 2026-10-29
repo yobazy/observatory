@@ -4279,6 +4279,9 @@ td.task-last {
   margin-right: 6px;
 }
 .reader {
+  /* One width for everything you read and write here: replies, open
+     decisions and the reply box share their edges. */
+  --rd-measure: 720px;
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -4290,14 +4293,23 @@ td.task-last {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* The scrollbar's room is kept on both sides, so the column stays centred
+     over the reply box below it. */
+  scrollbar-gutter: stable both-edges;
+  /* What you read fades out at the foot instead of being cut off. */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
 }
 .rd-col {
-  max-width: 76ch;
+  max-width: var(--rd-measure);
   margin: 0 auto;
-  padding: 24px 28px 32px;
+  padding: 24px 28px 40px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
+}
+/* A turn of yours starts a new beat, so it gets a little more air above. */
+.rd-col > .rd-you {
+  margin-top: 8px;
 }
 /* The window doesn't select text; what was said in a thread does, so you can
    copy part of a reply. Its buttons and folds stay clicks. */
@@ -4360,13 +4372,13 @@ td.task-last {
 }
 .rd-you {
   align-self: flex-end;
-  max-width: 85%;
-  padding: 9px 13px;
-  border-radius: var(--r-lg);
+  max-width: 80%;
+  padding: 10px 15px;
+  border-radius: 18px 18px 6px 18px;
   background: var(--raised);
   color: var(--text);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 14.5px;
+  line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -4395,11 +4407,12 @@ td.task-last {
    tap and details folded away. Prose replies don't get one. */
 .rd-card {
   display: grid;
-  gap: 12px;
-  padding: 16px 18px;
-  border: 1px solid var(--line);
+  gap: 14px;
+  padding: 20px 22px 18px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   border-radius: var(--r-lg);
   background: var(--panel);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
 }
 /* Grid items won't shrink below their content by default, so a long code line
    would widen the whole card past the pane, and its Copy buttons with it. */
@@ -4488,13 +4501,15 @@ td.task-last {
 }
 .rd-needs {
   display: grid;
-  gap: 9px;
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--st-waiting) 35%, var(--line));
-  border-radius: var(--r-md);
-  background: var(--term);
+  gap: 14px;
+  padding: 14px 16px 16px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--st-waiting) 7%, transparent);
 }
 .rd-needs h4 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 0;
   font-size: 11px;
   font-weight: 600;
@@ -4502,31 +4517,37 @@ td.task-last {
   text-transform: uppercase;
   color: var(--st-waiting);
 }
+.rd-needs h4::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* The options always sit under their question, so every answer starts at
+   the same edge and reads down the card. */
 .rd-q {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
+  display: grid;
+  gap: 8px;
 }
 .rd-q-text {
-  flex: 1 1 240px;
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 14.5px;
+  line-height: 1.5;
 }
 .rd-opts {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 6px;
 }
 .rd-opt {
   display: inline-flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 7px;
   min-height: 30px;
-  padding: 4px 11px;
+  padding: 4px 13px 4px 11px;
   text-align: left;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -4538,8 +4559,17 @@ td.task-last {
     color 120ms,
     transform 90ms;
 }
+.rd-opt b {
+  font-weight: 600;
+  color: var(--faint);
+}
 .rd-opt:hover:not(:disabled) {
   border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.rd-opt.is-on b,
+.rd-opt:hover:not(:disabled) b {
+  color: inherit;
 }
 .rd-opt:active:not(:disabled) {
   transform: scale(0.96);
@@ -4597,26 +4627,18 @@ td.task-last {
 .rd-fold summary::-webkit-details-marker {
   display: none;
 }
-.rd-fold summary::before {
-  content: "▸";
-  display: inline-block;
-  width: 14px;
-  font-size: 12px;
-}
-.rd-fold[open] summary::before {
-  content: "▾";
-}
 .rd-fold .rd-md {
   margin-top: 8px;
 }
 /* The close verdict the reply ends on, set apart at the card's foot. */
 .rd-verdict {
   margin: 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
   font-size: 13px;
+  line-height: 1.5;
   --tone: var(--st-idle);
-  color: color-mix(in srgb, var(--tone) 70%, var(--text));
+  color: var(--muted);
 }
 .rd-verdict-text {
   min-width: 0;
@@ -4624,11 +4646,12 @@ td.task-last {
 .rd-verdict-text::before {
   content: "";
   display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 8px;
+  width: 7px;
+  height: 7px;
+  margin: 0 10px 1px 2px;
   border-radius: 50%;
   background: var(--tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 22%, transparent);
 }
 .rd-verdict.is-done {
   --tone: var(--st-done);
@@ -4700,7 +4723,7 @@ td.task-last {
   white-space: nowrap;
 }
 .rd-steps {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--faint);
 }
 .rd-steps summary {
@@ -4711,14 +4734,23 @@ td.task-last {
 .rd-steps summary::-webkit-details-marker {
   display: none;
 }
-.rd-steps summary::before {
-  content: "▸";
+.rd-steps summary::before,
+.rd-fold summary::before,
+.rd-open > summary::before {
+  content: "›";
   display: inline-block;
   width: 14px;
-  font-size: 12px;
+  font-size: 15px;
+  line-height: 1;
+  text-align: center;
+  margin-right: 4px;
+  transition: transform 160ms ease;
 }
-.rd-steps[open] summary::before {
-  content: "▾";
+.rd-steps[open] summary::before,
+.rd-fold[open] summary::before,
+.rd-open[open] > summary::before {
+  content: "›";
+  transform: rotate(90deg);
 }
 .rd-steps summary:hover {
   color: var(--muted);
@@ -4728,10 +4760,11 @@ td.task-last {
 }
 .rd-steps ul {
   list-style: none;
-  margin: 6px 0 0 14px;
-  padding: 0;
+  margin: 8px 0 2px 6px;
+  padding: 2px 0 2px 14px;
+  border-left: 1px solid var(--line);
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 .rd-steps li {
   display: flex;
@@ -4822,32 +4855,43 @@ td.task-last {
   text-align: left;
 }
 .rd-compose {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  max-width: 76ch;
+  max-width: var(--rd-measure);
   width: 100%;
   margin: 0 auto;
-  padding: 10px 28px 16px;
+  padding: 10px 28px 18px;
 }
 .rd-compose textarea {
   flex: 1;
   resize: none;
-  min-height: 40px;
+  min-height: 48px;
   max-height: 30vh;
-  padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  padding: 13px 92px 13px 16px;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 16px;
   background: var(--panel);
   color: var(--text);
   font: inherit;
-  font-size: 14px;
+  font-size: 14.5px;
   line-height: 1.45;
   outline: none;
   user-select: text;
+  transition: border-color 120ms, box-shadow 120ms;
 }
 .rd-compose textarea:focus {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+/* Send sits inside the box, at its corner. */
+.rd-compose > .btn-primary {
+  position: absolute;
+  right: 36px;
+  bottom: 26px;
+  border-radius: 11px;
+  padding: 5px 13px;
 }
 .rd-wait {
   margin: 0;
@@ -4907,7 +4951,8 @@ td.task-last {
 /* Takes no room, so showing it doesn't move what you're reading. */
 .rd-latest-at {
   position: sticky;
-  bottom: 12px;
+  /* Clear of the fade at the foot of the scroll. */
+  bottom: 26px;
   height: 0;
   display: flex;
   justify-content: center;
@@ -7426,7 +7471,33 @@ button.board-main:hover .board-text {
 /* A file a reply names opens in the preview; "#75" goes to that PR. */
 .rd-md code.rd-path {
   cursor: pointer;
-  text-decoration: underline dotted;
+  text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 3px;
+}
+/* A long path keeps its file name whole and lets the folders give way,
+   cut from the front, so it stays on one line. Copying it still copies
+   all of it. */
+.rd-md code.rd-path.is-long {
+  display: inline-flex;
+  max-width: 100%;
+  vertical-align: bottom;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.rd-path-dir {
+  min-width: 3ch;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  color: var(--faint);
+}
+.rd-path-dir > bdi {
+  direction: ltr;
+}
+.rd-path-base {
+  flex: none;
+  text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent);
   text-underline-offset: 3px;
 }
 .rd-md code.rd-path:hover {
@@ -7453,13 +7524,12 @@ button.board-main:hover .board-text {
   color: var(--text);
 }
 .rd-open {
-  max-width: 76ch;
+  max-width: calc(var(--rd-measure) - 56px);
   width: calc(100% - 56px);
-  margin: 0 auto 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--panel);
+  margin: 0 auto 2px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--st-waiting) 7%, var(--term));
   font-size: 12.5px;
 }
 .rd-open > summary {
@@ -7471,23 +7541,16 @@ button.board-main:hover .board-text {
   cursor: pointer;
   list-style: none;
 }
-.rd-open > summary::before {
-  content: "▸";
-  width: 10px;
-}
-.rd-open[open] > summary::before {
-  content: "▾";
-}
 .rd-open > summary::-webkit-details-marker {
   display: none;
 }
 .rd-open[open] > summary {
   position: sticky;
-  top: -6px;
+  top: -8px;
   z-index: 1;
-  margin: -6px -12px 0;
-  padding: 6px 12px;
-  background: var(--panel);
+  margin: -8px -14px 0;
+  padding: 8px 14px;
+  background: color-mix(in srgb, var(--st-waiting) 7%, var(--term));
 }
 .rd-open-fold {
   margin-left: auto;
@@ -8067,7 +8130,10 @@ button.board-main:hover .board-text {
   line-height: 1.25;
 }
 .rd-card {
-  border-radius: 16px;
+  border-radius: 18px;
+}
+.rd-md li::marker {
+  color: var(--faint);
 }
 
 /* The eyepiece row (LiveStrip.tsx): one lens per live thread. */
