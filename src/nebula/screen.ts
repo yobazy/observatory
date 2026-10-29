@@ -4,7 +4,7 @@
 // plain lines. From those, a question with numbered choices — a permission
 // prompt — can be answered from outside the terminal.
 import { Terminal } from "@xterm/xterm";
-import { sendInput, tailOutput } from "./client";
+import { promptAnswered, sendInput, tailOutput } from "./client";
 import type { Agent } from "./types";
 import { findQuestion, type Choice, type Question } from "./question";
 
@@ -52,4 +52,5 @@ export async function answer(agent: Agent, q: Question, choice: Choice): Promise
     now && now.prompt === q.prompt && now.choices.some((c) => c.key === choice.key && c.label === choice.label);
   if (!same) throw new Error(`${agent.name} isn't asking that any more`);
   await sendInput({ Agent: agent.id }, choice.key);
+  promptAnswered(agent);
 }

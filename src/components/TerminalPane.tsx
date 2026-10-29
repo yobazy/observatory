@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
-import { debugLog, onExit, onPty, request, send, sendInput } from "../nebula/client";
+import { debugLog, onExit, onPty, promptAnswered, request, send, sendInput } from "../nebula/client";
 import { flash, getState, projectOfWorktree, setState, useAppState } from "../nebula/store";
 import { agentSpec, harnessLabel, statusLabel, usualHarness } from "../nebula/status";
 import { sessionKey, type Agent, type SessionRef } from "../nebula/types";
@@ -333,7 +333,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     const ref = current.current;
     if (!ref || !asking) return;
     setMenu(null);
-    void sendInput(ref, c.key);
+    void sendInput(ref, c.key).then(() => agent && promptAnswered(agent));
   };
 
   const project = agent || tab ? projectOfWorktree(state, (agent ?? tab)!.worktree_id) : undefined;

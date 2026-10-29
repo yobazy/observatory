@@ -315,10 +315,30 @@ function decode(b64: string): Uint8Array {
 
 // ---- event handling ----
 
+// Prompts answered from this app, by agent: since when it was waiting.
+// nebula only hears a permission prompt was answered once the command it
+// allowed ends or the next one starts, so a long command would leave the
+// agent "waiting on you" all the while it runs.
+const answered = new Map<string, number>();
+
+/** You answered the prompt `a` is waiting on: it shows as working until
+ *  the daemon has status news of its own. */
+export function promptAnswered(a: Agent) {
+  if (a.status !== "needs_feedback") return;
+  answered.set(a.id, a.status_changed_at);
+  setState((s) => (s.agents[a.id] ? { agents: { ...s.agents, [a.id]: { ...s.agents[a.id], status: "running" } } } : {}));
+}
+
 /** An agent row from the daemon, kept waiting on you while limits.ts holds
- *  it at a usage limit: until the daemon has status news of its own. */
+ *  it at a usage limit, or working once you've answered its prompt: until
+ *  the daemon has status news of its own. */
 function held(a: Agent): Agent {
   a = withSessionStatus(a);
+  const since = answered.get(a.id);
+  if (since !== undefined) {
+    if (a.status === "needs_feedback" && a.status_changed_at === since) a = { ...a, status: "running" };
+    else answered.delete(a.id);
+  }
   const hit = getState().limits[a.id];
   if (!hit) return a;
   if (a.status === "running" && a.status_changed_at === hit.since) return { ...a, status: "needs_feedback" };
