@@ -4542,9 +4542,15 @@ td.task-last {
   display: grid;
   gap: 8px;
 }
+/* A question can carry a long command; it wraps inside the box rather than
+   widening the question past it. */
+.rd-q > * {
+  min-width: 0;
+}
 .rd-q-text {
   font-size: 14.5px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .rd-opts {
   display: flex;

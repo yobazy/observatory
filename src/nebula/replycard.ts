@@ -242,7 +242,17 @@ export function readCard(text: string): Card {
   // The lines each ask's own-line options came from, to give back if they
   // don't make a choice.
   const lined = new Map<Ask, string[]>();
+  // A command fenced under a question keeps its lines, so it shows as a
+  // block to run or copy rather than run into the question's text.
+  let fence: string | null = null;
   for (const line of sections.needs.flatMap(splitAsks)) {
+    const fenceLine = /^(\s*)(```|~~~)/.exec(line);
+    if (open && (fence !== null || fenceLine)) {
+      const indent = fence ?? fenceLine![1];
+      open.text += `\n${line.startsWith(indent) ? line.slice(indent.length) : line.trimStart()}`;
+      if (fenceLine) fence = fence === null ? fenceLine[1] : null;
+      continue;
+    }
     const item = ITEM.exec(line);
     const opt = open && readOptionLine(line);
     if (item) {
