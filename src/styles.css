@@ -7343,6 +7343,21 @@ button.board-main:hover .board-text {
   flex-wrap: wrap;
   gap: 8px;
 }
+.auto-fix {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.auto-fix select {
+  max-width: 180px;
+  height: 24px;
+  background: var(--night);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0 6px;
+  font-size: 12px;
+}
 .auto-status {
   display: flex;
   flex-direction: column;
