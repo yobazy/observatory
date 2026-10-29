@@ -786,7 +786,6 @@ function ListGlyph() {
   );
 }
 
-/** A window with its left panel marked: hide or show a column. */
 /** A speech bubble: a session asking you something. */
 function AskGlyph() {
   return (
@@ -802,6 +801,7 @@ function AskGlyph() {
   );
 }
 
+/** A window with its left panel marked: hide or show a column. */
 export function PanelGlyph() {
   return (
     <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
