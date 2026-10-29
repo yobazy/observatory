@@ -96,7 +96,7 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
    *  weren't looking (followupRules.ts); they clear once you act. */
   autoFollowUps?: Record<string, true>;
   /** The agent CLI Dispatch routes a list with, headless (router.rs);
-   *  `claude -p` when unset. */
+   *  `claude -p --no-session-persistence --tools ""` when unset. */
   routerCommand?: string;
   /** The agent CLI the tagging prompt runs through, headless (tagging.ts,
    *  router.rs). No default: tagging is off until it's set. */

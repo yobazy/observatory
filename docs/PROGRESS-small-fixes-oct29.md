@@ -20,6 +20,17 @@ Branch `small-fixes-oct29`, worktree `/data/tmp/overnight-2026-10-29/wt/f-obs-sm
   that line is about slots, and `occupies()` is what the caps count.
 - Test: `tests/board.test.mjs` "the Dispatch dialog's line counts a session stopped at its plan...".
 
+### 2. Router defaults
+
+- `router.rs` `DEFAULT_COMMAND` is now `claude -p --no-session-persistence --tools ""` (the same flags
+  title.rs already uses). A `routerCommand` pref still replaces it whole, run as typed.
+- New `router_words()` so the default/override choice is unit tested
+  (`the_default_router_saves_no_session_and_uses_no_tools`).
+- Settings shows the new default as the placeholder and first suggestion; the haiku suggestion carries the
+  same flags. theme.ts doc comment updated.
+- Not run for real here (`router_smoke` is `#[ignore]` and calls the real CLI). Try:
+  `cd src-tauri && cargo test -- --ignored router_smoke`.
+
 ## Notes
 
 - On `pc` (Linux), 10 tests in `tests/automations.test.mjs` fail before any change: they shell out to
