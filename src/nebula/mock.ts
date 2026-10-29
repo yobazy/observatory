@@ -480,6 +480,7 @@ export function mockAutomations(): AutomationsReport {
       job("com.dev.inbox-watch", { StartInterval: 120 }, loaded("com.dev.inbox-watch", "\tlast exit code = 0"), 25, ["checked inbox: nothing new"]),
       job("com.dev.old-reminder", { StartInterval: 3600 }, 'Bad request.\nCould not find service "com.dev.old-reminder" in domain for user gui: 501', 4000, ["sent reminder"]),
       job("ai.dev.gateway", { KeepAlive: true }, loaded("ai.dev.gateway", "\tpid = 4242\n\tlast exit code = (never exited)"), 1, ["listening on :8642"]),
+      job("ai.dev.indexer", { KeepAlive: true }, loaded("ai.dev.indexer", "\tpid = 4310\n\tlast exit code = (never exited)"), 3, ["indexed 412 files", "sqlite3.OperationalError: disk I/O error"]),
       job("com.google.keystone.agent", { StartInterval: 3600 }, loaded("com.google.keystone.agent", "\tlast exit code = 0"), 10, []),
     ],
   };
