@@ -55,23 +55,26 @@ export function parseTags(text: string): string[] {
   return [...new Set(text.split(/[,\s]+/).map(cleanTag).filter(Boolean))];
 }
 
-/** Every tag in use, the most used first, then by name. */
-export function allTags(prefs: FolderPrefs, repos: string[]): string[] {
+/** Every tag in use, the most used first, then by name: projects' own tags,
+ *  and the tags their threads carry (`threadTags`, by repo), once a project. */
+export function allTags(prefs: FolderPrefs, repos: string[], threadTags: Record<string, string[]> = {}): string[] {
   const count = new Map<string, number>();
-  for (const repo of repos) for (const t of prefs.projectTags?.[repo] ?? []) count.set(t, (count.get(t) ?? 0) + 1);
+  for (const repo of repos)
+    for (const t of new Set([...(prefs.projectTags?.[repo] ?? []), ...(threadTags[repo] ?? [])])) count.set(t, (count.get(t) ?? 0) + 1);
   return [...count.keys()].sort((a, b) => count.get(b)! - count.get(a)! || a.localeCompare(b));
 }
 
 /** Whether `project` answers the filter `query`: its name (an alias, when it
  *  has one, is its name), the daemon's name for it, its folder, or a tag.
- *  "#tag" asks for that tag alone. */
-export function matches(project: Named, daemonName: string, prefs: FolderPrefs, query: string): boolean {
+ *  "#tag" asks for that tag alone, on the project or on one of its threads
+ *  (`threadTags`, the tags they carry). */
+export function matches(project: Named, daemonName: string, prefs: FolderPrefs, query: string, threadTags: string[] = []): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const tags = prefs.projectTags?.[project.repo_path] ?? [];
   if (q.startsWith("#")) {
     const want = cleanTag(q);
-    return !want || tags.some((t) => t.startsWith(want));
+    return !want || [...tags, ...threadTags].some((t) => t.startsWith(want));
   }
   const folder = prefs.projectFolders?.find((f) => f.projects.includes(project.repo_path))?.name ?? "";
   return [project.name, daemonName, project.repo_path, folder, ...tags].some((s) => s.toLowerCase().includes(q));

@@ -7572,6 +7572,81 @@ button.board-main:hover .board-text {
   margin-left: 0;
 }
 
+/* A tag's color: --pc is its hue, set only on tags that have one (so a
+   tagged row's own color doesn't leak into its uncolored tags). */
+.tag-chip.has-color,
+.tag-dot,
+.row-tag[style],
+.tt-color[style] {
+  --pc-ink: hsl(var(--pc) 72% 64%);
+}
+:root[data-mode="light"] .tag-chip.has-color,
+:root[data-mode="light"] .tag-dot,
+:root[data-mode="light"] .row-tag[style],
+:root[data-mode="light"] .tt-color[style] {
+  --pc-ink: hsl(var(--pc) 62% 46%);
+}
+.tag-chip.has-color {
+  border-color: color-mix(in srgb, var(--pc-ink) 45%, var(--line));
+  color: color-mix(in srgb, var(--pc-ink) 70%, var(--text));
+}
+.tag-chip.has-color.is-on {
+  border-color: var(--pc-ink);
+  background: color-mix(in srgb, var(--pc-ink) 20%, transparent);
+  color: var(--text);
+}
+.tag-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pc-ink);
+}
+/* A row's tags: a small dot each, gray when the tag has no color. */
+.row-tags {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+.row-tag {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.row-tag[style] {
+  background: var(--pc-ink);
+}
+.tt-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tt-item .color-row {
+  gap: 6px;
+  padding-left: 26px;
+}
+.tt-item .color-swatch {
+  width: 20px;
+  height: 20px;
+}
+.tt-color {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--pc-ink, none);
+}
+.tt-color.is-none {
+  background: linear-gradient(135deg, transparent 45%, var(--faint) 45%, var(--faint) 55%, transparent 55%);
+}
+.tt-color:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* A file a reply names opens in the preview; "#75" goes to that PR. */
 .rd-md code.rd-path {
   cursor: pointer;

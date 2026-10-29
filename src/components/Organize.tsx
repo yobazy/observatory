@@ -8,11 +8,13 @@ import {
   isAutoFollowUp,
   renameThreadTag,
   setTaskColor,
-  tagThread,
+  setThreadTagColor,
+  tagPicked,
   toggleFlag,
 } from "../nebula/organize";
 import { PRIORITIES, priorityLabel, type Priority } from "../nebula/priority";
-import { tagCounts, tagList, threadTagsOf } from "../nebula/threadtags";
+import { tagColor, tagCounts, tagList, tagShare, threadTagsOf } from "../nebula/threadtags";
+import type { DesktopPrefs } from "../nebula/theme";
 import { relativeTime } from "../nebula/status";
 import { flash, getState, projectOfWorktree, projectWorktrees, useAppState } from "../nebula/store";
 import type { Agent } from "../nebula/types";
@@ -91,12 +93,13 @@ export function TaskColorDialog({ agent, onClose }: { agent: Agent; onClose: () 
   );
 }
 
-/** Which of its project's tags a thread carries: a checkbox each, and a
- *  field that adds a new one to the project and to the thread. Each change
- *  saves as you make it, as yours. */
-export function ThreadTagsDialog({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+/** Which of their project's tags one thread, or several picked ones, carry:
+ *  a checkbox each (mixed when only some of the threads do), and a field
+ *  that adds a new one to the project and to the threads. Each change saves
+ *  as you make it, as yours. */
+export function ThreadTagsDialog({ agents, onClose }: { agents: Agent[]; onClose: () => void }) {
   const state = useAppState();
-  const repo = projectOfWorktree(state, agent.worktree_id)?.repo_path;
+  const repo = agents[0] && projectOfWorktree(state, agents[0].worktree_id)?.repo_path;
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement>(null);
@@ -105,34 +108,39 @@ export function ThreadTagsDialog({ agent, onClose }: { agent: Agent; onClose: ()
   if (!repo) return null;
   if (editing) return <TagListDialog repo={repo} onClose={onClose} />;
   const list = tagList(state.prefs, repo);
-  const carried = threadTagsOf(state.prefs, agent.id);
+  // Picks only ever come from one project's list; any from another are left out.
+  const ids = agents.filter((a) => projectOfWorktree(state, a.worktree_id)?.repo_path === repo).map((a) => a.id);
+  const one = ids.length === 1;
 
-  const toggle = (tag: string, on: boolean) =>
-    void tagThread(agent.id, on ? [...carried, tag] : carried.filter((t) => t !== tag));
   const add = async () => {
     const tag = cleanTag(name);
     if (!(await addThreadTag(repo, name))) return;
     setName("");
-    const now = threadTagsOf(getState().prefs, agent.id);
-    if (!now.includes(tag)) await tagThread(agent.id, [...now, tag]);
+    if (tagShare(getState().prefs, ids, tag) !== "all") await tagPicked(ids, tag, true);
   };
 
   return (
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog dialog-narrow thread-tags" role="dialog" aria-modal="true" aria-labelledby="thread-tags-title">
-        <h2 id="thread-tags-title">Tags on {agent.name}</h2>
+        <h2 id="thread-tags-title">Tags on {one ? agents[0].name : `${ids.length} threads`}</h2>
         {list.length > 0 ? (
           <ul className="tt-list" aria-labelledby="thread-tags-title">
-            {list.map((t) => (
-              <li key={t}>
-                <label className="tt-check">
-                  <input type="checkbox" checked={carried.includes(t)} onChange={(e) => toggle(t, e.target.checked)} />#{t}
-                </label>
-              </li>
-            ))}
+            {list.map((t) => {
+              const share = tagShare(state.prefs, ids, t);
+              return (
+                <li key={t}>
+                  <label className="tt-check" title={share === "some" ? "Some of them carry it: check to tag them all" : undefined}>
+                    <MixedCheckbox share={share} onChange={(on) => void tagPicked(ids, t, on)} />
+                    <TagDot repo={repo} tag={t} />#{t}
+                  </label>
+                </li>
+              );
+            })}
           </ul>
         ) : (
-          <p className="dialog-note">This project has no tags yet. Add one below, and it goes on this thread too.</p>
+          <p className="dialog-note">
+            This project has no tags yet. Add one below, and it goes on {one ? "this thread" : "these threads"} too.
+          </p>
         )}
         <form
           className="tt-add"
@@ -166,6 +174,84 @@ export function ThreadTagsDialog({ agent, onClose }: { agent: Agent; onClose: ()
         </footer>
       </div>
     </div>
+  );
+}
+
+/** A checkbox for a tag on several threads: checked when they all carry it,
+ *  mixed when some do. Checking a mixed one tags them all. */
+function MixedCheckbox({ share, onChange }: { share: "all" | "some" | "none"; onChange: (on: boolean) => void }) {
+  const box = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (box.current) box.current.indeterminate = share === "some";
+  }, [share]);
+  return (
+    <input
+      ref={box}
+      type="checkbox"
+      checked={share === "all"}
+      aria-checked={share === "some" ? "mixed" : share === "all"}
+      onChange={() => onChange(share !== "all")}
+    />
+  );
+}
+
+/** A tag's color as `--pc` (its hue), or nothing when it has none. */
+export function tagColorStyle(prefs: DesktopPrefs, repo: string, tag: string): React.CSSProperties | undefined {
+  const name = tagColor(prefs, repo, tag);
+  const hue = PROJECT_COLORS.find((c) => c.name === name)?.hue;
+  return hue === undefined ? undefined : ({ "--pc": hue } as React.CSSProperties);
+}
+
+/** A tag's color as a small dot; nothing when it has none. */
+export function TagDot({ repo, tag }: { repo: string; tag: string }) {
+  const style = tagColorStyle(useAppState().prefs, repo, tag);
+  return style ? <span className="tag-dot" style={style} aria-hidden /> : null;
+}
+
+/** A chip for one of a project's thread tags, in its color when it has one:
+ *  `#tag`, then whatever's passed (a count). */
+export function TagChip({
+  repo,
+  tag,
+  on,
+  title,
+  onClick,
+  children,
+}: {
+  repo: string;
+  tag: string;
+  on: boolean;
+  title: string;
+  onClick: () => void;
+  children?: React.ReactNode;
+}) {
+  const style = tagColorStyle(useAppState().prefs, repo, tag);
+  return (
+    <button
+      className={`tag-chip${on ? " is-on" : ""}${style ? " has-color" : ""}`}
+      style={style}
+      aria-pressed={on}
+      title={title}
+      onClick={onClick}
+    >
+      #{tag} {children}
+    </button>
+  );
+}
+
+/** The tags a thread carries, on its row: a dot in each one's color. */
+export function TagMarks({ agent }: { agent: Agent }) {
+  const state = useAppState();
+  const tags = threadTagsOf(state.prefs, agent.id);
+  const repo = tags.length ? projectOfWorktree(state, agent.worktree_id)?.repo_path : undefined;
+  if (!repo) return null;
+  const label = tags.map((t) => `#${t}`).join(" ");
+  return (
+    <span className="row-mark row-tags" role="img" title={label} aria-label={`Tagged ${label}`}>
+      {tags.map((t) => (
+        <span key={t} className="row-tag" style={tagColorStyle(state.prefs, repo, t)} />
+      ))}
+    </span>
   );
 }
 
@@ -282,14 +368,29 @@ export function TagListDialog({ repo, onClose }: { repo: string; onClose: () => 
 /** One tag in the editor: its name, renamed when you leave the field or
  *  press Enter, and a delete button. */
 function TagListRow({ repo, tag, count }: { repo: string; tag: string; count: number }) {
+  const prefs = useAppState().prefs;
   const [value, setValue] = useState(tag);
+  const [coloring, setColoring] = useState(false);
   useEffect(() => setValue(tag), [tag]);
   const commit = () => {
     if (cleanTag(value) === tag) return setValue(tag);
     void renameThreadTag(repo, tag, value).then((ok) => ok || setValue(tag));
   };
+  const color = tagColor(prefs, repo, tag);
+  const labelId = `tt-color-${tag}`;
   return (
-    <li className="tt-row">
+    <li className="tt-item">
+    <div className="tt-row">
+      <button
+        type="button"
+        id={labelId}
+        className={`tt-color${color ? "" : " is-none"}`}
+        style={tagColorStyle(prefs, repo, tag)}
+        aria-expanded={coloring}
+        title={color ? `#${tag} is ${color}: pick another color` : `Pick a color for #${tag}`}
+        aria-label={`Color for #${tag}`}
+        onClick={() => setColoring(!coloring)}
+      />
       <span className="tt-hash" aria-hidden>
         #
       </span>
@@ -318,8 +419,18 @@ function TagListRow({ repo, tag, count }: { repo: string; tag: string; count: nu
       >
         Delete
       </button>
+    </div>
+    {coloring && (
+      <ColorRow
+        value={color}
+        labelledBy={labelId}
+        onPick={(name) => {
+          void setThreadTagColor(repo, tag, name).catch((e) => flash(`Couldn't save the color: ${e}`));
+          setColoring(false);
+        }}
+      />
+    )}
     </li>
-
   );
 }
 

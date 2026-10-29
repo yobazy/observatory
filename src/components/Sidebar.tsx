@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import {
   STATUS_ORDER,
   daemonName,
+  getState,
   projectAgents,
   projectOfWorktree,
   setState,
@@ -24,7 +25,8 @@ import { UncommittedEntry } from "./Uncommitted";
 import { IdeasEntry } from "./Ideas";
 import { InboxEntry } from "./Inbox";
 import { createFolder, deleteFolder, moveFolder, moveInFolder, moveProject, moveToFolder, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
-import { allTags, layout, matches, type ProjectFolder } from "../nebula/folders";
+import { allTags, cleanTag, layout, matches, type ProjectFolder } from "../nebula/folders";
+import { carriedTags } from "../nebula/threadtags";
 import { FolderGlyph } from "./ProjectOrganize";
 import { ContextMenu, type MenuItem } from "./Menu";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
@@ -81,10 +83,26 @@ export function Sidebar({
   const looseRepos = grouped.loose.map((p) => p.repo_path);
   const reorder = useReorder((repo, to) => void moveProject(repo, to, looseRepos), !filtered, fileInto(LOOSE));
   const folderOrder = useReorder((id, to) => void moveFolder(id, to), !filtered);
-  const tags = useMemo(() => allTags(state.prefs, projects.map((p) => p.repo_path)), [projects, state.prefs]);
+  // The tags each project's threads carry, by repo: "#tag" finds those too.
+  const threadTags = useMemo(
+    () => Object.fromEntries(projects.map((p) => [p.repo_path, carriedTags(state.prefs, projectAgents(state, p.id).map((a) => a.id))])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projects, state.prefs, state.agents, state.worktrees],
+  );
+  const tags = useMemo(() => allTags(state.prefs, projects.map((p) => p.repo_path), threadTags), [projects, state.prefs, threadTags]);
+  // A "#tag" filter is a tag looked for across projects: a project opened
+  // meanwhile turns its chip on, and ⌘K can set it.
+  const queryTag = query.trim().startsWith("#") ? cleanTag(query) || null : null;
+  useEffect(() => {
+    if (getState().tagFilter !== queryTag) setState({ tagFilter: queryTag });
+  }, [queryTag]);
+  useEffect(() => {
+    if (state.tagFilter && state.tagFilter !== queryTag) setQuery(`#${state.tagFilter}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.tagFilter]);
   const waiting = useMemo(() => waitingAgents(state), [state]);
   const shown = useMemo(() => {
-    if (query.trim()) return projects.filter((p) => matches(p, daemonName(p), state.prefs, query));
+    if (query.trim()) return projects.filter((p) => matches(p, daemonName(p), state.prefs, query, threadTags[p.repo_path]));
     // Needs you: what's waiting, working or unread, and the project you're in.
     if (needsOnly)
       return projects.filter(
@@ -94,7 +112,7 @@ export function Sidebar({
           projectAgents(state, p.id).some((a) => a.status === "needs_feedback" || a.status === "running" || a.unseen),
       );
     return projects;
-  }, [projects, query, needsOnly, state]);
+  }, [projects, query, needsOnly, state, threadTags]);
   const hiddenCount = projects.length - shown.length;
   // The order on screen, which ⌘1–9 count in: a folded folder's projects aren't.
   const onScreen = filtered ? shown : [...grouped.folders.flatMap((g) => (g.folder.collapsed ? [] : g.projects)), ...grouped.loose];
@@ -329,7 +347,7 @@ export function Sidebar({
                   className={`tag-chip${on ? " is-on" : ""}`}
                   aria-pressed={on}
                   onClick={() => setQuery(on ? "" : `#${t}`)}
-                  title={on ? "Show every project again" : `Show only projects tagged ${t}`}
+                  title={on ? "Show every project again" : `Show only projects tagged #${t}, or with threads tagged #${t}`}
                 >
                   #{t}
                 </button>
