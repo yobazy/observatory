@@ -4702,6 +4702,10 @@ td.task-last {
   font-size: 11.5px;
   cursor: pointer;
   opacity: 0;
+  transition:
+    opacity 140ms ease-out,
+    color 120ms,
+    border-color 120ms;
 }
 .rd-reply:hover .rd-point,
 .rd-tools:focus-within .rd-point,
@@ -4943,8 +4947,25 @@ td.task-last {
   animation: fade 120ms ease-out both;
 }
 .rd-fold[open] > .rd-md,
-.rd-steps[open] > ul {
+.rd-steps[open] > ul,
+.rd-open[open] > .rd-open-reply {
   animation: rise 160ms ease-out;
+}
+/* A thread fades in as it opens, rather than replacing the last at once. */
+.rd-col {
+  animation: fade 140ms ease-out;
+}
+/* What comes and goes as the agent works settles in too: the working line,
+   a queued reply, its question to you, and the bar above the box. */
+.rd-working,
+.rd-you.is-queued,
+.rd-ask,
+.rd-compose > .rd-wait {
+  animation: rise 180ms ease-out both;
+}
+.rd-catchup,
+.rd-open {
+  animation: fade 180ms ease-out both;
 }
 .rd-working {
   display: flex;
@@ -4998,12 +5019,22 @@ td.task-last {
   .rd-reply.is-new .rd-card > *,
   .rd-fold[open] > .rd-md,
   .rd-steps[open] > ul,
+  .rd-open[open] > .rd-open-reply,
+  .rd-col,
+  .rd-working,
+  .rd-you.is-queued,
+  .rd-ask,
+  .rd-compose > .rd-wait,
+  .rd-catchup,
+  .rd-open,
   .rd-picked,
   .rd-pulse,
   .rd-latest {
     animation: none;
   }
-  .rd-opt {
+  .rd-opt,
+  .rd-point,
+  .rd-hero-status {
     transition: none;
   }
 }
@@ -8150,6 +8181,7 @@ button.board-main:hover .board-text {
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
+  transition: color 240ms ease;
 }
 .rd-hero-status.is-needs_feedback {
   color: var(--st-waiting);

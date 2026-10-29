@@ -679,7 +679,10 @@ export function Reader({
   const picks = tapped.entry === latest ? tapped.picks : {};
   // A reply on its way, shown in the thread until the agent's copy lands.
   const [outbox, setOutbox] = useState<{ text: string; after: number; sent: boolean } | null>(null);
-  const landed = !!outbox && (t?.entries ?? []).some((e) => e.kind === "you" && e.n > outbox.after);
+  // The thread's own copy of a reply you sent takes the Sending bubble's
+  // place, which already rose in, so it doesn't rise a second time.
+  const landedN = outbox ? (t?.entries ?? []).find((e) => e.kind === "you" && e.n > outbox.after)?.n : undefined;
+  const landed = landedN !== undefined;
   // A queued message you took back out of the queue no longer counts.
   const stillGoing = queued.how === "sent" || (getState().queue[agent.id] ?? []).some((q) => q.text === queued.text);
   // What you answered each earlier reply with, read from the message after it.
@@ -1040,7 +1043,7 @@ export function Reader({
                       ]
                     : []),
                   e.kind === "you" ? (
-                    <div key={e.n} data-n={e.n} className={`rd-you${fresh(e) ? " is-new" : ""}`}>
+                    <div key={e.n} data-n={e.n} className={`rd-you${fresh(e) && e.n !== landedN ? " is-new" : ""}`}>
                       {e.text}
                     </div>
                   ) : e.kind === "claude" ? (
