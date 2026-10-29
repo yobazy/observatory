@@ -32,7 +32,8 @@ export function onDraftAdded(fn: (agentId: string) => void): () => void {
  *  the path is in it already. */
 export function withPath(text: string, path: string): string {
   if (!text.trim()) return path;
-  if (text.includes(path)) return text;
+  const esc = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (new RegExp(`(^|\\s)${esc}(?=\\s|$)`).test(text)) return text;
   return /\s$/.test(text) ? `${text}${path}` : `${text} ${path}`;
 }
 

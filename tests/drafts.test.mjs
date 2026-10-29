@@ -8,6 +8,9 @@ test('a path goes at the end of what you wrote, once', () => {
   assert.equal(withPath('look at', '/r/a.html'), 'look at /r/a.html');
   assert.equal(withPath('look at\n', '/r/a.html'), 'look at\n/r/a.html');
   assert.equal(withPath('look at /r/a.html', '/r/a.html'), 'look at /r/a.html');
+  assert.equal(withPath("look at '/r/a b.html' now", "'/r/a b.html'"), "look at '/r/a b.html' now");
+  // Only the whole path counts as there already, not a longer one it starts.
+  assert.equal(withPath('compare /r/a.html.bak with', '/r/a.html'), 'compare /r/a.html.bak with /r/a.html');
 });
 
 test('a file goes where the agent reads next', () => {
