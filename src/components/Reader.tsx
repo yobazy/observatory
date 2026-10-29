@@ -140,6 +140,18 @@ async function runIn(agentId: string, command: string) {
   }
 }
 
+/** A question, with any command fenced under it as its own block. */
+function AskText({ n, text }: { n: number; text: string }) {
+  const at = text.search(/^(```|~~~)/m);
+  const lead = at < 0 ? text : text.slice(0, at);
+  return (
+    <>
+      <span className="rd-q-text" dangerouslySetInnerHTML={{ __html: toHtml(`${n}. ${lead}`, true) }} />
+      {at >= 0 && <Md className="rd-q-more" text={text.slice(at)} />}
+    </>
+  );
+}
+
 function Md({ text, className = "" }: { text: string; className?: string }) {
   const html = useMemo(() => toHtml(text), [text]);
   const el = useRef<HTMLDivElement>(null);
@@ -437,7 +449,7 @@ export function CardReply({
           <h4>Needs you</h4>
           {card.asks.map((a) => (
             <div key={a.n} className="rd-q">
-              <span className="rd-q-text" dangerouslySetInnerHTML={{ __html: toHtml(`${a.n}. ${a.text}`, true) }} />
+              <AskText n={a.n} text={a.text} />
               {a.options.length > 0 && (
                 <span className="rd-opts">
                   {a.options.map((o) => (
@@ -561,7 +573,7 @@ function OpenDecisions({
           </div>
           {d.asks.map((a) => (
             <div key={a.n} className="rd-q">
-              <span className="rd-q-text" dangerouslySetInnerHTML={{ __html: toHtml(`${a.n}. ${a.text}`, true) }} />
+              <AskText n={a.n} text={a.text} />
               <span className="rd-opts">
                 {a.options.map((o) => (
                   <button key={o.letter} className="rd-opt" onClick={() => onAnswer(d, a.n, o.letter)}>

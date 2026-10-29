@@ -435,3 +435,10 @@ test('letters alone take their labels from the lines that spelled them out', () 
     { letter: 'B', label: '' },
   ]);
 });
+
+test('a command fenced under a question keeps its lines', () => {
+  const c = readCard('**Needs you**\n1. **Deploy it.** Run this:\n   ```\n   ! npx deploy --a\n   1. not an item\n   ```\n2. Then?  A yes · B no');
+  assert.equal(c.asks.length, 2);
+  assert.equal(c.asks[0].text, '**Deploy it.** Run this:\n```\n! npx deploy --a\n1. not an item\n```');
+  assert.deepEqual(c.asks[1].options.map((o) => o.letter), ['A', 'B']);
+});
