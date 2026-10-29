@@ -35,6 +35,8 @@ export interface PaletteContext {
   editHome: () => void;
   addProject: () => void;
   toggleProjects: () => void;
+  /** Show the projects sidebar, where a tag looked for across projects shows. */
+  showProjects: () => void;
   toggleTasks: () => void;
   toggleGrid: () => void;
   prompt: (d: TextDialogSpec) => void;
@@ -155,14 +157,24 @@ function build(s: State, ctx: PaletteContext): Item[] {
   // sidebar to "#tag", and the projects open with its chip on.
   const tagged = carriedTags(s.prefs, agents.map((a) => a.id));
   for (const t of tagged.sort()) {
-    const n = agents.filter((a) => threadTagsOf(s.prefs, a.id).includes(t)).length;
+    const carrying = agents.filter((a) => threadTagsOf(s.prefs, a.id).includes(t));
+    const where = new Set(carrying.map((a) => s.worktrees[a.worktree_id]?.project_id));
+    // Stay in the open project when it has some; else open the first that does.
+    const first = sortedProjects(s).find((p) => where.has(p.id));
     items.push({
       id: `tag:${t}`,
       group: "Tags",
       label: `Threads tagged #${t}, in every project`,
-      detail: `${n} ${n === 1 ? "thread" : "threads"}`,
+      detail: `${carrying.length} ${carrying.length === 1 ? "thread" : "threads"} in ${where.size} ${where.size === 1 ? "project" : "projects"}`,
       tag: t,
-      run: () => setState({ tagFilter: t, view: "sessions" }),
+      run: () => {
+        ctx.showProjects();
+        setState((now) => ({
+          tagFilter: t,
+          view: "sessions",
+          selectedProject: now.selectedProject && where.has(now.selectedProject) ? now.selectedProject : (first?.id ?? now.selectedProject),
+        }));
+      },
     });
   }
   for (const a of agents) items.push(taskItem(s, a));

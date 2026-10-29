@@ -380,56 +380,56 @@ function TagListRow({ repo, tag, count }: { repo: string; tag: string; count: nu
   const labelId = `tt-color-${tag}`;
   return (
     <li className="tt-item">
-    <div className="tt-row">
-      <button
-        type="button"
-        id={labelId}
-        className={`tt-color${color ? "" : " is-none"}`}
-        style={tagColorStyle(prefs, repo, tag)}
-        aria-expanded={coloring}
-        title={color ? `#${tag} is ${color}: pick another color` : `Pick a color for #${tag}`}
-        aria-label={`Color for #${tag}`}
-        onClick={() => setColoring(!coloring)}
-      />
-      <span className="tt-hash" aria-hidden>
-        #
-      </span>
-      <input
-        className="setting-input"
-        value={value}
-        aria-label={`Rename #${tag}`}
-        spellCheck={false}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            e.currentTarget.blur();
-          }
-        }}
-      />
-      <span className="tt-count" title={`${count} ${count === 1 ? "thread carries" : "threads carry"} it`}>
-        {count}
-      </span>
-      <button
-        type="button"
-        className="btn btn-sm"
-        onClick={() => void deleteThreadTag(repo, tag)}
-        title={count ? `Delete #${tag} and take it off ${count} ${count === 1 ? "thread" : "threads"}` : `Delete #${tag}`}
-      >
-        Delete
-      </button>
-    </div>
-    {coloring && (
-      <ColorRow
-        value={color}
-        labelledBy={labelId}
-        onPick={(name) => {
-          void setThreadTagColor(repo, tag, name).catch((e) => flash(`Couldn't save the color: ${e}`));
-          setColoring(false);
-        }}
-      />
-    )}
+      <div className="tt-row">
+        <button
+          type="button"
+          id={labelId}
+          className={`tt-color${color ? "" : " is-none"}`}
+          style={tagColorStyle(prefs, repo, tag)}
+          aria-expanded={coloring}
+          title={color ? `#${tag} is ${color}: pick another color` : `Pick a color for #${tag}`}
+          aria-label={`Color for #${tag}`}
+          onClick={() => setColoring(!coloring)}
+        />
+        <span className="tt-hash" aria-hidden>
+          #
+        </span>
+        <input
+          className="setting-input"
+          value={value}
+          aria-label={`Rename #${tag}`}
+          spellCheck={false}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+          }}
+        />
+        <span className="tt-count" title={`${count} ${count === 1 ? "thread carries" : "threads carry"} it`}>
+          {count}
+        </span>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={() => void deleteThreadTag(repo, tag)}
+          title={count ? `Delete #${tag} and take it off ${count} ${count === 1 ? "thread" : "threads"}` : `Delete #${tag}`}
+        >
+          Delete
+        </button>
+      </div>
+      {coloring && (
+        <ColorRow
+          value={color}
+          labelledBy={labelId}
+          onPick={(name) => {
+            void setThreadTagColor(repo, tag, name).catch((e) => flash(`Couldn't save the color: ${e}`));
+            setColoring(false);
+          }}
+        />
+      )}
     </li>
   );
 }

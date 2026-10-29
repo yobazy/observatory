@@ -276,3 +276,12 @@ Acceptance criteria:
 - Given `tagCommand` is set to `codex exec`, when a pass runs, then the tags come back the same way (manual check against the sandbox `scripts/sandbox.sh app`).
 
 Status: done. Not yet checked by hand in the sandbox: "Tag untagged" with claude -p --model haiku, and a pass with codex exec.
+
+### Beyond S16: several chips, tag colors, tagging picked threads, and a tag across projects
+Built from the LATER.md item; notes in `docs/PROGRESS-thread-tags-plus.md`.
+- Several chips can be on at once; a row shows when its thread carries every one (`hasTag`, `toggleChip`).
+- Each project's tags can have a color (`threadTagColors` in `DesktopPrefs`, by repo then tag), picked in the tag list editor. Chips, the Tags dialog and dots on each tagged row show it. A rename carries the color, a delete drops it, and `pruned()` drops a removed project's colors.
+- "Tags…" works on several picked threads, from their menu and from the pick bar: a box per tag, mixed when only some carry it (`tagThreads`, `tagShare`). Archived threads' menu has "Tags…" too.
+- A tag across projects: `#tag` in ⌘K lists the tags and every project's threads carrying them, and the sidebar's `#tag` filter and tag chips find projects whose threads carry it. While it's on, a project opens with that tag's chip on (`tagFilter` in the store, `chipFor`).
+
+Status: done, with unit tests. Not yet checked in a browser or the sandbox.

@@ -100,6 +100,8 @@ export function Sidebar({
     if (state.tagFilter && state.tagFilter !== queryTag) setQuery(`#${state.tagFilter}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.tagFilter]);
+  // Hiding the sidebar drops its filter, so no chip comes on out of sight.
+  useEffect(() => () => setState({ tagFilter: null }), []);
   const waiting = useMemo(() => waitingAgents(state), [state]);
   const shown = useMemo(() => {
     if (query.trim()) return projects.filter((p) => matches(p, daemonName(p), state.prefs, query, threadTags[p.repo_path]));

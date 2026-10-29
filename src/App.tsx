@@ -237,6 +237,7 @@ export default function App() {
       editHome,
       addProject: openAddProject,
       toggleProjects: () => setHideProjects((h) => !h),
+      showProjects: () => setHideProjects(false),
       toggleTasks: () => setHideTasks((h) => !h),
       toggleGrid: () => setGrid((g) => !g),
       prompt: setTextDialog,
