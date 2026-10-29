@@ -8,7 +8,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview, onFilesOpened } from "./client";
 import { flash, getState, setState } from "./store";
-import { addToShelf } from "./shelf";
+import { addToShelf, noteOpened } from "./shelf";
 
 export type PreviewKind = "html" | "markdown" | "image" | "video" | "pdf" | "text";
 
@@ -74,6 +74,7 @@ export async function openPreview(paths: string[], from?: string | null): Promis
     }
   }
   if (!opened.length) return;
+  noteOpened(opened.map((f) => f.path));
   setState((s) => {
     const files = [...(s.preview?.files ?? [])];
     let active = -1;
@@ -111,7 +112,7 @@ export function usePreviewEvents() {
   useEffect(
     () =>
       onFilesOpened((paths, agent) => {
-        addToShelf(agent, [...paths].reverse());
+        addToShelf(agent, [...paths].reverse(), true);
         if (getState().prefs.previewShownFiles === false) return;
         void openPreview(paths, agent);
       }),

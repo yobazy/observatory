@@ -19,6 +19,7 @@ import { commandIn } from "../nebula/command";
 import { fitTables } from "../nebula/tablecols";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
+import { draftFor, keepDraft, onDraftAdded } from "../nebula/drafts";
 import { harnessLabel, relativeTime, statusLabel } from "../nebula/status";
 import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
@@ -27,9 +28,6 @@ import { ReaderFind } from "./ReaderFind";
 import { Plate } from "./Plate";
 import { WorkCat } from "./Pet";
 
-/** What you were typing to each agent, kept when the reader remounts for a
- *  new session (/clear, resume). */
-const drafts = new Map<string, string>();
 /** Earlier decisions you put away, per agent, for as long as the app runs. */
 const dismissedFor = new Map<string, Set<number>>();
 
@@ -643,9 +641,9 @@ export function Reader({
   const seenAll = () => lastN.current !== null && markRead(agent.id, lastN.current);
   // Something arrived below while you were scrolled up.
   const [behind, setBehind] = useState(false);
-  const [draft, setDraftState] = useState(() => drafts.get(agent.id) ?? "");
+  const [draft, setDraftState] = useState(() => draftFor(agent.id));
   const setDraft = (text: string) => {
-    drafts.set(agent.id, text);
+    keepDraft(agent.id, text);
     setDraftState(text);
   };
   // A glide down to the latest is under way; resizes leave it be.
@@ -840,6 +838,21 @@ export function Reader({
   }, []);
   const [pointing, setPointing] = useState<number | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  // A file sent here from the Files list lands in the box, ready to say why.
+  useEffect(
+    () =>
+      onDraftAdded((id) => {
+        if (id !== agent.id) return;
+        setDraftState(draftFor(id));
+        requestAnimationFrame(() => {
+          const el = box.current;
+          if (!el) return;
+          el.focus();
+          el.setSelectionRange(el.value.length, el.value.length);
+        });
+      }),
+    [agent.id],
+  );
   // What the latest card recommends, offered in the empty box like the
   // terminal's ghost text: Tab taps those answers, Enter sends them.
   const recommended = useMemo(() => (latestCard ? suggested(latestCard) : {}), [latestCard]);

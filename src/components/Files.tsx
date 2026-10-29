@@ -1,14 +1,21 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview } from "../nebula/preview";
-import { clearShelf, removeFromShelf, type ShelfItem } from "../nebula/shelf";
-import { flash, useAppState } from "../nebula/store";
+import { baseName, dirName, hideCard, hoverPath, leavePath, openPreview, showPreviewFile } from "../nebula/preview";
+import { clearShelf, pinOnShelf, removeFromShelf, type ShelfItem } from "../nebula/shelf";
+import { byRecent, bySource, lastTouched, pickRange, togglePick } from "../nebula/shelfList";
+import { flash, getState, useAppState } from "../nebula/store";
+import { sendInput } from "../nebula/client";
+import { shellQuote } from "../nebula/dropfiles";
+import { addToDraft, fileTarget, withPath } from "../nebula/drafts";
+import { paneMode, setPaneMode } from "../nebula/pane";
+import { editQueued } from "../nebula/queue";
 import { relativeTime } from "../nebula/status";
 import { summarize } from "../nebula/turnsummary";
 import type { Agent, Worktree } from "../nebula/types";
 import { ContextMenu, type MenuItem } from "./Menu";
 import { appLabel, openFileIn } from "./Preview";
-import { useTurn } from "./TurnStrip";
+import { hasLog, useTurn } from "./TurnStrip";
+import { PinGlyph } from "./Organize";
 
 const KIND_MARK: Record<string, string> = { html: "◧", htm: "◧", md: "¶", markdown: "¶", pdf: "⎘" };
 const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif|ico|bmp)$/i;
@@ -19,12 +26,74 @@ function mark(path: string): string {
   return KIND_MARK[ext] ?? (IMAGE.test(path) ? "▣" : VIDEO.test(path) ? "▶" : "≡");
 }
 
+/** What kind of file it is at a glance; a pin, once it's pinned. */
+function FileMark({ path, pinned }: { path: string; pinned?: boolean }) {
+  return pinned ? (
+    <span className="shelf-mark is-pin" role="img" aria-label="Pinned" title="Pinned: stays first">
+      <PinGlyph />
+    </span>
+  ) : (
+    <span className="shelf-mark" aria-hidden>
+      {mark(path)}
+    </span>
+  );
+}
+
 /** Where a file sits, said the short way: inside the checkout from its root,
  *  elsewhere from ~. */
 function folder(path: string, root: string): string {
   const dir = path.slice(0, path.lastIndexOf("/"));
   if (root && (dir === root || dir.startsWith(`${root}/`))) return dir.slice(root.length + 1) || "top of the checkout";
   return dirName(path);
+}
+
+/** Hand `path` to `agent` without typing it: into the reply you're writing
+ *  in the Read view, the prompt queued for its next turn, or its prompt line
+ *  in the terminal, whichever it would read next (fileTarget). */
+export async function sendFile(agent: Agent, path: string) {
+  const name = baseName(path);
+  // A control character could end the paste early and run the rest as input.
+  if (/[\x00-\x1f\x7f]/.test(path)) {
+    flash(`${name}'s name has a control character in it, so it wasn't sent`);
+    return;
+  }
+  const canRead = hasLog(agent);
+  const waiting = agent.status === "needs_feedback";
+  const queued = getState().queue[agent.id] ?? [];
+  let to = fileTarget({ reading: canRead && paneMode() === "read", queued: queued.length, alive: agent.alive, waiting });
+  const text = shellQuote(path);
+  if (to === "queue") {
+    const last = queued[queued.length - 1];
+    if (editQueued(agent.id, last.id, withPath(last.text, text))) {
+      flash(`Added ${name} to the prompt queued for ${agent.name}`);
+      return;
+    }
+    // Sent meanwhile: it goes where it would have without one.
+    to = fileTarget({ reading: false, queued: 0, alive: agent.alive, waiting });
+  }
+  // Without a conversation to read, there's no reply box to put it in.
+  if (to === "draft" && !canRead) {
+    if (waiting) {
+      flash(`${agent.name} is waiting on you. Answer it first, then send ${name}`);
+      return;
+    }
+    to = "terminal";
+  }
+  if (to === "draft") {
+    addToDraft(agent.id, text);
+    if (paneMode() !== "read") setPaneMode("read");
+    flash(waiting ? `Added ${name} to your reply, for once you've answered ${agent.name}` : `Added ${name} to your reply`);
+  } else {
+    try {
+      // A bracketed paste, as a file dropped on the terminal is: the CLI
+      // takes it as pasted text, and nothing goes until you press Enter.
+      await sendInput({ Agent: agent.id }, `\x1b[200~${text} \x1b[201~`);
+      document.querySelector<HTMLElement>(".column-terminal .xterm-helper-textarea")?.focus();
+      flash(`Added ${name} to ${agent.name}'s prompt`);
+    } catch (e) {
+      flash(`Couldn't send ${name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 }
 
 /** A row in the list: a file, where it came from, and what's left to do
@@ -37,32 +106,58 @@ interface Row {
   from: string;
   /** On this session's shelf, so it can come off it. */
   own: boolean;
+  /** Pinned on this session's shelf. */
+  pinned?: boolean;
+  /** When it was shown, if it was. */
+  at?: number;
 }
+
+/** Pin or unpin, said for a menu. */
+const pinItem = (agentId: string, path: string, pinned: boolean | undefined): MenuItem => ({
+  label: pinned ? "Unpin" : "Pin to the front",
+  run: () => pinOnShelf(agentId, path, !pinned),
+});
 
 /** The files this task has shown: a chip each for a quick click, and the
  *  whole list, with more to do, behind "All". */
-export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree: Worktree | undefined; items: ShelfItem[] | undefined }) {
+export function ShelfStrip({ agent, worktree, items: shelved }: { agent: Agent; worktree: Worktree | undefined; items: ShelfItem[] | undefined }) {
   const [at, setAt] = useState<DOMRect | null>(null);
-  if (!items?.length) return null;
+  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
+  const opened = useAppState().fileOpened;
+  // Most recent first: shown again with `nebula open`, or opened by you.
+  const items = useMemo(() => byRecent(shelved ?? [], opened), [shelved, opened]);
+  if (!items.length) return null;
+  const chipActions = (path: string): MenuItem[] => [
+    {
+      label: "Open here",
+      run: () => void openPreview([path], agent.id),
+    },
+    { label: `Send to ${agent.name}`, run: () => void sendFile(agent, path) },
+    pinItem(agent.id, path, items.find((i) => i.path === path)?.pinned),
+    { label: "Remove from the shelf", destructive: true, separated: true, run: () => removeFromShelf(agent.id, path) },
+  ];
   return (
     <div className="shelf-strip" aria-label="Files this task has shown">
       <span className="queue-label">Files</span>
       <ul>
         {items.map((item) => (
-          <li key={item.path}>
+          <li key={item.path} className={item.pinned ? "is-pinned" : undefined}>
             <button
               className="shelf-chip"
-              title={`${dirName(item.path)}/${baseName(item.path)}`}
+              title={`${dirName(item.path)}/${baseName(item.path)}${item.pinned ? "\nPinned: stays first" : ""}\nRight-click to send it to ${agent.name}, or to ${item.pinned ? "unpin" : "pin"} it`}
               onClick={() => {
                 hideCard();
                 void openPreview([item.path], agent.id);
               }}
               onMouseEnter={(e) => hoverPath(item.path, e.clientX, e.clientY + 12, agent.id)}
               onMouseLeave={() => leavePath()}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                hideCard();
+                setMenu({ path: item.path, x: e.clientX, y: e.clientY });
+              }}
             >
-              <span className="shelf-mark" aria-hidden>
-                {mark(item.path)}
-              </span>
+              <FileMark path={item.path} pinned={item.pinned} />
               {baseName(item.path)}
             </button>
             <button
@@ -86,6 +181,7 @@ export function ShelfStrip({ agent, worktree, items }: { agent: Agent; worktree:
         All {items.length} <span aria-hidden>▾</span>
       </button>
       {at && <FilesPanel agent={agent} worktree={worktree} items={items} anchor={at} onClose={() => setAt(null)} />}
+      {menu && <ContextMenu items={chipActions(menu.path)} x={menu.x} y={menu.y} label={baseName(menu.path)} onClose={() => setMenu(null)} />}
     </div>
   );
 }
@@ -111,25 +207,41 @@ function FilesPanel({
   const panel = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ row: Row; x: number; y: number } | null>(null);
+  // Files picked to open together as tabs, and the one a Shift-click runs from.
+  const [picked, setPicked] = useState<string[]>([]);
+  const [runFrom, setRunFrom] = useState<string | null>(null);
   const root = worktree?.path ?? "";
 
-  const own: Row[] = items.map((i) => ({ path: i.path, note: relativeTime(i.at), from: agent.id, own: true }));
+  // Each section most recent first, by when a file was last shown or opened
+  // (`items` comes in that order already).
+  const opened = state.fileOpened;
+  const own: Row[] = items.map((i) => ({
+    path: i.path,
+    note: relativeTime(lastTouched(i, opened)),
+    from: agent.id,
+    own: true,
+    pinned: i.pinned,
+  }));
   const seen = new Set(items.map((i) => i.path));
-  const others: Row[] = [];
+  const shownByOthers: Row[] = [];
   for (const [id, shelf] of Object.entries(state.shelf)) {
     const other = state.agents[id];
     if (id === agent.id || !other || other.worktree_id !== agent.worktree_id) continue;
     for (const i of shelf) {
       if (seen.has(i.path)) continue;
       seen.add(i.path);
-      others.push({ path: i.path, note: other.name, from: id, own: false });
+      shownByOthers.push({ path: i.path, note: other.name, from: id, own: false, at: i.at });
     }
   }
+  const others = byRecent(shownByOthers, opened);
   const changed: Row[] = turn
-    ? summarize(turn, root)
-        .edited.map((p) => (p.startsWith("/") ? p : `${root}/${p}`))
-        .filter((p) => !seen.has(p))
-        .map((path) => ({ path, note: "", from: agent.id, own: false }))
+    ? byRecent(
+        summarize(turn, root)
+          .edited.map((p) => (p.startsWith("/") ? p : `${root}/${p}`))
+          .filter((p) => !seen.has(p))
+          .map((path) => ({ path, note: "", from: agent.id, own: false })),
+        opened,
+      )
     : [];
 
   const q = query.trim().toLowerCase();
@@ -168,8 +280,30 @@ function FilesPanel({
     onClose();
     void openPreview([r.path], r.from);
   };
+  const listed = [...own, ...others, ...changed].filter(match);
+  const pick = (r: Row, run: boolean) => {
+    setPicked((p) => (run ? pickRange(listed.map((x) => x.path), p, runFrom, r.path) : togglePick(p, r.path)));
+    setRunFrom(r.path);
+  };
+  // Every picked file as a tab, the first of them in front.
+  const openPicked = async () => {
+    const groups = bySource([...own, ...others, ...changed], picked);
+    hideCard();
+    onClose();
+    for (const g of groups) await openPreview(g.paths, g.from);
+    const first = groups[0]?.paths[0];
+    const at = getState().preview?.files.findIndex((f) => f.path === first) ?? -1;
+    if (at >= 0) showPreviewFile(at);
+  };
   const actions = (r: Row): MenuItem[] => [
     { label: "Open here", run: () => open(r) },
+    {
+      label: `Send to ${agent.name}`,
+      run: () => {
+        onClose();
+        void sendFile(agent, r.path);
+      },
+    },
     { label: `Open in ${appLabel(r.path).toLowerCase()}`, run: () => void openFileIn(r.path, "app") },
     { label: "Open in editor", run: () => void openFileIn(r.path, "editor") },
     { label: "Show in Finder", run: () => void openFileIn(r.path, "finder") },
@@ -182,7 +316,9 @@ function FilesPanel({
           () => flash("Couldn't copy the path"),
         ),
     },
-    ...(r.own ? [{ label: "Remove from the shelf", destructive: true, run: () => removeFromShelf(agent.id, r.path) }] : []),
+    ...(r.own
+      ? [pinItem(agent.id, r.path, r.pinned), { label: "Remove from the shelf", destructive: true, run: () => removeFromShelf(agent.id, r.path) }]
+      : []),
   ];
 
   const section = (title: string, rows: Row[]) => {
@@ -195,15 +331,27 @@ function FilesPanel({
           {shown.map((r) => (
             <li
               key={r.path}
+              className={picked.includes(r.path) ? "is-picked" : undefined}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ row: r, x: e.clientX, y: e.clientY });
               }}
             >
-              <button className="fl-open" onClick={() => open(r)} title={r.path}>
-                <span className="shelf-mark" aria-hidden>
-                  {mark(r.path)}
-                </span>
+              <input
+                type="checkbox"
+                className="fl-pick"
+                checked={picked.includes(r.path)}
+                onChange={() => {}}
+                onClick={(e) => pick(r, e.shiftKey)}
+                aria-label={`Pick ${baseName(r.path)}, to open it with others as tabs`}
+                title="Pick it, to open several as tabs (or ⌘-click the file; Shift-click picks a run)"
+              />
+              <button
+                className="fl-open"
+                onClick={(e) => (e.metaKey || e.shiftKey ? pick(r, e.shiftKey) : open(r))}
+                title={`${r.path}\n⌘-click to pick it, to open several as tabs`}
+              >
+                <FileMark path={r.path} pinned={r.pinned} />
                 <span className="fl-name">{baseName(r.path)}</span>
                 <span className="fl-where">{folder(r.path, root)}</span>
                 {r.note && <span className="fl-note">{r.note}</span>}
@@ -255,18 +403,30 @@ function FilesPanel({
         {section("Changed in the last turn", changed)}
         {empty && <p className="fl-empty">No file matches “{query.trim()}”.</p>}
       </div>
-      <footer className="fl-foot">
-        <span>Right-click a file for more</span>
-        <button
-          className="link-btn"
-          onClick={() => {
-            clearShelf(agent.id);
-            onClose();
-          }}
-        >
-          Clear the shelf
-        </button>
-      </footer>
+      {picked.length > 0 ? (
+        <footer className="fl-foot is-picking">
+          <span>{picked.length === 1 ? "1 file picked" : `${picked.length} files picked`}</span>
+          <button className="link-btn" onClick={() => setPicked([])}>
+            Unpick
+          </button>
+          <button className="btn btn-sm btn-primary" onClick={() => void openPicked()}>
+            {picked.length === 1 ? "Open it" : `Open ${picked.length} as tabs`}
+          </button>
+        </footer>
+      ) : (
+        <footer className="fl-foot">
+          <span>⌘-click to open several as tabs. Right-click to send one to {agent.name}, and more</span>
+          <button
+            className="link-btn"
+            onClick={() => {
+              clearShelf(agent.id);
+              onClose();
+            }}
+          >
+            {items.some((i) => i.pinned) ? "Clear all but pinned" : "Clear the shelf"}
+          </button>
+        </footer>
+      )}
       {menu && <ContextMenu items={actions(menu.row)} x={menu.x} y={menu.y} label={baseName(menu.row.path)} onClose={() => setMenu(null)} />}
     </div>,
     document.body,

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allTags, layout, matches, moveWithin, parseTags, placeIn } from '../src/nebula/folders.ts';
+import { allTags, layout, matches, moveWithin, parseTags, placeIn, reorderFolders } from '../src/nebula/folders.ts';
 
 const p = (repo, name = repo) => ({ repo_path: `/r/${repo}`, name });
 const projects = [p('a'), p('b'), p('c'), p('d')];
@@ -51,4 +51,13 @@ test('putting a project in a folder takes it out of any other', () => {
   ];
   assert.deepEqual(placeIn(folders, '/r/a', 'g').map((f) => f.projects), [['/r/b'], ['/r/a']]);
   assert.deepEqual(placeIn(folders, '/r/a', null).map((f) => f.projects), [['/r/b'], []]);
+});
+
+test('a folder dragged to a new place takes it, the rest keep their order', () => {
+  const folders = ['f', 'g', 'h'].map((id) => ({ id, name: id, projects: [] }));
+  const ids = (fs) => fs.map((f) => f.id);
+  assert.deepEqual(ids(reorderFolders(folders, 'h', 0)), ['h', 'f', 'g']);
+  assert.deepEqual(ids(reorderFolders(folders, 'f', 2)), ['g', 'h', 'f']);
+  assert.deepEqual(ids(reorderFolders(folders, 'f', 99)), ['g', 'h', 'f']);
+  assert.equal(reorderFolders(folders, 'gone', 0), folders);
 });

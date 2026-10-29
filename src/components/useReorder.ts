@@ -21,8 +21,11 @@ interface Drag {
   step: number;
   active: boolean;
   scroller: HTMLElement | null;
+  lastX: number;
   lastY: number;
   frame: number;
+  /** The group it's over, when that's another one it can be dropped into. */
+  into: string | null;
   /** Takes down the window listeners this drag put up. */
   off: () => void;
 }
@@ -35,19 +38,41 @@ function scrollParent(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
+/** Somewhere an item can be dropped besides its own list: an element marked
+ *  `data-drop-into` (a folder, say), named by that attribute. `own` is the
+ *  name of the group the list itself is, which drops as a reorder. */
+export interface DropInto {
+  own: string;
+  onDrop: (id: string, into: string) => void;
+}
+
+/** The drop group under a point, if any. The held item lets the pointer
+ *  through (`pointer-events: none` while dragging). */
+function groupAt(x: number, y: number): HTMLElement | null {
+  return document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-drop-into]") ?? null;
+}
+
+function markInto(el: HTMLElement | null) {
+  document.querySelectorAll<HTMLElement>(".is-drop-into").forEach((o) => o !== el && o.classList.remove("is-drop-into"));
+  el?.classList.add("is-drop-into");
+}
+
 /** Press, hold and drag a list's items into a new order, done with pointer
  *  events rather than HTML drag and drop (which the webview draws poorly).
  *  The list's direct children carry `data-reorder-id`; the others slide
  *  aside as the dragged one passes, and `onMove(id, to, ids)` gets the
  *  drop, with the order the user saw. While a drag is on, `frozen` holds
  *  that order: a list that sorts itself should render in it, so rows don't
- *  re-sort under the pointer. */
-export function useReorder(onMove: (id: string, to: number, ids: string[]) => void, enabled = true) {
+ *  re-sort under the pointer. With `into`, an item held over another drop
+ *  group goes there instead (`into.onDrop`), and its own list stays put. */
+export function useReorder(onMove: (id: string, to: number, ids: string[]) => void, enabled = true, into?: DropInto) {
   const list = useRef<HTMLUListElement>(null);
   const drag = useRef<Drag | null>(null);
   const [frozen, setFrozen] = useState<string[] | null>(null);
   const move = useRef(onMove);
   move.current = onMove;
+  const dropInto = useRef(into);
+  dropInto.current = into;
 
   useEffect(() => () => end(false, true), []);
 
@@ -56,11 +81,18 @@ export function useReorder(onMove: (id: string, to: number, ids: string[]) => vo
     const r = d.rects[d.from];
     const mid = r.top + r.height / 2 + dy;
     let to = d.from;
-    d.rects.forEach((o, i) => {
-      const m = o.top + o.height / 2;
-      if (i > d.from && mid > m) to = i;
-      if (i < d.from && mid < m && to >= d.from) to = i;
-    });
+    // Over another group: it goes in there, so its own list closes up
+    // behind it rather than making room.
+    const group = dropInto.current ? groupAt(d.lastX, d.lastY) : null;
+    const name = group?.dataset.dropInto;
+    d.into = group && name !== undefined && name !== dropInto.current?.own ? name : null;
+    markInto(d.into !== null ? group : null);
+    if (d.into === null)
+      d.rects.forEach((o, i) => {
+        const m = o.top + o.height / 2;
+        if (i > d.from && mid > m) to = i;
+        if (i < d.from && mid < m && to >= d.from) to = i;
+      });
     d.to = to;
     d.items.forEach((el, i) => {
       if (i === d.from) el.style.transform = `translateY(${dy}px)`;
@@ -89,6 +121,7 @@ export function useReorder(onMove: (id: string, to: number, ids: string[]) => vo
   function onPointerMove(e: PointerEvent) {
     const d = drag.current;
     if (!d || e.pointerId !== d.pointer) return;
+    d.lastX = e.clientX;
     d.lastY = e.clientY;
     if (!d.active) {
       if (Math.abs(e.clientY - d.startY) < SLOP) return;
@@ -122,6 +155,7 @@ export function useReorder(onMove: (id: string, to: number, ids: string[]) => vo
     d?.off();
     if (!d?.active) return;
     cancelAnimationFrame(d.frame);
+    markInto(null);
     if (!unmounting) {
       if (drop) swallowClick();
       else if (escaped) {
@@ -143,7 +177,8 @@ export function useReorder(onMove: (id: string, to: number, ids: string[]) => vo
       // Commit the new order before the offsets come off, so rows don't
       // flash back to where they were.
       flushSync(() => {
-        if (drop && d.to !== d.from) move.current(d.id, d.to, d.ids);
+        if (drop && d.into !== null) dropInto.current?.onDrop(d.id, d.into);
+        else if (drop && d.to !== d.from) move.current(d.id, d.to, d.ids);
         setFrozen(null);
       });
     }
@@ -188,7 +223,9 @@ export function useReorder(onMove: (id: string, to: number, ids: string[]) => vo
         ids: items.map((el) => el.dataset.reorderId!),
         pointer: e.pointerId,
         startY: e.clientY,
+        lastX: e.clientX,
         lastY: e.clientY,
+        into: null,
         startScroll: scroller?.scrollTop ?? 0,
         items,
         rects,

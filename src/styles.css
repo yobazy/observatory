@@ -675,6 +675,31 @@ body.is-resizing-rows * {
   color: var(--faint);
   font-size: 12px;
 }
+.folder-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A project held over a folder, or over the list from inside a folder: the
+   place it will go lights up (useReorder.ts, DropInto). */
+.folder.is-drop-into > .folder-head {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent);
+  color: var(--text);
+}
+.folder.is-drop-into > .project-list.in-folder {
+  border-left-color: var(--accent);
+}
+.project-list.is-loose.is-drop-into {
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+/* Taking a project out of a folder needs somewhere to drop it, even when
+   every project is in one. */
+.sidebar:has(.in-folder.is-reordering) .project-list.is-loose {
+  min-height: 44px;
+}
 .project-tags {
   margin: -3px 0 0 26px;
   overflow: hidden;
@@ -3507,21 +3532,8 @@ td.task-last {
 .project-row {
   position: relative;
 }
-/* A bar down the row's left edge (a task's too). */
-.project-row.has-color::before,
-.row.has-color::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 9px;
-  bottom: 9px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--pc-ink);
-}
-.project-row.has-color.is-selected {
-  background: color-mix(in srgb, var(--pc-ink) 12%, var(--panel));
-}
+/* (A project or task row in its color is filled with it: "a picked color
+   fills the row", at the end of this file.) */
 /* The open project's color runs across the top of its column. */
 .sessions.has-color {
   box-shadow: inset 0 3px 0 var(--pc-ink);
@@ -5252,6 +5264,16 @@ body.is-reordering * {
   position: relative;
   z-index: 3;
   transition: none;
+  /* So what's under the pointer is where it would drop (DropInto). */
+  pointer-events: none;
+}
+.is-reordering > .is-dragging > .folder {
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.45), inset 0 0 0 1px var(--line);
+}
+:root[data-mode="light"] .is-reordering > .is-dragging > .folder {
+  box-shadow: 0 10px 24px rgb(27 34 51 / 0.16), inset 0 0 0 1px var(--line);
 }
 .is-reordering > .is-dragging > .project-row,
 .is-reordering > .is-dragging > .row {
@@ -5269,16 +5291,6 @@ body.is-reordering * {
 .is-reordering > :not(.is-dragging) > .project-row:hover:not(.is-selected),
 .is-reordering > :not(.is-dragging) > .row:hover:not(.is-selected) {
   background: none;
-}
-
-/* A task's color: the same bar down the left edge a project's has. */
-.row.has-color {
-  position: relative;
-}
-/* (Not while it's held: the drag's lift wins.) */
-:not(.is-dragging) > .row.has-color.is-selected {
-  background: color-mix(in srgb, var(--pc-ink) 12%, var(--raised));
-  box-shadow: none;
 }
 
 /* Pinned and flagged marks sit before the time (in .row-age). */
@@ -6251,6 +6263,14 @@ th:last-child > .col-grip {
   color: var(--accent);
   font-size: 11px;
 }
+.shelf-mark.is-pin {
+  display: inline-grid;
+}
+/* A pinned file stays first: its chip carries the accent's edge. */
+.shelf-strip li.is-pinned {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
 .shelf-x {
   padding: 2px 9px 2px 4px;
   border: 0;
@@ -6396,6 +6416,36 @@ th:last-child > .col-grip {
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 11.5px;
+}
+/* Picking several to open as tabs: a box shows on the row under the
+   pointer, and on every row once one is picked. */
+.fl-pick {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin: 0 0 0 8px;
+  accent-color: var(--accent);
+  opacity: 0;
+  cursor: pointer;
+}
+.fl-section li:hover .fl-pick,
+.fl-pick:focus-visible,
+.fl-pick:checked,
+.files-panel:has(.fl-pick:checked) .fl-pick {
+  opacity: 1;
+}
+.fl-section li.is-picked {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.fl-section li .fl-open {
+  padding-left: 6px;
+}
+.fl-foot.is-picking {
+  justify-content: flex-start;
+  color: var(--text);
+}
+.fl-foot.is-picking .btn {
+  margin-left: auto;
 }
 
 /* ---------- comments on a preview (Comments.tsx) ---------- */
@@ -8195,4 +8245,88 @@ button.board-main:hover .board-text {
 }
 .waiting-row {
   grid-template-columns: 18px 1fr;
+}
+
+/* ---------- a picked color fills the row ---------- */
+
+/* A project (Icon & color) or task (Color…) in a color of yours is a solid
+   row of it, known at a glance without reading its name. The row redefines
+   the text tokens for what's on it, so names, details, times and meters
+   read on the fill in either theme. Kept last: it outranks the plain
+   rows' selected and hover surfaces. */
+.project-row.has-color,
+.row.has-color {
+  --fill: hsl(var(--pc) 44% 25%);
+  --fill-hover: hsl(var(--pc) 46% 28%);
+  --fill-on: hsl(var(--pc) 50% 30%);
+  --fill-ring: hsl(var(--pc) 70% 82%);
+  --on-fill: hsl(var(--pc) 30% 97%);
+  --badge-ring: hsl(var(--pc) 45% 18%);
+  --text: var(--on-fill);
+  --muted: hsl(var(--pc) 25% 89%);
+  --faint: hsl(var(--pc) 18% 78%);
+  --line: hsl(var(--pc) 30% 46%);
+  --amber: var(--on-fill);
+  margin: 2px 0;
+  background: var(--fill);
+  color: var(--muted);
+}
+:root[data-mode="light"] .project-row.has-color,
+:root[data-mode="light"] .row.has-color {
+  --fill: hsl(var(--pc) 78% 83%);
+  --fill-hover: hsl(var(--pc) 74% 78%);
+  --fill-on: hsl(var(--pc) 70% 73%);
+  --fill-ring: hsl(var(--pc) 60% 32%);
+  --on-fill: hsl(var(--pc) 60% 12%);
+  --badge-ring: hsl(var(--pc) 80% 96%);
+  --muted: hsl(var(--pc) 40% 22%);
+  --faint: hsl(var(--pc) 28% 32%);
+  --line: hsl(var(--pc) 45% 68%);
+}
+:root .project-row.has-color:hover,
+:root .row.has-color:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+/* Selected: a deeper shade and a ring in a light (or, in light mode, dark)
+   tone of its hue. */
+:root .project-row.has-color.is-selected,
+:root .row.has-color.is-selected {
+  background: var(--fill-on);
+  box-shadow: inset 0 0 0 2px var(--fill-ring);
+  color: var(--text);
+}
+:root .row.has-color.is-picked {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* Held in a drag, it keeps its color; the rows it passes keep theirs. */
+.is-reordering > .is-dragging > .has-color {
+  background: var(--fill-hover);
+}
+.is-reordering > :not(.is-dragging) > .has-color:hover:not(.is-selected) {
+  background: var(--fill);
+}
+/* What sits on the fill: badges and segments get an edge, and the marks
+   that are colored text take the row's own text color. */
+.has-color .project-badge,
+.has-color .seg {
+  box-shadow: 0 0 0 1.5px var(--badge-ring);
+}
+.has-color .badge-unseen {
+  background: var(--st-done);
+  color: var(--accent-ink);
+}
+.has-color .project-working {
+  --st-running: var(--on-fill);
+}
+.has-color .live-dot {
+  box-shadow: 0 0 0 2px var(--badge-ring);
+}
+.row.has-color .mark-flag,
+.row.has-color .mark-safe,
+.row-needs_feedback.has-color .row-age {
+  color: var(--on-fill);
+}
+.row-needs_feedback.has-color .row-age {
+  font-weight: 650;
 }

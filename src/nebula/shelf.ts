@@ -2,26 +2,47 @@
 // after it scrolls out of the terminal. Files land on it when an agent runs
 // `nebula open`, and when a previewable path (a page, a doc, an image, a
 // PDF) that exists on disk turns up in the task's terminal. Kept per agent
-// in localStorage across launches, newest first, twenty at most.
+// in localStorage across launches: pinned files first, then the rest by when
+// each was last shown or opened, twenty at most (shelfList.ts).
 import { useEffect } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { getState, setState, subscribe } from "./store";
 import { findPaths, logicalLine, WORTH, type Row } from "./pathtext";
 import { resolve } from "./termpaths";
+import { cleared, noteOpen, pin, pinnedFirst, shelve, type ShelfItem } from "./shelfList";
 
-export interface ShelfItem {
-  path: string;
-  /** When it was last shown, ms. */
-  at: number;
-}
+export type { ShelfItem };
 
 const KEY = "observatory.shelf";
-const KEEP = 20;
+const OPENED_KEY = "observatory.fileOpened";
+
+function loadOpened(): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OPENED_KEY) ?? "{}");
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Files opened in the preview just now: they move up their lists. */
+export function noteOpened(paths: string[]) {
+  if (!paths.length) return;
+  const fileOpened = noteOpen(getState().fileOpened, paths, Date.now());
+  setState({ fileOpened });
+  try {
+    localStorage.setItem(OPENED_KEY, JSON.stringify(fileOpened));
+  } catch {
+    // The order falls back to when each was shown.
+  }
+}
 
 function loadShelf(): Record<string, ShelfItem[]> {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}");
-    return raw && typeof raw === "object" ? raw : {};
+    if (!raw || typeof raw !== "object") return {};
+    // A hand-edited file may have a pin out of place.
+    return Object.fromEntries(Object.entries(raw as Record<string, ShelfItem[]>).map(([id, items]) => [id, pinnedFirst(items)]));
   } catch {
     return {};
   }
@@ -43,17 +64,23 @@ function write(agentId: string, items: ShelfItem[]) {
   save(shelf);
 }
 
-/** Put `paths` on `agentId`'s shelf, at the front. */
-export function addToShelf(agentId: string, paths: string[]) {
+/** Put `paths` on `agentId`'s shelf, at the front after the pinned ones.
+ *  `again`: the agent showed them on purpose (`nebula open`), so ones
+ *  already there count as shown now too. */
+export function addToShelf(agentId: string, paths: string[], again = false) {
   if (!paths.length) return;
-  const now = Date.now();
   const had = getState().shelf[agentId] ?? [];
-  const fresh = paths.filter((p) => !had.some((i) => i.path === p));
   // Already there and nothing new: leave the order alone, so a scan that
   // keeps finding the same paths doesn't keep reshuffling the strip.
-  if (!fresh.length) return;
-  const items = [...fresh.map((path) => ({ path, at: now })), ...had].slice(0, KEEP);
-  write(agentId, items);
+  const items = shelve(had, paths, Date.now(), { again });
+  if (items !== had) write(agentId, items);
+}
+
+/** Pin `path` on `agentId`'s shelf, so it stays at the front; or unpin it. */
+export function pinOnShelf(agentId: string, path: string, on: boolean) {
+  const had = getState().shelf[agentId] ?? [];
+  const items = pin(had, path, on);
+  if (items !== had) write(agentId, items);
 }
 
 export function removeFromShelf(agentId: string, path: string) {
@@ -63,16 +90,16 @@ export function removeFromShelf(agentId: string, path: string) {
   );
 }
 
-/** Take everything off `agentId`'s shelf. */
+/** Take everything off `agentId`'s shelf but the pinned files. */
 export function clearShelf(agentId: string) {
-  write(agentId, []);
+  write(agentId, cleared(getState().shelf[agentId] ?? []));
 }
 
 /** Mount once: loads the shelves, and drops those of agents the daemon no
  *  longer has. */
 export function useShelf() {
   useEffect(() => {
-    setState({ shelf: loadShelf() });
+    setState({ shelf: loadShelf(), fileOpened: loadOpened() });
     let snapshots = getState().snapshots;
     return subscribe(() => {
       const s = getState();
