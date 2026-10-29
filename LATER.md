@@ -10,7 +10,6 @@
 - More activities for the sidebar cat, beyond stargazing, catching stars, grooming and stretching (#37). Why: wanted, set aside for now (2026-10-16).
 - Pick the sidebar pet: a cat or a dog, in Settings beside the on/off switch; the dog needs its own frames for every activity. Why: wanted, set aside for now (2026-10-16).
 - Enable and disable a launchd job from the Automations view (`launchctl bootstrap` / `bootout`, with a confirm), and the same for a cloud routine (`enabled` through the routines API). Why: the panel starts read-only plus Run now (2026-10-22).
-- A banner when a job turns red, through `notify.ts` and respecting quiet hours. Why: the footer dot covers it until the view has proven which failures are real.
 - Add a job from the Automations view (write a plist, or create a routine). Why: jobs are made in agent threads today; the view only watches them.
 - Thread tags, beyond S15 and S16: several chips on at once, tag colors, tagging several picked threads from the multi-select menu, and a tag filter across projects (⌘K or the sidebar). Why: one chip in one project covers the one-repo, several-clients case (2026-10-22).
 - Tagging prompt suggestions for new tags: the prompt proposes a tag that isn't in the project's list for the user to accept. Why: S16 only picks from the list, so a hand-made list stays the source of truth.

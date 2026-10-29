@@ -438,6 +438,29 @@ export function jobList(
   return { jobs, configError: error };
 }
 
+// ---- the banner when a job turns red ----
+
+/** Which shown jobs turned red since the last read, and the red labels to
+ *  keep for the next. `prev` null is the first read ever: what's red then
+ *  is only remembered, since the footer dot already shows it. A job that
+ *  recovers and fails again turns red again. */
+export function turnedRed(
+  prev: string[] | null,
+  jobs: Pick<Job, "label" | "health">[],
+): { fire: string[]; red: string[] } {
+  const red = jobs.filter((j) => toneOf(j.health) === "red").map((j) => j.label);
+  if (!prev) return { fire: [], red };
+  const was = new Set(prev);
+  return { fire: red.filter((l) => !was.has(l)), red };
+}
+
+/** The banner's words: one job by name and why, or several by name. */
+export function redBanner(jobs: Pick<Job, "name" | "reason">[]): { title: string; body: string } | null {
+  if (!jobs.length) return null;
+  if (jobs.length === 1) return { title: `${jobs[0].name} is failing`, body: jobs[0].reason };
+  return { title: `${jobs.length} automations are failing`, body: jobs.map((j) => j.name).join(", ") };
+}
+
 // ---- times, in words ----
 
 /** "about 5 min ago": last runs come off log mtimes, so never exact. */

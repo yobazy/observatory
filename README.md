@@ -164,7 +164,8 @@ it would do without changing anything, and `--help` lists the other options.
   they serve, with a tag on dev servers and test browsers left running. Stop or force quit one from
   there.
 - **Automations** (from the sidebar footer) lists your launchd jobs with their last run, schedule,
-  and whether they're stale or failing. Run one now or open its log.
+  and whether they're stale or failing. Run one now or open its log. A job that starts failing
+  puts up a banner, except in quiet hours.
 
 **Organizing**
 

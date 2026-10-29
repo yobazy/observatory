@@ -11,11 +11,13 @@ import {
   jobProject,
   nextRun,
   parseLaunchctl,
+  redBanner,
   runAction,
   runNow,
   scheduleText,
   shownLabels,
   track,
+  turnedRed,
   until,
   worstHealth,
 } from '../src/nebula/automations.ts';
@@ -301,4 +303,51 @@ test('fixPrompt carries the job, its log, and how to check a fix', () => {
   assert.match(fixPrompt({ ...base, alwaysOn: true, health: 'running' }), /kickstart -k/);
   assert.match(fixPrompt({ ...base, health: 'not loaded' }), /launchctl bootstrap gui\/\$\(id -u\) \/x\/com\.bazil\.todos\.plist/);
   assert.match(fixPrompt({ ...base, tail: [] }), /Its log is empty/);
+});
+
+// ---- the banner when a job turns red ----
+
+test('red banner: fires once when a shown job turns failing, not for stale, hidden or already red jobs', () => {
+  const report = (exit1) => ({
+    config: JSON.stringify({ jobs: [{ label: 'com.bazil.a', name: 'Todos sync' }] }),
+    jobs: [
+      raw({ launchctl: text(exit1 ? 'launchctl-exit1.txt' : 'launchctl-wispr-watch.txt') }),
+      // Stale is orange in the view: no banner.
+      raw({ label: 'com.bazil.b', plist: { KeepAlive: true }, tail: [] }),
+      // Failing, but not a label the view shows.
+      raw({ label: 'com.other.c', launchctl: text('launchctl-exit1.txt') }),
+    ],
+  });
+  const rows = (exit1) => jobList(report(exit1), ['com.bazil.'], NOW).jobs;
+  assert.equal(rows(false).find((j) => j.label === 'com.bazil.b').health, 'stale');
+
+  let red = null;
+  const fired = [];
+  for (const exit1 of [false, true, true, false, true]) {
+    const r = turnedRed(red, rows(exit1));
+    red = r.red;
+    fired.push(r.fire);
+  }
+  // The first read only remembers; then it turns red, stays red, recovers, and fails again.
+  assert.deepEqual(fired, [[], ['com.bazil.a'], [], [], ['com.bazil.a']]);
+
+  const failing = rows(true).filter((j) => j.label === 'com.bazil.a');
+  assert.deepEqual(redBanner(failing), { title: 'Todos sync is failing', body: 'Exited with code 1' });
+});
+
+test('red banner: a first read with a job already red fires nothing; several at once share one banner', () => {
+  assert.deepEqual(turnedRed(null, [{ label: 'a', health: 'failing' }]), { fire: [], red: ['a'] });
+  assert.deepEqual(
+    turnedRed([], [
+      { label: 'a', health: 'failing' },
+      { label: 'b', health: 'failing' },
+      { label: 'c', health: 'not loaded' },
+    ]).fire,
+    ['a', 'b'],
+  );
+  assert.deepEqual(redBanner([{ name: 'Todos sync', reason: 'x' }, { name: 'Mail watch', reason: 'y' }]), {
+    title: '2 automations are failing',
+    body: 'Todos sync, Mail watch',
+  });
+  assert.equal(redBanner([]), null);
 });
