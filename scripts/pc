@@ -1,0 +1,65 @@
+#!/bin/bash
+# The sandbox app on the always-on PC (`ssh pc`) instead of this Mac: built
+# from what's pushed, on a virtual display, driven with scripts/drive over
+# ssh. Moments are copied over for `replay`, screenshots copied back.
+#
+#   scripts/pc up [branch]        # the branch (default: this one, pushed) running there
+#   scripts/pc drive <args>       # scripts/drive there: replay, shot and the rest
+#   scripts/pc down               # stop it
+#
+# It renders with WebKitGTK, not macOS's WebKit: check video and anything
+# only macOS does on the Mac with scripts/sandbox.sh up.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+HOST="${OBSERVATORY_PC:-pc}"
+DIR=/data/scratch/observatory-sandbox
+REPO=$(git remote get-url origin)
+
+# A login shell, so cargo, nebula and node are on the PATH.
+there() { ssh "$HOST" "bash -lc $(printf '%q' "$1")"; }
+
+case "${1:-}" in
+  up)
+    branch="${2:-$(git branch --show-current)}"
+    if [ -z "${2:-}" ] && [ -n "$(git log "origin/$branch..$branch" 2>/dev/null)" ]; then
+      echo "warning: $branch has commits that aren't pushed; the PC builds what's on origin" >&2
+    fi
+    there "set -e
+      [ -d $DIR/.git ] || git clone -q $REPO $DIR
+      cd $DIR
+      scripts/sandbox.sh down >/dev/null 2>&1 || true
+      git fetch -q origin && git checkout -q -B $branch origin/$branch
+      cmp -s package-lock.json .sandbox/installed.lock 2>/dev/null || { npm ci --silent && mkdir -p .sandbox && cp package-lock.json .sandbox/installed.lock; }
+      scripts/sandbox.sh up"
+    ;;
+  drive)
+    shift
+    case "${1:-}" in
+      replay)
+        # The moment lives on this Mac; replay a copy of it there.
+        src="${2:?replay needs a moment folder}"
+        dest="$DIR/.sandbox/moments/$(basename "$src")"
+        there "mkdir -p '$dest'"
+        scp -q "$src/moment.json" "$HOST:$dest/"
+        [ -f "$src/thread.json" ] && scp -q "$src/thread.json" "$HOST:$dest/"
+        there "cd $DIR && scripts/drive replay '$dest'"
+        ;;
+      shot)
+        # Taken there, kept here: at OUT, or beside the Mac's sandbox shots.
+        out="${2:-/tmp/observatory-sandbox/shots/pc-$(date +%Y%m%d-%H%M%S).png}"
+        remote="$DIR/.sandbox/shots/$(basename "$out")"
+        there "cd $DIR && scripts/drive shot '$remote'" >/dev/null
+        mkdir -p "$(dirname "$out")"
+        scp -q "$HOST:$remote" "$out"
+        echo "$out"
+        ;;
+      *)
+        args=$(printf '%q ' "$@")
+        there "cd $DIR && scripts/drive $args"
+        ;;
+    esac
+    ;;
+  down) there "cd $DIR && scripts/sandbox.sh down" ;;
+  *) echo "usage: $0 up [branch]|drive <args>|down" >&2; exit 2 ;;
+esac
