@@ -5935,6 +5935,72 @@ button.attempt-status:hover span:nth-child(2) {
   max-height: 100%;
   object-fit: contain;
 }
+.fpv-picture {
+  position: relative;
+  height: 100%;
+}
+.fpv-picture .fpv-image {
+  overflow: auto;
+  padding-bottom: 56px;
+}
+.fpv-picture img {
+  cursor: zoom-in;
+  user-select: none;
+}
+/* Bigger than the pane: it scrolls, and margin auto centres it without
+   cutting off its left or top the way centring the flex box would. */
+.fpv-image.is-zoomed {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.fpv-image.is-zoomed img {
+  flex: none;
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  cursor: zoom-out;
+}
+.fpv-picbar {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  box-shadow: var(--shadow-pop);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.fpv-picbar-n {
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.fpv-picbar-sep {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: var(--line);
+}
+.fpv-picbar-pct {
+  min-width: 64px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.fpv-picbar-pct:hover {
+  background: color-mix(in srgb, var(--line) 50%, transparent);
+}
 .fpv-text {
   margin: 0;
   padding: 16px 20px;
