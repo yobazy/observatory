@@ -9,7 +9,7 @@ import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
 import { actOf, clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
-import { answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
+import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { useStandIn } from "../nebula/pane";
 import { shipKind } from "../nebula/git";
@@ -1121,6 +1121,20 @@ export function Reader({
             </div>
           )}
         </div>
+        {!waiting && t && t.entries.length > 0 && (
+          <button
+            className="link-btn rd-catchup"
+            onClick={() =>
+              void enqueue(agent, CATCH_UP).then(
+                (how) => flash(how === "queued" ? `Queued for ${agent.name}: catch you up` : `Asked ${agent.name} to catch you up`),
+                () => flash(`Couldn't ask ${agent.name} to catch you up`, 6000),
+              )
+            }
+            title="Ask for a fresh card: where it stands, and every decision still open"
+          >
+            ↻ Catch me up
+          </button>
+        )}
         {!waiting && undecided.length > 0 && (
           <OpenDecisions
             open={undecided}

@@ -359,6 +359,11 @@ export function suggested(card: Card): Record<number, string> {
 /** Decisions earlier replies asked that the message after them didn't
  *  answer, newest last, for the reader to keep in view. The latest reply's
  *  own are on its card, so they don't count. */
+/** What "Catch me up" sends: a fresh card restating every decision still
+ *  open in the thread, so the earlier ones it replaces can be put away. */
+export const CATCH_UP =
+  "Catch me up: where does this thread stand now? Reply as a card: what's done, what's still running or waiting, and under Needs you every decision from this thread that's still open, numbered from 1 with lettered options. Leave out the ones I've answered or that no longer matter.";
+
 export function openDecisions(
   entries: { n: number; kind: string; text: string }[],
   latest: number,
@@ -369,6 +374,11 @@ export function openDecisions(
     if (e.kind === "claude") {
       const asks = readCard(e.text).asks.filter((a) => a.options.length);
       if (asks.length && e.n !== latest) pending = { entry: e.n, quote: replyQuote(e.text), asks };
+    } else if (e.kind === "you" && e.text.trim() === CATCH_UP) {
+      // The reply to it says again whatever is still open.
+      out.length = 0;
+      pending = null;
+      continue;
     } else if (e.kind === "you") {
       // "About your reply that starts "…": 2 B" answers an earlier one.
       for (const m of e.text.matchAll(/^About your reply that starts "(.+)": ([^\n]+)$/gm)) {
