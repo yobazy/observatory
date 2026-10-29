@@ -311,6 +311,10 @@ export function startMock(handlers: Map<string, PtyHandler>) {
     }
     if (variant === "DeleteWorktree" && body) {
       const id = String(body.id);
+      // Like git, it won't drop uncommitted work without force.
+      const g = mockGitStatus(id);
+      if (!body.force && g.staged + g.unstaged + g.untracked > 0)
+        return { error: `'${g.branch}' contains modified or untracked files, use --force to delete it` };
       setState((s) => {
         const worktrees = { ...s.worktrees };
         delete worktrees[id];
@@ -394,7 +398,7 @@ export function mockGitStatus(worktreeId: string): GitStatus {
     case "wm0":
       return { ...base, behind: 5 };
     case "w3":
-      return { ...base, upstream: "origin/search-facets", upstreamGone: true, baseAhead: 2 };
+      return { ...base, upstream: "origin/search-facets", upstreamGone: true, baseAhead: 2, untracked: 1 };
     case "wm2":
       return { ...base, upstreamGone: true };
     case "wm1":

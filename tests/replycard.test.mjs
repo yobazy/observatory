@@ -323,6 +323,22 @@ test('answering an earlier decision from the tray closes it', async () => {
   assert.deepEqual(openDecisions(entries, -1), []);
 });
 
+test('catching up puts away the decisions before it', async () => {
+  const { openDecisions, CATCH_UP } = await import('../src/nebula/replycard.ts');
+  const entries = [
+    { n: 1, kind: 'claude', text: reply },
+    { n: 2, kind: 'you', text: 'carry on' },
+    { n: 3, kind: 'claude', text: reply },
+    { n: 4, kind: 'you', text: CATCH_UP },
+    { n: 5, kind: 'claude', text: reply },
+    { n: 6, kind: 'you', text: 'thanks' },
+    { n: 7, kind: 'claude', text: 'ok' },
+  ];
+  assert.equal(openDecisions(entries.slice(0, 3), -1).length, 1);
+  assert.deepEqual(openDecisions(entries.slice(0, 5), 5), []);
+  assert.deepEqual(openDecisions(entries, 7).map((o) => o.entry), [5]);
+});
+
 test('a passage you select is quoted ahead of what you say about it', async () => {
   const { passageText } = await import('../src/nebula/replycard.ts');
   assert.equal(passageText(' two\nlines ', 'why?'), 'About this part of your reply:\n> two\n> lines\n\nwhy?');
@@ -393,4 +409,29 @@ test('answers written in, or given in the tray alongside taps, count as answered
   ];
   assert.equal(entries[3].text, `1 A\n\nAbout your reply that starts "${quote}": 2 B`);
   assert.deepEqual(openDecisions(entries, -1).map((o) => [o.entry, o.asks.map((a) => a.n)]), [[3, [2]]]);
+});
+
+test('letters alone take their labels from the lines that spelled them out', () => {
+  const c = readCard(`**Two lines to choose from.**
+
+- A "From sneakers to snowboards." Specific, and people scroll.
+- B Shoes and boards. Spells out more.
+
+**Decision**
+6. The line?  A · B · or your own words, and I'll tighten them`);
+  assert.deepEqual(c.asks, [
+    {
+      n: 6,
+      text: "The line? Or your own words, and I'll tighten them",
+      options: [
+        { letter: 'A', label: '"From sneakers to snowboards."' },
+        { letter: 'B', label: 'Shoes and boards.' },
+      ],
+    },
+  ]);
+  assert.deepEqual(readAsk(1, 'Pick one  A · C').options, []);
+  assert.deepEqual(readAsk(1, 'Which?  A · B').options, [
+    { letter: 'A', label: '' },
+    { letter: 'B', label: '' },
+  ]);
 });

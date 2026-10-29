@@ -193,6 +193,65 @@ export const FRAMES = {
     "....OOOOOOOOOOOO..",
     "........WW....WW..",
   ],
+  // At the laptop (LAPTOP, drawn to its right), eyes on the screen, one
+  // paw on the keys and then the other.
+  typeA: [
+    "..........O..O....",
+    ".........OOOOOO...",
+    ".........OOKOOK...",
+    ".........OOOOPO...",
+    ".........WWWWWW...",
+    "..........OWWO....",
+    ".O.......OOWWOO...",
+    ".O......OOOWWOOO..",
+    "..O.....ODOOOODWW.",
+    "...O....OOOOOOOO..",
+    "....OOOOOOOOOOOO..",
+    "........WW....WW..",
+  ],
+  typeB: [
+    "..........O..O....",
+    ".........OOOOOO...",
+    ".........OOKOOK...",
+    ".........OOOOPO...",
+    ".........WWWWWW...",
+    "..........OWWO....",
+    ".O.......OOWWOO...",
+    ".O......OOOWWOOO..",
+    "..O.....ODOOOODO..",
+    "...O....OOOOOOOOWW",
+    "....OOOOOOOOOOOO..",
+    "........WW....WW..",
+  ],
+  // Over a book (BOOK, at its paws), eyes down, reading along the line.
+  readA: [
+    "..........O..O....",
+    ".........OOOOOO...",
+    ".........OOOOOO...",
+    ".........OKOOKO...",
+    ".........WWWPWW...",
+    "..........OWWO....",
+    ".O.......OOWWOO...",
+    ".O......OOOWWOOO..",
+    "..O.....ODOOOODO..",
+    "...O....OOOOOOOO..",
+    "....OOOOOOOOOOOO..",
+    "........WW....WW..",
+  ],
+  readB: [
+    "..........O..O....",
+    ".........OOOOOO...",
+    ".........OOOOOO...",
+    ".........OOKOOK...",
+    ".........WWWPWW...",
+    "..........OWWO....",
+    ".O.......OOWWOO...",
+    ".O......OOOWWOOO..",
+    "..O.....ODOOOODO..",
+    "...O....OOOOOOOO..",
+    "....OOOOOOOOOOOO..",
+    "........WW....WW..",
+  ],
 } satisfies Record<Frame, string[]>;
 
 /** The telescope the cat looks through: 16 by 12, its eyepiece (E) at the
@@ -214,3 +273,37 @@ export const TELESCOPE = [
   "...L.....L......",
 ];
 export const TELESCOPE_W = 16;
+
+/** The working line's props, 10 by 12, bottoms on the ground. The laptop is
+ *  open toward the cat: its lid (M) at the right with the screen's glow (S)
+ *  on the cat's side, the keys (M) under its paws. */
+export const LAPTOP = [
+  "..........",
+  "..........",
+  "........M.",
+  ".......SM.",
+  ".......SM.",
+  ".......SM.",
+  ".......SM.",
+  ".......SM.",
+  "........M.",
+  "........M.",
+  "MMMMMMMMM.",
+  ".M.....M..",
+];
+/** An open book on the ground: pages (W) up from a spine (A). */
+export const BOOK = [
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "..........",
+  "W......W..",
+  "WWW..WWW..",
+  ".WWWWWW...",
+  "..AAAA....",
+];
+export const PROP_W = 10;

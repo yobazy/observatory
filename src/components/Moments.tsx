@@ -93,7 +93,7 @@ export function MomentCard() {
           className="btn btn-sm btn-primary"
           disabled={!project}
           onClick={() => void taskMoment(project, note)}
-          title="Start an agent on this moment and your note, and stay where you are (⌘↵)"
+          title="Start an agent that fixes this in its own worktree and opens a PR for a second agent to review and merge. You stay where you are (⌘↵)"
         >
           Start task
         </button>

@@ -10,11 +10,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" width="880" alt="Demo: opening a task that's waiting on you, switching projects, shipping a branch with one click, starting the dev server, the right-click task menu, Claude usage, and switching color themes">
+  <img src="docs/demo.gif" width="880" alt="Demo: opening a thread that's waiting on you, reading it as a conversation, jumping between threads from the Live strip, switching projects, agent usage, and switching color themes">
 </p>
 
 Run Claude Code, Codex and other agent CLIs in as many projects and branches as you like, and see
-only the ones that need you. Observatory talks to the same daemon as the `nebula` TUI, so both can
+only the ones that need you. Each thread gets a sand plate: a Chladni figure its work moves, so you
+can tell at a glance which agents are busy, which are waiting on you and which have settled. Observatory talks to the same daemon as the `nebula` TUI, so both can
 be open at once on the same sessions. Close either one and your agents keep running.
 
 ## Install
@@ -51,7 +52,7 @@ it would do without changing anything, and `--help` lists the other options.
 
 **Sessions**
 
-![Sessions: projects on the left with what's waiting on you and what finished while you were away, a project's branches and threads in the middle, and the selected thread's terminal on the right with its permission prompt as buttons](docs/screenshots/sessions.jpg)
+![Sessions in the night-blue look: projects on the left with what's waiting on you and what finished while you were away, a project's branches and threads in the middle, and on the right the selected thread's terminal under the Live strip of sand plates, with its permission prompt as buttons](docs/screenshots/sessions.jpg)
 
 - **Projects sidebar**: filter it with `⌘P` and jump with `⌘1`–`⌘9`. Each project shows one bar
   segment per session, a spinner with the number of tasks in progress, and badges for tasks waiting
@@ -65,6 +66,11 @@ it would do without changing anything, and `--help` lists the other options.
 - **While you were away**: turns that finished while you weren't looking, with a line on what
   each did (tests passed, files edited). A finished task stays under Follow up until you reply,
   archive it or tick it off.
+- **Sand plates**: each thread's status dot is a Chladni plate. Every prompt or tool step moves
+  the sand to a new figure, so working threads keep shifting, waiting ones hold and pulse, and
+  finished ones settle. A project's plate is its emblem in the header.
+- **Live strip**: a row of plates under the pane header, one per working, waiting or unread
+  thread across all projects. Click one to open it.
 - **Worktree bands**: sessions grouped by branch, with the ones that need you first. Switching
   projects brings back the session you last had open there.
 - **Turn summary**: a line above each terminal says what the latest turn did, for Claude Code and
@@ -100,9 +106,16 @@ it would do without changing anything, and `--help` lists the other options.
   in a tray above the box.
 - **Select part of a reply** and choose **Reply about this** to quote it. A file named in a reply
   opens in the preview, a PR number links to the PR, and an edit step shows its diff.
+- **Run** beside a shell command in a reply sends it to the thread as `! <command>`, so it runs
+  there and its output lands in the thread. A permission prompt shows the command it's asking
+  about above its choices.
+- **Tables** wrap at whole words, scroll sideways when they're wide, and have columns you can drag
+  to resize.
 - **Close thread**: when a reply ends with "Safe to close", one click archives the thread and takes
   you back to the one before, with **Undo**. "Keep open" or "Don't close" shows its reason in the
   header instead.
+- **Your reply shows at once** as a bubble at the end of the thread, with **Sending…**, or
+  **Waking…** while a sleeping thread starts up to take it.
 - **Queue next** holds a message until the agent's turn ends. You can edit it or take it back
   before it goes.
 
@@ -204,7 +217,8 @@ presented as measured zero usage.
 
 ![Settings in light mode with the Forest theme](docs/screenshots/settings.jpg)
 
-Every tab of the TUI's settings, written to the same files the same way, so a change in either
+Night-blue surfaces with ivory text by default, and the same design by day in Light (ivory pages,
+ink-blue text). Every tab of the TUI's settings, written to the same files the same way, so a change in either
 app shows up in the other. Rows that only affect the TUI's look are tagged. The color theme is
 shared with the TUI; System, Dark, Black and Light are for the desktop app, and the terminal
 follows them. The terminal's font is picked by seeing each one set the same text, and `⌘+`/`⌘−`
@@ -218,7 +232,8 @@ type, and nothing is sent anywhere. It's there to show where the app gets in you
 **Mark this moment** (`⇧⌘M`): noticed something off? This saves the last minute of those events,
 what's on screen (the view, project, session and its status) and a screenshot of the window to a
 folder under `moments/` beside the log, copies the folder's path, and takes a line on what you
-saw. Paste the path wherever you're reporting it, or start a task from it. The minute is kept in
+saw. Paste the path wherever you're reporting it, or start a task from it: an agent fixes it in its
+own worktree and opens a PR, and a second agent reviews and merges it. The minute is kept in
 memory whether or not the log is on, and only written when you press it. The screenshot needs
 Screen Recording allowed.
 
@@ -228,7 +243,10 @@ Screen Recording allowed.
 
 **And** a pixel cat that plays at the bottom of the sidebar. It chases a
 yarn ball, naps, watches the sky through its telescope, and sits up when an agent starts waiting
-on you. Click it to say hi, or turn it off in Settings.
+on you. While a thread works, a second cat keeps it company on the Read view's working line: it
+types at a laptop while the agent edits, reads a book while it reads, paces while a command runs,
+looks through its telescope during a web search, sweats when a command fails, and dozes if one step
+takes two minutes. Click either cat to say hi, or turn them off in Settings.
 
 ## Building from source
 

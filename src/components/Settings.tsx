@@ -689,7 +689,7 @@ function Appearance({ settings, save }: { settings: Settings; save: (k: string, 
             <label className="setting-label" htmlFor="set-pet">
               Sidebar cat
             </label>
-            <span className="setting-hint">A pixel cat that plays at the bottom of the sidebar. Click it to say hi.</span>
+            <span className="setting-hint">A pixel cat that plays at the bottom of the sidebar, and one that keeps a working thread company in the Read view. Click either to say hi.</span>
           </div>
           <Switch id="set-pet" on={prefs.pet !== false} onChange={(on) => void savePrefs({ ...prefs, pet: on })} />
         </div>

@@ -517,3 +517,50 @@ export async function runNow(job: Pick<Job, "label" | "health" | "alwaysOn" | "n
   await deps.invoke("automations_kickstart", { label: job.label, restart: a.restart });
   return true;
 }
+
+// ---- Fix with an agent ----
+
+/** The project a job's code lives in: the one whose repo its command or logs
+ *  point into, the deepest if several do. Null for a script outside them all. */
+export function jobProject(
+  job: Pick<Job, "command" | "logs">,
+  projects: { id: string; repo_path: string }[],
+): string | null {
+  const text = [job.command, ...job.logs].join("\n");
+  let best: { id: string; depth: number } | null = null;
+  for (const p of projects) {
+    const repo = p.repo_path.replace(/\/+$/, "");
+    if (!repo) continue;
+    const at = text.indexOf(repo);
+    if (at < 0) continue;
+    // A whole path component: /x/app shouldn't claim /x/app-two.
+    const next = text[at + repo.length];
+    if (next !== undefined && !/[/\s"']/.test(next)) continue;
+    if (!best || repo.length > best.depth) best = { id: p.id, depth: repo.length };
+  }
+  return best?.id ?? null;
+}
+
+/** The prompt for an agent sent to look at a job: what the panel shows, and
+ *  how to check a fix by running it. */
+export function fixPrompt(job: Job): string {
+  const facts = [
+    `Name: ${job.name}${job.name !== job.label ? ` (${job.label})` : ""}`,
+    `Health: ${job.health}${job.reason ? `, ${job.reason}` : ""}`,
+    `Schedule: ${job.schedule}`,
+    `Command: ${job.command || "none in the plist"}`,
+    `Plist: ${job.plistPath}`,
+    `${job.logs.length === 1 ? "Log" : "Logs"}: ${job.logs.length ? job.logs.join(", ") : "none set in the plist"}`,
+  ];
+  const tail = job.tail.slice(-40);
+  const run =
+    job.health === "not loaded"
+      ? `load it with \`launchctl bootstrap gui/$(id -u) ${job.plistPath}\` (launchd doesn't have it now)`
+      : `run it once with \`launchctl kickstart${job.alwaysOn ? " -k" : ""} gui/$(id -u)/${job.label}\``;
+  return [
+    `My launchd job ${job.name} needs a look: Observatory's Automations panel shows it as ${job.health}. Find out why and fix it.`,
+    facts.join("\n"),
+    tail.length ? `The end of its log:\n\n\`\`\`\n${tail.join("\n")}\n\`\`\`` : "Its log is empty.",
+    `When you've fixed it, ${run} and check the log to confirm. If the fix needs me (a macOS permission, a password, a login), say exactly what to do instead of working around it.`,
+  ].join("\n\n");
+}

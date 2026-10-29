@@ -5,8 +5,10 @@ import { readFileSync } from 'node:fs';
 import {
   ago,
   expectedEvery,
+  fixPrompt,
   health,
   jobList,
+  jobProject,
   nextRun,
   parseLaunchctl,
   runAction,
@@ -270,4 +272,33 @@ test('status command: a config entry with statusCommand marks the job', () => {
   const jobs = jobList(report, undefined, NOW).jobs;
   assert.equal(jobs.find((j) => j.label === 'com.bazil.wispr-watch').hasStatus, true);
   assert.equal(jobs.find((j) => j.label === 'com.bazil.todos-notion').hasStatus, false);
+});
+
+test('jobProject finds the repo a job runs from, the deepest one, whole path components only', () => {
+  const projects = [
+    { id: 'p', repo_path: '/Users/x/Programming' },
+    { id: 'c', repo_path: '/Users/x/Programming/career-ops' },
+    { id: 'c2', repo_path: '/Users/x/Programming/career-ops-two/' },
+  ];
+  const job = (command, logs = []) => ({ command, logs });
+  assert.equal(jobProject(job('/usr/bin/python3 /Users/x/Programming/career-ops/watch.py'), projects), 'c');
+  assert.equal(jobProject(job('/usr/bin/node /Users/x/Programming/career-ops-two/run.js'), projects), 'c2');
+  assert.equal(jobProject(job('/bin/sh -c x', ['/Users/x/Programming/career-ops/log.txt']), projects), 'c');
+  assert.equal(jobProject(job('/usr/bin/python3 /Users/x/.local/bin/todos'), projects), null);
+});
+
+test('fixPrompt carries the job, its log, and how to check a fix', () => {
+  const base = {
+    label: 'com.bazil.todos', name: 'Todos', where: 'This Mac (launchd)', command: '/usr/bin/python3 /x/todos',
+    plistPath: '/x/com.bazil.todos.plist', schedule: 'Every 5 min', lastRun: null, nextRun: null, health: 'failing',
+    reason: 'PermissionError', pid: null, tail: ['Traceback', 'PermissionError: [Errno 1]'], logs: ['/x/todos.log'],
+    alwaysOn: false, hasStatus: false,
+  };
+  const p = fixPrompt(base);
+  assert.match(p, /Todos \(com\.bazil\.todos\)/);
+  assert.match(p, /PermissionError: \[Errno 1\]/);
+  assert.match(p, /launchctl kickstart gui\/\$\(id -u\)\/com\.bazil\.todos/);
+  assert.match(fixPrompt({ ...base, alwaysOn: true, health: 'running' }), /kickstart -k/);
+  assert.match(fixPrompt({ ...base, health: 'not loaded' }), /launchctl bootstrap gui\/\$\(id -u\) \/x\/com\.bazil\.todos\.plist/);
+  assert.match(fixPrompt({ ...base, tail: [] }), /Its log is empty/);
 });

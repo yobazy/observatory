@@ -448,18 +448,16 @@ export function IdeasEntry() {
   const on = state.view === "ideas";
   return (
     <button
-      className={`uc-entry${on ? " is-on" : ""}`}
+      className={`side-stat${on ? " is-on" : ""}`}
       onClick={() => (on ? setState({ view: "sessions" }) : openIdeas())}
-      title="Ideas: things written down to start later, by project, with a priority and a deadline (⇧⌘I)"
+      title={`Ideas: ${open.length ? `${open.length} to start` : "none yet"}${late ? `, ${late} overdue` : ""}. Things written down to start later, by project, with a priority and a deadline (⇧⌘I)`}
     >
-      <span className="uc-entry-title">
+      <span className="side-stat-top">
         <BulbGlyph />
-        Ideas
+        {late > 0 && <span className="side-stat-badge" aria-label={`${late} overdue`} />}
       </span>
-      <span className="uc-entry-sub">
-        {open.length ? `${open.length} to start` : "None yet"}
-        {late > 0 && <span className="ideas-late"> · {late} overdue</span>}
-      </span>
+      <span className="side-stat-value">{open.length}</span>
+      <span className="side-stat-label">Ideas</span>
     </button>
   );
 }

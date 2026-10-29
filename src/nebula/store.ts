@@ -60,6 +60,8 @@ export interface State {
   automationsError: string | null;
   /** Each job's `runs` count as the app has watched it (automations.ts). */
   automationWatch: Watches;
+  /** The agent "Fix with an agent" last started on each job, by label. */
+  automationFixes: Record<string, string>;
   /** nebula's shared `theme` setting (the accent), and the desktop app's own prefs. */
   theme: string;
   prefs: DesktopPrefs;
@@ -150,6 +152,7 @@ let state: State = {
   automations: null,
   automationsError: null,
   automationWatch: {},
+  automationFixes: {},
   ...loadSelection(),
 };
 

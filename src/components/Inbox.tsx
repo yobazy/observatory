@@ -174,12 +174,26 @@ export function InboxEntry() {
   const on = state.view === "inbox";
   return (
     <button
-      className={`uc-entry${on ? " is-on" : ""}`}
+      className={`side-stat${lastCount ? " is-hot" : ""}${on ? " is-on" : ""}`}
       onClick={() => setState({ view: on ? "sessions" : "inbox" })}
-      title="Decisions: every thread whose latest reply asks you to decide something, to answer from one place (⌥⌘J)"
+      title={`Decisions: ${lastCount === null ? "" : `${lastCount || "none"} waiting. `}Every thread whose latest reply asks you to decide something, to answer from one place (⌥⌘J)`}
     >
-      <span className="uc-entry-title">Decisions</span>
-      <span className="uc-entry-sub">{lastCount === null ? "Answer from one place" : lastCount ? `${lastCount} waiting` : "None waiting"}</span>
+      <span className="side-stat-top">
+        <ForkGlyph />
+        {!!lastCount && <span className="side-stat-badge" aria-hidden />}
+      </span>
+      {/* Counted when Decisions last opened; a dash until then. */}
+      <span className="side-stat-value">{lastCount ?? "–"}</span>
+      <span className="side-stat-label">Decisions</span>
     </button>
+  );
+}
+
+/** A path splitting in two: Decisions. */
+function ForkGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+      <path d="M8 2.5v4M8 6.5 4.5 10v3.5M8 6.5l3.5 3.5v3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

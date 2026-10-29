@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
-import { flash, setState, useAppState } from "../nebula/store";
+import { flash, setState, sortedProjects, useAppState } from "../nebula/store";
 import { ago, jobList, runAction, toneOf, until, worstHealth, type Job, type RestartConfirm } from "../nebula/automations";
-import { logForPreview, readStatus, refreshAutomations, runJob } from "../nebula/automationsLoad";
+import { fixJob, fixProject, logForPreview, readStatus, refreshAutomations, runJob } from "../nebula/automationsLoad";
 import { baseName, openPreview } from "../nebula/preview";
 
 /** The rows as of this minute; null until the first read lands. */
@@ -38,6 +38,10 @@ export function AutomationsView() {
   /** The job whose Restart confirm is open. */
   const [asking, setAsking] = useState<string | null>(null);
   const [status, setStatus] = useState<Record<string, Status>>({});
+  /** The project picked for each job's fix, where it differs from fixProject's. */
+  const [fixTo, setFixTo] = useState<Record<string, string>>({});
+  const [fixing, setFixing] = useState<Set<string>>(new Set());
+  const projects = useMemo(() => sortedProjects(state), [state.projects]);
   const controls = useRef<HTMLDivElement>(null);
   useOverlayKeys(controls);
   useEffect(() => void refreshAutomations(), []);
@@ -91,6 +95,27 @@ export function AutomationsView() {
         return n;
       });
     }
+  };
+  const fix = async (j: Job, projectId: string) => {
+    setFixing((s) => new Set(s).add(j.label));
+    try {
+      await fixJob(j, projectId);
+      flash(`Started an agent on ${j.name} in ${state.projects[projectId]?.name ?? "that project"}`, 3000);
+    } catch (e) {
+      flash(`Couldn't start an agent: ${e instanceof Error ? e.message : e}`, 6000);
+    } finally {
+      setFixing((s) => {
+        const n = new Set(s);
+        n.delete(j.label);
+        return n;
+      });
+    }
+  };
+  const openFix = (agentId: string) => {
+    const a = state.agents[agentId];
+    const w = a && state.worktrees[a.worktree_id];
+    if (!a || !w) return;
+    setState({ view: "sessions", selectedProject: w.project_id, selectedSession: { Agent: a.id } });
   };
   const openLog = async (path: string) => {
     try {
@@ -189,6 +214,47 @@ export function AutomationsView() {
                             >
                               {starting.has(j.label) ? "Starting…" : a.label}
                             </button>
+                          );
+                        })()}
+                        {(() => {
+                          const to = fixTo[j.label] ?? fixProject(j) ?? "";
+                          const sent = state.automationFixes[j.label];
+                          const unwell = j.health !== "ok" && j.health !== "running";
+                          return (
+                            <span className="auto-fix">
+                              <button
+                                className={`btn btn-sm${unwell ? " btn-primary" : ""}`}
+                                disabled={!to || fixing.has(j.label)}
+                                onClick={() => void fix(j, to)}
+                                title={
+                                  to
+                                    ? `Start an agent in ${state.projects[to]?.name}'s main checkout with this job's details and log, to find what's wrong and fix it`
+                                    : "Pick a project for the agent first"
+                                }
+                              >
+                                {fixing.has(j.label) ? "Starting…" : "Fix with an agent"}
+                              </button>
+                              <select
+                                value={to}
+                                onChange={(e) => setFixTo((f) => ({ ...f, [j.label]: e.target.value }))}
+                                aria-label={`Project for ${j.name}'s fix`}
+                                title="Where the agent works: the job's own repo when its command is in one"
+                              >
+                                <option value="" disabled>
+                                  Project…
+                                </option>
+                                {projects.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    in {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {sent && state.agents[sent] && (
+                                <button className="link-btn" onClick={() => openFix(sent)} title="Go to the agent working on this job">
+                                  Open its thread
+                                </button>
+                              )}
+                            </span>
                           );
                         })()}
                         {j.logs.map((p) => (
