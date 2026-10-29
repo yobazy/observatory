@@ -117,7 +117,7 @@ All in `/data/tmp/overnight-2026-10-28/observatory/` (browser preview, demo data
 An independent read of the whole batch (`git diff origin/main...0e51a16`) against the brief, by
 a run that didn't write it. #102 had already been squash-merged (8f9bbd3) and its branch
 deleted by then, so the two fixes below sit on current main under the same branch name, in a
-new draft PR.
+new draft PR: https://github.com/yobazy/observatory/pull/118
 
 ### Confirmed and fixed
 
