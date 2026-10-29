@@ -294,7 +294,9 @@ clicking for it: `state`, `view`, `select`, `click`, `type`, `key`, `shot` and m
 `-h`). `scripts/drive replay <moment dir>` puts a marked moment's view and thread back on screen.
 
 `npm run dev` on its own serves a browser preview with demo data and a canned terminal. It's
-handy for styling, and needs no daemon. The screenshots above are from it.
+handy for styling, and needs no daemon. The screenshots above are from it:
+`node scripts/screenshots.mjs` retakes them, the demo GIF and the release cover (`stills` skips
+the GIF).
 
 ## Layout
 
@@ -334,7 +336,8 @@ Bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `pac
 
 Each release page leads with a download button, `docs/release/cover.jpg`, and
 `docs/release/whats-new.md`, which is rewritten for every release (the script won't build while
-it's unchanged since the last tag). Retake the cover when the app looks different. The commit
+it's unchanged since the last tag). Before each release, run `node scripts/screenshots.mjs` so
+the cover, the README's screenshots and its demo show the app as it ships. The commit
 subjects since the previous tag (version bumps left out) go underneath, and into `latest.json`,
 where **What's new** reads them.
 
