@@ -8,7 +8,8 @@ import {
   useDispatchItems,
   type DispatchItem,
 } from "../nebula/dispatch";
-import { batchCounts, isDispatched, routableItems, useBatches } from "../nebula/batch";
+import { isDispatched, routableItems, useBatches } from "../nebula/batch";
+import { batchSummary, dispatchedLine } from "../nebula/board";
 import { setState, useAppState } from "../nebula/store";
 import { RouteReview } from "./RouteReview";
 
@@ -16,23 +17,16 @@ import { RouteReview } from "./RouteReview";
  *  the board (DispatchBoard.tsx) tracks each task. */
 function DispatchedSummary({ onBoard }: { onBoard: () => void }) {
   const batches = useBatches();
-  const { agents } = useAppState();
+  const { agents, queue } = useAppState();
   const tasks = useMemo(() => batches.filter((b) => !b.dismissed).flatMap((b) => b.tasks), [batches]);
   if (!tasks.length) return null;
-  const c = batchCounts(tasks, agents);
-  const parts = [
-    c.working && `${c.working} working`,
-    c.waiting && `${c.waiting} waiting for a slot`,
-    c.done && `${c.done} done`,
-    c.listed && `${c.listed} on your list`,
-    c.blocked && `${c.blocked} blocked`,
-    c.failed && `${c.failed} failed`,
-  ].filter(Boolean);
+  // The board's counts, so a session stopped at its plan says it needs you.
+  const line = dispatchedLine(batchSummary(tasks, agents, (id) => queue[id]?.length ?? 0));
   const stuck = tasks.filter((t) => (t.state === "blocked" || t.state === "failed") && t.note);
   return (
     <div className="dialog-note dispatched" role="status">
       <p>
-        Dispatched: {parts.join(" · ")}{" "}
+        Dispatched: {line}{" "}
         <button type="button" className="link-btn" onClick={onBoard}>
           Open the board
         </button>
