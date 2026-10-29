@@ -266,11 +266,7 @@ function FileView({ file, rev, width, ...picking }: { file: PreviewFile; rev: nu
     case "markdown":
       return <MarkdownView path={file.path} from={file.from} rev={rev} {...picking} />;
     case "image":
-      return (
-        <div className="fpv-stage fpv-image">
-          <img src={previewUrl(file.path, rev)} alt={baseName(file.path)} />
-        </div>
-      );
+      return <ImageView file={file} rev={rev} />;
     case "video":
       return (
         <div className="fpv-stage fpv-image">
@@ -282,6 +278,152 @@ function FileView({ file, rev, width, ...picking }: { file: PreviewFile; rev: nu
     default:
       return <TextView path={file.path} rev={rev} />;
   }
+}
+
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 8;
+
+/** A picture, fit to the pane. A click zooms to its real size where you
+ *  clicked (or doubles a small one), another fits it again; pinch, ⌘-scroll,
+ *  + and − zoom too, 0 fits. The bar under it says how big, and steps to the
+ *  other open files when there are some. */
+function ImageView({ file, rev }: { file: PreviewFile; rev: number }) {
+  const { preview } = useAppState();
+  const stage = useRef<HTMLDivElement>(null);
+  const img = useRef<HTMLImageElement>(null);
+  // null fits it to the pane; a number is its scale, 1 for real pixels.
+  const [zoom, setZoom] = useState<number | null>(null);
+  const [fit, setFit] = useState(1);
+  // The point of the picture to keep under the pointer as the zoom changes.
+  const anchor = useRef<{ fx: number; fy: number; x: number; y: number } | null>(null);
+
+  const scaleNow = () => {
+    const el = img.current;
+    return el?.naturalWidth ? el.getBoundingClientRect().width / el.naturalWidth : 1;
+  };
+  const fitScale = () => {
+    const el = img.current;
+    const box = stage.current;
+    if (!el?.naturalWidth || !box) return 1;
+    return Math.min(1, (box.clientWidth - 32) / el.naturalWidth, (box.clientHeight - 32) / el.naturalHeight);
+  };
+  const measure = () => setFit(fitScale());
+
+  /** Zoom to `next` (null: fit), keeping the picture still at (x, y), or at
+   *  the middle of the pane. */
+  const zoomTo = useCallback((next: number | null, x?: number, y?: number) => {
+    const el = img.current;
+    const box = stage.current;
+    if (!el || !box) return;
+    const r = el.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    const px = x ?? b.left + b.width / 2;
+    const py = y ?? b.top + b.height / 2;
+    anchor.current = { fx: (px - r.left) / r.width, fy: (py - r.top) / r.height, x: px, y: py };
+    if (next !== null) next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+    // Zoomed out to the fit or past it is just fit.
+    setZoom(next !== null && next <= fitScale() + 0.001 ? null : next);
+  }, []);
+  const zoomBy = useCallback((factor: number, x?: number, y?: number) => zoomTo(scaleNow() * factor, x, y), [zoomTo]);
+
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    const el = img.current;
+    const box = stage.current;
+    anchor.current = null;
+    if (!a || !el || !box || zoom === null) return;
+    const r = el.getBoundingClientRect();
+    box.scrollLeft += r.left + a.fx * r.width - a.x;
+    box.scrollTop += r.top + a.fy * r.height - a.y;
+  }, [zoom]);
+
+  // Pinch (which arrives as a wheel with ctrl) and ⌘-scroll zoom; plain
+  // scrolling still pans. Passive listeners can't stop the page zooming.
+  useEffect(() => {
+    const box = stage.current;
+    if (!box) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomBy(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+    };
+    box.addEventListener("wheel", onWheel, { passive: false });
+    return () => box.removeEventListener("wheel", onWheel);
+  }, [zoomBy]);
+
+  // + and − from anywhere in the preview, as ← and → are.
+  useEffect(() => {
+    const pane = stage.current?.closest<HTMLElement>(".fpv");
+    if (!pane) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest("textarea, input, select") || e.ctrlKey || e.altKey) return;
+      if (e.key === "=" || e.key === "+") zoomBy(1.25);
+      else if (e.key === "-") zoomBy(0.8);
+      else if (e.key === "0") zoomTo(null);
+      else return;
+      e.preventDefault();
+    };
+    pane.addEventListener("keydown", onKey);
+    return () => pane.removeEventListener("keydown", onKey);
+  }, [zoomBy, zoomTo]);
+
+  useEffect(() => {
+    const box = stage.current;
+    if (!box) return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(box);
+    return () => watch.disconnect();
+  }, []);
+
+  const el = img.current;
+  const zoomed = zoom !== null && !!el?.naturalWidth;
+  const n = preview?.files.length ?? 0;
+  const step = (by: number) => preview && showPreviewFile((preview.active + by + n) % n);
+  return (
+    <div className="fpv-picture">
+      <div ref={stage} className={`fpv-stage fpv-image${zoomed ? " is-zoomed" : ""}`}>
+        <img
+          ref={img}
+          src={previewUrl(file.path, rev)}
+          alt={baseName(file.path)}
+          draggable={false}
+          onLoad={measure}
+          style={zoomed ? { width: el!.naturalWidth * zoom!, height: el!.naturalHeight * zoom! } : undefined}
+          title={zoomed ? "Click to fit" : "Click to zoom in"}
+          onClick={(e) => zoomTo(zoomed ? null : Math.max(1, fitScale() * 2), e.clientX, e.clientY)}
+        />
+      </div>
+      <div className="fpv-picbar" role="toolbar" aria-label="Picture">
+        {n > 1 && (
+          <>
+            <button className="icon-btn" onClick={() => step(-1)} aria-label="Previous file" title="Previous (←)">
+              ‹
+            </button>
+            <span className="fpv-picbar-n">
+              {preview!.active + 1} of {n}
+            </span>
+            <button className="icon-btn" onClick={() => step(1)} aria-label="Next file" title="Next (→)">
+              ›
+            </button>
+            <span className="fpv-picbar-sep" />
+          </>
+        )}
+        <button className="icon-btn" onClick={() => zoomBy(0.8)} aria-label="Zoom out" title="Zoom out (−)">
+          −
+        </button>
+        <button
+          className="fpv-picbar-pct"
+          onClick={() => zoomTo(zoomed ? null : 1)}
+          title={zoomed ? "Fit to the pane (0)" : "Real size"}
+        >
+          {zoomed ? `${Math.round(zoom! * 100)}%` : `Fit · ${Math.round(fit * 100)}%`}
+        </button>
+        <button className="icon-btn" onClick={() => zoomBy(1.25)} aria-label="Zoom in" title="Zoom in (+)">
+          +
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /** A mockup, in a sandboxed frame. In comment mode the page comes with
