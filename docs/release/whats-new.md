@@ -10,14 +10,27 @@
   underneath on its own.
 -->
 
-### A cat keeps you company while an agent works
+### The Read view reads more calmly
 
-While a thread is working, a small cat sits at the start of the Read view's **Working…** line and acts out the step under way: it types at a laptop for edits, reads a book for searches, paces during commands and looks through its telescope on the web. It naps if a step drags on, and sweats when a command fails. Click it for a heart. The Pet setting turns it off.
+Replies, the open-decisions bar and the reply box share one column width. **Needs you** is a tinted well instead of a box inside a box, options sit under their question, and the verdict is a quiet dot. Long file paths show the file name first. What appears now eases in instead of popping, and it all stays still under Reduce motion.
 
-### Your reply shows up the moment you send it
+### Catch me up
 
-Pressing Send now puts your reply at the end of the thread straight away, with a line that reads **Sending…**, **Waking the thread to send it…** while a sleeping agent starts, then **Sent**. If sending fails, your draft comes back.
+**↻ Catch me up**, above the reply box, asks the agent for a fresh card: what's done, what's running, and every decision still open, renumbered from 1. The earlier decisions it replaces drop out of the "still open" box.
 
-### Pasted messages show in the Read view
+### Do more from the Files list
 
-A message that was only a paste used to be left out of the Read view. Now it shows like any other message.
+Right-click a file to **Send** its path to a thread, pin it so it stays on the task's shelf, or pick several and **Open N as tabs**. Files are listed most recent first. Projects drag onto folders and out of them, and a picked color now fills the whole row.
+
+### Hand broken jobs and marked moments to an agent
+
+An unfolded job in the Automations panel has **Fix with an agent**, which starts one in the right project with the job's details and its last log lines. **Start task** on a marked moment now takes the fix all the way to a pull request in its own worktree, reviewed by a second agent.
+
+### And smaller things
+
+- **←** / **→** step through a reply's pictures in the preview.
+- Decisions written as bare letters (`A · B · C`) become buttons, labelled from the reply, and options that quote a line with dots in it read correctly.
+- Commands under a Needs-you question show as blocks inside the box, with Copy and Run.
+- The earlier-decisions box folds from **Hide** at its right and stays in view as you scroll.
+- The sidebar's Away and Follow up cards are calmer, and Uncommitted, Ideas and Decisions are counts.
+- Clean up's "Clean up anyway" question can be closed with Cancel or Escape.
