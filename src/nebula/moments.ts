@@ -143,9 +143,10 @@ export function momentPrompt(dir: string, note: string): string {
     "Other agents may be working on other moments at the same time, in this project. If it needs a change, take it all the way:\n" +
       "1. Check `gh pr list` first. If an open PR already covers this, add what you found to it as a comment and stop there.\n" +
       `2. Before you edit anything, run \`git fetch origin\` and then \`nebula worktree ${branch} --base origin/<default branch>\` to move into your own worktree. Use that exact name, since it's unique to this moment. Other sessions share this checkout, so don't switch its branch.\n` +
-      "3. Make the change, run the checks this project's CLAUDE.md or README asks for, and commit.\n" +
-      "4. Push the branch and open a PR.\n" +
-      '5. Hand the review to a separate agent: `nebula spawn "Review PR #<number> (<url>) as a fresh reviewer: read the diff, look for correctness bugs and breaks in this project\'s rules. Other PRs may have merged since it was opened: if it is behind or conflicts, rebase it on the default branch, resolve the conflicts and push. Then run its checks. If it holds up, merge it with gh pr merge. If not, or the conflicts are not clear-cut, leave a PR comment saying what is wrong and don\'t merge."`\n' +
+      `3. If the project has \`scripts/drive\` (Observatory does), see it yourself rather than asking me: \`scripts/drive replay ${dir}\` puts this moment back on screen in the sandbox app, and \`scripts/drive shot\` takes a screenshot. Use the always-on PC when \`ssh pc\` answers: push your branch, then \`scripts/pc up\` and \`scripts/pc drive …\`. Use the Mac (\`scripts/sandbox.sh up\`, then \`scripts/drive …\`) for video or anything only macOS does. Reproduce it before you change anything, check the fix the same way, and put the before and after screenshots in the PR.\n` +
+      "4. Make the change, run the checks this project's CLAUDE.md or README asks for, and commit.\n" +
+      "5. Push the branch and open a PR.\n" +
+      '6. Hand the review to a separate agent: `nebula spawn "Review PR #<number> (<url>) as a fresh reviewer: read the diff, look for correctness bugs and breaks in this project\'s rules. Other PRs may have merged since it was opened: if it is behind or conflicts, rebase it on the default branch, resolve the conflicts and push. Then run its checks. If it holds up, merge it with gh pr merge. If not, or the conflicts are not clear-cut, leave a PR comment saying what is wrong and don\'t merge."`\n' +
       "If it turns out no change is needed, say what you found instead.",
   ].join("\n\n");
 }
