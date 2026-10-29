@@ -10,10 +10,14 @@
   underneath on its own.
 -->
 
-### Answers to a sleeping thread get sent
+### A cat keeps you company while an agent works
 
-A thread goes to sleep after it's been idle for a while. If you answered one from the Read view, your reply stayed stuck at "Queued, sent when its turn ends", even though its turn was already over. Now the thread you're looking at wakes up and takes the reply. Sleeping threads you aren't looking at still wait until you open them.
+While a thread is working, a small cat sits at the start of the Read view's **Working…** line and acts out the step under way: it types at a laptop for edits, reads a book for searches, paces during commands and looks through its telescope on the web. It naps if a step drags on, and sweats when a command fails. Click it for a heart. The Pet setting turns it off.
 
-### Tables you can read
+### Your reply shows up the moment you send it
 
-Tables in the Read view now wrap at whole words instead of breaking them, scroll sideways when they're wide, and have columns you can drag to resize.
+Pressing Send now puts your reply at the end of the thread straight away, with a line that reads **Sending…**, **Waking the thread to send it…** while a sleeping agent starts, then **Sent**. If sending fails, your draft comes back.
+
+### Pasted messages show in the Read view
+
+A message that was only a paste used to be left out of the Read view. Now it shows like any other message.

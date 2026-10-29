@@ -242,7 +242,10 @@ Screen Recording allowed.
 
 **And** a pixel cat that plays at the bottom of the sidebar. It chases a
 yarn ball, naps, watches the sky through its telescope, and sits up when an agent starts waiting
-on you. Click it to say hi, or turn it off in Settings.
+on you. While a thread works, a second cat keeps it company on the Read view's working line: it
+types at a laptop while the agent edits, reads a book while it reads, paces while a command runs,
+looks through its telescope during a web search, sweats when a command fails, and dozes if one step
+takes two minutes. Click either cat to say hi, or turn them off in Settings.
 
 ## Building from source
 

@@ -7,9 +7,9 @@ import { flash, getState, projectOfWorktree, useAppState } from "../nebula/store
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue } from "../nebula/queue";
-import { clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
+import { actOf, clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
-import { answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
+import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { useStandIn } from "../nebula/pane";
 import { shipKind } from "../nebula/git";
@@ -25,6 +25,7 @@ import type { Choice, Question } from "../nebula/screen";
 import { AskChoices } from "./AskStrip";
 import { ReaderFind } from "./ReaderFind";
 import { Plate } from "./Plate";
+import { WorkCat } from "./Pet";
 
 /** What you were typing to each agent, kept when the reader remounts for a
  *  new session (/clear, resume). */
@@ -666,11 +667,18 @@ export function Reader({
     }
     return out;
   }, [t?.entries]);
-  // The step under way, said as what it's doing.
-  const doing = useMemo(() => {
+  // The step under way, said as what it's doing; its kind and the run's
+  // failed steps are for the cat on the working line.
+  const { doing, act, failed } = useMemo(() => {
     const last = t?.entries[t.entries.length - 1];
-    const step = last?.kind === "steps" ? last.steps[last.steps.length - 1] : undefined;
-    return step && step.ok === null ? doingLine(step) : null;
+    const steps = last?.kind === "steps" ? last.steps : [];
+    const step = steps[steps.length - 1];
+    const live = step && step.ok === null ? step : undefined;
+    return {
+      doing: live ? doingLine(live) : null,
+      act: live ? actOf(live) : null,
+      failed: steps.filter((s) => s.ok === false).length,
+    };
   }, [t?.entries]);
   const latestCard = useMemo(() => {
     const e = t?.entries.find((x) => x.n === latest);
@@ -1078,7 +1086,11 @@ export function Reader({
                 ))}
                 {agent.status === "running" && (
                   <p className="rd-note rd-working">
-                    <span className="rd-pulse" aria-hidden />
+                    {state.prefs.pet !== false ? (
+                      <WorkCat act={act} what={doing ?? ""} failed={failed} />
+                    ) : (
+                      <span className="rd-pulse" aria-hidden />
+                    )}
                     <span className="rd-doing">{doing ?? "Working…"}</span>
                     <Elapsed since={agent.status_changed_at} />
                   </p>
@@ -1109,6 +1121,20 @@ export function Reader({
             </div>
           )}
         </div>
+        {!waiting && t && t.entries.length > 0 && (
+          <button
+            className="link-btn rd-catchup"
+            onClick={() =>
+              void enqueue(agent, CATCH_UP).then(
+                (how) => flash(how === "queued" ? `Queued for ${agent.name}: catch you up` : `Asked ${agent.name} to catch you up`),
+                () => flash(`Couldn't ask ${agent.name} to catch you up`, 6000),
+              )
+            }
+            title="Ask for a fresh card: where it stands, and every decision still open"
+          >
+            ↻ Catch me up
+          </button>
+        )}
         {!waiting && undecided.length > 0 && (
           <OpenDecisions
             open={undecided}

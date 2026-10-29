@@ -2,7 +2,9 @@ import { memo, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { getState, subscribe, waitingAgents } from "../nebula/store";
 import { onPetMood } from "../nebula/delight";
 import { CAT_W, H, SCALE, SCOPE_AT, step, TICK_MS, W, type Cat, type Frame } from "./petBrain";
-import { FRAMES, TELESCOPE, TELESCOPE_W, type Px } from "./petFrames";
+import { BOOK, FRAMES, LAPTOP, TELESCOPE, TELESCOPE_W, type Px } from "./petFrames";
+import { DESK, DESK_W, deskStep, doingNow, PROP_AT, type Desk } from "./workCat";
+import type { Act } from "../nebula/transcript";
 
 // A pixel cat that lives along the bottom of the sidebar, VS Code Pets
 // style: it wanders, sits, naps, chases a ball of yarn in the theme's
@@ -49,6 +51,25 @@ const Telescope = memo(function Telescope() {
     <svg width={TELESCOPE_W * SCALE} height={H * SCALE} viewBox={`0 0 ${TELESCOPE_W} ${H}`} shapeRendering="crispEdges" aria-hidden>
       {TELESCOPE.flatMap((row, y) =>
         [...row].map((c, x) => (c === "." ? null : <rect key={`${x}-${y}`} x={x} y={y} width="1.02" height="1.02" fill={SCOPE_COLORS[c]} />)),
+      )}
+    </svg>
+  );
+});
+
+const PROP_COLORS: Record<string, string> = {
+  M: "var(--muted)",
+  S: "var(--accent)",
+  A: "var(--accent)",
+  W: COLORS.W,
+};
+
+/** A laptop or a book for the working line's cat, drawn once. */
+const Prop = memo(function Prop({ rows }: { rows: string[] }) {
+  const w = rows[0].length;
+  return (
+    <svg width={w * SCALE} height={H * SCALE} viewBox={`0 0 ${w} ${H}`} shapeRendering="crispEdges" aria-hidden>
+      {rows.flatMap((row, y) =>
+        [...row].map((c, x) => (c === "." ? null : <rect key={`${x}-${y}`} x={x} y={y} width="1.02" height="1.02" fill={PROP_COLORS[c]} />)),
       )}
     </svg>
   );
@@ -187,5 +208,72 @@ export const Pet = memo(function Pet({ on }: { on: boolean }) {
         </span>
       )}
     </div>
+  );
+});
+
+/** The cat on the Read view's working line, acting out the step under
+ *  way: typing at a laptop while it edits, over a book while it reads,
+ *  pacing while a command runs, at the telescope while it searches the
+ *  web. A failed command gets a sweat, and one thing going on for two
+ *  minutes a nap. `what` is the working line's words, so a new step, even
+ *  of the same kind, wakes it. */
+export const WorkCat = memo(function WorkCat({ act, what, failed }: { act: Act | null; what: string; failed: number }) {
+  const reduced = useMemo(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches, []);
+  const [desk, setDesk] = useState<Desk>(() => deskStep(DESK, doingNow(act, 0)));
+  const now = useRef({ act, what, at: Date.now() });
+  if (now.current.act !== act || now.current.what !== what) now.current = { act, what, at: Date.now() };
+
+  useEffect(() => {
+    if (reduced) return;
+    const t = setInterval(() => {
+      if (!document.hidden) setDesk((d) => deskStep(d, doingNow(now.current.act, Date.now() - now.current.at)));
+    }, TICK_MS);
+    return () => clearInterval(t);
+  }, [reduced]);
+
+  // A step that just failed, not the ones failed before the line showed.
+  const seen = useRef(failed);
+  useEffect(() => {
+    if (failed > seen.current) setDesk((d) => ({ ...d, bubble: "sweat", bubbleLeft: 14 }));
+    seen.current = failed;
+  }, [failed]);
+
+  const doing = doingNow(act, 0);
+  const shown = reduced ? deskStep(DESK, doing) : desk;
+  const facingLeft = shown.dir === -1;
+  return (
+    <span className="wc-desk" style={{ width: DESK_W }}>
+      <button
+        className="pet-cat"
+        style={{ transform: `translateX(${shown.x}px)` }}
+        onClick={() => setDesk((d) => ({ ...d, bubble: "heart", bubbleLeft: 12 }))}
+        aria-label="The cat, keeping the agent company. Click to pet it."
+        title="Pet the cat"
+      >
+        <span className={facingLeft ? "pet-flip" : undefined}>
+          <Sprite frame={shown.frame} />
+        </span>
+        {shown.bubble && !reduced && (
+          <span className={`pet-bubble pet-bubble-${shown.bubble}`} aria-hidden>
+            {BUBBLE_TEXT[shown.bubble]}
+          </span>
+        )}
+      </button>
+      {shown.frame.startsWith("type") && (
+        <span className="pet-scope" style={{ transform: `translateX(${PROP_AT.edit}px)` }} aria-hidden>
+          <Prop rows={LAPTOP} />
+        </span>
+      )}
+      {shown.frame.startsWith("read") && (
+        <span className="pet-scope" style={{ transform: `translateX(${PROP_AT.read}px)` }} aria-hidden>
+          <Prop rows={BOOK} />
+        </span>
+      )}
+      {shown.frame.startsWith("gaze") && (
+        <span className="pet-scope" style={{ transform: `translateX(${PROP_AT.web}px)` }} aria-hidden>
+          <Telescope />
+        </span>
+      )}
+    </span>
   );
 });

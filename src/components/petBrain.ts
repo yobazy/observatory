@@ -14,7 +14,11 @@ export type Frame =
   | "groomA"
   | "groomB"
   | "stretch"
-  | "lookUp";
+  | "lookUp"
+  | "typeA"
+  | "typeB"
+  | "readA"
+  | "readB";
 
 export const W = 18;
 export const H = 12;

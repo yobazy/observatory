@@ -70,3 +70,39 @@ test('grooming and stretching end on their own', () => {
     Math.random = random;
   }
 });
+
+test('the working line\'s cat acts out the step under way', async () => {
+  const { DESK, NAP_AFTER, PACE, deskStep, doingNow } = await import('../src/components/workCat.ts');
+  const run = (doing, ticks) => {
+    let d = DESK;
+    const frames = new Set();
+    for (let i = 0; i < ticks; i++) {
+      d = deskStep(d, doing);
+      frames.add(d.frame);
+      assert.ok(d.x >= 0 && d.x <= PACE, `${doing} stays on its line`);
+    }
+    return { d, frames };
+  };
+  assert.deepEqual([...run('edit', 40).frames].sort(), ['typeA', 'typeB']);
+  assert.deepEqual([...run('read', 40).frames].sort(), ['readA', 'readB']);
+  assert.ok(run('web', 40).frames.has('gazeA'));
+  // Pacing goes both ways, and anything else brings it back to its props.
+  const paced = run('run', 60).d;
+  assert.ok(paced.x > 0 || paced.dir === -1);
+  assert.equal(deskStep(paced, 'edit').x, 0);
+  // Every frame it uses is one the sprite can draw.
+  for (const doing of ['edit', 'read', 'run', 'web', 'wait', 'other', 'think', 'nap']) {
+    for (const f of run(doing, 50).frames) assert.ok(FRAMES[f], `${doing}: ${f}`);
+  }
+  // One thing for two minutes and it naps, with a z; a new step wakes it.
+  assert.equal(doingNow('run', NAP_AFTER), 'nap');
+  assert.equal(doingNow(null, 1000), 'think');
+  const napping = run('nap', 3).d;
+  assert.equal(napping.frame, 'sleep');
+  assert.equal(napping.bubble, 'z');
+  assert.equal(deskStep(napping, 'edit').bubble, null);
+  // A sweat outlasts its ticks, then clears.
+  let d = { ...DESK, bubble: 'sweat', bubbleLeft: 2 };
+  for (let i = 0; i < 3; i++) d = deskStep(d, 'run');
+  assert.equal(d.bubble, null);
+});

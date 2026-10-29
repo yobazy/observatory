@@ -424,36 +424,118 @@ body.is-resizing-rows * {
   font-variant-numeric: tabular-nums;
 }
 
-/* The same card as Waiting on you, in the finished green. */
-.waiting.away {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--st-done) 12%, transparent), color-mix(in srgb, var(--st-done) 4%, transparent));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-done) 26%, transparent);
+/* While you were away and Follow up: calm cards, one neutral fill, told
+   apart by a thin line of their color down the left edge. */
+.side-card {
+  --k: var(--accent);
+  position: relative;
+  margin: 0 10px 10px;
+  padding: 4px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--raised) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 5%, transparent);
 }
-.away .waiting-title {
-  color: var(--st-done);
+.side-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--k);
 }
-.away-close {
-  margin-left: auto;
-  width: 20px;
-  height: 20px;
-  color: var(--muted);
+.side-card.away {
+  --k: var(--st-done);
 }
-.away-row:hover {
-  background: color-mix(in srgb, var(--st-done) 10%, transparent);
-}
-.away-more {
-  display: block;
-  margin: 2px 8px;
-  font-size: 12px;
+.side-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px 4px;
+  font-size: 12.5px;
   font-weight: 600;
 }
-.away-did {
-  grid-column: 2;
-  font-size: 12px;
-  color: var(--text);
+.side-card-title {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.side-card-head > svg {
+  color: var(--k);
+  flex: none;
+}
+.side-card-count {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--k);
+  background: color-mix(in srgb, var(--k) 14%, transparent);
+}
+.side-card-close {
+  flex: none;
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  color: var(--faint);
+}
+.side-card li {
+  position: relative;
+}
+/* Name and age on one line, what it did (or where it lives) under it. */
+.side-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  text-align: left;
+}
+.side-row:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.side-row-name {
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.side-row-age {
+  font-size: 11.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.side-row-sub {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.side-row-sub.is-error {
+  color: var(--st-error);
+}
+.side-row-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.side-card-more {
+  display: block;
+  margin: 2px 8px 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.side-card-more-note {
+  color: var(--faint);
+  font-weight: 400;
 }
 
 .project-search {
@@ -3183,6 +3265,12 @@ td.task-last {
 .pet-bubble-sweat {
   font-size: 9px;
 }
+/* The working line's cat: a small yard of its own at the line's start. */
+.wc-desk {
+  position: relative;
+  flex: none;
+  height: 24px;
+}
 @keyframes pet-float {
   to {
     transform: translateY(-3px);
@@ -5166,82 +5254,16 @@ body.is-reordering * {
   width: min(360px, calc(100vw - 32px));
 }
 
-/* Marked for follow-up: a calm list, beside the loud "Waiting on you". */
-.followups {
-  margin: 0 10px 12px;
-  padding: 10px 6px 6px;
-  border-radius: var(--r-lg);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.followups-title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--accent);
-  padding: 0 8px 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.followups li {
-  position: relative;
-}
-.followup-row {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: 0;
-  border-radius: var(--r-md);
-  padding: 6px 34px 6px 8px;
-}
-.followup-row:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.followup-name {
-  font-weight: 550;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.followup-where {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.followup-project {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.followup-age {
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-}
-.followups-count {
-  font-variant-numeric: tabular-nums;
-  opacity: 0.8;
-}
-.followups-more {
-  display: block;
-  margin: 2px 8px;
-  font-size: 12px;
-  font-weight: 600;
-}
+/* Follow up's ✓ takes the age's place on hover. */
 .followup-clear {
   position: absolute;
-  top: 5px;
+  top: 4px;
   right: 6px;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  width: 20px;
+  height: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   background: var(--panel);
   color: var(--accent);
   border-radius: var(--r-sm);
@@ -5250,6 +5272,10 @@ body.is-reordering * {
 .followups li:hover .followup-clear,
 .followup-clear:focus-visible {
   opacity: 1;
+}
+.followups li:hover .side-row-age,
+.followups li:has(.followup-clear:focus-visible) .side-row-age {
+  visibility: hidden;
 }
 .menu-keys {
   float: right;
@@ -6818,34 +6844,6 @@ button.board-main:hover .board-text {
 
 /* ---------- uncommitted work, by thread ---------- */
 
-/* The sidebar's way in: quiet, since nothing here is urgent, but always
-   there while work sits uncommitted. */
-.uc-entry {
-  margin: 0 10px 12px;
-  padding: 8px 12px;
-  border: 1px dashed var(--line);
-  border-radius: var(--r-lg);
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.uc-entry:hover,
-.uc-entry.is-on {
-  border-style: solid;
-  background: var(--raised);
-}
-.uc-entry-title {
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.uc-entry-sub {
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .uc-branch {
   display: flex;
   flex-direction: column;
@@ -6954,31 +6952,64 @@ button.board-main:hover .board-text {
 }
 
 /* ---------- ideas (Ideas.tsx): things to start later ---------- */
+/* Uncommitted, Ideas and Decisions: a row of counts, each a way in. */
 .side-entries {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   margin: 0 10px 12px;
+}
+.side-stat {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 8px 8px 7px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--raised) 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
+  text-align: left;
+}
+.side-stat:hover {
+  background: var(--raised);
+}
+.side-stat.is-on {
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
+}
+.side-stat-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  color: var(--faint);
+}
+.side-stat-badge {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--st-waiting);
+}
+.side-stat-value {
+  margin-top: 4px;
+  font: 600 19px/1.15 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+.side-stat.is-hot .side-stat-value {
+  color: var(--st-waiting);
+}
+.side-stat-label {
+  max-width: 100%;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .side-entries:empty {
   display: none;
-}
-.side-entries > .uc-entry {
-  flex: 1 1 0;
-  min-width: 90px;
-  margin: 0;
-}
-.ideas-late {
-  color: var(--st-waiting);
-}
-.uc-entry-title:has(.bulb-glyph) {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.bulb-glyph {
-  color: var(--muted);
-  flex: none;
 }
 .sessions-ideas {
   margin-top: 4px;
@@ -7394,6 +7425,18 @@ button.board-main:hover .board-text {
 }
 
 /* Decisions earlier replies left open, folded above the reply box. */
+.rd-catchup {
+  align-self: flex-end;
+  max-width: 76ch;
+  width: calc(100% - 56px);
+  margin: 0 auto 4px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rd-catchup:hover {
+  color: var(--text);
+}
 .rd-open {
   max-width: 76ch;
   width: calc(100% - 56px);
