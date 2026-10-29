@@ -619,15 +619,12 @@ export function Reader({
   root,
   onTerminal,
   question,
-  picked,
   onPick,
 }: {
   agent: Agent;
   root: string;
   onTerminal: () => void;
   question: Question | null;
-  /** The choice you just picked on its prompt, while nebula still has it waiting. */
-  picked: string | null;
   onPick: (c: Choice) => void;
 }) {
   const t = useTranscript(agent);
@@ -664,8 +661,7 @@ export function Reader({
   };
   // A glide down to the latest is under way; resizes leave it be.
   const gliding = useRef(false);
-  // Not once you've answered: it's carrying on, and only nebula hasn't heard.
-  const waiting = agent.status === "needs_feedback" && !picked;
+  const waiting = agent.status === "needs_feedback";
   // Answers tapped on the latest reply, until you send them or it moves on.
   const [tapped, setTapped] = useState<{ entry: number; picks: Record<number, string> }>({ entry: -1, picks: {} });
   const latest = useMemo(() => {
@@ -1215,11 +1211,6 @@ export function Reader({
             </p>
           ) : (
             <>
-              {picked && (
-                <span className="rd-picked rd-said" title={`You answered its prompt: ${picked}`}>
-                  ✓ {picked}
-                </span>
-              )}
               {pointed && (
                 <span className="rd-picked rd-pointed" title={pointed.shot ?? "No screenshot"}>
                   <span className="rd-quote">{pointed.passage ? "On" : "About"} “{pointed.quote}”</span>
