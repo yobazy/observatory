@@ -32,7 +32,6 @@ import { reorderKey, useReorder, type DropInto } from "./useReorder";
 import { useBatches } from "../nebula/batch";
 import { useRecentCount, useVisits } from "../nebula/recent";
 import { RECENT_COUNTS, recentProjects, type RecentCount } from "../nebula/recentList";
-import { Plate } from "./Plate";
 
 /** The drop group (useReorder's `data-drop-into`) of the projects in no
  *  folder; a folder's is its id. */
@@ -201,27 +200,26 @@ export function Sidebar({
           finished never leaves the projects out of reach. */}
       <div className="sidebar-scroll">
         {waiting.length > 0 && (
-          <section className="waiting" aria-label="Sessions waiting on you">
+          <section className="side-card waiting" aria-label="Sessions waiting on you">
             <h2
-              className="waiting-title"
+              className="side-card-head"
               title="Sessions stopped until you answer them: a question, a permission prompt or a menu. Click one to open it, or Answer to reply from here."
             >
-              Waiting on you <span className="waiting-count">{waiting.length}</span>
+              <AskGlyph />
+              <span className="side-card-title">Waiting on you</span> <span className="side-card-count">{waiting.length}</span>
             </h2>
             <ul>
               {waiting.map((a) => {
                 const open = answering.has(a.id);
+                const project = projectOfWorktree(state, a.worktree_id);
                 return (
                   <li key={a.id} className={open ? "is-answering" : undefined}>
                     <button
-                      className="waiting-row"
+                      className="side-row"
                       onClick={() => selectAgent(a)}
-                      title={`${a.name}, in ${projectOfWorktree(state, a.worktree_id)?.name ?? "its project"}, is waiting on you.${lastPrompt(a) ? `\nYou asked: ${lastPrompt(a)}` : ""}\nClick to open it.`}
+                      title={`${a.name}, in ${project?.name ?? "its project"}, is waiting on you.${lastPrompt(a) ? `\nYou asked: ${lastPrompt(a)}` : ""}\nClick to open it.`}
                     >
-                      <span className="sdot has-plate dot-needs_feedback" aria-hidden>
-                        <Plate seed={a.id} work={a.recent_prompts.length} tone="needs_feedback" size={18} />
-                      </span>
-                      <span className="waiting-name">
+                      <span className="side-row-name">
                         {a.name}
                         <PriorityMark priority={state.prefs.taskPriorities?.[a.id]} />
                         {state.prefs.followUps?.[a.id] !== undefined && (
@@ -230,12 +228,10 @@ export function Sidebar({
                           </span>
                         )}
                       </span>
-                      <span className="waiting-where">
-                        <span>
-                          <ProjectDot project={projectOfWorktree(state, a.worktree_id)} />
-                          {projectOfWorktree(state, a.worktree_id)?.name}
-                        </span>
-                        <span className="waiting-age">{relativeTime(a.status_changed_at)}</span>
+                      <span className="side-row-age">{relativeTime(a.status_changed_at)}</span>
+                      <span className="side-row-sub">
+                        <ProjectDot project={project} />
+                        <span className="side-row-text">{project?.name}</span>
                       </span>
                     </button>
                     <button
@@ -791,6 +787,21 @@ function ListGlyph() {
 }
 
 /** A window with its left panel marked: hide or show a column. */
+/** A speech bubble: a session asking you something. */
+function AskGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function PanelGlyph() {
   return (
     <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
