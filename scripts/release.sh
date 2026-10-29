@@ -132,7 +132,7 @@ ok "what's new: $whats_new"
 # changes: a stale one is worth a word, though not worth stopping for.
 if [ -n "$previous" ] && git cat-file -e "$previous:docs/release/cover.jpg" 2>/dev/null \
   && git diff --quiet "$previous" HEAD -- docs/release/cover.jpg; then
-  note "docs/release/cover.jpg is the one from $previous; retake it if the app looks different now"
+  note "docs/release/cover.jpg is the one from $previous; run node scripts/screenshots.mjs to retake it and the README pictures"
 fi
 
 # ---- build: Tauri signs, notarizes and staples the .app ----
