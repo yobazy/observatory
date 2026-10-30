@@ -4977,6 +4977,7 @@ td.task-last {
   .rd-ask,
   .rd-compose > .rd-wait,
   .rd-catchup,
+  .rd-catchup.is-busy .rd-catchup-icon,
   .rd-open,
   .rd-picked,
   .rd-pulse,
@@ -7626,6 +7627,23 @@ button.board-main:hover .board-text {
 }
 .rd-catchup:hover {
   color: var(--text);
+}
+.rd-catchup-icon {
+  display: inline-block;
+}
+.rd-catchup.is-busy {
+  color: var(--text);
+  cursor: default;
+  text-decoration: none;
+}
+.rd-catchup.is-busy .rd-catchup-icon {
+  color: var(--st-running);
+  animation: rd-catchup-spin 1s linear infinite;
+}
+@keyframes rd-catchup-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .rd-open {
   max-width: calc(var(--rd-measure) - 56px);
