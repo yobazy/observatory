@@ -5,7 +5,7 @@
 // prompt — can be answered from outside the terminal.
 import { Terminal } from "@xterm/xterm";
 import { promptAnswered, sendInput, tailOutput } from "./client";
-import type { Agent } from "./types";
+import type { Agent, SessionRef } from "./types";
 import { findQuestion, type Choice, type Question } from "./question";
 
 export { findQuestion, lastRows, looksLikePicker, type Choice, type Question } from "./question";
@@ -51,6 +51,16 @@ export async function answer(agent: Agent, q: Question, choice: Choice): Promise
   const same =
     now && now.prompt === q.prompt && now.choices.some((c) => c.key === choice.key && c.label === choice.label);
   if (!same) throw new Error(`${agent.name} isn't asking that any more`);
-  await sendInput({ Agent: agent.id }, choice.key);
+  await sendChoice({ Agent: agent.id }, choice);
   promptAnswered(agent);
+}
+
+/** Type what picks a choice: its key, or its arrow keys and Enter one at a
+ *  time, so the CLI reads each as its own press. */
+export async function sendChoice(ref: SessionRef, choice: Choice): Promise<void> {
+  if (!choice.keys) return sendInput(ref, choice.key);
+  for (const [n, k] of choice.keys.entries()) {
+    if (n) await new Promise((r) => setTimeout(r, 60));
+    await sendInput(ref, k);
+  }
 }

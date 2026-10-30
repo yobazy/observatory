@@ -9,7 +9,7 @@ import { flash, getState, projectOfWorktree, setState, useAppState } from "../ne
 import { agentSpec, harnessLabel, statusLabel, usualHarness } from "../nebula/status";
 import { sessionKey, type Agent, type SessionRef } from "../nebula/types";
 import { enqueue, isIdle, noteTyped, unqueue } from "../nebula/queue";
-import { findQuestion, noteSize, type Choice, type Question } from "../nebula/screen";
+import { findQuestion, noteSize, sendChoice, type Choice, type Question } from "../nebula/screen";
 import { TextDialog, type TextDialogSpec } from "./Dialogs";
 import { hasLog, setTurnLineHidden, TurnStrip, useTurnLineHidden } from "./TurnStrip";
 import { Reader } from "./Reader";
@@ -333,7 +333,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     const ref = current.current;
     if (!ref || !asking) return;
     setMenu(null);
-    void sendInput(ref, c.key).then(() => agent && promptAnswered(agent));
+    void sendChoice(ref, c).then(() => agent && promptAnswered(agent));
   };
 
   const project = agent || tab ? projectOfWorktree(state, (agent ?? tab)!.worktree_id) : undefined;

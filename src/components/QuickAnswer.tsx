@@ -86,7 +86,7 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
               onClick={() => void pick(q, c)}
               title={c.label}
             >
-              <kbd>{c.key}</kbd>
+              {!c.keys && <kbd>{c.key}</kbd>}
               <span>{c.label}</span>
             </button>
           ))}

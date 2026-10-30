@@ -76,18 +76,36 @@ test('choices that skip a number, or start past 1, are not a question', () => {
   assert.equal(findQuestion(['Pick', '❯ 2. B', '  3. C']), null);
 });
 
-test('choices on one row are a menu to answer in the terminal', () => {
+test('choices on one row read as a question, picked by arrow keys and Enter', () => {
   const screen = [
+    '────────────────────────────────────────────────',
     '  MCP server “claude.ai Supabase” requests your input',
     '',
     '  This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).',
+    '  It may permanently remove data, tables, schemas or other objects.',
     '  Run it on project qdczbudnpdvuxpjmhpnk?',
     '',
     '  ❯ Accept    Decline',
+    '',
+    '  Esc to cancel · ↑/↓ to navigate',
   ];
-  assert.equal(findQuestion(screen), null);
-  assert.equal(looksLikePicker(screen), true, 'so a typed reply is never sent into it');
-  assert.equal(looksLikePicker(['  Accept    ❯ Decline']), true);
+  const q = findQuestion(screen);
+  assert.equal(
+    q.prompt,
+    'This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE). It may permanently remove data, tables, schemas or other objects. Run it on project qdczbudnpdvuxpjmhpnk?',
+  );
+  assert.deepEqual(q.detail, ['MCP server “claude.ai Supabase” requests your input']);
+  assert.deepEqual(q.choices.map((c) => [c.label, c.selected, c.keys]), [
+    ['Accept', true, ['\r']],
+    ['Decline', false, ['\x1b[C', '\r']],
+  ]);
+  const back = findQuestion(['Run it?', '  Accept    ❯ Decline']);
+  assert.deepEqual(back.choices.map((c) => c.keys), [['\x1b[D', '\r'], ['\r']]);
+  assert.equal(looksLikePicker(screen), true, 'and a typed reply is still never sent into it');
+});
+
+test('a row with no choice marked yet is not read', () => {
+  assert.equal(findQuestion(['Run it?', '   Accept     Decline   (press an arrow key to choose)']), null);
 });
 
 test("the ordinary input line is not a menu", () => {

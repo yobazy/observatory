@@ -7,7 +7,7 @@ export function AskChoices({ question, onPick }: { question: Question; onPick: (
     <div className="ask-choices" role="group" aria-label={question.prompt || "Choices"}>
       {question.choices.map((c) => (
         <button key={c.key} className={`qa-choice${c.selected ? " is-current" : ""}`} onClick={() => onPick(c)} title={c.label}>
-          <kbd>{c.key}</kbd>
+          {!c.keys && <kbd>{c.key}</kbd>}
           <span>{c.label}</span>
         </button>
       ))}
