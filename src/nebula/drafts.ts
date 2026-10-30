@@ -37,16 +37,24 @@ export function withPath(text: string, path: string): string {
   return /\s$/.test(text) ? `${text}${path}` : `${text} ${path}`;
 }
 
-export type FileTarget = "draft" | "queue" | "terminal";
+export type FileTarget = "draft" | "queue" | "terminal" | "nowhere";
 
 /** Where a file sent to an agent goes. The reply box, when the Read view is
  *  up; else the last queued prompt, when one waits; else the agent's own
  *  prompt line in its terminal. An agent asleep gets it in the reply box,
  *  since typing into its terminal would mean waking it, and so does one
  *  waiting on you: its terminal is showing a question or a menu, which a
- *  paste could answer. */
-export function fileTarget(on: { reading: boolean; queued: number; alive: boolean; waiting: boolean }): FileTarget {
+ *  paste could answer. Without a log to read there's no reply box, so
+ *  neither gets it: "nowhere", and the sender says why. */
+export function fileTarget(on: {
+  reading: boolean;
+  queued: number;
+  alive: boolean;
+  waiting: boolean;
+  canRead: boolean;
+}): FileTarget {
   if (on.reading) return "draft";
   if (on.queued > 0) return "queue";
-  return on.alive && !on.waiting ? "terminal" : "draft";
+  if (on.alive && !on.waiting) return "terminal";
+  return on.canRead ? "draft" : "nowhere";
 }
