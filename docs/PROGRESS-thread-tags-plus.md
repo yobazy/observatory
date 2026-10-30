@@ -20,7 +20,7 @@ nobody to ask, so the calls I made are listed under Decisions.
 - **Several chips narrow (AND).** A row shows only when its thread carries every chip that's
   on, the same as search words. Two client tags on at once show nothing, and the empty line
   then says "No threads tagged #a and #b". OR is a small change (`hasTag` in `threadtags.ts`)
-  if it reads wrong in use. See Needs Bazil 1.
+  if it reads wrong in use. Bazil confirmed AND on 2026-10-30 (decision 34A).
 - **Colors are per project**, like the tag lists (`threadTagColors[repo][tag]`), using the
   same eight colors as projects and tasks. A rename carries the color. When the rename merges
   into a tag that already has a color, that color wins. Delete drops it, and `pruned()` drops
@@ -63,7 +63,7 @@ nobody to ask, so the calls I made are listed under Decisions.
 
 ## Left
 
-- **No screenshots.** This box has no Playwright browser, and downloading one
+- ~~No screenshots.~~ Taken 2026-10-30 (see below). Originally: this box has no Playwright browser, and downloading one
   (`npx playwright install chromium-headless-shell`) needed an approval nobody could give
   overnight. The full sandbox would build the Tauri app in a shared dir outside the worktree,
   which this run's rules don't allow. A ready Playwright check is at
@@ -90,10 +90,39 @@ By hand in the preview or the sandbox (`scripts/sandbox.sh app`):
    in every project". The sidebar reads `#blkwtr` and lists only those projects, and opening
    one shows its `#blkwtr` chip on. Esc in the sidebar filter clears it.
 
+## Decisions applied 2026-10-30
+
+- **Decision 34A (several chips: a thread must have all of them). No code change.** This branch
+  already does that. `hasTag` in `src/nebula/threadtags.ts` checks
+  `active.every(...)`, and `threadShows` and `filterThreads` both go through it. The unit test
+  "several chips on at once show only the threads carrying every one" in
+  `tests/threadtags.test.mjs` covers it, and the browser run below checks it in the UI:
+  `#blkwtr` alone shows 3 threads, adding `#logo` narrows to the 2 carrying both, and adding
+  `#hoam` shows "No threads tagged #blkwtr and #logo and #hoam".
+- **Decision 3A (sentence case, no all-caps letter-spaced labels).** The branch adds no
+  `text-transform: uppercase` or `letter-spacing` to `styles.css`, and its new labels ("Tags on
+  3 threads", "Edit tags…", "Tag untagged", "Threads tagged #x, in every project") are in
+  sentence case. Nothing to change.
+- **Screenshots, taken.** `npx playwright install chromium` fetched the headless shell
+  Playwright 1.57 wants (build 1200). The script from last night is now at
+  `/data/tmp/overnight-2026-10-30/scratch/obs-120/shots.mjs`, with one fix: `shot()` blurs
+  focus, so the Enter that picks the ⌘K row went nowhere. It now focuses the palette input
+  again first, and that was a bug in the script, not in the app. All 20 checks pass in dark
+  and light. The shots are in `/data/tmp/overnight-2026-10-30/scratch/obs-120/`: `1-two-chips`,
+  `1b-no-match`, `2-tag-colors`, `3-tag-picked`, `4-palette-tag` and `5-sidebar-tag`, each as
+  `-light.png` and `-dark.png`.
+- **Checks run:** `npm run build` passes. `npm test`: 299 pass and 10 fail, the same
+  `automations.test.mjs` ones as before (they need macOS `plutil`). Rust is untouched, so I
+  didn't run cargo.
+- **Self-review** of `git diff origin/main...HEAD` (filter, colors, multi-tag, cross-project
+  parts) found no bugs. One thing to notice in use: a chip's count is how many threads carry
+  that tag, not how many would still show if you added it to the chips already on. So with
+  `#blkwtr` and `#logo` on, `#hoam 1` still reads 1, though turning it on shows nothing. I left
+  it as it is (Needs Bazil 1).
+
 ## Needs Bazil
 
-1. Several chips narrow (thread must carry all of them). Keep that, or switch to "any of
-   them" (better for picking two clients at once)?
-2. Run the screenshot check on the Mac (or allow the headless-shell download on `pc`), and
-   look over the colored chips and row dots in light and dark.
-3. Try the ⌘K tag pick and sidebar `#tag` in the sandbox; the PR is a draft for that.
+1. With AND, should a chip's count show how many threads would remain if you added it (so
+   `#hoam` would read 0 while `#blkwtr` and `#logo` are on)? It's a small change.
+2. Look over the screenshots (above) for the colored chips and row dots in light and dark.
+3. Try the ⌘K tag pick and the sidebar `#tag` in the sandbox. The PR is a draft for that.
