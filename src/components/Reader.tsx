@@ -677,15 +677,17 @@ export function Reader({
     how: "sent",
   });
   const picks = tapped.entry === latest ? tapped.picks : {};
-  // Catch me up was asked after this entry; the button stays busy until a
-  // reply follows your ask.
-  const [catching, setCatching] = useState<number | null>(null);
+  // Catch me up was asked after this entry, at this time; the button stays
+  // busy until a reply follows your ask, or the agent stops without one.
+  const [catching, setCatching] = useState<{ after: number; at: number } | null>(null);
   const caughtUp = useMemo(() => {
     if (catching === null) return false;
     const all = t?.entries ?? [];
-    const ask = all.find((e) => e.kind === "you" && e.n > catching && e.text.trim() === CATCH_UP);
-    return !!ask && all.some((e) => e.kind === "claude" && e.n > ask.n);
-  }, [catching, t?.entries]);
+    const ask = all.find((e) => e.kind === "you" && e.n > catching.after && e.text.trim() === CATCH_UP);
+    if (!ask) return false;
+    const stopped = agent.status !== "running" && agent.status_changed_at > catching.at;
+    return stopped || all.some((e) => e.kind === "claude" && e.n > ask.n);
+  }, [catching, t?.entries, agent.status, agent.status_changed_at]);
   useEffect(() => {
     if (caughtUp) setCatching(null);
   }, [caughtUp]);
@@ -1187,7 +1189,7 @@ export function Reader({
             disabled={catching !== null}
             aria-busy={catching !== null}
             onClick={() => {
-              setCatching(t.entries[t.entries.length - 1].n);
+              setCatching({ after: t.entries[t.entries.length - 1].n, at: Date.now() });
               void enqueue(agent, CATCH_UP).then(
                 (how) => flash(how === "queued" ? `Queued for ${agent.name}: catch you up` : `Asked ${agent.name} to catch you up`),
                 () => {
