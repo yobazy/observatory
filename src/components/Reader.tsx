@@ -116,7 +116,7 @@ function openLink(e: MouseEvent) {
   const href = (e.target as HTMLElement).closest("a")?.getAttribute("href");
   if (!href) return;
   e.preventDefault();
-  if (/^https?:/i.test(href)) void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href)).catch(() => {});
+  if (/^(https?|mailto):/i.test(href)) void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href)).catch(() => {});
 }
 
 /** Put `text` on the clipboard and say so. */
