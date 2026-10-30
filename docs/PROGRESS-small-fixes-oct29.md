@@ -41,7 +41,8 @@ Draft PR: #121 small fixes (https://github.com/yobazy/observatory/pull/121). Sta
   The red labels are kept in localStorage (`observatory.automations.red`).
 - Decisions:
   - First read ever (nothing saved) only remembers what's red: no burst of banners on first launch.
-  - A job that turns red during quiet hours, or while you're looking at the Automations view, is
+  - (Changed by decision 35B, see below: a job that turns red in quiet hours now banners once they end.)
+    A job that turns red during quiet hours, or while you're looking at the Automations view, is
     remembered as red and never bannered later. It banners again only after it recovers and fails again.
     Same as budget nudges, which `notify()` drops in quiet hours.
   - Several jobs turning red in one read share one banner: "2 automations are failing", names in the body.
@@ -80,3 +81,44 @@ Draft PR: #121 small fixes (https://github.com/yobazy/observatory/pull/121). Sta
    footer dot. Say if you'd rather it banner once quiet hours end.
 3. Run `cd src-tauri && cargo test -- --ignored router_smoke` once to confirm the real `claude` accepts
    the new default flags (title.rs already uses the same ones).
+
+## Decisions applied 2026-10-30 (run obs-121)
+
+### Decision 35B: banner once quiet hours end
+
+- A job that turns red in quiet hours is now held (localStorage `observatory.automations.held`)
+  instead of being dropped. At the first read after quiet hours end, if it's still red, it gets
+  the usual banner (several held jobs share one banner, as before). If it recovered in the
+  meantime, nothing.
+- If you look at the Automations view while it's held, it's dropped: you've seen it.
+- Pure `redToBanner(last, jobs, { quiet, looking })` in automations.ts does this; `bannerRed` in
+  automationsLoad.ts feeds it. Quiet hours are read from the saved prefs (`loadPrefs()`), so a
+  launch inside quiet hours holds too, even before the store's prefs have loaded.
+- `quiet.ts` gained a pure `inQuietHours(prefs, now)` (`isQuietNow` uses it) and now imports
+  `./store.ts` with its extension so the Node tests can load it.
+- Timing: reads run every 5 min with the view closed (and not while the window is hidden), so the
+  banner comes within about 5 min of quiet hours ending, or at the next read once the window is shown.
+- README's Automations line says so.
+- Test, fake clock (22:00 to 08:00): "red banner: a job that turns red in quiet hours banners once
+  they end, if still red" in `tests/automations.test.mjs`. It walks reads at 23:00, 02:00, 05:00,
+  07:55, 08:00, 08:05 and covers a job that recovers overnight, one that's seen in the view, and no
+  quiet hours set.
+
+### Rule 3A (sentence case)
+
+- No labels added or changed in this run; the new banner words are the existing sentence-case ones.
+
+### Checks run (on pc)
+
+- `npm run build && npm test`: build clean, 307 pass, 0 fail.
+- `cargo fmt --check`, `cargo clippy --all-targets --locked -- -D warnings`: clean.
+- `cargo test --locked`: the same 5 `automations.rs` failures as before (macOS-only `plutil`);
+  no Rust changed in this run.
+- Not seen in the running app: the banner is a native notification. Try it on the Mac: set quiet
+  hours to start a minute ago and end in a few minutes, make the sandbox automation exit 1
+  (`scripts/sandbox.sh automations`), switch away from the Automations view, wait past the end.
+
+### Needs Bazil
+
+1. Try the held banner once on the Mac (native notification; can't check it on pc).
+2. Still open from before: `cd src-tauri && cargo test -- --ignored router_smoke`.
