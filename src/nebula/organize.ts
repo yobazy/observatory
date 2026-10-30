@@ -9,7 +9,7 @@ import { isWatching } from "./notify";
 import { flash, getState, projectWorktrees, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
 import { moveWithin, placeIn, reorderFolders, type ProjectFolder } from "./folders";
 import { pruned } from "./prune";
-import { addTag, deleteTag, renameTag, setThreadTags } from "./threadtags";
+import { addTag, deleteTag, renameTag, setTagColor, setThreadTags, tagThreads } from "./threadtags";
 import { savePrefs, type DesktopPrefs } from "./theme";
 import { nextPriority, priorityLabel, type Priority } from "./priority";
 import type { Agent } from "./types";
@@ -222,6 +222,15 @@ export function saveTagging(change: (prefs: DesktopPrefs) => DesktopPrefs) {
 /** A thread's tags, as you set them from its menu. */
 export function tagThread(agentId: string, tags: string[]) {
   return save((prefs) => setThreadTags(prefs, agentId, tags));
+}
+
+/** One tag on, or off, each of several picked threads, as you. */
+export function tagPicked(agentIds: string[], tag: string, on: boolean) {
+  return save((prefs) => tagThreads(prefs, agentIds, tag, on));
+}
+
+export function setThreadTagColor(repo: string, tag: string, color: string | null) {
+  return save((prefs) => setTagColor(prefs, repo, tag, color));
 }
 
 export function setTaskPriority(agentId: string, priority: Priority | null) {

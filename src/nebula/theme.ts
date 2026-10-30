@@ -88,6 +88,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   threadTagLists?: Record<string, string[]>;
   /** The tags each thread carries, and who set them, by agent id. */
   threadTags?: Record<string, ThreadTagRecord>;
+  /** Colors picked for a project's thread tags, by repo path, then tag:
+   *  a PROJECT_COLORS name. */
+  threadTagColors?: Record<string, Record<string, string>>;
   /** Tasks marked to come back to, by agent id: when they were marked (ms). */
   followUps?: Record<string, number>;
   /** Ideas not started yet, newest first (ideas.ts). */

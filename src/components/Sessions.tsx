@@ -29,8 +29,8 @@ import { ProjectIcon, useProjectColorStyle } from "./ProjectIcon";
 import { locateProject } from "../nebula/relocate";
 import { sameSession, type Agent, type SessionRef, type TerminalTab, type Worktree } from "../nebula/types";
 import { cyclePriority, isFollowUp, isPinned, moveTask, toggleFlag } from "../nebula/organize";
-import { FlagGlyph, PinGlyph, PriorityMark, TagListDialog, useTaskColorStyle } from "./Organize";
-import { hasTerms, searchTerms, tagCounts, tagList, threadShows } from "../nebula/threadtags";
+import { FlagGlyph, PinGlyph, PriorityMark, TagChip, TagListDialog, TagMarks, ThreadTagsDialog, useTaskColorStyle } from "./Organize";
+import { chipFor, hasTerms, searchTerms, tagCounts, tagList, threadShows, toggleChip } from "../nebula/threadtags";
 import { tagProjectNow } from "../nebula/taggingRunner";
 import type { DesktopPrefs } from "../nebula/theme";
 import { reorderKey, useReorder } from "./useReorder";
@@ -53,13 +53,13 @@ type NewTask = (worktree?: string, seed?: Seed) => void;
 type Picks = { ids: Set<string>; click: (e: React.MouseEvent, id: string) => boolean };
 const PicksContext = createContext<Picks | null>(null);
 
-/** What the list is narrowed to: a search's words, and a tag chip. */
-type Filter = { terms: string[]; tag: string | null; prefs: DesktopPrefs };
+/** What the list is narrowed to: a search's words, and the tag chips on. */
+type Filter = { terms: string[]; tags: string[]; prefs: DesktopPrefs };
 
 /** A task matches on its name, prompts, agent, model or branch, and on
- *  the chip's tag when one is on. */
+ *  every chip's tag when any are on. */
 function agentMatches(a: Agent, wt: Worktree, f: Filter): boolean {
-  return threadShows(f.prefs, a.id, f.tag, f.terms, [
+  return threadShows(f.prefs, a.id, f.tags, f.terms, [
     a.name,
     a.custom_harness ?? KIND_LABEL[a.kind],
     a.model,
@@ -70,10 +70,10 @@ function agentMatches(a: Agent, wt: Worktree, f: Filter): boolean {
 
 /** Terminals carry no tags, so a chip hides them. */
 function terminalMatches(t: TerminalTab, wt: Worktree, f: Filter): boolean {
-  return !f.tag && hasTerms(f.terms, [t.name, t.run_command, wt.branch]);
+  return !f.tags.length && hasTerms(f.terms, [t.name, t.run_command, wt.branch]);
 }
 
-const filtering = (f: Filter) => f.terms.length > 0 || f.tag !== null;
+const filtering = (f: Filter) => f.terms.length > 0 || f.tags.length > 0;
 
 export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: () => void }) {
   const state = useAppState();
@@ -89,19 +89,23 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
   const [query, setQuery] = useState("");
   const searchBox = useRef<HTMLInputElement>(null);
   const terms = useMemo(() => searchTerms(query), [query]);
-  // The tag chip that's on: only its threads show.
-  const [chip, setChip] = useState<string | null>(null);
+  // The tag chips that are on: only threads carrying all of them show.
+  const [chips, setChips] = useState<string[]>([]);
   const [editingTags, setEditingTags] = useState(false);
   const [tagging, setTagging] = useState(false);
-  // A search and a chip belong to the project they were set in.
-  useEffect(() => {
-    setQuery("");
-    setChip(null);
-  }, [project?.id]);
   const tags = project ? tagList(state.prefs, project.repo_path) : [];
+  // A search and chips belong to the project they were set in. A tag looked
+  // for across projects (the sidebar's "#tag", or ⌘K) turns its chip on.
+  useEffect(() => setQuery(""), [project?.id]);
+  useEffect(() => {
+    const s = getState();
+    const p = s.selectedProject ? s.projects[s.selectedProject] : undefined;
+    setChips(p ? chipFor(s.tagFilter, tagList(s.prefs, p.repo_path)) : []);
+  }, [project?.id, state.tagFilter]);
   // A chip whose tag was deleted or renamed lets go.
-  const tag = chip && tags.includes(chip) ? chip : null;
-  const filter = useMemo((): Filter => ({ terms, tag, prefs: state.prefs }), [terms, tag, state.prefs]);
+  const tagKey = tags.join("\n");
+  const on = useMemo(() => chips.filter((t) => tags.includes(t)), [chips, tagKey]);
+  const filter = useMemo((): Filter => ({ terms, tags: on, prefs: state.prefs }), [terms, on, state.prefs]);
   const threads = useMemo(() => {
     const wts = new Set(worktrees.map((w) => w.id));
     return Object.values(state.agents).filter((a) => wts.has(a.worktree_id));
@@ -133,7 +137,7 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
   useEffect(() => {
     clearPicks();
     anchor.current = null;
-  }, [project?.id, query, tag]);
+  }, [project?.id, query, on]);
   const openAgent = state.selectedSession && "Agent" in state.selectedSession ? state.selectedSession.Agent : null;
   const picks: Picks = {
     ids: pickedIds,
@@ -245,15 +249,24 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
       {/* Before the project has a tag, only the link to make some. */}
       <div className="thread-chips" role="group" aria-label="Show threads tagged">
         {tags.map((t) => (
-          <button
+          <TagChip
             key={t}
-            className={`tag-chip${tag === t ? " is-on" : ""}`}
-            aria-pressed={tag === t}
-            title={tag === t ? "Show every thread again" : `Show only threads tagged #${t}`}
-            onClick={() => setChip(tag === t ? null : t)}
+            repo={project.repo_path}
+            tag={t}
+            on={on.includes(t)}
+            title={
+              on.includes(t)
+                ? on.length > 1
+                  ? `Stop narrowing to #${t}`
+                  : "Show every thread again"
+                : on.length
+                  ? `Narrow to threads tagged #${t} too`
+                  : `Show only threads tagged #${t}`
+            }
+            onClick={() => setChips(toggleChip(on, t))}
           >
-            #{t} <span className="thread-chip-count">{counts.get(t) ?? 0}</span>
-          </button>
+            <span className="thread-chip-count">{counts.get(t) ?? 0}</span>
+          </TagChip>
         ))}
         <button
           className={`link-btn thread-chips-edit${tags.length ? "" : " is-alone"}`}
@@ -323,11 +336,11 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
         {worktrees.map((wt) => (
           <Band key={wt.id} worktree={wt} filter={filter} onNewTask={onNewTask} onMenu={onMenu} />
         ))}
-        {tag && !firstMatch ? (
+        {on.length > 0 && !firstMatch ? (
           <p className="sessions-no-match">
-            No threads tagged #{tag}
+            No threads tagged {on.map((t) => `#${t}`).join(" and ")}
             {terms.length > 0 && <> match “{query.trim()}”</>}.{" "}
-            <button className="link-btn" onClick={() => setChip(null)}>
+            <button className="link-btn" onClick={() => setChips([])}>
               Show all
             </button>
           </p>
@@ -484,6 +497,7 @@ function PickBar({ agents, onClear }: { agents: Agent[]; onClear: () => void }) 
   const live = agents.filter((a) => !a.archived);
   const gone = agents.filter((a) => a.archived);
   const [busy, setBusy] = useState(false);
+  const [tagging, setTagging] = useState(false);
   const run = (which: Agent[], archived: boolean) => {
     setBusy(true);
     void setArchived(which, archived).then(() => {
@@ -504,9 +518,13 @@ function PickBar({ agents, onClear }: { agents: Agent[]; onClear: () => void }) 
           Unarchive{live.length ? ` ${gone.length}` : ""}
         </button>
       )}
+      <button className="btn btn-sm" onClick={() => setTagging(true)} title="Tag or untag them all at once">
+        Tags…
+      </button>
       <button className="btn btn-sm" onClick={onClear} title="Clear selection (Esc)">
         Clear
       </button>
+      {tagging && <ThreadTagsDialog agents={agents} onClose={() => setTagging(false)} />}
     </div>
   );
 }
@@ -781,6 +799,7 @@ function AgentRow({
       </span>
       <span className="row-age">
         <AgentServerMark agentId={agent.id} />
+        <TagMarks agent={agent} />
         {safe && (
           <span className="row-mark mark-safe" role="img" title="Its last reply says it's safe to close" aria-label="Safe to close">
             ✓

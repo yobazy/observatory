@@ -23,7 +23,7 @@ type Dialog =
   | ConfirmDialogSpec
   | { kind: "run-setup"; worktree: Worktree }
   | { kind: "task-color"; agent: Agent }
-  | { kind: "thread-tags"; agent: Agent }
+  | { kind: "thread-tags"; agents: Agent[] }
   | { kind: "priority"; agent: Agent };
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -151,7 +151,7 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
         ? [{ label: `Unpin all on ${wt?.branch ?? "this branch"}`, run: () => void attempt(unpinAll(a.worktree_id)) }]
         : []),
       { label: "Color…", run: () => setDialog({ kind: "task-color", agent: a }) },
-      { label: "Tags…", run: () => setDialog({ kind: "thread-tags", agent: a }) },
+      { label: "Tags…", run: () => setDialog({ kind: "thread-tags", agents: [a] }) },
       priority,
     ];
     const issue: MenuItem[] = a.issue_url ? [{ label: "Open issue", run: () => void openLink(a.issue_url!) }] : [];
@@ -161,6 +161,7 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
         { label: "Unarchive", run: () => void attempt(request("UnarchiveAgent", { id: a.id })) },
         duplicate,
         followUp,
+        { label: "Tags…", run: () => setDialog({ kind: "thread-tags", agents: [a] }) },
         ...issue,
         del,
       ];
@@ -319,6 +320,7 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
     const items: MenuItem[] = [];
     if (live.length) items.push({ label: `Archive ${tasks(live.length)}`, run: () => void setArchived(live, true).then(clear) });
     if (gone.length) items.push({ label: `Unarchive ${tasks(gone.length)}`, run: () => void setArchived(gone, false).then(clear) });
+    items.push({ label: `Tags on ${tasks(agents.length)}…`, run: () => setDialog({ kind: "thread-tags", agents }) });
     items.push({ label: "Clear selection", separated: true, run: clear });
     setMenu({ items, x, y, label: `${tasks(agents.length)} selected` });
   };
@@ -329,7 +331,7 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
       {dialog?.kind === "text" && <TextDialog d={dialog} onClose={() => setDialog(null)} />}
       {dialog?.kind === "confirm" && <ConfirmDialog d={dialog} onClose={() => setDialog(null)} />}
       {dialog?.kind === "task-color" && <TaskColorDialog agent={dialog.agent} onClose={() => setDialog(null)} />}
-      {dialog?.kind === "thread-tags" && <ThreadTagsDialog agent={dialog.agent} onClose={() => setDialog(null)} />}
+      {dialog?.kind === "thread-tags" && <ThreadTagsDialog agents={dialog.agents} onClose={() => setDialog(null)} />}
       {dialog?.kind === "priority" && (
         <PriorityDialog
           name={dialog.agent.name}
