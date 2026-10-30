@@ -3,15 +3,16 @@ import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "./client";
 import { getState, setState } from "./store";
 import { notify } from "./notify";
+import { inQuietHours } from "./quiet";
 import { loadPrefs } from "./theme";
 import {
   fixPrompt,
   jobList,
   jobProject,
   redBanner,
+  redToBanner,
   runNow,
   track,
-  turnedRed,
   type AutomationsReport,
   type Job,
   type RunDeps,
@@ -57,18 +58,40 @@ function saveRed(red: string[]) {
   }
 }
 
-/** A banner (notify.ts, so hushed in quiet hours) when shown jobs turned
- *  red since the last read: the rows the view lists, red as it shows them.
- *  Not while you're looking at the view; a job hushed either way stays
- *  red without a banner until it recovers. */
+const HELD_KEY = "observatory.automations.held";
+
+/** Jobs that turned red in quiet hours, to banner once they end. */
+function loadHeld(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(HELD_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHeld(held: string[]) {
+  try {
+    localStorage.setItem(HELD_KEY, JSON.stringify(held));
+  } catch {
+    // A failure held over quiet hours goes unbannered after a relaunch.
+  }
+}
+
+/** A banner when shown jobs turned red since the last read: the rows the
+ *  view lists, red as it shows them. Not while you're looking at the view;
+ *  in quiet hours, held for the first read after they end (redToBanner). */
 async function bannerRed(report: AutomationsReport, watches: Watches) {
   // Settings' label prefixes as saved: before the app's prefs have loaded,
   // the default prefixes could show (and banner) a job you've hidden.
   const prefs = await loadPrefs();
   const { jobs } = jobList(report, prefs.automationLabels, Date.now(), watches);
-  const { fire, red } = turnedRed(loadRed(), jobs);
+  const looking = getState().view === "automations" && document.hasFocus();
+  // Quiet hours as saved too, so a launch inside them holds the banner.
+  const quiet = inQuietHours(prefs, new Date());
+  const { fire, red, held } = redToBanner({ red: loadRed(), held: loadHeld() }, jobs, { quiet, looking });
   saveRed(red);
-  if (!fire.length || (getState().view === "automations" && document.hasFocus())) return;
+  saveHeld(held);
   const banner = redBanner(jobs.filter((j) => fire.includes(j.label)));
   if (banner) await notify(banner.title, banner.body);
 }

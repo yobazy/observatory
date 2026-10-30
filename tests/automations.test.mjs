@@ -12,6 +12,7 @@ import {
   nextRun,
   parseLaunchctl,
   redBanner,
+  redToBanner,
   runAction,
   runNow,
   scheduleText,
@@ -21,6 +22,7 @@ import {
   until,
   worstHealth,
 } from '../src/nebula/automations.ts';
+import { inQuietHours } from '../src/nebula/quiet.ts';
 
 const dir = new URL('./fixtures/automations/', import.meta.url);
 const text = (name) => readFileSync(new URL(name, dir), 'utf8');
@@ -360,4 +362,38 @@ test('red banner: a first read with a job already red fires nothing; several at 
     body: 'Todos sync, Mail watch',
   });
   assert.equal(redBanner([]), null);
+});
+
+test('red banner: a job that turns red in quiet hours banners once they end, if still red', () => {
+  const quietPrefs = { quietFrom: '22:00', quietTo: '08:00' };
+  const at = (h, m = 0) => new Date(2026, 9, 30, h, m);
+  const job = (label, failing) => ({ label, health: failing ? 'failing' : 'ok' });
+  let last = { red: [], held: [] };
+  const read = (clock, jobs, looking = false) => {
+    const r = redToBanner(last, jobs, { quiet: inQuietHours(quietPrefs, clock), looking });
+    last = { red: r.red, held: r.held };
+    return r.fire;
+  };
+
+  // a fails at 23:00 and b at 02:00: both held, nothing bannered in the night.
+  assert.deepEqual(read(at(23), [job('a', true), job('b', false), job('c', false)]), []);
+  assert.deepEqual(read(at(2), [job('a', true), job('b', true), job('c', false)]), []);
+  // c fails and recovers inside quiet hours: nothing left to banner for it.
+  assert.deepEqual(read(at(5), [job('a', true), job('b', true), job('c', true)]), []);
+  assert.deepEqual(read(at(7, 55), [job('a', true), job('b', false), job('c', false)]), []);
+  assert.deepEqual(last.held, ['a']);
+  // 08:00 ends them: a, still red, banners once; b recovered, so it doesn't.
+  assert.deepEqual(read(at(8), [job('a', true), job('b', false), job('c', false)]), ['a']);
+  assert.deepEqual(read(at(8, 5), [job('a', true), job('b', false), job('c', false)]), []);
+  assert.deepEqual(last, { red: ['a'], held: [] });
+
+  // Held, then seen in the view: no banner afterwards.
+  last = { red: [], held: [] };
+  read(at(23), [job('a', true)]);
+  assert.deepEqual(read(at(6), [job('a', true)], true), []);
+  assert.deepEqual(read(at(9), [job('a', true)]), []);
+
+  // No quiet hours set: it banners straight away.
+  assert.equal(inQuietHours({}, at(23)), false);
+  assert.deepEqual(redToBanner({ red: [], held: [] }, [job('a', true)], { quiet: false, looking: false }).fire, ['a']);
 });

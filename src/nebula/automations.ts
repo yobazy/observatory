@@ -454,6 +454,22 @@ export function turnedRed(
   return { fire: red.filter((l) => !was.has(l)), red };
 }
 
+/** What to banner after a read, and what to keep for the next. A job that
+ *  turns red in quiet hours is held, and bannered at the first read after
+ *  they end if it's still red; one that turns red while you're looking at
+ *  the view is never bannered (nor is anything held then: you've seen it). */
+export function redToBanner(
+  last: { red: string[] | null; held: string[] },
+  jobs: Pick<Job, "label" | "health">[],
+  hush: { quiet: boolean; looking: boolean },
+): { fire: string[]; red: string[]; held: string[] } {
+  const { fire: turned, red } = turnedRed(last.red, jobs);
+  const due = [...new Set([...last.held.filter((l) => red.includes(l)), ...turned])];
+  if (hush.looking) return { fire: [], red, held: [] };
+  if (hush.quiet) return { fire: [], red, held: due };
+  return { fire: due, red, held: [] };
+}
+
 /** The banner's words: one job by name and why, or several by name. */
 export function redBanner(jobs: Pick<Job, "name" | "reason">[]): { title: string; body: string } | null {
   if (!jobs.length) return null;

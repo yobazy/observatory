@@ -165,7 +165,7 @@ it would do without changing anything, and `--help` lists the other options.
   there.
 - **Automations** (from the sidebar footer) lists your launchd jobs with their last run, schedule,
   and whether they're stale or failing. Run one now or open its log. A job that starts failing
-  puts up a banner, except in quiet hours.
+  puts up a banner; in quiet hours it waits until they end, and skips it if the job has recovered.
 
 **Organizing**
 
