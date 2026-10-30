@@ -48,10 +48,12 @@ export async function readScreen(agent: Agent, maxBytes = 48_000): Promise<strin
 export async function answer(agent: Agent, q: Question, choice: Choice): Promise<void> {
   const lines = await readScreen(agent);
   const now = lines && findQuestion(lines);
+  // The fresh copy, since a row choice's arrow keys count from wherever the
+  // mark is now.
   const same =
-    now && now.prompt === q.prompt && now.choices.some((c) => c.key === choice.key && c.label === choice.label);
+    now && now.prompt === q.prompt && now.choices.find((c) => c.key === choice.key && c.label === choice.label);
   if (!same) throw new Error(`${agent.name} isn't asking that any more`);
-  await sendChoice({ Agent: agent.id }, choice);
+  await sendChoice({ Agent: agent.id }, same);
   promptAnswered(agent);
 }
 
