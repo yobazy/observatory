@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, useLayoutEffect } from "react";
 import {
   STATUS_ORDER,
   daemonName,
@@ -459,6 +459,30 @@ function useNeedsOnly(): [boolean, (on: boolean) => void] {
   ];
 }
 
+/** Slides the rows of `list` from where they were to where they are now
+ *  whenever `order` changes, and fades in rows that just joined, so a
+ *  reorder reads as the rows moving rather than the labels swapping. Rows
+ *  carry their key in `data-flip`. */
+function useFlip(list: React.RefObject<HTMLElement | null>, order: string) {
+  const before = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const rows = Array.from(list.current?.querySelectorAll<HTMLElement>("[data-flip]") ?? []);
+    const was = before.current;
+    const now = new Map(rows.map((row) => [row.dataset.flip!, row.getBoundingClientRect().top]));
+    before.current = now;
+    if (was.size === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    for (const row of rows) {
+      const from = was.get(row.dataset.flip!);
+      const to = now.get(row.dataset.flip!)!;
+      if (from === undefined) {
+        row.animate({ opacity: [0, 1], transform: ["translateY(-4px)", "none"] }, { duration: 200, easing: "ease-out" });
+      } else if (from !== to) {
+        row.animate({ transform: [`translateY(${from - to}px)`, "none"] }, { duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" });
+      }
+    }
+  }, [list, order]);
+}
+
 /** The last few projects you were in, this one marked among them, above
  *  the full list so switching back never takes a scroll or a search. */
 function RecentPanel({ projects, onMenu }: { projects: Project[]; onMenu: (e: React.MouseEvent, project: Project) => void }) {
@@ -467,6 +491,8 @@ function RecentPanel({ projects, onMenu }: { projects: Project[]; onMenu: (e: Re
   const [count, setCount] = useRecentCount();
   const current = state.selectedProject ? state.projects[state.selectedProject] : undefined;
   const recent = useMemo(() => recentProjects(visits, projects, current, count), [visits, projects, current, count]);
+  const list = useRef<HTMLUListElement>(null);
+  useFlip(list, recent.map((r) => r.project.id).join(" "));
   // Only you being here isn't a list yet.
   if (recent.length < 2) return null;
   return (
@@ -487,13 +513,13 @@ function RecentPanel({ projects, onMenu }: { projects: Project[]; onMenu: (e: Re
           ))}
         </select>
       </div>
-      <ul>
+      <ul ref={list}>
         {recent.map(({ project, at, here }) => {
           const agents = projectAgents(state, project.id);
           const needs = agents.filter((a) => a.status === "needs_feedback").length;
           const running = agents.filter((a) => a.status === "running").length;
           return (
-            <li key={project.id}>
+            <li key={project.id} data-flip={project.id}>
               <button
                 className={`recent-row${here ? " is-selected" : ""}`}
                 aria-current={here ? "page" : undefined}
