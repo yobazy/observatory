@@ -3,10 +3,13 @@
 // them). Kept apart from the reading so it can be tested on its own.
 
 export interface Choice {
-  /** What to type to pick it. */
+  /** What to type to pick it, or its place in a row of choices. */
   key: string;
   label: string;
   selected: boolean;
+  /** The keys to press in turn to pick it, when typing `key` doesn't: a
+   *  choice in a row is reached by arrow keys, then Enter. */
+  keys?: string[];
 }
 
 export interface Question {
@@ -38,6 +41,10 @@ function upToText(lines: string[]): string[] {
  *  a run numbered 1, 2, 3… in the last rows counts, so a numbered list in
  *  the agent's prose above doesn't. */
 export function findQuestion(screen: string[]): Question | null {
+  return numbered(screen) ?? inRow(screen);
+}
+
+function numbered(screen: string[]): Question | null {
   const lines = upToText(screen);
   const rows = lines.map((l) => l.replace(EDGE, ""));
   let end = rows.length - 1;
@@ -96,6 +103,57 @@ export function findQuestion(screen: string[]): Question | null {
   }
   const detail = panelAbove(lines, rows, j);
   return detail ? { prompt: above.join(" "), detail, choices } : { prompt: above.join(" "), choices };
+}
+
+/** A mark before one of several short choices spaced apart on one row, as
+ *  an MCP server's "❯ Accept    Decline" draws. */
+const ROW = /^(?:[❯›▶]\s*)?\S+(?: \S+){0,3}(?:\s{3,}(?:[❯›▶]\s*)?\S+(?: \S+){0,3})+$/;
+const MARK = /^[❯›▶]\s*/;
+
+/** Choices drawn side by side on one row, under the question: Claude Code's
+ *  MCP input prompt. ← and → move the mark along the row, Enter picks. */
+function inRow(screen: string[]): Question | null {
+  const lines = upToText(screen);
+  const rows = lines.map((l) => l.replace(EDGE, ""));
+  let end = rows.length - 1;
+  let skipped = 0;
+  while (end >= 0 && !ROW.test(rows[end]) && skipped < 6) {
+    end--;
+    skipped++;
+  }
+  if (end < 0 || !ROW.test(rows[end])) return null;
+  const parts = rows[end].trim().split(/\s{3,}/);
+  const at = parts.findIndex((p) => MARK.test(p));
+  if (at < 0 || parts.filter((p) => MARK.test(p)).length !== 1) return null;
+  const choices: Choice[] = parts.map((p, n) => {
+    const step = n > at ? "\x1b[C" : "\x1b[D";
+    return {
+      key: String(n + 1),
+      label: p.replace(MARK, ""),
+      selected: n === at,
+      keys: [...Array<string>(Math.abs(n - at)).fill(step), "\r"],
+    };
+  });
+  const above: string[] = [];
+  let j = end - 1;
+  for (; j >= 0 && above.length < 6; j--) {
+    const t = rows[j].trim();
+    if (!t) {
+      if (above.length) break;
+      continue;
+    }
+    above.unshift(t);
+  }
+  const title: string[] = [];
+  for (; j >= 0 && title.length < 2; j--) {
+    const t = rows[j].trim();
+    if (!t || RULE.test(lines[j])) {
+      if (title.length || RULE.test(lines[j])) break;
+      continue;
+    }
+    title.unshift(t);
+  }
+  return title.length ? { prompt: above.join(" "), detail: title, choices } : { prompt: above.join(" "), choices };
 }
 
 /** The panel rows above the prompt, up to the rule or box top the panel
