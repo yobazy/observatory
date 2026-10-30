@@ -7,8 +7,8 @@ hook() { # $1 = hook event name
   echo "{\"session_id\":\"fake-$$\",\"cwd\":\"$PWD\",\"prompt\":\"$2\"}" | bash -c "$cmd" >/dev/null 2>&1
 }
 printf '\e[1;38;5;111mfake agent\e[0m in %s\n' "$PWD"
-[ -n "$1" ] && { hook UserPromptSubmit "$1"; echo "task: $1"; sleep 2; hook Stop; }
-while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do
+reply() { # $1 = a prompt, typed or given at start
+  local line="$1"
   case "$line" in
     ask*) hook UserPromptSubmit "$line"; echo "Allow me to edit README.md? (reply y)"; hook PermissionRequest ;;
     # A Claude-style menu, then a slow command nebula hears nothing about
@@ -34,4 +34,11 @@ while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do
       printf '\r\e[9A\e[J  ⎿  %s\n' "$pick"; sleep 2; echo "done."; hook Stop ;;
     *) hook UserPromptSubmit "$line"; echo "working on: $line"; sleep 3; echo "done."; hook Stop ;;
   esac
-done
+}
+# A task it starts on: the prompts above work as tasks too, so scripts/drive
+# can start one without typing into a terminal.
+case "$1" in
+  ask* | menu* | mcp*) reply "$1" ;;
+  ?*) hook UserPromptSubmit "$1"; echo "task: $1"; sleep 2; hook Stop ;;
+esac
+while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do reply "$line"; done
