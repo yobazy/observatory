@@ -176,3 +176,39 @@ new draft PR: https://github.com/yobazy/observatory/pull/118
 
 1. Sending a file to an asleep thread with no log: terminal (as now, like a dropped file) or
    refuse with a line? Same question for a stand-in Read view with no log.
+
+## Decisions applied 2026-10-30
+
+- **Decision 33B** (9e7be88): Sending a file to a thread that's asleep and has no readable log
+  is now refused with a line ("<name> is asleep with no log to reply in. Open its terminal to
+  wake it, then send <file>") instead of being pasted into its terminal. `fileTarget` takes
+  `canRead` and returns `"nowhere"` when the file would need the reply box and there isn't one
+  (asleep, or waiting on you, without a log); `sendFile` flashes the reason. A queued prompt
+  still takes the file, and an awake thread without a log still gets it in its terminal, as a
+  dropped file does. Test: `tests/drafts.test.mjs`, "a file for a reply box that a thread
+  without a log lacks goes nowhere". This settles the first "Looked at and left" item above.
+- Not changed: the stand-in Read view with no log (second "Looked at and left" item). 33B only
+  covered the asleep case; an awake thread showing a stand-in still gets the path in its
+  terminal.
+- Decision 3A (sentence case): the one new line is sentence case; nothing else on the branch
+  adds labels.
+
+### Checks run (on `pc`, Linux)
+
+- `npm run build`: passes.
+- `npm test`: 295 of 305 pass, including all four in `drafts.test.mjs`. The 10 failing are the
+  automations tests that need macOS `plutil` (`spawnSync plutil ENOENT`), as last night.
+- `cargo fmt --check`: clean. `cargo clippy --all-targets --locked -- -D warnings`: clean.
+- `cargo test --locked`: 83 pass, 5 fail, 4 ignored. The 5 are in `automations::tests`: two need
+  `plutil`, and three `status_command_*` timeout tests that fail on Linux. This branch changes
+  nothing under `src-tauri/`, so they come from main; worth one run on the Mac or CI.
+
+### Left
+
+- Not tried in the app: the change is a refusal path covered by the unit test.
+
+### Needs Bazil (2026-10-30)
+
+1. Confirm `cargo test` passes on the Mac or in CI (the 5 failures above are Linux-only as far
+   as I can tell).
+2. Stand-in Read view with no log: keep sending to the terminal, or refuse like 33B?
