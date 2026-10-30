@@ -11,20 +11,34 @@ import {
   jobProject,
   nextRun,
   parseLaunchctl,
+  redBanner,
+  redToBanner,
   runAction,
   runNow,
   scheduleText,
   shownLabels,
   toneOf,
   track,
+  turnedRed,
   until,
   worstHealth,
 } from '../src/nebula/automations.ts';
+import { inQuietHours } from '../src/nebula/quiet.ts';
 
 const dir = new URL('./fixtures/automations/', import.meta.url);
 const text = (name) => readFileSync(new URL(name, dir), 'utf8');
-/** The way automations.rs reads a plist. */
-const plist = (name) => JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', new URL(name, dir).pathname], { encoding: 'utf8' }));
+/** The way automations.rs reads a plist; Python's plistlib where there's no
+ *  plutil (Linux). */
+const plist = (name) => {
+  const path = new URL(name, dir).pathname;
+  try {
+    return JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', path], { encoding: 'utf8' }));
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+    const py = 'import json, plistlib, sys; print(json.dumps(plistlib.load(open(sys.argv[1], "rb"))))';
+    return JSON.parse(execFileSync('python3', ['-I', '-c', py, path], { encoding: 'utf8' }));
+  }
+};
 
 const NOW = new Date(2026, 9, 22, 12, 0).getTime();
 const MIN = 60_000;
@@ -312,4 +326,85 @@ test('fixPrompt carries the job, its log, and how to check a fix', () => {
   assert.match(fixPrompt({ ...base, alwaysOn: true, health: 'running' }), /kickstart -k/);
   assert.match(fixPrompt({ ...base, health: 'not loaded' }), /launchctl bootstrap gui\/\$\(id -u\) \/x\/com\.bazil\.todos\.plist/);
   assert.match(fixPrompt({ ...base, tail: [] }), /Its log is empty/);
+});
+
+// ---- the banner when a job turns red ----
+
+test('red banner: fires once when a shown job turns failing, not for stale, hidden or already red jobs', () => {
+  const report = (exit1) => ({
+    config: JSON.stringify({ jobs: [{ label: 'com.bazil.a', name: 'Todos sync' }] }),
+    jobs: [
+      raw({ launchctl: text(exit1 ? 'launchctl-exit1.txt' : 'launchctl-wispr-watch.txt') }),
+      // Stale is orange in the view: no banner.
+      raw({ label: 'com.bazil.b', plist: { KeepAlive: true }, tail: [] }),
+      // Failing, but not a label the view shows.
+      raw({ label: 'com.other.c', launchctl: text('launchctl-exit1.txt') }),
+    ],
+  });
+  const rows = (exit1) => jobList(report(exit1), ['com.bazil.'], NOW).jobs;
+  assert.equal(rows(false).find((j) => j.label === 'com.bazil.b').health, 'stale');
+
+  let red = null;
+  const fired = [];
+  for (const exit1 of [false, true, true, false, true]) {
+    const r = turnedRed(red, rows(exit1));
+    red = r.red;
+    fired.push(r.fire);
+  }
+  // The first read only remembers; then it turns red, stays red, recovers, and fails again.
+  assert.deepEqual(fired, [[], ['com.bazil.a'], [], [], ['com.bazil.a']]);
+
+  const failing = rows(true).filter((j) => j.label === 'com.bazil.a');
+  assert.deepEqual(redBanner(failing), { title: 'Todos sync is failing', body: 'Exited with code 1' });
+});
+
+test('red banner: a first read with a job already red fires nothing; several at once share one banner', () => {
+  assert.deepEqual(turnedRed(null, [{ label: 'a', health: 'failing' }]), { fire: [], red: ['a'] });
+  assert.deepEqual(
+    turnedRed([], [
+      { label: 'a', health: 'failing' },
+      { label: 'b', health: 'failing' },
+      { label: 'c', health: 'not loaded' },
+    ]).fire,
+    ['a', 'b'],
+  );
+  assert.deepEqual(redBanner([{ name: 'Todos sync', reason: 'x' }, { name: 'Mail watch', reason: 'y' }]), {
+    title: '2 automations are failing',
+    body: 'Todos sync, Mail watch',
+  });
+  assert.equal(redBanner([]), null);
+});
+
+test('red banner: a job that turns red in quiet hours banners once they end, if still red', () => {
+  const quietPrefs = { quietFrom: '22:00', quietTo: '08:00' };
+  const at = (h, m = 0) => new Date(2026, 9, 30, h, m);
+  const job = (label, failing) => ({ label, health: failing ? 'failing' : 'ok' });
+  let last = { red: [], held: [] };
+  const read = (clock, jobs, looking = false) => {
+    const r = redToBanner(last, jobs, { quiet: inQuietHours(quietPrefs, clock), looking });
+    last = { red: r.red, held: r.held };
+    return r.fire;
+  };
+
+  // a fails at 23:00 and b at 02:00: both held, nothing bannered in the night.
+  assert.deepEqual(read(at(23), [job('a', true), job('b', false), job('c', false)]), []);
+  assert.deepEqual(read(at(2), [job('a', true), job('b', true), job('c', false)]), []);
+  // c fails and recovers inside quiet hours: nothing left to banner for it.
+  assert.deepEqual(read(at(5), [job('a', true), job('b', true), job('c', true)]), []);
+  assert.deepEqual(read(at(7, 55), [job('a', true), job('b', false), job('c', false)]), []);
+  assert.deepEqual(last.held, ['a']);
+  // 08:00 ends them: a, still red, banners once; b recovered, so it doesn't.
+  assert.deepEqual(read(at(8), [job('a', true), job('b', false), job('c', false)]), ['a']);
+  assert.deepEqual(read(at(8, 5), [job('a', true), job('b', false), job('c', false)]), []);
+  assert.deepEqual(last, { red: ['a'], held: [] });
+
+  // Held, then seen in the view: no banner afterwards.
+  last = { red: [], held: [] };
+  read(at(23), [job('a', true)]);
+  assert.deepEqual(read(at(6), [job('a', true)], true), []);
+  assert.deepEqual(read(at(9), [job('a', true)]), []);
+
+  // No quiet hours set: it banners straight away.
+  assert.equal(inQuietHours({}, at(23)), false);
+  assert.deepEqual(redToBanner({ red: [], held: [] }, [job('a', true)], { quiet: false, looking: false }).fire, ['a']);
 });
