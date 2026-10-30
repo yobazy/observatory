@@ -111,3 +111,104 @@ All in `/data/tmp/overnight-2026-10-28/observatory/` (browser preview, demo data
 2. Say if opening a chip should move it to the front (item 4 as written) or only `nebula open`
    should.
 3. Run `cargo fmt/clippy/test` (or let CI), since they couldn't run in this session.
+
+## Review pass 2026-10-29
+
+An independent read of the whole batch (`git diff origin/main...0e51a16`) against the brief, by
+a run that didn't write it. #102 had already been squash-merged (8f9bbd3) and its branch
+deleted by then, so the two fixes below sit on current main under the same branch name, in a
+new draft PR: https://github.com/yobazy/observatory/pull/118
+
+### Confirmed and fixed
+
+1. **A full shelf dropped the file you'd just opened** (33022fa).
+   The row sorts by when a file was last shown *or opened*, but making room for a new file
+   dropped the oldest by *shown* time only. A file shown long ago and opened a minute ago sat
+   first in the row and was the one thrown out. Reproduced with `shelve` (keep 2: y shown at 5,
+   x shown at 1 and opened at 100, z arrives: x went). Now `shelve` ranks by the same
+   `lastTouched` the row uses; `addToShelf` passes `fileOpened`. Test: "making room drops the
+   file least recently shown or opened" in `tests/shelf.test.mjs`.
+2. **Send didn't add a path that a longer one in the reply starts with.** `withPath` checked
+   `text.includes(path)`, so sending `/r/a.html` to a reply that said `/r/a.html.bak` changed
+   nothing, while the flash still said "Added". Now only the whole path, between spaces or the
+   ends, counts as there already (49d1f49). Tests added to `tests/drafts.test.mjs` (also covers a quoted
+   path with a space).
+
+### Looked at and left
+
+- Sending to a thread that's asleep and has no readable log goes to its terminal, not the reply
+  box as the "Done" list says (the box needs a log). Dropping a file on that terminal does the
+  same, and an error is flashed, so I left it; the notes line is a little broader than the code.
+- `sendFile` decides "reading" from `hasLog` alone, while the pane also shows the Read view for
+  a stand-in transcript (`useStandIn`). With a stand-in and no log, the path goes to the
+  terminal while the Read view is up. Rare, and which way is right depends on what a stand-in
+  is for, so not changed.
+- Pinned chips sort among themselves by recency, not in the order they were pinned (`pin`
+  puts a new pin at the end of the pinned, `byRecent` then reorders them). Matches "pinned
+  first, most recent first"; not a bug.
+- Opening picked files that are already open as tabs leaves those tabs where they were, so the
+  tabs aren't strictly in list order then. The first picked file is still put in front.
+- Drag and drop: the drop group under the pointer works because the held row has
+  `pointer-events: none`; folders drag only by their heading, and the projects inside keep
+  their own drag. Checked by reading; not driven again (no Mac, and the earlier run's
+  Playwright screenshots cover it).
+- `tests/rowcolor.test.mjs` really reads the declarations from `styles.css` (`--pc` is a bare
+  hue, as the test assumes) and the light block inherits only `--text`/`--amber`, which point at
+  the redefined `--on-fill`. Passes for the right reason.
+- Notes' claims checked true: 282 pass / 10 fail, the 10 all `tests/automations.test.mjs` with
+  `spawnSync plutil ENOENT`; no changes under `src-tauri/`; the six LATER.md lines removed.
+
+### Checks run
+
+- `npm ci && npm run build`: passes.
+- `npm test`: on the old branch head plus the fixes, 283 pass, 10 fail; on current main plus
+  the fixes, 294 pass, 10 fail. The 10 are the same `plutil` tests (macOS only).
+- Rust: still not run. Only `rustup` is in `~/.cargo/bin` on this box, and running it (or
+  cargo) needed an approval this unattended session can't give. Nothing under `src-tauri/`
+  changed, and CI runs them.
+
+### Left
+
+- The two "Looked at and left" items about where Send goes, if Bazil wants them changed.
+- Rust checks on a machine where cargo runs (or CI).
+
+### Needs Bazil (review pass)
+
+1. Sending a file to an asleep thread with no log: terminal (as now, like a dropped file) or
+   refuse with a line? Same question for a stand-in Read view with no log.
+
+## Decisions applied 2026-10-30
+
+- **Decision 33B** (9e7be88): Sending a file to a thread that's asleep and has no readable log
+  is now refused with a line ("<name> is asleep with no log to reply in. Open its terminal to
+  wake it, then send <file>") instead of being pasted into its terminal. `fileTarget` takes
+  `canRead` and returns `"nowhere"` when the file would need the reply box and there isn't one
+  (asleep, or waiting on you, without a log); `sendFile` flashes the reason. A queued prompt
+  still takes the file, and an awake thread without a log still gets it in its terminal, as a
+  dropped file does. Test: `tests/drafts.test.mjs`, "a file for a reply box that a thread
+  without a log lacks goes nowhere". This settles the first "Looked at and left" item above.
+- Not changed: the stand-in Read view with no log (second "Looked at and left" item). 33B only
+  covered the asleep case; an awake thread showing a stand-in still gets the path in its
+  terminal.
+- Decision 3A (sentence case): the one new line is sentence case; nothing else on the branch
+  adds labels.
+
+### Checks run (on `pc`, Linux)
+
+- `npm run build`: passes.
+- `npm test`: 295 of 305 pass, including all four in `drafts.test.mjs`. The 10 failing are the
+  automations tests that need macOS `plutil` (`spawnSync plutil ENOENT`), as last night.
+- `cargo fmt --check`: clean. `cargo clippy --all-targets --locked -- -D warnings`: clean.
+- `cargo test --locked`: 83 pass, 5 fail, 4 ignored. The 5 are in `automations::tests`: two need
+  `plutil`, and three `status_command_*` timeout tests that fail on Linux. This branch changes
+  nothing under `src-tauri/`, so they come from main; worth one run on the Mac or CI.
+
+### Left
+
+- Not tried in the app: the change is a refusal path covered by the unit test.
+
+### Needs Bazil (2026-10-30)
+
+1. Confirm `cargo test` passes on the Mac or in CI (the 5 failures above are Linux-only as far
+   as I can tell).
+2. Stand-in Read view with no log: keep sending to the terminal, or refuse like 33B?
