@@ -677,6 +677,21 @@ export function Reader({
     how: "sent",
   });
   const picks = tapped.entry === latest ? tapped.picks : {};
+  // Catch me up was asked after this entry, at this time; the button stays
+  // busy until a reply follows your ask, or the agent stops without one. A
+  // queued ask waits for the turn before it to end, so only its own counts.
+  const [catching, setCatching] = useState<{ after: number; at: number; queued: boolean } | null>(null);
+  const caughtUp = useMemo(() => {
+    if (catching === null) return false;
+    const all = t?.entries ?? [];
+    const ask = all.find((e) => e.kind === "you" && e.n > catching.after && e.text.trim() === CATCH_UP);
+    const stopped = agent.status !== "running" && agent.status_changed_at > catching.at;
+    if (ask && all.some((e) => e.kind === "claude" && e.n > ask.n)) return true;
+    return stopped && (!!ask || !catching.queued);
+  }, [catching, t?.entries, agent.status, agent.status_changed_at]);
+  useEffect(() => {
+    if (caughtUp) setCatching(null);
+  }, [caughtUp]);
   // A reply on its way, shown in the thread until the agent's copy lands.
   const [outbox, setOutbox] = useState<{ text: string; after: number; sent: boolean } | null>(null);
   // The thread's own copy of a reply you sent takes the Sending bubble's
@@ -1171,16 +1186,29 @@ export function Reader({
         </div>
         {!waiting && t && t.entries.length > 0 && (
           <button
-            className="link-btn rd-catchup"
-            onClick={() =>
+            className={`link-btn rd-catchup${catching !== null ? " is-busy" : ""}`}
+            disabled={catching !== null}
+            aria-busy={catching !== null}
+            onClick={() => {
+              const asked = { after: t.entries[t.entries.length - 1].n, at: Date.now(), queued: false };
+              setCatching(asked);
               void enqueue(agent, CATCH_UP).then(
-                (how) => flash(how === "queued" ? `Queued for ${agent.name}: catch you up` : `Asked ${agent.name} to catch you up`),
-                () => flash(`Couldn't ask ${agent.name} to catch you up`, 6000),
-              )
-            }
-            title="Ask for a fresh card: where it stands, and every decision still open"
+                (how) => {
+                  if (how === "queued") setCatching((c) => (c === asked ? { ...asked, queued: true } : c));
+                  flash(how === "queued" ? `Queued for ${agent.name}: catch you up` : `Asked ${agent.name} to catch you up`);
+                },
+                () => {
+                  setCatching(null);
+                  flash(`Couldn't ask ${agent.name} to catch you up`, 6000);
+                },
+              );
+            }}
+            title={catching !== null ? `${agent.name} is writing you a fresh card` : "Ask for a fresh card: where it stands, and every decision still open"}
           >
-            ↻ Catch me up
+            <span className="rd-catchup-icon" aria-hidden>
+              ↻
+            </span>{" "}
+            {catching !== null ? "Catching you up…" : "Catch me up"}
           </button>
         )}
         {!waiting && undecided.length > 0 && (
