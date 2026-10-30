@@ -31,6 +31,31 @@ fn show_main_window(app: tauri::AppHandle) {
     tray::show_main(&app);
 }
 
+/// The main window, made here rather than by tauri.conf.json (which has it
+/// `create: false`) so a page asking for a new window, a `target=_blank`
+/// link or `window.open`, gets the browser instead of a bare window of the app.
+fn main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")
+        .expect("tauri.conf.json has the main window")
+        .clone();
+    let handle = app.clone();
+    tauri::WebviewWindowBuilder::from_config(app, &config)?
+        .on_new_window(move |url, _| {
+            if matches!(url.scheme(), "http" | "https" | "mailto") {
+                use tauri_plugin_opener::OpenerExt;
+                let _ = handle.opener().open_url(url.as_str(), None::<&str>);
+            }
+            tauri::webview::NewWindowResponse::Deny
+        })
+        .build()?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -43,6 +68,7 @@ pub fn run() {
         // observatory:// links: an agent handing a task to another project.
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
+            main_window(app.handle())?;
             tray::install(app.handle())?;
             control::start(app.handle());
             Ok(())

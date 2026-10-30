@@ -25,9 +25,11 @@ import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { startUseLog } from "./nebula/uselog";
 import { startMoments } from "./nebula/moments";
+import { startLinks } from "./nebula/links";
 
 startUseLog();
 startMoments();
+startLinks();
 // The control socket an agent drives the dev build with (control.ts); a
 // release build leaves it out.
 if (import.meta.env.DEV && "__TAURI_INTERNALS__" in globalThis) void import("./nebula/control").then((m) => m.startControl());

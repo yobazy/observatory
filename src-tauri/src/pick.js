@@ -1,6 +1,6 @@
 // Comment mode in a mockup preview: added to the page by preview.rs only
-// when the preview asks for it (?pick=1), so a page shown normally is served
-// untouched. Outlines what the pointer is on, and a click picks it instead
+// when the preview asks for it (?pick=1), so a page shown normally gets only
+// links.js. Outlines what the pointer is on, and a click picks it instead
 // of acting on it: the element's selector and text go to Observatory, which
 // asks what should change. Pins for the comments already made come back the
 // other way and are drawn over the page. Talks only through postMessage; the

@@ -231,11 +231,18 @@ pub fn serve<R: Runtime>(
         return serve_range(&path, range.to_str().unwrap_or("")).unwrap_or_else(not_found);
     }
     match std::fs::read(&path) {
-        Ok(bytes) if picking && kind_of(&path) == "html" => Response::builder()
-            .header("Content-Type", mime(&path))
-            .header("Cache-Control", "no-store")
-            .body(Cow::Owned(with_picker(bytes)))
-            .unwrap(),
+        Ok(bytes) if kind_of(&path) == "html" => {
+            let page = with_script(bytes, LINKS);
+            Response::builder()
+                .header("Content-Type", mime(&path))
+                .header("Cache-Control", "no-store")
+                .body(Cow::Owned(if picking {
+                    with_script(page, PICKER)
+                } else {
+                    page
+                }))
+                .unwrap()
+        }
         Ok(bytes) => Response::builder()
             .header("Content-Type", mime(&path))
             // Live reload re-requests the same URL; it must not be cached.
@@ -303,10 +310,14 @@ fn serve_range(path: &Path, range: &str) -> Option<Response<Cow<'static, [u8]>>>
 /// Comment mode's script (pick.js), for a page opened with `?pick=1`.
 const PICKER: &str = include_str!("pick.js");
 
-/// `page` with the comment-mode script added: before `</body>` when it has
-/// one, else at the end, where a browser still runs it.
-fn with_picker(page: Vec<u8>) -> Vec<u8> {
-    let tag = format!("<script>{PICKER}</script>");
+/// The script that sends a page's web links to the browser (links.js), for
+/// every page.
+const LINKS: &str = include_str!("links.js");
+
+/// `page` with `script` added: before `</body>` when it has one, else at the
+/// end, where a browser still runs it.
+fn with_script(page: Vec<u8>, script: &str) -> Vec<u8> {
+    let tag = format!("<script>{script}</script>");
     let lower = page.to_ascii_lowercase();
     let at = lower
         .windows(7)
@@ -348,11 +359,11 @@ mod tests {
 
     #[test]
     fn the_picker_goes_before_the_end_of_the_body() {
-        let page = with_picker(b"<html><body><p>hi</p></BODY></html>".to_vec());
+        let page = with_script(b"<html><body><p>hi</p></BODY></html>".to_vec(), PICKER);
         let page = String::from_utf8(page).unwrap();
         assert!(page.starts_with("<html><body><p>hi</p><script>"));
         assert!(page.ends_with("</script></BODY></html>"));
-        let bare = String::from_utf8(with_picker(b"<p>no body</p>".to_vec())).unwrap();
+        let bare = String::from_utf8(with_script(b"<p>no body</p>".to_vec(), PICKER)).unwrap();
         assert!(bare.starts_with("<p>no body</p><script>") && bare.ends_with("</script>"));
     }
 
