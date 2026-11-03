@@ -1,11 +1,9 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { isPreview, request } from "../nebula/client";
-import { flash, getState, useAppState } from "../nebula/store";
+import { flash, useAppState } from "../nebula/store";
 import { changedFiles, type GitStatus } from "../nebula/git";
 import { needsForce, takerFor } from "../nebula/actions";
 import { handToBranch } from "../nebula/queue";
-import { createPr, fixCiPrompt, mergePr, readyPr, refreshPrs, type PullRequest } from "../nebula/prs";
+import { cleanUp, createPr, fixCiPrompt, mergePr, readyPr, refreshPrs, type PullRequest } from "../nebula/prs";
 import { openLink } from "./Run";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import type { Worktree } from "../nebula/types";
@@ -22,30 +20,6 @@ const STATE_LABEL: Record<PullRequest["state"], string> = {
 /** Whether the branch is pushed and has work main lacks: what a PR needs. */
 function canOpenPr(git: GitStatus): boolean {
   return !!git.upstream && !git.upstreamGone && (git.baseAhead ?? 0) > 0;
-}
-
-/** Remove the worktree and its local branch. `landed` (the PR merged at
- *  exactly this commit) deletes the branch with -D, since a squash merge
- *  leaves it "unmerged" to git; otherwise -d, which keeps a branch that
- *  still has commits nothing else holds. */
-async function cleanUp(wt: Worktree, force: boolean, landed: boolean) {
-  const project = getState().projects[wt.project_id];
-  await request("DeleteWorktree", { id: wt.id, force });
-  if (!project || isPreview()) {
-    flash(`Cleaned up ${wt.branch}`);
-    return;
-  }
-  try {
-    await invoke("delete_branch", { repo: project.repo_path, branch: wt.branch, force: landed });
-  } catch (e) {
-    flash(
-      landed
-        ? `Removed the worktree; the branch stayed: ${errText(e)}`
-        : `Removed the worktree. The ${wt.branch} branch has commits that aren't merged, so it was kept.`,
-    );
-    return;
-  }
-  flash(`Cleaned up ${wt.branch}`);
 }
 
 /** A band's pull request: where it stands, and the one next step it needs —

@@ -3,8 +3,9 @@
 // the way `gh pr checks` folds them, as the TUI does.
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { isPreview, onAgentStatus } from "./client";
-import { getState, projectWorktrees, setState, subscribe } from "./store";
+import { isPreview, onAgentStatus, request } from "./client";
+import { cleanable } from "./autoclean";
+import { flash, getState, projectWorktrees, setState, subscribe } from "./store";
 import type { Worktree } from "./types";
 
 export type Checks = "none" | "passing" | "pending" | "failing";
@@ -139,6 +140,7 @@ export function usePrPolling() {
       return s.selectedProject ? projectWorktrees(s, s.selectedProject).map((w) => w.id) : [];
     };
     const tick = setInterval(() => {
+      autoClean();
       if (document.hidden) return;
       if (document.hasFocus()) void refreshPrs(selected(), FAST_MS - 5_000);
       void refreshPrs(Object.keys(getState().worktrees), SLOW_MS);
@@ -203,6 +205,51 @@ export async function readyPr(wt: Worktree, pr: PullRequest): Promise<void> {
   }
   await invoke("gh_pr_ready", { path: wt.path, number: pr.number });
   await refreshPrs([wt.id]);
+}
+
+/** Remove the worktree and its local branch. `landed` (the PR merged at
+ *  exactly this commit) deletes the branch with -D, since a squash merge
+ *  leaves it "unmerged" to git; otherwise -d, which keeps a branch that
+ *  still has commits nothing else holds. */
+export async function cleanUp(wt: Worktree, force: boolean, landed: boolean, done = `Cleaned up ${wt.branch}`) {
+  const project = getState().projects[wt.project_id];
+  await request("DeleteWorktree", { id: wt.id, force });
+  if (!project || isPreview()) {
+    flash(done);
+    return;
+  }
+  try {
+    await invoke("delete_branch", { repo: project.repo_path, branch: wt.branch, force: landed });
+  } catch (e) {
+    flash(
+      landed
+        ? `Removed the worktree; the branch stayed: ${e instanceof Error ? e.message : String(e)}`
+        : `Removed the worktree. The ${wt.branch} branch has commits that aren't merged, so it was kept.`,
+    );
+    return;
+  }
+  flash(done);
+}
+
+
+/** Worktrees being cleaned up on their own, and ones that failed to, which
+ *  are left for the Clean up button rather than tried again every tick. */
+const cleaning = new Set<string>();
+
+/** Clean up moment tasks whose reviewer merged their PR (autoclean.ts):
+ *  their threads and worktree go, and the branch with them. */
+function autoClean() {
+  const s = getState();
+  const watching = !document.hidden && document.hasFocus();
+  for (const id of cleanable(s, Date.now(), watching)) {
+    const wt = s.worktrees[id];
+    const p = s.prs[id];
+    if (cleaning.has(id) || p?.kind !== "found") continue;
+    cleaning.add(id);
+    cleanUp(wt, false, true, `#${p.pr.number} merged, so its threads and the ${wt.branch} worktree are cleaned up`).catch((e) =>
+      flash(`Couldn't clean up ${wt.branch}: ${e instanceof Error ? e.message : String(e)}`),
+    );
+  }
 }
 
 /** The prompt that hands a red CI run to an agent. */
