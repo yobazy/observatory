@@ -468,7 +468,10 @@ function useFlip(list: React.RefObject<HTMLElement | null>, order: string) {
   useLayoutEffect(() => {
     const rows = Array.from(list.current?.querySelectorAll<HTMLElement>("[data-flip]") ?? []);
     const was = before.current;
-    const now = new Map(rows.map((row) => [row.dataset.flip!, row.getBoundingClientRect().top]));
+    // From the list's top, so scrolling the sidebar or a card above growing
+    // between reorders doesn't read as every row having moved.
+    const base = list.current?.getBoundingClientRect().top ?? 0;
+    const now = new Map(rows.map((row) => [row.dataset.flip!, row.getBoundingClientRect().top - base]));
     before.current = now;
     if (was.size === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     for (const row of rows) {
