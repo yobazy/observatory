@@ -206,6 +206,9 @@ const ITEM = /^\s*(?:[-*]\s+)?(\*\*|__)?(\d+)[.)]\s+(.+)$/;
 const IMAGE = /(?:^|[\s`("'[])(\/[^\s`)"'\]]+\.(?:png|jpe?g|gif|webp|svg|avif))/gi;
 const VIDEO = /`(\/[^`\n]+\.(?:mp4|m4v|mov|webm))`|(?:^|[\s("'[])(\/[^\s`)"'\]]+\.(?:mp4|m4v|mov|webm))/gi;
 
+// Where a Needs you or Decisions heading started, among the section's lines.
+const SECTION_START = "\u0000";
+
 /** Paragraphs, with fenced code kept whole. */
 function paragraphs(text: string): string[] {
   const out: string[] = [];
@@ -262,6 +265,7 @@ export function readCard(text: string): Card {
       fenced || (!marked && i > 0 && lines[i - 1].trim()) ? null : (SECTION.exec(line) ?? SECTION_INLINE.exec(line));
     if (s) {
       into = s[1].toLowerCase() === "details" ? sections.details : sections.needs;
+      if (into === sections.needs) into.push(SECTION_START);
       if (s[2]) into.push(s[2]);
     } else into.push(line);
   }
@@ -292,11 +296,22 @@ export function readCard(text: string): Card {
   // A command fenced under a question keeps its lines, so it shows as a
   // block to run or copy rather than run into the question's text.
   let fence: string | null = null;
+  // A numbered list a "Before you sign:" line or a bold heading leads into
+  // is that list, not decisions; it stays where it was written, unless an
+  // item in it turns out to offer a choice.
+  const listed = new Map<Ask, { at: number; lines: string[] }>();
+  let leadIn = false;
   for (const line of sections.needs.flatMap(splitAsks)) {
+    if (line === SECTION_START) {
+      open = null;
+      leadIn = false;
+      continue;
+    }
     const fenceLine = /^(\s*)(```|~~~)/.exec(line);
     if (open && (fence !== null || fenceLine)) {
       const indent = fence ?? fenceLine![1];
       open.text += `\n${line.startsWith(indent) ? line.slice(indent.length) : line.trimStart()}`;
+      listed.get(open)?.lines.push(line);
       if (fenceLine) fence = fence === null ? fenceLine[1] : null;
       continue;
     }
@@ -306,12 +321,20 @@ export function readCard(text: string): Card {
       // Bold that opened before the number closes after the question; drop it.
       const text = item[1] ? item[3].replace(item[1], "") : item[3];
       asks.push((open = readAsk(Number(item[2]), text)));
+      if (leadIn) listed.set(open, { at: note.length, lines: [line] });
     } else if (open && opt && opt.letter === String.fromCharCode(65 + open.options.length)) {
       open.options.push(opt);
       lined.set(open, [...(lined.get(open) ?? []), line]);
-    } else if (open && /^\s{2,}\S/.test(line)) open.text += ` ${line.trim()}`;
-    else {
-      if (line.trim()) open = null;
+      listed.get(open)?.lines.push(line);
+    } else if (open && /^\s{2,}\S/.test(line)) {
+      open.text += ` ${line.trim()}`;
+      listed.get(open)?.lines.push(line);
+    } else {
+      if (line.trim()) {
+        open = null;
+        const plain = line.replace(/\*\*|__/g, "").trim();
+        leadIn = plain.endsWith(":") || /^\s*(#|\*\*|__)/.test(line);
+      }
       note.push(line);
     }
   }
@@ -323,6 +346,13 @@ export function readCard(text: string): Card {
       a.options = [];
     }
     for (const o of a.options) if (!o.label) o.label = labelFrom(paras.join("\n"), o.letter);
+  }
+  // The lead-in's list goes back under it, last first so the places hold.
+  for (const a of [...asks].reverse()) {
+    const at = listed.get(a);
+    if (!at || a.options.length) continue;
+    note.splice(at.at, 0, ...at.lines);
+    asks.splice(asks.indexOf(a), 1);
   }
 
   const details = sections.details.join("\n").trim();
