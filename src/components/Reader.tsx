@@ -6,7 +6,7 @@ import { isPreview } from "../nebula/client";
 import { flash, getState, projectOfWorktree, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
-import { enqueue, isIdle, unqueue } from "../nebula/queue";
+import { enqueue, isIdle, unqueue, wasSent } from "../nebula/queue";
 import { actOf, clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
 import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
@@ -679,16 +679,20 @@ export function Reader({
   const picks = tapped.entry === latest ? tapped.picks : {};
   // Catch me up was asked after this entry, at this time; the button stays
   // busy until a reply follows your ask, or the agent stops without one. A
-  // queued ask waits for the turn before it to end, so only its own counts.
-  const [catching, setCatching] = useState<{ after: number; at: number; queued: boolean } | null>(null);
+  // queued ask (`queued` is its id in the queue) waits for the turn before it
+  // to end, so only its own counts; taken back or edited, it's not coming.
+  const [catching, setCatching] = useState<{ after: number; at: number; queued: string | null } | null>(null);
+  const queue = state.queue[agent.id];
   const caughtUp = useMemo(() => {
     if (catching === null) return false;
+    const { queued } = catching;
+    if (queued !== null && !wasSent(queued) && !(queue ?? []).some((q) => q.id === queued)) return true;
     const all = t?.entries ?? [];
     const ask = all.find((e) => e.kind === "you" && e.n > catching.after && e.text.trim() === CATCH_UP);
     const stopped = agent.status !== "running" && agent.status_changed_at > catching.at;
     if (ask && all.some((e) => e.kind === "claude" && e.n > ask.n)) return true;
-    return stopped && (!!ask || !catching.queued);
-  }, [catching, t?.entries, agent.status, agent.status_changed_at]);
+    return stopped && (!!ask || queued === null);
+  }, [catching, queue, t?.entries, agent.status, agent.status_changed_at]);
   useEffect(() => {
     if (caughtUp) setCatching(null);
   }, [caughtUp]);
@@ -1190,11 +1194,13 @@ export function Reader({
             disabled={catching !== null}
             aria-busy={catching !== null}
             onClick={() => {
-              const asked = { after: t.entries[t.entries.length - 1].n, at: Date.now(), queued: false };
+              const asked = { after: t.entries[t.entries.length - 1].n, at: Date.now(), queued: null };
               setCatching(asked);
               void enqueue(agent, CATCH_UP).then(
                 (how) => {
-                  if (how === "queued") setCatching((c) => (c === asked ? { ...asked, queued: true } : c));
+                  // The ask just went on the end of the queue.
+                  const id = getState().queue[agent.id]?.at(-1)?.id ?? null;
+                  if (how === "queued") setCatching((c) => (c === asked ? { ...asked, queued: id } : c));
                   flash(how === "queued" ? `Queued for ${agent.name}: catch you up` : `Asked ${agent.name} to catch you up`);
                 },
                 () => {
