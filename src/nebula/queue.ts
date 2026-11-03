@@ -58,6 +58,9 @@ const sending = new Set<string>();
 const lastSent = new Map<string, number>();
 /** When you last typed into each agent's terminal (`noteTyped`). */
 const lastTyped = new Map<string, number>();
+/** When this app sent each queued prompt, by id, so one gone from the queue
+ *  can be told apart from one taken back. */
+const sentAt = new Map<string, number>();
 const TYPING_MS = 10_000;
 
 /** Called on your keystrokes into an agent's terminal: a queued prompt
@@ -131,6 +134,12 @@ export function editQueued(agentId: string, id: string, text: string): boolean {
   return true;
 }
 
+/** When the queued prompt `id` went to its agent; undefined while it's
+ *  queued, or once it's been taken back or edited out of the queue. */
+export function queuedSentAt(id: string): number | undefined {
+  return sentAt.get(id);
+}
+
 export function unqueue(agentId: string, id: string) {
   write(agentId, (getState().queue[agentId] ?? []).filter((q) => q.id !== id));
 }
@@ -160,11 +169,13 @@ async function sendNext(agentId: string) {
   const [still, ...rest] = getState().queue[agentId] ?? [];
   // It started another turn meanwhile, or the item was removed.
   if (!now || !readyForNext(now) || still?.id !== next.id) return;
+  sentAt.set(next.id, Date.now());
   write(agentId, rest);
   try {
     await type(now, next.text, false);
     flash(`Sent the queued prompt to ${now.name}`);
   } catch (e) {
+    sentAt.delete(next.id);
     write(agentId, [next, ...(getState().queue[agentId] ?? [])]);
     flash(`Couldn't send the queued prompt: ${e instanceof Error ? e.message : String(e)}`);
   }
