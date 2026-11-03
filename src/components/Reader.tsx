@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef,
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { isPreview } from "../nebula/client";
+import { isPreview, runSuggester } from "../nebula/client";
+import { buildSuggestPrompt, previewSuggestions, readSuggestions, suggestCommand } from "../nebula/nextprompts";
 import { flash, getState, projectOfWorktree, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
@@ -30,6 +31,9 @@ import { WorkCat } from "./Pet";
 
 /** Earlier decisions you put away, per agent, for as long as the app runs. */
 const dismissedFor = new Map<string, Set<number>>();
+/** Next prompts suggested for a thread's latest reply, keyed by thread and
+ *  entry; asked once per reply for as long as the app runs. */
+const nextFor = new Map<string, string[] | "asking">();
 
 /** The thread's artwork and name at the top of what it said. Every prompt
  *  and step it has taken moves the sand, so the plate is made by the work. */
@@ -800,6 +804,28 @@ export function Reader({
     [t?.entries, latest, dismissed],
   );
   const turns = useMemo(() => turnsOf(t?.entries ?? []), [t?.entries]);
+  // What you might send next, asked of a cheap model once the latest reply
+  // is in and the agent has stopped, offered as chips under it.
+  const nextKey = latest >= 0 ? `${thread}:${latest}` : "";
+  const [, setNextGot] = useState(0);
+  const next = nextKey ? nextFor.get(nextKey) : undefined;
+  const suggesting = !!suggestCommand(state.prefs.suggestCommand) && isIdle(agent);
+  useEffect(() => {
+    if (!nextKey || !suggesting || nextFor.has(nextKey)) return;
+    const all = t?.entries ?? [];
+    const reply = all.find((e) => e.n === latest)?.text ?? "";
+    const you = [...all].reverse().find((e) => e.kind === "you" && e.n < latest)?.text ?? "";
+    if (!reply.trim()) return;
+    nextFor.set(nextKey, "asking");
+    runSuggester(buildSuggestPrompt(you, reply), previewSuggestions).then(
+      (text) => {
+        nextFor.set(nextKey, readSuggestions(text) ?? []);
+        setNextGot((n) => n + 1);
+      },
+      // Off, missing or slow: no chips, and no asking again for this reply.
+      () => nextFor.set(nextKey, []),
+    );
+  }, [nextKey, suggesting]);
   // A reply kept as a note, in the folder picked in Settings.
   const saveNote = async (text: string) => {
     if (!state.prefs.notesFolder) {
@@ -1147,6 +1173,27 @@ export function Reader({
                     </span>
                   </div>
                 ))}
+                {suggesting && Array.isArray(next) && next.length > 0 && !draft && !outbox && !(state.queue[agent.id] ?? []).length && (
+                  <div className="rd-next" role="group" aria-label="Suggested next prompts">
+                    {next.map((p) => (
+                      <button
+                        key={p}
+                        className="rd-next-chip"
+                        title="Put this in the reply box, to send as is or change first"
+                        onClick={() => {
+                          setDraft(p);
+                          requestAnimationFrame(() => {
+                            const el = box.current;
+                            el?.focus();
+                            el?.setSelectionRange(p.length, p.length);
+                          });
+                        }}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {agent.status === "running" && (
                   <p className="rd-note rd-working">
                     {state.prefs.pet !== false ? (
