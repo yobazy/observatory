@@ -74,14 +74,14 @@ function readyForNext(a: Agent, now = Date.now()): boolean {
   return isIdle(a, now) && !sending.has(a.id) && (a.status_changed_at > sent || now - sent > 60_000);
 }
 
-async function type(agent: Agent, text: string, select: boolean) {
+async function type(agent: Agent, text: string, select: boolean, stay = false) {
   sending.add(agent.id);
   // Stamped before typing: a turn that starts and ends before followUp
   // returns still counts as after it.
   const before = lastSent.get(agent.id);
   lastSent.set(agent.id, Date.now());
   try {
-    await followUp(agent, text, { select });
+    await followUp(agent, text, { select, stay });
   } catch (e) {
     if (before === undefined) lastSent.delete(agent.id);
     else lastSent.set(agent.id, before);
@@ -93,13 +93,14 @@ async function type(agent: Agent, text: string, select: boolean) {
 
 /** Queue `text` for `agent`, or send it now if the agent is idle and
  *  nothing is queued ahead of it. The agent is looked up afresh: a dialog
- *  may have been open for a while. Resolves with what happened. */
-export async function enqueue(agent: Agent, text: string): Promise<"sent" | "queued"> {
+ *  may have been open for a while. Resolves with what happened. `stay`
+ *  keeps you on the view you sent it from. */
+export async function enqueue(agent: Agent, text: string, opts: { stay?: boolean } = {}): Promise<"sent" | "queued"> {
   const s = getState();
   const now = s.agents[agent.id] ?? agent;
   const ahead = s.queue[agent.id] ?? [];
   if (!ahead.length && readyForNext(now)) {
-    await type(now, text, true);
+    await type(now, text, !opts.stay, opts.stay);
     return "sent";
   }
   write(agent.id, [...ahead, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text, at: Date.now() }]);
