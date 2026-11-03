@@ -298,7 +298,7 @@ export function readCard(text: string): Card {
   let fence: string | null = null;
   // A numbered list a "Before you sign:" line or a bold heading leads into
   // is that list, not decisions; it stays where it was written, unless an
-  // item in it turns out to offer a choice.
+  // item in it turns out to offer a choice or asks a question.
   const listed = new Map<Ask, { at: number; lines: string[] }>();
   let leadIn = false;
   for (const line of sections.needs.flatMap(splitAsks)) {
@@ -350,7 +350,7 @@ export function readCard(text: string): Card {
   // The lead-in's list goes back under it, last first so the places hold.
   for (const a of [...asks].reverse()) {
     const at = listed.get(a);
-    if (!at || a.options.length) continue;
+    if (!at || a.options.length || a.text.includes("?")) continue;
     note.splice(at.at, 0, ...at.lines);
     asks.splice(asks.indexOf(a), 1);
   }
