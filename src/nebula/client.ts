@@ -12,6 +12,7 @@ import type {
   SessionRef,
 } from "./types";
 import { sessionKey } from "./types";
+import { forgetKeys, noteKeys } from "./typed";
 import type { CardSources } from "./cards";
 import { disconnectedAgents, withSessionStatus } from "./sessionStatus";
 
@@ -56,6 +57,8 @@ export function onAgentStatus(fn: (agent: Agent, from: Agent["status"]) => void)
 /** Announce a status change the app made itself (limits.ts), as one from
  *  the daemon is. */
 export function statusChanged(agent: Agent, from: Agent["status"]) {
+  // A question's menu takes keys that aren't the prompt line's.
+  if (agent.status === "needs_feedback" || from === "needs_feedback") forgetKeys(agent.id);
   onStatusChanged(agent, from);
   statusListeners.forEach((fn) => fn(agent, from));
 }
@@ -143,6 +146,7 @@ export function tailOutput(session: SessionRef, maxBytes: number, afterSeq: numb
 }
 
 export function sendInput(session: SessionRef, data: string): Promise<void> {
+  if ("Agent" in session) noteKeys(session.Agent, data);
   if (mockSend) {
     mockSend("SendInput", { session, data });
     return Promise.resolve();
@@ -441,6 +445,7 @@ function handle(event: ServerEvent) {
     tails.delete(req_id);
   } else if ("SessionExited" in event) {
     const { session, exit_code } = event.SessionExited;
+    if ("Agent" in session) forgetKeys(session.Agent);
     exitHandlers.get(sessionKey(session))?.(exit_code);
   }
 }

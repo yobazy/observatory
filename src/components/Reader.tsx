@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef,
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { isPreview } from "../nebula/client";
+import { isPreview, sendInput } from "../nebula/client";
 import { flash, getState, projectOfWorktree, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
@@ -20,6 +20,7 @@ import { fitTables } from "../nebula/tablecols";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
 import { draftFor, keepDraft, onDraftAdded } from "../nebula/drafts";
+import { rubOut, unsentLine } from "../nebula/typed";
 import { harnessLabel, relativeTime, statusLabel } from "../nebula/status";
 import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
@@ -659,6 +660,21 @@ export function Reader({
     keepDraft(agent.id, text);
     setDraftState(text);
   };
+  // What you typed in the terminal and didn't send comes over into the box,
+  // and off the terminal's line: left there, it would go out unseen in
+  // front of whatever you send from here.
+  useEffect(() => {
+    if (!agent.alive || agent.status === "needs_feedback") return;
+    const line = unsentLine(agent.id);
+    if (!line?.trim()) return;
+    sendInput({ Agent: agent.id }, rubOut(line)).then(
+      () => {
+        const had = draftFor(agent.id);
+        setDraft(had.trim() ? `${had.trimEnd()}\n${line}` : line);
+      },
+      () => {},
+    );
+  }, []);
   // A glide down to the latest is under way; resizes leave it be.
   const gliding = useRef(false);
   const waiting = agent.status === "needs_feedback";

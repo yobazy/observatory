@@ -132,7 +132,9 @@ async function run(req: Req): Promise<unknown> {
       // React tracks the value itself, so it's set the way a keystroke would.
       const proto = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
       Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, text);
-      el.dispatchEvent(new Event("input", { bubbles: true }));
+      // As typed text, so a terminal's own input box (xterm reads the
+      // event's data) takes it too.
+      el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
       await frames();
       return text;
     }
