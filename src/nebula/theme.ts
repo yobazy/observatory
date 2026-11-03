@@ -50,6 +50,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   quickCapture?: string;
   /** Chimes for finished turns and questions (delight.ts); on unless off. */
   sounds?: boolean;
+  /** A thread that finishes while the app is in the background sounds like
+   *  sand settling instead of the chime (delight.ts); off unless turned on. */
+  sandSound?: boolean;
   /** 0 to 1; 0.5 when unset. */
   soundVolume?: number;
   /** Quiet hours, "HH:MM" local: no chimes or banners between them. */

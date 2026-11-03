@@ -61,6 +61,8 @@ import { HoverCard, PreviewPane } from "./components/Preview";
 import { Palette, type PaletteContext } from "./components/Palette";
 import { MomentCard } from "./components/Moments";
 import { TextDialog, type TextDialogSpec } from "./components/Dialogs";
+import { followClock } from "./nebula/sky";
+import { useDockIcon } from "./components/dockIcon";
 
 export default function App() {
   const [launch, setLaunch] = useState<{
@@ -192,6 +194,8 @@ export default function App() {
   useRecentTracking();
   useProjectLogos();
   useMinuteClock();
+  useSky();
+  useDockIcon();
   useLeaveUsageOnSelect();
   useEffect(trackRecent, []);
   const { view, preview, prefs } = useAppState();
@@ -433,6 +437,12 @@ function useGridMode(): [boolean, (v: boolean | ((v: boolean) => boolean)) => vo
     }
   }, [grid]);
   return [grid, setGrid];
+}
+
+/** In the default dark mode the night blue follows the time of day (sky.ts). */
+function useSky() {
+  const { mode } = useAppState();
+  useEffect(() => (mode === "dark" ? followClock() : undefined), [mode]);
 }
 
 /** Keeps `state.minute` current, for views that expire with the clock. */

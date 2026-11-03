@@ -98,3 +98,11 @@ export function settle(
     grains[i + 1] = y < 0 ? -y : y > 1 ? 2 - y : y;
   }
 }
+
+/** How much of a plate's sand is out, 0 to 1, after `turns` turns: a
+ *  thread just started is a few scattered grains, a long one a dense
+ *  figure. Small plates keep enough grains to read as a dot. */
+export function sandFill(turns: number, small: boolean): number {
+  const floor = small ? 0.3 : 0.05;
+  return floor + (1 - floor) * (1 - Math.exp(-Math.max(0, turns) / 60));
+}

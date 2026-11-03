@@ -1,7 +1,7 @@
-import { memo, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type JSX, type RefObject } from "react";
 import { getState, subscribe, waitingAgents } from "../nebula/store";
 import { onPetMood } from "../nebula/delight";
-import { CAT_W, H, SCALE, SCOPE_AT, step, TICK_MS, W, type Cat, type Frame } from "./petBrain";
+import { CAT_W, H, SCALE, SCOPE_AT, keepWatch, step, TICK_MS, W, type Cat, type Frame } from "./petBrain";
 import { BOOK, FRAMES, LAPTOP, TELESCOPE, TELESCOPE_W, type Px } from "./petFrames";
 import { DESK, DESK_W, deskStep, doingNow, PROP_AT, type Desk } from "./workCat";
 import type { Act } from "../nebula/transcript";
@@ -45,13 +45,33 @@ const SCOPE_COLORS: Record<string, string> = {
   L: "var(--muted)",
 };
 
-/** The telescope, drawn once: it never changes. */
-const Telescope = memo(function Telescope() {
+/** Where the tube turns on the tripod, in the telescope's pixels. */
+const PIVOT = { x: 6.5, y: 3.5 };
+/** The tube is the top four rows; the tripod stands under it. */
+const TUBE_ROWS = 4;
+
+const scopeRects = (from: number, to: number) =>
+  TELESCOPE.slice(from, to).flatMap((row, i) =>
+    [...row].map((c, x) =>
+      c === "." ? null : <rect key={`${x}-${from + i}`} x={x} y={from + i} width="1.02" height="1.02" fill={SCOPE_COLORS[c]} />,
+    ),
+  );
+
+/** The telescope; `aim` turns its tube (degrees, up is negative). */
+const Telescope = memo(function Telescope({ aim = 0 }: { aim?: number }) {
   return (
-    <svg width={TELESCOPE_W * SCALE} height={H * SCALE} viewBox={`0 0 ${TELESCOPE_W} ${H}`} shapeRendering="crispEdges" aria-hidden>
-      {TELESCOPE.flatMap((row, y) =>
-        [...row].map((c, x) => (c === "." ? null : <rect key={`${x}-${y}`} x={x} y={y} width="1.02" height="1.02" fill={SCOPE_COLORS[c]} />)),
-      )}
+    <svg
+      width={TELESCOPE_W * SCALE}
+      height={H * SCALE}
+      viewBox={`0 0 ${TELESCOPE_W} ${H}`}
+      shapeRendering="crispEdges"
+      overflow="visible"
+      aria-hidden
+    >
+      <g className="pet-tube" style={{ transform: `rotate(${aim}deg)`, transformOrigin: `${PIVOT.x}px ${PIVOT.y}px` }}>
+        {scopeRects(0, TUBE_ROWS)}
+      </g>
+      {scopeRects(TUBE_ROWS, TELESCOPE.length)}
     </svg>
   );
 });
@@ -110,7 +130,7 @@ export const Pet = memo(function Pet({ on }: { on: boolean }) {
     width.current = el.clientWidth;
     if (reduced) return () => ro.disconnect();
     const t = setInterval(() => {
-      if (!document.hidden) setCat((c) => step(c, width.current));
+      if (!document.hidden) setCat((c) => keepWatch(step(c, width.current), width.current, waitingAgents(getState()).length > 0));
     }, TICK_MS);
     return () => {
       clearInterval(t);
@@ -152,6 +172,8 @@ export const Pet = memo(function Pet({ on }: { on: boolean }) {
       ),
     [],
   );
+
+  const aim = useAim(yard, cat.watch === true && cat.mode === "gaze", cat.x);
 
   if (!on) return null;
   const facingLeft = cat.dir === -1;
@@ -203,13 +225,45 @@ export const Pet = memo(function Pet({ on }: { on: boolean }) {
           then at the far end. */}
       {cat.mode === "gaze" && (
         <span className="pet-scope" style={{ transform: `translateX(${cat.x + SCOPE_AT}px)` }} aria-hidden>
-          <Telescope />
-          {cat.step % 16 < 4 && !reduced && <span className="pet-twinkle">✦</span>}
+          <Telescope aim={aim} />
+          {cat.step % 16 < 4 && !reduced && !cat.watch && <span className="pet-twinkle">✦</span>}
         </span>
       )}
     </div>
   );
 });
+
+/** Which way the scope points while the cat watches: at the sidebar's
+ *  first waiting thread (its coral pip), or up the list when that's out of
+ *  sight; level, at the sky, the rest of the time. */
+function useAim(yard: RefObject<HTMLDivElement | null>, watching: boolean, x: number): number {
+  const [aim, setAim] = useState(0);
+  useEffect(() => {
+    if (!watching) {
+      setAim(0);
+      return;
+    }
+    const find = () => {
+      const scope = yard.current?.querySelector(".pet-scope");
+      const pip = yard.current?.closest(".sidebar")?.querySelector(".pip-needs_feedback");
+      if (!scope) return;
+      const s = scope.getBoundingClientRect();
+      const px = s.left + PIVOT.x * SCALE;
+      const py = s.top + PIVOT.y * SCALE;
+      let to = -50;
+      if (pip) {
+        const t = pip.getBoundingClientRect();
+        if (t.height > 0) to = (Math.atan2(t.top + t.height / 2 - py, t.left + t.width / 2 - px) * 180) / Math.PI;
+      }
+      setAim(Math.max(-165, Math.min(0, Math.round(to))));
+    };
+    find();
+    // Threads come and go, and the list scrolls: look again now and then.
+    const t = setInterval(find, 1500);
+    return () => clearInterval(t);
+  }, [watching, x, yard]);
+  return aim;
+}
 
 /** The cat on the Read view's working line, acting out the step under
  *  way: typing at a laptop while it edits, over a book while it reads,

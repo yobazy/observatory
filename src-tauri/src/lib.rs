@@ -4,6 +4,7 @@ mod cards;
 mod codex_log;
 mod control;
 mod daemon;
+mod dock;
 mod editor;
 mod gh;
 mod git;
@@ -141,6 +142,7 @@ pub fn run() {
             icons::project_images,
             title::suggest_title,
             tray::update_tray,
+            dock::set_dock_icon,
             editor::list_editors,
             editor::open_in_editor,
             show_main_window,

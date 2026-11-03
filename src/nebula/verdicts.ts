@@ -8,6 +8,7 @@ import { flash, getState, setState } from "./store";
 import { afterClosing } from "./recentThreads";
 import { readVerdict, type Chip } from "./replycard";
 import type { Turn } from "./turnsummary";
+import { noteTurnNumber } from "./turnCount";
 import { sameSession, type Agent } from "./types";
 
 const known = new Map<string, { key: string; verdict: Chip | null }>();
@@ -30,6 +31,7 @@ function set(agent: Agent, verdict: Chip | null) {
 
 /** A turn already read elsewhere (the turn strip) counts too. */
 export function noteTurn(agent: Agent, turn: Turn | null) {
+  noteTurnNumber(agent.id, turn?.number);
   if (readable(agent) && turn) set(agent, readVerdict(turn.saidEnd ?? turn.said ?? ""));
 }
 
@@ -49,6 +51,7 @@ function check(agent: Agent) {
       const turn = isPreview()
         ? (await import("./mock")).mockTurn(getState(), now.id)
         : await invoke<Turn | null>("thread_turn", { session: now.session_id, kind: now.kind });
+      noteTurnNumber(now.id, turn?.number);
       set(now, turn ? readVerdict(turn.saidEnd ?? turn.said ?? "") : null);
     } catch {
       set(now, null);
