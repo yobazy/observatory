@@ -28,10 +28,12 @@ import { Plate, plateTone } from "./Plate";
 import { LiveStrip } from "./LiveStrip";
 
 const THEME = {
-  background: "#0d1120",
+  // The eyepiece well's color (styles.css .pane-body::before): --term, darkened.
+  background: "#090c16",
   foreground: "#e6e2d6",
-  cursor: "#f0a28b",
-  cursorAccent: "#0d1120",
+  // The cursor is a grain of sand.
+  cursor: "#efeadf",
+  cursorAccent: "#090c16",
   selectionBackground: "#2b3450",
   black: "#1a2032",
   red: "#f0907a",
@@ -55,7 +57,7 @@ const THEME = {
 const LIGHT_THEME = {
   background: "#fbfaf7",
   foreground: "#121726",
-  cursor: "#b5482c",
+  cursor: "#121726",
   cursorAccent: "#fbfaf7",
   selectionBackground: "#dfe3f2",
   black: "#121726",

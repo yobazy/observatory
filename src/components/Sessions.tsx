@@ -211,7 +211,7 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
         <ProjectPlate projectId={project.id} seed={project.repo_path} />
         <div className="sessions-title" data-tauri-drag-region>
           <h1>
-            <ProjectIcon project={project} size={22} />
+            <ProjectIcon project={project} size={22} onlyPicked />
             {project.name}
           </h1>
           <p className="sessions-path" title={project.repo_path}>

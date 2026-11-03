@@ -45,6 +45,9 @@ interface Live {
   t: number;
   /** Frames left before a still plate stops drawing. */
   settling: number;
+  /** An extra shake that dies away: the plate struck when its thread opens
+   *  or finishes, so the sand jumps and settles again. */
+  kick: number;
   visible: boolean;
 }
 
@@ -86,7 +89,8 @@ subscribe(() => {
 });
 
 const isBig = (p: Live) => p.size > 48;
-const moving = (p: Live) => p.drift || p.tone === "running" || p.tone === "needs_feedback" || p.settling > 0 || p.k < 1;
+const moving = (p: Live) =>
+  p.drift || p.tone === "running" || p.tone === "needs_feedback" || p.settling > 0 || p.k < 1 || p.kick > 0;
 
 function grainsFor(size: number) {
   return size > 110 ? 20000 : size > 70 ? 9000 : size > 48 ? 4200 : 260;
@@ -102,9 +106,10 @@ function step(p: Live, dt: number) {
   }
   if (p.k < 1) p.k = Math.min(1, p.k + dt / (isBig(p) ? 1.6 : 1.1));
   const big = isBig(p);
-  const shake = (p.tone === "running" || p.drift ? 0.004 : 0.0012) + (big ? 0.016 : 0);
+  const shake = (p.tone === "running" || p.drift ? 0.004 : 0.0012) + (big ? 0.016 : 0) + p.kick;
   settle(p.grains, p.from, p.to, p.k, big ? 0.14 : 0.35, shake);
   if (p.k >= 1 && p.settling > 0) p.settling--;
+  if (p.kick > 0) p.kick = p.kick < 0.002 ? 0 : p.kick * Math.pow(0.03, dt);
 }
 
 function retarget(p: Live, to: Mode) {
@@ -220,10 +225,18 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, cla
       work,
       t: (hashT(seed) % 997) / 997 * 3,
       settling: 0,
+      kick: 0,
       visible: true,
     };
-    // Arrive already settled: a plate's first frame is its figure, not noise.
-    for (let i = 0; i < (isBig(p) ? 45 : 40); i++) settle(p.grains, mode, mode, 1, isBig(p) ? 0.14 : 0.35, isBig(p) ? 0.016 : 0);
+    // Small plates arrive settled: their first frame is their figure. A big
+    // one (a thread or project just opened) arrives half formed and settles
+    // in front of you.
+    const struck = isBig(p) && !reduced();
+    for (let i = 0; i < (struck ? 6 : isBig(p) ? 45 : 40); i++) settle(p.grains, mode, mode, 1, isBig(p) ? 0.14 : 0.35, isBig(p) ? 0.016 : 0);
+    if (struck) {
+      p.kick = 0.02;
+      p.settling = 80;
+    }
     draw(p);
     plates.add(p);
     live.current = p;
@@ -241,6 +254,11 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, cla
   useEffect(() => {
     const p = live.current;
     if (!p) return;
+    // A thread that just finished gets one last shake before it rests.
+    if (tone === "finished" && (p.tone === "running" || p.tone === "needs_feedback") && !reduced()) {
+      p.kick = isBig(p) ? 0.03 : 0.015;
+      p.settling = Math.max(p.settling, 90);
+    }
     p.tone = tone;
     p.drift = drift;
     if (work !== p.work) {
