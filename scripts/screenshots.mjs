@@ -2,16 +2,17 @@
 // Retakes the README's pictures, and the cover every release page leads with,
 // from the browser preview's demo data (never real sessions):
 //
-//   node scripts/screenshots.mjs          stills and the demo GIF
+//   node scripts/screenshots.mjs          stills and the demo video and GIF
 //   node scripts/screenshots.mjs stills   just the stills
+//   node scripts/screenshots.mjs demo     just the demo
 //
 // It builds the app, serves it on a spare port and drives it with Playwright
-// at 1440×860 in dark mode. Stills are 2× JPEGs (sips, quality 60); the GIF is
-// a recording with a drawn cursor, cut down by ffmpeg to 880px at 8 fps.
+// at 1440×860 in dark mode. Stills are 2× JPEGs (sips, quality 60). The demo
+// is a video (docs/demo.mp4, see demo() below) and a GIF cut from it.
 // Run it before every release, so the README shows the app as it ships.
 
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
@@ -94,89 +95,142 @@ async function stills() {
   await light.context.close();
 }
 
-// A drawn cursor, since recordings don't show the real one.
-const CURSOR = `
-  const c = document.createElement("div");
-  c.id = "demo-cursor";
-  c.innerHTML = '<svg width="22" height="22" viewBox="0 0 22 22"><path d="M3 2 L3 18 L7.5 14 L10.5 20.5 L13 19.4 L10 13 L16 13 Z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>';
-  Object.assign(c.style, { position: "fixed", left: "720px", top: "430px", zIndex: 2147483647,
-    pointerEvents: "none", transition: "left .45s ease, top .45s ease" });
-  document.addEventListener("DOMContentLoaded", () => document.body.appendChild(c));
-`;
-
+// The demo: Chrome's screencast records the flow at 2×, sharp enough to zoom
+// into, while the script logs where the cursor goes, what the camera should
+// look at and when each caption starts. scripts/demo/Demo.tsx (Remotion)
+// turns the recording and that log into the video: the window on a backdrop,
+// a camera that eases toward what's clicked, a drawn cursor and captions.
 async function demo() {
-  const context = await browser.newContext({
-    viewport: VIEW,
-    colorScheme: "dark",
-    recordVideo: { dir: tmp, size: VIEW },
-  });
-  await context.addInitScript(CURSOR);
-  const recording = Date.now();
+  const context = await browser.newContext({ viewport: VIEW, colorScheme: "dark", deviceScaleFactor: 2 });
   const page = await context.newPage();
   await page.goto(URL_);
   await page.waitForTimeout(9000);
-  const start = Date.now();
 
+  const frames = join(tmp, "frames");
+  mkdirSync(frames);
+  const shots = [];
+  const cdp = await context.newCDPSession(page);
+  cdp.on("Page.screencastFrame", ({ data, metadata, sessionId }) => {
+    const file = join(frames, `${shots.length}.jpg`);
+    writeFileSync(file, Buffer.from(data, "base64"));
+    shots.push({ t: metadata.timestamp, file });
+    cdp.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
+  });
+  await cdp.send("Page.startScreencast", { format: "jpeg", quality: 92, maxWidth: 2880, maxHeight: 1720 });
+  await page.waitForTimeout(300);
+  const start = Date.now() / 1000;
+  const now = () => Date.now() / 1000 - start;
+
+  const cursor = [];
+  const clicks = [];
+  const camera = [];
+  const captions = [];
   const pause = (ms) => page.waitForTimeout(ms);
-  async function point(locator) {
+  const say = (text) => captions.push({ t: now(), text });
+  const look = (zoom, x = VIEW.width / 2, y = VIEW.height / 2) => camera.push({ t: now(), zoom, x, y });
+
+  // Moves the real pointer too, so hover states show as the drawn one arrives.
+  // With a zoom, the camera follows the cursor there.
+  async function point(locator, zoom) {
     const box = await locator.boundingBox();
     const x = box.x + Math.min(box.width / 2, 60);
     const y = box.y + box.height / 2;
-    await page.evaluate(([x, y]) => {
-      const c = document.getElementById("demo-cursor");
-      c.style.left = `${x}px`;
-      c.style.top = `${y}px`;
-    }, [x, y]);
-    await page.mouse.move(x, y, { steps: 8 });
+    cursor.push({ t: now(), x, y });
+    if (zoom) look(zoom, x, y);
+    await page.mouse.move(x, y, { steps: 12 });
     await pause(550);
+    return { x, y };
   }
-  async function click(locator, wait = 1400) {
-    await point(locator);
-    await locator.click();
+  async function click(locator, { wait = 1400, zoom } = {}) {
+    const { x, y } = await point(locator, zoom);
+    clicks.push(now());
+    await page.mouse.click(x, y);
     await pause(wait);
   }
 
+  say("Every agent you're running, in one window");
+  await pause(2200);
+
   // A thread that's waiting on you, read as a conversation.
-  await click(page.locator("button").filter({ hasText: /Hero Section Redesign/ }).first(), 1800);
-  await click(button(page, "Read"), 1500);
+  say("Open the thread that's waiting on you");
+  await click(page.locator("button").filter({ hasText: /Hero Section Redesign/ }).first(), { zoom: 1.7, wait: 1600 });
+  say("Read it as a conversation, and answer from there");
+  await click(button(page, "Read"), { zoom: 1.5, wait: 900 });
+  look(1.35, 1080, 520);
+  await pause(1000);
   await page.mouse.wheel(0, 700);
-  await pause(1800);
+  await pause(2200);
+
   // Jumping between threads from the Live strip.
-  await click(page.getByText("Sequentia", { exact: false }).first(), 2000);
-  await click(button(page, "Terminal"), 1800);
+  say("Jump between threads from the Live strip");
+  await click(page.getByText("Sequentia", { exact: false }).first(), { zoom: 1.6, wait: 1800 });
+  await click(button(page, "Terminal"), { zoom: 1.4, wait: 1600 });
+
   // Another project.
-  await click(page.locator("button").filter({ hasText: /admin-dashboard/ }).first(), 1800);
-  await click(page.locator("button").filter({ hasText: /storefront/ }).first(), 1500);
+  say("Every project, side by side");
+  look(1.15, 400, 520);
+  await click(page.locator("button").filter({ hasText: /admin-dashboard/ }).first(), { wait: 1600 });
+  await click(page.locator("button").filter({ hasText: /storefront/ }).first(), { wait: 1300 });
+
   // Agent usage.
-  await click(page.locator("button").filter({ hasText: /Usage/ }).first(), 2600);
+  say("What your agents cost, today and over time");
+  await click(page.locator("button").filter({ hasText: /Usage/ }).first(), { zoom: 1, wait: 2800 });
   await page.keyboard.press("Meta+u");
   await pause(800);
+
   // Color themes.
+  say("Light or dark, in the accent you like");
   await page.keyboard.press("Meta+,");
   await pause(1200);
   for (const accent of ["Ocean", "Rose", "Amber", "Default"]) {
-    await click(button(page, accent), 1000);
+    await click(button(page, accent), { zoom: 1.25, wait: 1000 });
   }
-  await click(button(page, "Light"), 1400);
-  await click(button(page, "Dark"), 1200);
+  await click(button(page, "Light"), { zoom: 1.25, wait: 1400 });
+  await click(button(page, "Dark"), { zoom: 1.25, wait: 1200 });
+  look(1);
   await page.keyboard.press("Meta+,");
-  await pause(1500);
-
-  // Cut the splash: the GIF starts on the settled window.
-  const lead = (start - recording) / 1000;
-  const video = await page.video().path();
+  await pause(1800);
+  const seconds = now();
+  await cdp.send("Page.stopScreencast");
   await context.close();
+
+  // The screencast only sends a frame when something changed: hold each one
+  // until the next, starting from the frame on screen when the log started.
+  const first = Math.max(0, shots.findLastIndex((s) => s.t <= start));
+  const list = shots.slice(first).map((s, i, all) => {
+    const from = Math.max(s.t, start);
+    const to = i + 1 < all.length ? Math.max(all[i + 1].t, start) : start + seconds;
+    return `file '${s.file}'\nduration ${Math.max(0, to - from).toFixed(4)}`;
+  });
+  const concat = join(tmp, "frames.txt");
+  writeFileSync(concat, `${list.join("\n")}\nfile '${shots.at(-1).file}'\n`);
+  const publicDir = join(tmp, "public");
+  mkdirSync(publicDir);
+  run("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", concat, "-vf", "fps=30",
+    "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", join(publicDir, "recording.mp4")]);
+
+  const { bundle } = await import("@remotion/bundler");
+  const { renderMedia, selectComposition } = await import("@remotion/renderer");
+  const inputProps = { seconds, cursor, clicks, camera, captions };
+  const serveUrl = await bundle({ entryPoint: join(root, "scripts/demo/index.ts"), publicDir });
+  const composition = await selectComposition({ serveUrl, id: "Demo", inputProps });
+  const mp4 = join(root, "docs/demo.mp4");
+  await renderMedia({ composition, serveUrl, inputProps, codec: "h264", crf: 26, scale: 1.5, outputLocation: mp4 });
+  console.log("  docs/demo.mp4");
+
+  // The README's GIF, cut down from the video. The camera moves every pixel,
+  // which GIF compresses badly, so it stays at 8 fps to land under 10 MB.
   const palette = join(tmp, "palette.png");
-  const filters = "fps=8,scale=880:-1:flags=lanczos";
-  run("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(lead), "-i", video, "-vf",
-    `${filters},palettegen=max_colors=96`, palette]);
-  run("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(lead), "-i", video, "-i", palette,
-    "-lavfi", `${filters}[x];[x][1:v]paletteuse=dither=none`, join(root, "docs/demo.gif")]);
+  const filters = "fps=8,scale=800:-1:flags=lanczos";
+  run("ffmpeg", ["-y", "-loglevel", "error", "-i", mp4, "-vf",
+    `${filters},palettegen=max_colors=96:stats_mode=diff`, palette]);
+  run("ffmpeg", ["-y", "-loglevel", "error", "-i", mp4, "-i", palette,
+    "-lavfi", `${filters}[x];[x][1:v]paletteuse=dither=none:diff_mode=rectangle`, join(root, "docs/demo.gif")]);
   console.log("  docs/demo.gif");
 }
 
 try {
-  await stills();
+  if (only !== "demo") await stills();
   if (only !== "stills") await demo();
 } finally {
   await browser.close();

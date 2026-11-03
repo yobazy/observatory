@@ -42,11 +42,14 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@remotion/bundler": "^4.0.540",
+    "@remotion/renderer": "^4.0.540",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
     "playwright": "^1.57.0",
+    "remotion": "^4.0.540",
     "typescript": "~6.0.3",
     "vite": "^8.0.16"
   }
