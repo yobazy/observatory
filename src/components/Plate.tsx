@@ -254,8 +254,9 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, cla
   useEffect(() => {
     const p = live.current;
     if (!p) return;
-    // A thread that just finished gets one last shake before it rests.
-    if (tone === "finished" && (p.tone === "running" || p.tone === "needs_feedback") && !reduced()) {
+    // A thread that just finished gets one last shake before it rests,
+    // read or not: one you're watching is marked seen as it finishes.
+    if ((tone === "finished" || tone === "fresh") && (p.tone === "running" || p.tone === "needs_feedback") && !reduced()) {
       p.kick = isBig(p) ? 0.03 : 0.015;
       p.settling = Math.max(p.settling, 90);
     }
