@@ -103,6 +103,7 @@ pub fn run() {
             gh::gh_pr,
             gh::gh_pr_create,
             gh::gh_pr_merge,
+            gh::gh_pr_ready,
             usage::usage_report,
             uselog::append_use_log,
             uselog::use_log_path,

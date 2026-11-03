@@ -194,6 +194,17 @@ export async function mergePr(wt: Worktree, pr: PullRequest): Promise<string> {
   return how;
 }
 
+/** Take a draft PR out of draft, so it's ready for review (and for a
+ *  reviewer that only picks up ready ones). */
+export async function readyPr(wt: Worktree, pr: PullRequest): Promise<void> {
+  if (isPreview()) {
+    setState((s) => ({ prs: { ...s.prs, [wt.id]: { kind: "found", pr: { ...pr, state: "open" }, at: Date.now() } } }));
+    return;
+  }
+  await invoke("gh_pr_ready", { path: wt.path, number: pr.number });
+  await refreshPrs([wt.id]);
+}
+
 /** The prompt that hands a red CI run to an agent. */
 export function fixCiPrompt(pr: PullRequest, branch: string): string {
   const which = pr.failing.length ? ` (${pr.failing.slice(0, 8).join(", ")})` : "";
