@@ -462,3 +462,40 @@ test("a dot inside an option's quote or brackets stays in it, and prose after th
   assert.deepEqual(suggested(c), { 1: 'C' });
   assert.deepEqual(readAsk(1, 'Ship?  A today · B Monday').options[1], { letter: 'B', label: 'Monday' });
 });
+
+test('a numbered list a lead-in line introduces stays under it, not as decisions', () => {
+  const c = readCard(`**Contract reviewed.**
+
+**Needs you**
+- Send the reply draft.
+
+**What the reply asks for**
+
+Before you sign:
+1. Pay the onboarding time.
+2. Insurance proof within 30 days.
+
+Also asked:
+
+3. Net 15 from February.
+4. An indemnity that runs both ways.
+
+**Decisions**
+1. Also ask for 30 days' notice?  A leave it out · B add it
+2. Push the commit?  A push · B leave it local`);
+  assert.deepEqual(
+    c.asks.map((a) => [a.n, a.options.map((o) => o.letter).join('')]),
+    [
+      [1, 'AB'],
+      [2, 'AB'],
+    ],
+  );
+  assert.match(c.asksNote, /Before you sign:\n1\. Pay the onboarding time\.\n2\. Insurance proof within 30 days\./);
+  assert.match(c.asksNote, /Also asked:\n\n3\. Net 15 from February\.\n4\. An indemnity that runs both ways\./);
+});
+
+test('a lead-in list item that offers a choice is still a decision', () => {
+  const c = readCard('**Needs you**\nTwo things:\n1. Ship it?  A yes · B no\n2. Read the draft.');
+  assert.deepEqual(c.asks.map((a) => a.n), [1]);
+  assert.match(c.asksNote, /Two things:\n2\. Read the draft\./);
+});
