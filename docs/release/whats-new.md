@@ -10,27 +10,18 @@
   underneath on its own.
 -->
 
-### The Read view reads more calmly
+### Zoom into pictures
 
-Replies, the open-decisions bar and the reply box share one column width. **Needs you** is a tinted well instead of a box inside a box, options sit under their question, and the verdict is a quiet dot. Long file paths show the file name first. What appears now eases in instead of popping, and it all stays still under Reduce motion.
+Click a picture in the preview to zoom in where you clicked, and click again to fit. Pinch, ⌘-scroll, **+** and **−** zoom too, and **0** fits. A bar under the picture shows **‹ 2 of 5 ›** and steps through the files you have open.
 
-### Catch me up
+### Answer more from the Read view
 
-**↻ Catch me up**, above the reply box, asks the agent for a fresh card: what's done, what's running, and every decision still open, renumbered from 1. The earlier decisions it replaces drop out of the "still open" box.
-
-### Do more from the Files list
-
-Right-click a file to **Send** its path to a thread, pin it so it stays on the task's shelf, or pick several and **Open N as tabs**. Files are listed most recent first. Projects drag onto folders and out of them, and a picked color now fills the whole row.
-
-### Hand broken jobs and marked moments to an agent
-
-An unfolded job in the Automations panel has **Fix with an agent**, which starts one in the right project with the job's details and its last log lines. **Start task** on a marked moment now takes the fix all the way to a pull request in its own worktree, reviewed by a second agent.
+When an MCP server asks for input with **Accept / Decline**, the Read view shows the question and both buttons, so you no longer have to switch to the terminal. After you say **Yes** to a permission prompt, the thread shows Working while the command runs, not Waiting on you. **Catch me up** spins and says *Catching you up…* until the fresh card arrives.
 
 ### And smaller things
 
-- **←** / **→** step through a reply's pictures in the preview.
-- Decisions written as bare letters (`A · B · C`) become buttons, labelled from the reply, and options that quote a line with dots in it read correctly.
-- Commands under a Needs-you question show as blocks inside the box, with Copy and Run.
-- The earlier-decisions box folds from **Hide** at its right and stays in view as you scroll.
-- The sidebar's Away and Follow up cards are calmer, and Uncommitted, Ideas and Decisions are counts.
-- Clean up's "Clean up anyway" question can be closed with Cancel or Escape.
+- Web links open in your browser instead of inside the app.
+- A worktree whose folder was deleted says **The folder is gone** and offers **Remove from list**, instead of showing git's error.
+- An always-on job that's running but whose log ends in an error shows **Running, with errors** in orange.
+- Waiting on you uses the same calm card as While you were away and Follow up.
+- A numbered list under a line like "Before you sign:" stays in place in the Read view, instead of turning into empty decisions.
