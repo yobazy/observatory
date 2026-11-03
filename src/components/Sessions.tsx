@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ProjectIdeas } from "./Ideas";
 import {
   flash,
@@ -210,9 +210,9 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
       <header className="sessions-head" data-tauri-drag-region>
         <ProjectPlate projectId={project.id} seed={project.repo_path} />
         <div className="sessions-title" data-tauri-drag-region>
-          <h1>
+          <h1 title={project.name} style={{ "--name-len": project.name.length } as CSSProperties}>
             <ProjectIcon project={project} size={22} />
-            {project.name}
+            <span className="sessions-name">{project.name}</span>
           </h1>
           <p className="sessions-path" title={project.repo_path}>
             {project.repo_path.replace(/^\/Users\/[^/]+/, "~")}
