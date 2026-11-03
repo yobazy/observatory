@@ -5,7 +5,7 @@ import { flash, getState, useAppState } from "../nebula/store";
 import { changedFiles, type GitStatus } from "../nebula/git";
 import { needsForce, takerFor } from "../nebula/actions";
 import { handToBranch } from "../nebula/queue";
-import { createPr, fixCiPrompt, mergePr, refreshPrs, type PullRequest } from "../nebula/prs";
+import { createPr, fixCiPrompt, mergePr, readyPr, refreshPrs, type PullRequest } from "../nebula/prs";
 import { openLink } from "./Run";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import type { Worktree } from "../nebula/types";
@@ -194,6 +194,21 @@ export function PrLine({ worktree, git }: { worktree: Worktree; git: GitStatus }
             }
           >
             Fix CI
+          </button>
+        )}
+        {p.state === "draft" && (
+          <button
+            className="btn btn-sm"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await readyPr(worktree, p);
+                flash(`Marked #${p.number} ready for review`);
+              })
+            }
+            title={`Take #${p.number} out of draft so it can be reviewed and merged (gh pr ready)`}
+          >
+            {busy ? "Marking…" : "Mark ready"}
           </button>
         )}
         {p.state === "open" && p.checks !== "failing" && p.checks !== "pending" && !p.conflicts && p.review !== "changes" && (

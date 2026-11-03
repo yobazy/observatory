@@ -146,6 +146,16 @@ pub async fn gh_pr_create(path: PathBuf, draft: bool) -> Result<String, String> 
     .map_err(|e| e.to_string())?
 }
 
+/// Mark draft pull request `number` ready for review.
+#[tauri::command]
+pub async fn gh_pr_ready(path: PathBuf, number: u64) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        gh(&path, &["pr", "ready", &number.to_string()]).map(|_| ())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// The merge `gh` should do, from `gh repo view`'s JSON: a squash where the
 /// repo allows one, else a merge commit, else a rebase.
 fn merge_flag(repo: &serde_json::Value) -> Option<&'static str> {
