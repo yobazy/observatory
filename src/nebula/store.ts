@@ -210,6 +210,21 @@ export function setState(patch: Partial<State> | ((s: State) => Partial<State>))
   listeners.forEach((l) => l());
 }
 
+/** Set while a selection happens behind the current view (Decisions
+ *  answering a thread that has to be woken), so it doesn't leave that view. */
+let selectingInPlace = false;
+export function selectInPlace(session: State["selectedSession"]) {
+  selectingInPlace = true;
+  try {
+    setState({ selectedSession: session });
+  } finally {
+    selectingInPlace = false;
+  }
+}
+export function isSelectingInPlace(): boolean {
+  return selectingInPlace;
+}
+
 export function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => {

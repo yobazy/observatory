@@ -38,7 +38,7 @@ import { useAutoFollowUps } from "./nebula/organize";
 import { useProjectSessions } from "./nebula/focus";
 import { useRecentTracking } from "./nebula/recent";
 import { useProjectLogos } from "./nebula/icons";
-import { flash, getState, setState, subscribe, useAppState, waitingAgents } from "./nebula/store";
+import { flash, getState, isSelectingInPlace, setState, subscribe, useAppState, waitingAgents } from "./nebula/store";
 import { usePrPolling } from "./nebula/prs";
 import { useQueueRunner } from "./nebula/queue";
 import { useBatchRunner } from "./nebula/batchRunner";
@@ -456,7 +456,7 @@ function useLeaveUsageOnSelect() {
       if (s.selectedProject !== selectedProject || s.selectedSession !== selectedSession) {
         selectedProject = s.selectedProject;
         selectedSession = s.selectedSession;
-        if (s.view !== "sessions") setState({ view: "sessions" });
+        if (s.view !== "sessions" && !isSelectingInPlace()) setState({ view: "sessions" });
       }
     });
   }, []);

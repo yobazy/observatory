@@ -16,6 +16,8 @@ interface Waiting {
   card: Card;
 }
 
+const keyOf = (w: Waiting) => `${w.agent.id}:${w.n}`;
+
 /** How many threads the inbox last found waiting, for its sidebar entry. */
 let lastCount: number | null = null;
 
@@ -56,9 +58,15 @@ export function InboxView() {
       live = false;
     };
   }, [key]);
-  // Answered here: gone from the list while the thread takes it up.
+  // Answered here: gone from the list while the thread takes it up. The
+  // thread starts working at once and so drops out of `found`; a card on
+  // its way out keeps its place until its animation ends.
   const [sent, setSent] = useState<Set<string>>(new Set());
-  const shown = (found ?? []).filter((w) => !sent.has(`${w.agent.id}:${w.n}`));
+  const [leaving, setLeaving] = useState<{ w: Waiting; at: number }[]>([]);
+  const gone = (w: Waiting) => sent.has(keyOf(w)) || leaving.some((l) => keyOf(l.w) === keyOf(w));
+  const shown = (found ?? []).filter((w) => !gone(w));
+  const list = [...shown];
+  for (const l of [...leaving].sort((a, b) => a.at - b.at)) list.splice(Math.min(l.at, list.length), 0, l.w);
 
   return (
     <section className="usage inbox" aria-labelledby="inbox-title">
@@ -80,20 +88,46 @@ export function InboxView() {
         </div>
       </header>
       <div className="usage-body inbox-body">
-        {shown.map((w) => (
-          <InboxItem
-            key={`${w.agent.id}:${w.n}`}
-            waiting={w}
-            project={state.projects[state.worktrees[w.agent.worktree_id]?.project_id ?? ""]?.name ?? ""}
-            onSent={() => setSent((s) => new Set(s).add(`${w.agent.id}:${w.n}`))}
-          />
-        ))}
+        {list.map((w, i) => {
+          const k = keyOf(w);
+          const isLeaving = leaving.some((l) => keyOf(l.w) === k);
+          return (
+            <InboxItem
+              key={k}
+              waiting={w}
+              project={state.projects[state.worktrees[w.agent.worktree_id]?.project_id ?? ""]?.name ?? ""}
+              leaving={isLeaving}
+              onSent={(animate) => {
+                if (animate) setLeaving((ls) => [...ls, { w, at: i }]);
+                else setSent((s) => new Set(s).add(k));
+              }}
+              onGone={() => {
+                setSent((s) => new Set(s).add(k));
+                setLeaving((ls) => ls.filter((l) => keyOf(l.w) !== k));
+              }}
+            />
+          );
+        })}
       </div>
     </section>
   );
 }
 
-function InboxItem({ waiting, project, onSent }: { waiting: Waiting; project: string; onSent: () => void }) {
+function InboxItem({
+  waiting,
+  project,
+  leaving,
+  onSent,
+  onGone,
+}: {
+  waiting: Waiting;
+  project: string;
+  leaving: boolean;
+  /** Answered; `animate` when it should slide away rather than just go. */
+  onSent: (animate: boolean) => void;
+  /** Its slide away has ended. */
+  onGone: () => void;
+}) {
   const { agent, card } = waiting;
   const [picks, setPicks] = useState<Record<number, string>>({});
   const [draft, setDraft] = useState("");
@@ -102,18 +136,32 @@ function InboxItem({ waiting, project, onSent }: { waiting: Waiting; project: st
   const recommended = useMemo(() => suggested(card), [card]);
   const outgoing = answerText(picks, draft);
   const ghost = !draft && !answerText(picks, "") ? answerText(recommended, "") : "";
+  const self = useRef<HTMLElement>(null);
+  // Answered: the card slides away and its space closes, then it leaves the
+  // list. You stay here for the next one.
   const send = async () => {
-    if (!outgoing) return;
+    if (!outgoing || leaving) return;
     try {
-      const how = await enqueue(agent, outgoing);
+      const how = await enqueue(agent, outgoing, { stay: true });
       flash(how === "queued" ? `Queued for ${agent.name}` : `Sent to ${agent.name}`);
-      onSent();
+      const el = self.current;
+      const animate = !!el && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+      // Measured before the class goes on, for the height to close from.
+      if (el && animate) el.style.setProperty("--h", `${el.offsetHeight}px`);
+      onSent(animate);
     } catch {
       flash(`Couldn't send to ${agent.name}. Your answer is still here.`, 6000);
     }
   };
   return (
-    <article className="inbox-item">
+    <article
+      ref={self}
+      className={`inbox-item${leaving ? " is-leaving" : ""}`}
+      inert={leaving}
+      onAnimationEnd={(e) => {
+        if (e.target === e.currentTarget && leaving) onGone();
+      }}
+    >
       <div className="inbox-head">
         <span className="inbox-name">{agent.name}</span>
         {project && <span className="inbox-project">{project}</span>}
