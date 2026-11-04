@@ -894,6 +894,7 @@ body.is-resizing-rows * {
 .sessions-title {
   flex: 1 1 150px;
   min-width: 0;
+  container-type: inline-size;
 }
 .sessions-title h1 {
   font-size: 22px;
@@ -6028,6 +6029,86 @@ button.attempt-status:hover span:nth-child(2) {
   margin: auto;
   cursor: zoom-out;
 }
+.fpv-pdf {
+  display: block;
+  overflow: auto;
+  background: var(--panel);
+}
+/* As wide as the widest page when zoomed past the pane, so it scrolls to
+   both edges instead of being cut off by the centring. */
+.fpv-pdf-doc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: fit-content;
+  min-width: 100%;
+  padding: 16px 16px 72px;
+}
+.fpv-pdf-page {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-pop);
+}
+.fpv-pdf-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* pdf.js places these spans, as if the page weren't rotated; the rest of its
+   viewer's stylesheet isn't used. */
+.fpv-pdf-text {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  transform-origin: 0 0;
+}
+.fpv-pdf-text[data-main-rotation="90"] {
+  transform: rotate(90deg) translateY(-100%);
+}
+.fpv-pdf-text[data-main-rotation="180"] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+.fpv-pdf-text[data-main-rotation="270"] {
+  transform: rotate(270deg) translateX(-100%);
+}
+.fpv-pdf-text :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.fpv-pdf-text > :not(.markedContent),
+.fpv-pdf-text .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  z-index: 1;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.fpv-pdf-text .markedContent {
+  display: contents;
+}
+.fpv-pdf-text ::selection {
+  background: rgb(0 90 255 / 25%);
+}
+.fpv-pdf-link {
+  position: absolute;
+  z-index: 2;
+}
 .fpv-picbar {
   position: absolute;
   left: 50%;
@@ -8270,12 +8351,21 @@ button.board-main:hover .board-text {
   border-radius: 50%;
   box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 10px 24px -12px rgb(0 0 0 / 0.7);
 }
+/* A long name shrinks to fit its column, down to a floor, and only then
+   ends in an ellipsis instead of being cut mid-letter. --name-len is its
+   length in characters; 32px is the icon and its gap. */
 .sessions-title h1 {
   font-family: var(--display);
-  font-size: 27px;
+  font-size: clamp(19px, calc((100cqi - 32px) / (var(--name-len, 12) * 0.56)), 27px);
   font-weight: 650;
   letter-spacing: -0.03em;
   line-height: 1.05;
+}
+.sessions-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pane-name {
   font-family: var(--display);

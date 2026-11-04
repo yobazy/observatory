@@ -62,6 +62,12 @@ export async function readText(path: string): Promise<string> {
   return invoke<string>("read_preview_text", { path });
 }
 
+/** A previewed file's bytes: a PDF, for pdf.js. */
+export async function readBytes(path: string): Promise<ArrayBuffer> {
+  if (isPreview()) throw new Error("the browser preview has no files to read");
+  return invoke<ArrayBuffer>("read_preview_bytes", { path });
+}
+
 /** Open `paths` in the preview, `front` (or the first of them) in front.
  *  Files already open stay, so an agent showing three mockups in a row gets
  *  three tabs. */
