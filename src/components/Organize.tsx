@@ -4,6 +4,7 @@ import { cleanTag } from "../nebula/folders";
 import {
   addThreadTag,
   deleteThreadTag,
+  flipFollowUpOrder,
   followUpAgents,
   isAutoFollowUp,
   renameThreadTag,
@@ -366,6 +367,8 @@ export function FollowUps() {
   const flagged = followUpAgents(state).filter(({ agent }) => agent.status !== "needs_feedback" || agent.archived);
   if (flagged.length === 0) return null;
   const shown = all ? flagged : flagged.slice(0, FOLLOW_UP_ROWS);
+  const order = state.prefs.followUpOrder ?? "newest";
+  const other = order === "newest" ? "oldest" : "newest";
   return (
     <section className="side-card followups" aria-label="Flagged for follow-up">
       <h2
@@ -374,6 +377,17 @@ export function FollowUps() {
       >
         <FlagGlyph />
         <span className="side-card-title">Follow up</span> <span className="side-card-count">{flagged.length}</span>
+        {flagged.length > 1 && (
+          <button
+            className="side-card-sort"
+            onClick={() => void flipFollowUpOrder()}
+            aria-label={`Sorted ${order} first. Sort ${other} first`}
+            title={`Sorted ${order} first. Click for ${other} first.`}
+          >
+            {order === "newest" ? "Newest" : "Oldest"}
+            <span aria-hidden> {order === "newest" ? "↓" : "↑"}</span>
+          </button>
+        )}
       </h2>
       <ul>
         {shown.map(({ agent, at }) => {
@@ -416,14 +430,17 @@ export function FollowUps() {
         <button
           className="link-btn side-card-more"
           onClick={() => setAll((v) => !v)}
-          title={all ? "Back to the two oldest" : "Every task flagged to come back to"}
+          title={all ? `Back to the two ${order}` : "Every task flagged to come back to"}
         >
           {all ? (
             "Show fewer"
           ) : (
             <>
               {flagged.length - FOLLOW_UP_ROWS} more
-              <span className="side-card-more-note"> · newest {relativeTime(flagged[flagged.length - 1].at)}</span>
+              <span className="side-card-more-note">
+                {" "}
+                · {other} {relativeTime(flagged[flagged.length - 1].at)}
+              </span>
             </>
           )}
         </button>

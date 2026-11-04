@@ -427,6 +427,21 @@ body.is-resizing-rows * {
   height: 20px;
   color: var(--faint);
 }
+/* Which end of the list comes first: quiet until you want it. */
+.side-card-sort {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--faint);
+}
+.side-card-sort:hover {
+  color: var(--text);
+}
 .side-card li {
   position: relative;
 }

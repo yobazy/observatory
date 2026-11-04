@@ -4,7 +4,7 @@
 // icons; the daemon (and so the TUI) keeps its own order.
 import { useEffect } from "react";
 import { onAgentStatus } from "./client";
-import { afterStatus, settled } from "./followupRules";
+import { afterStatus, inFollowUpOrder, settled } from "./followupRules";
 import { isWatching } from "./notify";
 import { flash, getState, projectWorktrees, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
 import { moveWithin, placeIn, reorderFolders, type ProjectFolder } from "./folders";
@@ -273,11 +273,15 @@ export async function toggleFlag(agent: Agent) {
   flash(on ? `Flagged ${agent.name} for follow-up` : `Cleared the flag on ${agent.name}`);
 }
 
-/** Every marked task still around, the longest-waiting first. */
+/** Every marked task still around, in the order chosen on the card. */
 export function followUpAgents(s: State): { agent: Agent; at: number }[] {
-  return Object.entries(s.prefs.followUps ?? {})
-    .flatMap(([id, at]) => (s.agents[id] ? [{ agent: s.agents[id], at }] : []))
-    .sort((a, b) => a.at - b.at);
+  const rows = Object.entries(s.prefs.followUps ?? {}).flatMap(([id, at]) => (s.agents[id] ? [{ agent: s.agents[id], at }] : []));
+  return inFollowUpOrder(rows, s.prefs.followUpOrder);
+}
+
+/** Show the Follow up list from its other end; remembered across launches. */
+export async function flipFollowUpOrder() {
+  await save((prefs) => ({ ...prefs, followUpOrder: (prefs.followUpOrder ?? "newest") === "newest" ? "oldest" : "newest" }));
 }
 
 /** Whether the app flagged this task itself, when a turn ended unseen. */
