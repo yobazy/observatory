@@ -38,6 +38,7 @@
     "dompurify": "^3.4.16",
     "highlight.js": "11.11.1",
     "marked": "^18.1.0",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
