@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFPageProxy, RenderTask } from "pdfjs-dist";
 import { openPdf, type Pdfjs } from "../nebula/pdf";
-import { fitScale, PAGE_GAP, pageAt, pageTops, safeLink } from "../nebula/pdfpages";
+import { fitScale, PAGE_GAP, pageAt, pageTops, readingLine, safeLink } from "../nebula/pdfpages";
 import { readBytes, type PreviewFile } from "../nebula/preview";
 
 const MIN_ZOOM = 0.25;
@@ -10,7 +10,9 @@ const MAX_ZOOM = 6;
 const MAX_PIXELS = 16_000_000;
 
 /** One page: a placeholder of the right size until it's near the view, then
- *  drawn, with invisible text over it to select and its links on top. */
+ *  drawn, with invisible text over it to select and its links on top. Far from
+ *  the view again it goes back to a placeholder, so scrolling through a long
+ *  PDF doesn't keep every page's canvas. */
 function PdfPage({ lib, page, scale, root }: { lib: Pdfjs; page: PDFPageProxy; scale: number; root: HTMLElement | null }) {
   const box = useRef<HTMLDivElement>(null);
   const text = useRef<HTMLDivElement>(null);
@@ -21,15 +23,29 @@ function PdfPage({ lib, page, scale, root }: { lib: Pdfjs; page: PDFPageProxy; s
 
   useEffect(() => {
     if (!box.current || !root) return;
-    const watch = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { root, rootMargin: "100% 0px" });
-    watch.observe(box.current);
-    return () => watch.disconnect();
+    const draw = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { root, rootMargin: "100% 0px" });
+    // Wider than the line it's drawn at, so a small scroll back and forth
+    // doesn't draw it again.
+    const keep = new IntersectionObserver(([e]) => e.isIntersecting || setNear(false), { root, rootMargin: "300% 0px" });
+    draw.observe(box.current);
+    keep.observe(box.current);
+    return () => {
+      draw.disconnect();
+      keep.disconnect();
+    };
   }, [root]);
 
   // The old drawing stays, stretched, until the new one is ready, so zooming
   // doesn't flash and a run of zooms draws only the last.
   useEffect(() => {
-    if (!near) return;
+    if (!near) {
+      if (!drawn.current) return;
+      drawn.current = false;
+      box.current?.querySelector("canvas")?.remove();
+      text.current?.replaceChildren();
+      page.cleanup();
+      return;
+    }
     let task: RenderTask | null = null;
     let layer: InstanceType<Pdfjs["TextLayer"]> | null = null;
     let stale = false;
@@ -125,7 +141,10 @@ export function PdfView({ file, rev }: { file: PreviewFile; rev: number }) {
     readBytes(file.path)
       .then(openPdf)
       .then(async ({ lib, doc, close }) => {
-        const pages = await Promise.all(Array.from({ length: doc.numPages }, (_, i) => doc.getPage(i + 1)));
+        const pages = await Promise.all(Array.from({ length: doc.numPages }, (_, i) => doc.getPage(i + 1))).catch((e) => {
+          close();
+          throw e;
+        });
         if (stale) close();
         else {
           setError(null);
@@ -216,8 +235,22 @@ export function PdfView({ file, rev }: { file: PreviewFile; rev: number }) {
     return () => pane.removeEventListener("keydown", onKey);
   }, [stage, zoomBy, zoomTo]);
 
-  const onScroll = () => stage && setCurrent(pageAt(tops, heights, stage.scrollTop + stage.clientHeight / 2));
-  const goTo = (page: number) => stage?.scrollTo({ top: tops[page] - PAGE_GAP });
+  // Where a page button left the scroll: the bar says the page it asked for
+  // until you scroll on, as short pages put several in view at once.
+  const jumped = useRef<number | null>(null);
+  const onScroll = () => {
+    if (!stage) return;
+    if (jumped.current !== null && Math.abs(stage.scrollTop - jumped.current) < 1) return;
+    jumped.current = null;
+    const line = readingLine(stage.scrollTop, stage.clientHeight, stage.scrollHeight - stage.clientHeight);
+    setCurrent(pageAt(tops, heights, line));
+  };
+  const goTo = (page: number) => {
+    if (!stage) return;
+    stage.scrollTo({ top: tops[page] - PAGE_GAP });
+    jumped.current = stage.scrollTop;
+    setCurrent(page);
+  };
 
   if (error && !opened) return <p className="fpv-empty">Couldn't show this PDF: {error}</p>;
   const n = opened?.pages.length ?? 0;

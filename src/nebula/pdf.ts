@@ -22,5 +22,11 @@ export async function openPdf(data: ArrayBuffer) {
     iccUrl: `${base}iccs/`,
   });
   // `close` ends the worker with the document.
-  return { lib, doc: await task.promise, close: () => void task.destroy() };
+  const close = () => void task.destroy();
+  try {
+    return { lib, doc: await task.promise, close };
+  } catch (e) {
+    close();
+    throw e;
+  }
 }
