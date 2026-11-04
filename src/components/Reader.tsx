@@ -26,28 +26,31 @@ import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
 import { AskChoices } from "./AskStrip";
 import { ReaderFind } from "./ReaderFind";
-import { Plate } from "./Plate";
+import { Plate, plateTone } from "./Plate";
 import { WorkCat } from "./Pet";
 
 /** Earlier decisions you put away, per agent, for as long as the app runs. */
 const dismissedFor = new Map<string, Set<number>>();
 
-/** The thread's artwork and name at the top of what it said. Every prompt
- *  and step it has taken moves the sand, so the plate is made by the work. */
+/** The thread's artwork and name at the top of what it said, like a record
+ *  sleeve. Every prompt and step it has taken moves the sand, so the plate is
+ *  made by the work; its sand is the thread's status color, and a lamp in
+ *  the same color glows behind it. */
 function ReaderHero({ agent, work }: { agent: Agent; work: number }) {
   const state = useAppState();
   const branch = state.worktrees[agent.worktree_id]?.branch;
   const project = projectOfWorktree(state, agent.worktree_id)?.name;
+  const tone = plateTone(agent);
   return (
-    <header className="rd-hero">
-      <Plate seed={agent.id} work={work} tone="sand" size={128} drift={agent.status === "running"} />
+    <header className={`rd-hero is-${tone}`}>
+      <span className="rd-hero-lamp" aria-hidden />
+      <Plate seed={agent.id} work={work} tone={tone} size={128} drift={agent.status === "running"} />
       <div className="rd-hero-text">
-        <p className={`rd-hero-status is-${agent.status}`}>{statusLabel(agent)}</p>
+        <p className="rd-hero-where">{[project, branch].filter(Boolean).join(" · ")}</p>
         <h2 className="rd-hero-name">{agent.name}</h2>
-        <p className="rd-hero-where">
-          {[project && branch ? `${project} on ${branch}` : project ?? branch, harnessLabel(agent), relativeTime(agent.status_changed_at)]
-            .filter(Boolean)
-            .join(" · ")}
+        <p className="rd-hero-meta">
+          <span className={`rd-hero-status is-${agent.status}`}>{statusLabel(agent)}</span>
+          <span>{[harnessLabel(agent), relativeTime(agent.status_changed_at)].filter(Boolean).join(" · ")}</span>
         </p>
       </div>
     </header>

@@ -533,17 +533,7 @@ function RecentPanel({ projects, onMenu }: { projects: Project[]; onMenu: (e: Re
                 <ProjectIcon project={project} />
                 <span className="project-name">{project.name}</span>
                 <span className="project-meta">
-                  {running > 0 && (
-                    <span className="project-working" title={`${running} in progress`}>
-                      <span className="orbit" aria-hidden />
-                      <span aria-hidden>{running}</span>
-                    </span>
-                  )}
-                  {needs > 0 && (
-                    <span className="project-badge badge-needs" title={`${needs} waiting on you`}>
-                      {needs}
-                    </span>
-                  )}
+                  <StatusPips needs={needs} running={running} />
                   <span className="recent-age">{here ? "here" : relativeTime(at)}</span>
                 </span>
               </button>
@@ -636,22 +626,7 @@ function FolderGroup({
         <span className="folder-count">{projects.length}</span>
         {!open && (
           <span className="project-meta">
-            {running > 0 && (
-              <span className="project-working" title={`${running} in progress`}>
-                <span className="orbit" aria-hidden />
-                <span aria-hidden>{running}</span>
-              </span>
-            )}
-            {needs > 0 && (
-              <span className="project-badge badge-needs" title={`${needs} waiting on you`}>
-                {needs}
-              </span>
-            )}
-            {unseen > 0 && (
-              <span className="project-badge badge-unseen" title={`${unseen} finished, unread`}>
-                {unseen}
-              </span>
-            )}
+            <StatusPips needs={needs} running={running} unseen={unseen} />
           </span>
         )}
       </button>
@@ -731,23 +706,7 @@ function ProjectRow({
               !
             </span>
           )}
-          {running > 0 && (
-            <span className="project-working" title={`${running} in progress`}>
-              <span className="orbit" aria-hidden />
-              <span className="sr-only">{running} in progress</span>
-              <span aria-hidden>{running}</span>
-            </span>
-          )}
-          {needs > 0 && (
-            <span className="project-badge badge-needs" title={`${needs} waiting on you`}>
-              {needs}
-            </span>
-          )}
-          {unseen > 0 && (
-            <span className="project-badge badge-unseen" title={`${unseen} finished, unread`}>
-              {unseen}
-            </span>
-          )}
+          <StatusPips needs={needs} running={running} unseen={unseen} />
           {running + needs + unseen === 0 && index !== null && index < 9 && (
             <kbd className="project-key">⌘{index + 1}</kbd>
           )}
@@ -844,4 +803,32 @@ export function PanelGlyph() {
 export function ProjectDot({ project }: { project: Project | undefined }) {
   const style = useProjectColorStyle(project);
   return style ? <span className="project-dot" style={style} aria-hidden /> : null;
+}
+
+/** What a project's threads are doing, as one dot each: waiting on you first,
+ *  then working, then finished and unread. Past five it says how many more. */
+function StatusPips({ needs, running, unseen = 0 }: { needs: number; running: number; unseen?: number }) {
+  const total = needs + running + unseen;
+  if (total === 0) return null;
+  const dots = [
+    ...Array<string>(needs).fill("needs_feedback"),
+    ...Array<string>(running).fill("running"),
+    ...Array<string>(unseen).fill("finished"),
+  ];
+  const label = [needs && `${needs} waiting on you`, running && `${running} in progress`, unseen && `${unseen} finished, unread`]
+    .filter(Boolean)
+    .join(", ");
+  return (
+    <span className="pips" title={label}>
+      <span className="sr-only">{label}</span>
+      {dots.slice(0, 5).map((tone, i) => (
+        <span key={i} className={`pip pip-${tone}`} aria-hidden />
+      ))}
+      {total > 5 && (
+        <span className="pip-more" aria-hidden>
+          +{total - 5}
+        </span>
+      )}
+    </span>
+  );
 }

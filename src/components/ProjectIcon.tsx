@@ -21,10 +21,24 @@ import { FolderDialog, ProjectDetailsDialog } from "./ProjectOrganize";
 import { locateProject } from "../nebula/relocate";
 import { useCards } from "../nebula/cards";
 import { CardDialog, type CardTarget } from "./CardDialog";
+import { Plate } from "./Plate";
 
-export function ProjectIcon({ project, size = 18 }: { project: Project; size?: number }) {
+/** A project's icon: the emoji or image picked for it, its repo's logo, or
+ *  else its sigil, a still sand plate drawn from its folder, the same figure
+ *  every time. `onlyPicked` leaves the sigil out where the project's own
+ *  plate already shows. */
+export function ProjectIcon({ project, size = 18, onlyPicked = false }: { project: Project; size?: number; onlyPicked?: boolean }) {
   const { prefs, logos } = useAppState();
-  return <IconView icon={iconFor(project, prefs.projectIcons, logos, prefs.projectColors)} size={size} />;
+  const icon = iconFor(project, prefs.projectIcons, logos, prefs.projectColors);
+  if (icon.kind === "monogram") {
+    if (onlyPicked) return null;
+    return (
+      <span className="picon picon-sigil" style={{ width: size, height: size }} aria-hidden>
+        <Plate seed={project.repo_path} work={0} tone="sand" size={size} />
+      </span>
+    );
+  }
+  return <IconView icon={icon} size={size} />;
 }
 
 function IconView({ icon, size }: { icon: ShownIcon; size: number }) {
@@ -181,7 +195,7 @@ export function IconPicker({ project, onClose }: { project: Project; onClose: ()
 
         <footer className="dialog-foot">
           <span className="hint">
-            {logo ? "Without a pick, the repo’s own logo shows." : "Without a pick, a letter shows."}
+            {logo ? "Without a pick, the repo’s own logo shows." : "Without a pick, its sand plate shows."}
           </span>
           <button className="btn btn-primary" onClick={onClose}>
             Done

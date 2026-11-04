@@ -44,6 +44,9 @@
   --plate-idle: #9aa2b8;
   --plate-error: #e0708f;
 
+  /* Fine grain on the night surfaces, so they read as material, not flat fill. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
   --r-sm: 6px;
   --r-md: 9px;
   --r-lg: 14px;
@@ -66,6 +69,7 @@
 /* Night watch by day: ivory pages and ink-blue type. The plates stay night,
    so each lens is a piece of dark sky in the window. */
 :root[data-mode="light"] {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --night: #eceae4;
   --panel: #f6f5f1;
   --raised: #e2e0d8;
@@ -330,7 +334,7 @@ body.is-resizing-rows * {
 .sidebar {
   display: flex;
   flex-direction: column;
-  background: var(--night);
+  background: var(--grain), var(--night);
   border-right: 1px solid var(--line);
   min-height: 0;
 }
@@ -776,20 +780,12 @@ body.is-resizing-rows * {
   display: grid;
   place-items: center;
 }
-.badge-needs {
-  background: var(--st-waiting);
-  color: var(--accent-ink);
-}
 .badge-missing {
   background: var(--st-error);
   color: var(--accent-ink);
 }
 .project-row.is-missing .project-name {
   color: var(--muted);
-}
-.badge-unseen {
-  background: rgb(95 212 176 / 0.18);
-  color: var(--st-done);
 }
 
 /* The spectrum: one segment per live session, read at a glance. */
@@ -1193,7 +1189,7 @@ body.is-resizing-rows * {
 .pane {
   display: flex;
   flex-direction: column;
-  background: var(--term);
+  background: var(--grain), var(--term);
   min-width: 0;
   min-height: 0;
 }
@@ -1292,7 +1288,33 @@ body.is-resizing-rows * {
 }
 .xterm-host {
   position: absolute;
-  inset: 12px 6px 6px 16px;
+  inset: 20px 16px 14px 24px;
+}
+/* The terminal as an eyepiece: a recessed well, darker toward its rim. */
+.pane-body::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--term) 70%, #000);
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 14px 40px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+.pane-body::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 14px;
+  background: radial-gradient(120% 95% at 50% 40%, transparent 62%, rgb(0 0 0 / 0.28));
+  pointer-events: none;
+  z-index: 1;
+}
+:root[data-mode="light"] .pane-body::before {
+  background: var(--term);
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 10px 28px rgb(18 23 38 / 0.06);
+}
+:root[data-mode="light"] .pane-body::after {
+  background: none;
 }
 .xterm-host.is-hidden {
   visibility: hidden;
@@ -3266,14 +3288,44 @@ td.task-last {
   gap: 6px;
   flex: none;
 }
-.project-working {
+/* A project's threads as dots (Sidebar.tsx StatusPips): status in the
+   plate colors, no numbers until there are more than five. */
+.pips {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 650;
+  gap: 3px;
+}
+.pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--st-idle);
+}
+.pip-needs_feedback {
+  background: var(--st-waiting);
+}
+.pip-running {
+  background: var(--st-running);
+  animation: pip-breathe 2.4s ease-in-out infinite;
+}
+.pip-finished {
+  background: var(--st-done);
+}
+.pip-more {
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
-  color: var(--st-running);
+  color: var(--faint);
+  margin-left: 2px;
+}
+@keyframes pip-breathe {
+  50% {
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pip-running {
+    animation: none;
+  }
 }
 /* A dot circling a faint track: work in progress. */
 .orbit {
@@ -3388,6 +3440,15 @@ td.task-last {
   object-fit: contain;
   line-height: 1;
   user-select: none;
+}
+/* A project's sigil: its still plate, round like every lens. */
+.picon-sigil {
+  border-radius: 50%;
+  overflow: hidden;
+}
+.picon-sigil .plate {
+  display: block;
+  box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.08);
 }
 /* A letter on a color of its own, soft enough to sit beside the name. */
 .picon-mono {
@@ -3831,32 +3892,36 @@ td.task-last {
 .pr-link {
   font-weight: 650;
   font-size: 12px;
+  color: var(--text);
+}
+/* One quiet sentence: number, state, then what stands. Only the part that
+   needs you is colored (Pr.tsx), and a failing check is its own fix button. */
+.pr-sentence {
+  min-width: 0;
+  color: var(--muted);
+}
+.pr-sep {
+  color: var(--faint);
 }
 .pr-state {
-  font-weight: 600;
-}
-.pr-open {
-  color: var(--st-done);
-}
-.pr-draft,
-.pr-closed {
-  color: var(--faint);
+  color: var(--muted);
 }
 .pr-merged {
   color: var(--st-merged);
+  font-weight: 600;
 }
-.checks-passing {
-  color: var(--st-done);
-}
-.checks-pending {
-  color: var(--amber);
-}
-.checks-failing {
+.pr-loud {
   color: var(--st-waiting);
   font-weight: 600;
 }
-.pr-approved {
-  color: var(--st-done);
+.link-btn.pr-loud {
+  font-size: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--st-waiting) 45%, transparent);
+  text-underline-offset: 3px;
+}
+.link-btn.pr-loud:hover:not(:disabled) {
+  text-decoration-color: currentColor;
 }
 .pr-line .btn-sm {
   height: 22px;
@@ -4251,7 +4316,7 @@ td.task-last {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  background: var(--term);
+  background: var(--grain), var(--term);
 }
 .rd-scroll {
   flex: 1;
@@ -4994,10 +5059,12 @@ td.task-last {
 
 .ask-strip {
   display: grid;
-  gap: 7px;
-  padding: 9px 16px 10px 20px;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--st-waiting) 7%, var(--night));
+  gap: 8px;
+  margin: 10px 16px 2px;
+  padding: 11px 14px 12px;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-waiting) 32%, transparent);
+  background: color-mix(in srgb, var(--st-waiting) 6%, var(--term));
 }
 .ask-q,
 .rd-ask .rd-wait {
@@ -8310,16 +8377,52 @@ button.board-main:hover .board-text {
   background: var(--term);
 }
 
+/* The record sleeve (Reader.tsx ReaderHero): the thread's plate as its
+   art, with a lamp in its status color glowing behind it. */
 .rd-hero {
+  --lamp: var(--plate-idle);
+  position: relative;
+  isolation: isolate;
   display: flex;
-  align-items: flex-end;
-  gap: 22px;
+  align-items: center;
+  gap: 24px;
   margin-bottom: 10px;
+}
+.rd-hero.is-needs_feedback {
+  --lamp: var(--plate-waiting);
+}
+.rd-hero.is-running {
+  --lamp: var(--plate-running);
+}
+.rd-hero.is-finished {
+  --lamp: var(--plate-done);
+}
+.rd-hero.is-terminated {
+  --lamp: var(--plate-error);
+}
+.rd-hero-lamp {
+  position: absolute;
+  z-index: -1;
+  left: -150px;
+  top: -170px;
+  width: 440px;
+  height: 440px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--lamp) 15%, transparent), transparent);
+  pointer-events: none;
+  transition: background 600ms ease;
+}
+:root[data-mode="light"] .rd-hero-lamp {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--lamp) 22%, transparent), transparent);
 }
 .rd-hero .plate {
   flex: none;
   border-radius: 50%;
   box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 28px 50px -24px rgb(0 0 0 / 0.85);
+}
+.rd-hero.is-needs_feedback .plate {
+  box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 0 0 4px color-mix(in srgb, var(--plate-waiting) 30%, transparent),
+    0 28px 50px -24px rgb(0 0 0 / 0.85);
 }
 :root[data-mode="light"] .rd-hero .plate,
 :root[data-mode="light"] .sessions-plate {
@@ -8327,12 +8430,39 @@ button.board-main:hover .board-text {
 }
 .rd-hero-text {
   min-width: 0;
-  padding-bottom: 4px;
+}
+.rd-hero-where {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+.rd-hero-name {
+  margin: 8px 0 8px;
+  font-family: var(--display);
+  font-size: 34px;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.rd-hero-meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 .rd-hero-status {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--muted);
   transition: color 240ms ease;
 }
@@ -8344,20 +8474,6 @@ button.board-main:hover .board-text {
 }
 .rd-hero-status.is-terminated {
   color: var(--st-error);
-}
-.rd-hero-name {
-  margin: 6px 0 6px;
-  font-family: var(--display);
-  font-size: 34px;
-  font-weight: 650;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-  overflow-wrap: anywhere;
-}
-.rd-hero-where {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12.5px;
 }
 .md-doc.rd-md {
   font-size: 15px;
@@ -8500,12 +8616,8 @@ button.board-main:hover .board-text {
 .has-color .seg {
   box-shadow: 0 0 0 1.5px var(--badge-ring);
 }
-.has-color .badge-unseen {
-  background: var(--st-done);
-  color: var(--accent-ink);
-}
-.has-color .project-working {
-  --st-running: var(--on-fill);
+.has-color .pip {
+  box-shadow: 0 0 0 1.5px var(--badge-ring);
 }
 .has-color .live-dot {
   box-shadow: 0 0 0 2px var(--badge-ring);
