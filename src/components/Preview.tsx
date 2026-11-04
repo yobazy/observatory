@@ -26,6 +26,7 @@ import { ContextMenu } from "./Menu";
 import { CommentBox, CommentPanel, type Spot } from "./Comments";
 import type { Target } from "../nebula/comments";
 import { fitTables } from "../nebula/tablecols";
+import { PdfView } from "./PdfView";
 // The browser preview has no preview.rs to add comment mode's script, so
 // it puts it into the demo page itself.
 import PICK_JS from "../../src-tauri/src/pick.js?raw";
@@ -274,7 +275,7 @@ function FileView({ file, rev, width, ...picking }: { file: PreviewFile; rev: nu
         </div>
       );
     case "pdf":
-      return <iframe className="fpv-frame fpv-pdf" title={baseName(file.path)} src={previewUrl(file.path, rev)} />;
+      return <PdfView file={file} rev={rev} />;
     default:
       return <TextView path={file.path} rev={rev} />;
   }
