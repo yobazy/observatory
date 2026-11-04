@@ -5,6 +5,8 @@
 import { useEffect } from "react";
 import { BOOTING_MS, createAgent, defaultKind, followUp, takerFor } from "./actions";
 import { onAgentStatus, readSettings } from "./client";
+import { commandOf } from "./command";
+import { endRun, startRun } from "./shellruns";
 import { flash, getState, setState } from "./store";
 import type { Agent } from "./types";
 
@@ -83,9 +85,12 @@ async function type(agent: Agent, text: string, select: boolean, stay = false) {
   // returns still counts as after it.
   const before = lastSent.get(agent.id);
   lastSent.set(agent.id, Date.now());
+  const command = commandOf(text);
+  const run = command === null ? null : startRun(agent.id, command);
   try {
     await followUp(agent, text, { select, stay });
   } catch (e) {
+    if (run) endRun(agent.id, run);
     if (before === undefined) lastSent.delete(agent.id);
     else lastSent.set(agent.id, before);
     throw e;

@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { isPreview, sendInput } from "../nebula/client";
-import { flash, getState, projectOfWorktree, useAppState } from "../nebula/store";
+import { flash, getState, projectOfWorktree, subscribe, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue, queuedSentAt } from "../nebula/queue";
@@ -15,7 +15,8 @@ import { useStandIn } from "../nebula/pane";
 import { shipKind } from "../nebula/git";
 import { SHIP_LABEL, shipPrompt, shipWhat } from "../nebula/actions";
 import { highlightUnder } from "../nebula/highlight";
-import { commandIn } from "../nebula/command";
+import { commandIn, commandOf, stepOf } from "../nebula/command";
+import { RUNNING_LABEL, endRun, isRunning, runningCommand } from "../nebula/shellruns";
 import { fitTables } from "../nebula/tablecols";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
@@ -41,6 +42,7 @@ function ReaderHero({ agent, work }: { agent: Agent; work: number }) {
   const branch = state.worktrees[agent.worktree_id]?.branch;
   const project = projectOfWorktree(state, agent.worktree_id)?.name;
   const tone = plateTone(agent);
+  const running = runningCommand(state, agent);
   return (
     <header className={`rd-hero is-${tone}`}>
       <span className="rd-hero-lamp" aria-hidden />
@@ -49,7 +51,7 @@ function ReaderHero({ agent, work }: { agent: Agent; work: number }) {
         <p className="rd-hero-where">{[project, branch].filter(Boolean).join(" · ")}</p>
         <h2 className="rd-hero-name">{agent.name}</h2>
         <p className="rd-hero-meta">
-          <span className={`rd-hero-status is-${agent.status}`}>{statusLabel(agent)}</span>
+          <span className={`rd-hero-status is-${running ? "running" : agent.status}`}>{running ? RUNNING_LABEL : statusLabel(agent)}</span>
           <span>{[harnessLabel(agent), relativeTime(agent.status_changed_at)].filter(Boolean).join(" · ")}</span>
         </p>
       </div>
@@ -165,6 +167,7 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
   useEffect(() => {
     if (el.current) highlightUnder(el.current);
     const added: HTMLElement[] = [];
+    const watching: (() => void)[] = [];
     const runs = getState().agents[where.from]?.kind === "claude";
     for (const pre of el.current?.querySelectorAll("pre") ?? []) {
       const code = pre.querySelector("code") ?? pre;
@@ -181,6 +184,15 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
           e.stopPropagation();
           void runIn(where.from, command);
         };
+        // Says so while it runs, here where you clicked, and can't go twice.
+        const paint = () => {
+          const running = isRunning(where.from, command);
+          r.textContent = running ? "Running…" : "Run";
+          r.disabled = running;
+          r.classList.toggle("is-running", running);
+        };
+        paint();
+        watching.push(subscribe(paint));
         acts.append(r);
         pre.classList.add("is-command");
       }
@@ -197,6 +209,7 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
       added.push(acts);
     }
     return () => {
+      watching.forEach((stop) => stop());
       added.forEach((b) => b.remove());
       el.current?.querySelectorAll("pre.is-command").forEach((p) => p.classList.remove("is-command"));
     };
@@ -508,18 +521,18 @@ function Reply(props: {
 
 /** What a step changed, or how it failed: a failure shows at once, a
  *  change when you ask. */
-function StepDetail({ detail, failed }: { detail: string; failed: boolean }) {
+function StepDetail({ detail, failed, output }: { detail: string; failed: boolean; output: boolean }) {
   const [open, setOpen] = useState(failed);
   const lines = detail.split("\n");
   return (
     <>
       <button className="link-btn rd-step-more" onClick={() => setOpen(!open)} aria-expanded={open}>
-        {open ? "Hide" : failed ? "Output" : "Diff"}
+        {open ? "Hide" : output ? "Output" : "Diff"}
       </button>
       {open && (
-        <pre className={`rd-diff${failed ? " is-output" : ""}`}>
+        <pre className={`rd-diff${output ? " is-output" : ""}`}>
           {lines.map((l, i) => (
-            <span key={i} className={failed ? "" : l.startsWith("+ ") ? "is-add" : l.startsWith("- ") ? "is-del" : "is-gap"}>
+            <span key={i} className={output ? "" : l.startsWith("+ ") ? "is-add" : l.startsWith("- ") ? "is-del" : "is-gap"}>
               {l}
               {"\n"}
             </span>
@@ -607,7 +620,7 @@ function Steps({ entry, root, fresh }: { entry: Entry; root: string; fresh: bool
             </span>
             <span className="rd-tool">{s.tool.replace(/^mcp__.+?__/, "")}</span>
             <code title={s.target}>{rel(s.target)}</code>
-            {s.detail && <StepDetail detail={s.detail} failed={s.ok === false} />}
+            {s.detail && <StepDetail detail={s.detail} failed={s.ok === false} output={s.ok === false || s.tool === "Bash"} />}
           </li>
         ))}
       </ul>
@@ -751,6 +764,18 @@ export function Reader({
       failed: steps.filter((s) => s.ok === false).length,
     };
   }, [t?.entries]);
+  // A command run outside any turn: the status won't say, so this does.
+  const runs = state.shellRuns[agent.id];
+  const run = runs?.[0];
+  const runStep = useMemo(() => (run ? ({ tool: "Bash", target: run.command, ok: null } as const) : null), [run]);
+  useEffect(() => {
+    for (const r of runs ?? []) {
+      const step = stepOf(r, t?.entries ?? []);
+      if (!step) continue;
+      endRun(agent.id, r);
+      if (step.ok === null) flash("It's still going in the background. The Terminal view has it.", 6000);
+    }
+  }, [runs, t?.entries, agent.id]);
   const latestCard = useMemo(() => {
     const e = t?.entries.find((x) => x.n === latest);
     return e ? readCard(e.text) : null;
@@ -991,8 +1016,8 @@ export function Reader({
     try {
       const how = await enqueue(agent, text);
       setQueued({ entry: latest, picks, text, how });
-      // A queued one shows in the queue instead.
-      setOutbox(how === "queued" ? null : { text, after, sent: true });
+      // A queued one shows in the queue instead, a command on the working line.
+      setOutbox(how === "queued" || commandOf(text) !== null ? null : { text, after, sent: true });
       if (how === "queued") flash(`Queued for ${agent.name}: sent when its turn ends`);
     } catch {
       setOutbox(null);
@@ -1170,15 +1195,17 @@ export function Reader({
                     </span>
                   </div>
                 ))}
-                {agent.status === "running" && (
+                {(agent.status === "running" || run) && (
                   <p className="rd-note rd-working">
                     {state.prefs.pet !== false ? (
-                      <WorkCat act={act} what={doing ?? ""} failed={failed} />
+                      <WorkCat act={act ?? (runStep && actOf(runStep))} what={doing ?? run?.command ?? ""} failed={failed} />
                     ) : (
                       <span className="rd-pulse" aria-hidden />
                     )}
-                    <span className="rd-doing">{doing ?? "Working…"}</span>
-                    <Elapsed since={agent.status_changed_at} />
+                    <span className="rd-doing" title={run?.command}>
+                      {doing ?? (runStep ? doingLine(runStep) : "Working…")}
+                    </span>
+                    <Elapsed since={run?.at ?? agent.status_changed_at} />
                   </p>
                 )}
               </>

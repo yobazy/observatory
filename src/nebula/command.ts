@@ -2,6 +2,7 @@
 // line an agent can run: Run sends it to the agent as "! <command>", Claude
 // Code's way to run a command itself, so its output lands in the thread.
 // Pure, so its tests run under Node.
+import type { Entry, TStep } from "./transcript";
 
 const SHELL = new Set(["bash", "sh", "shell", "zsh", "console"]);
 
@@ -27,4 +28,34 @@ export function commandIn(lang: string, text: string): string | null {
   if (!lines.length) return null;
   if (!lang && !/^(sudo\s+)?([a-z][\w.-]*|\.{0,2}\/\S+|~\/\S+)(\s|$)/.test(lines[0])) return null;
   return lines.join(" && ");
+}
+
+/** A command an agent was told to run itself, as "! cmd". */
+export interface ShellRun {
+  command: string;
+  at: number;
+}
+
+const sameCommand = (a: string, b: string) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
+
+/** The command in a prompt of the form "! cmd", or null. */
+export function commandOf(text: string): string | null {
+  const m = /^!\s*([\s\S]+)$/.exec(text.trim());
+  return m ? m[1] : null;
+}
+
+export function isRun(run: ShellRun, command: string): boolean {
+  return sameCommand(run.command, command);
+}
+
+/** `run`'s step in the thread, once it has stopped or gone to the background
+ *  (`ok` unknown, but it printed). The log's times are whole seconds. */
+export function stepOf(run: ShellRun, entries: Entry[]): TStep | null {
+  const since = Math.floor(run.at / 1000);
+  for (const e of entries) {
+    if (e.kind !== "steps" || e.at < since) continue;
+    const step = e.steps.find((s) => s.tool === "Bash" && isRun(run, s.target) && (s.ok !== null || s.detail));
+    if (step) return step;
+  }
+  return null;
 }

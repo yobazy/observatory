@@ -23,6 +23,8 @@ const MAX_PROMPT: usize = 8_000;
 const MAX_REPLY: usize = 40_000;
 /// Lines kept of what a step changed, or of what a failed one printed.
 const MAX_DETAIL_LINES: usize = 40;
+/// What the CLI prints for a "! cmd" that outlasted its time limit.
+const BACKGROUNDED: &str = "was moved to the background";
 
 #[derive(Default)]
 pub struct TranscriptState(Arc<Mutex<HashMap<String, Reading>>>);
@@ -136,6 +138,15 @@ fn change_of(tool: &str, input: &serde_json::Value) -> Option<String> {
 }
 
 /// The last lines of what a tool printed, from its result's content.
+/// What's between `<tag>` and `</tag>` in `text`.
+fn between<'a>(text: &'a str, tag: &str) -> Option<&'a str> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let from = text.find(&open)? + open.len();
+    let to = text[from..].find(&close)? + from;
+    Some(&text[from..to])
+}
+
 fn output_tail(content: &serde_json::Value) -> String {
     let text = match content {
         serde_json::Value::String(t) => t.clone(),
@@ -225,10 +236,43 @@ impl Reading {
         if meta {
             return;
         }
+        if content.as_str().is_some_and(|text| self.shell(text, at)) {
+            return;
+        }
         if let Some(prompt) = typed_prompt(content) {
             self.pending.clear();
             self.push("you", clip_to(&prompt, MAX_PROMPT), at);
         }
+    }
+
+    /// A command you had the CLI run, "! cmd": its line, then a line with what
+    /// it printed, both written once it stops. It reads as a step of its own.
+    /// True if `text` was one of those lines.
+    fn shell(&mut self, text: &str, at: i64) -> bool {
+        if let Some(command) = between(text, "bash-input") {
+            self.push("steps", String::new(), at);
+            let entry = self.entries.back_mut().expect("just pushed");
+            entry.steps.push(Step {
+                tool: "Bash".to_string(),
+                target: command.trim().to_string(),
+                ok: None,
+                detail: None,
+            });
+            return true;
+        }
+        let Some(out) = between(text, "bash-stdout") else {
+            return false;
+        };
+        let err = between(text, "bash-stderr").unwrap_or("").trim();
+        let printed = if err.is_empty() { out } else { err };
+        if let Some(step) = self.entries.back_mut().and_then(|e| e.steps.last_mut()) {
+            // Over the CLI's time limit it carries on in the background, and
+            // the log never says when that ends: `ok` stays unknown.
+            step.ok = (!out.contains(BACKGROUNDED)).then_some(err.is_empty());
+            step.detail =
+                Some(output_tail(&serde_json::Value::from(printed))).filter(|t| !t.is_empty());
+        }
+        true
     }
 
     fn assistant(&mut self, content: &serde_json::Value, at: i64) {
@@ -412,6 +456,48 @@ mod tests {
         ]);
         let kinds: Vec<_> = r.entries.iter().map(|e| e.kind).collect();
         assert_eq!(kinds, ["you", "stopped"]);
+    }
+
+    #[test]
+    fn a_command_you_ran_reads_as_a_step_with_its_output() {
+        let r = read(&[
+            PROMPT,
+            r#"{"type":"user","message":{"content":"<local-command-caveat>Run directly.</local-command-caveat>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-input> npm test && echo ok</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout>12 passed</bash-stdout><bash-stderr></bash-stderr>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-input>false</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout></bash-stdout><bash-stderr>Error: no</bash-stderr>"}}"#,
+        ]);
+        let kinds: Vec<_> = r.entries.iter().map(|e| e.kind).collect();
+        assert_eq!(kinds, ["you", "steps", "steps"]);
+        let ran = &r.entries[1].steps[0];
+        assert_eq!(
+            (ran.tool.as_str(), ran.target.as_str()),
+            ("Bash", "npm test && echo ok")
+        );
+        assert_eq!(
+            (ran.ok, ran.detail.as_deref()),
+            (Some(true), Some("12 passed"))
+        );
+        let bad = &r.entries[2].steps[0];
+        assert_eq!(
+            (bad.ok, bad.detail.as_deref()),
+            (Some(false), Some("Error: no"))
+        );
+    }
+
+    #[test]
+    fn a_command_moved_to_the_background_is_left_unfinished() {
+        let r = read(&[
+            r#"{"type":"user","message":{"content":"<bash-input>deploy</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout>Command did not complete within its 120s timeout and was moved to the background (ID: b1).</bash-stdout><bash-stderr></bash-stderr>"}}"#,
+        ]);
+        let step = &r.entries[0].steps[0];
+        assert_eq!(step.ok, None);
+        assert!(step
+            .detail
+            .as_deref()
+            .is_some_and(|d| d.contains("background")));
     }
 
     #[test]
