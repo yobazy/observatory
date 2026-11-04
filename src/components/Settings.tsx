@@ -796,6 +796,24 @@ function SoundsAndEditor() {
       </div>
       <div className="setting">
         <div className="setting-text">
+          <label className="setting-label" htmlFor="set-sand-sound">
+            Sand when a thread finishes
+          </label>
+          <span className="setting-hint">
+            A soft hiss of settling sand instead of the chime, only while the app is in the background.{" "}
+            <button className="link-btn" onClick={() => play("sand", true)} disabled={prefs.sounds === false}>
+              Play it
+            </button>
+          </span>
+        </div>
+        <Switch
+          id="set-sand-sound"
+          on={prefs.sandSound === true}
+          onChange={(on) => void savePrefs({ ...prefs, sandSound: on })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
           <span className="setting-label" id="quiet-label">
             Quiet hours
           </span>

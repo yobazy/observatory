@@ -13,6 +13,7 @@ import { findQuestion, readScreen } from "./screen";
 import { isPreview } from "./client";
 import { summarize, type Turn } from "./turnsummary";
 import type { Agent, AgentStatus } from "./types";
+import { noteTurnNumber } from "./turnCount";
 
 let permitted: boolean | null = null;
 
@@ -57,6 +58,7 @@ export async function what(agent: Agent): Promise<string | null> {
       ? (await import("./mock")).mockTurn(getState(), agent.id)
       : await invoke<Turn | null>("thread_turn", { session: agent.session_id, kind: agent.kind });
     if (!turn) return null;
+    noteTurnNumber(agent.id, turn.number);
     const sum = summarize(turn, getState().worktrees[agent.worktree_id]?.path ?? "", agent.status === "needs_feedback");
     if (agent.status === "needs_feedback") return sum.asking ? clip(sum.asking) : null;
     return sum.headline.length ? sum.headline.map((p) => p.text).join(" · ") : null;

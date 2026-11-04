@@ -9,14 +9,14 @@ import type { Agent } from "./types";
 
 // ---- sounds ----
 
-export type Cue = "done" | "waiting" | "shipped";
+export type Cue = "done" | "waiting" | "shipped" | "sand";
 
 let ctx: AudioContext | null = null;
 
 /** Short chimes made on the spot (no audio files): two rising notes for a
  *  finished turn, one bright ping for a question, a little arpeggio for a
  *  merge. Quiet by design; the TUI has its own macOS sounds. */
-const TUNES: Record<Cue, [freq: number, at: number, len: number][]> = {
+const TUNES: Record<Exclude<Cue, "sand">, [freq: number, at: number, len: number][]> = {
   done: [
     [659.25, 0, 0.18],
     [987.77, 0.11, 0.28],
@@ -58,6 +58,7 @@ export function play(cue: Cue, force = false) {
     if (c.state !== "running") void c.resume();
     const volume = Math.max(0, Math.min(1, prefs.soundVolume ?? 0.5)) * 0.18;
     const start = c.currentTime + 0.01;
+    if (cue === "sand") return hiss(c, start, volume * 2);
     for (const [freq, at, len] of TUNES[cue]) {
       const osc = c.createOscillator();
       const gain = c.createGain();
@@ -73,6 +74,31 @@ export function play(cue: Cue, force = false) {
   } catch {
     // No audio device, or the webview refused: a missed chime is fine.
   }
+}
+
+/** Sand settling on a plate, under a second: noise that swells in and
+ *  falls away, with the odd louder grain, through a band that slides down
+ *  as it settles. */
+function hiss(c: AudioContext, start: number, volume: number) {
+  const len = 0.9;
+  const buf = c.createBuffer(1, Math.floor(c.sampleRate * len), c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) {
+    const t = i / d.length;
+    const grain = Math.random() < 0.08 ? 1.6 : 1;
+    d[i] = (Math.random() * 2 - 1) * Math.min(1, t * 14) * Math.pow(1 - t, 2.2) * grain;
+  }
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const band = c.createBiquadFilter();
+  band.type = "bandpass";
+  band.Q.value = 0.8;
+  band.frequency.setValueAtTime(3200, start);
+  band.frequency.exponentialRampToValueAtTime(700, start + len);
+  const gain = c.createGain();
+  gain.gain.value = volume;
+  src.connect(band).connect(gain).connect(c.destination);
+  src.start(start);
 }
 
 // ---- the cat ----
@@ -106,7 +132,8 @@ export function useDelight() {
       if (agent.status === "needs_feedback") {
         if (!watching(agent)) play("waiting");
       } else if (agent.status === "finished" && from === "running") {
-        if (!watching(agent)) play("done");
+        // In the background, the sand's hiss instead, if it's turned on.
+        if (!watching(agent)) play(getState().prefs.sandSound && !document.hasFocus() ? "sand" : "done");
         cheer("happy");
       }
     });

@@ -35,7 +35,9 @@ import { tagProjectNow } from "../nebula/taggingRunner";
 import type { DesktopPrefs } from "../nebula/theme";
 import { reorderKey, useReorder } from "./useReorder";
 import { useVerdict } from "../nebula/verdicts";
-import { Plate, plateTone } from "./Plate";
+import { Plate, ThreadPlate } from "./Plate";
+import { LooseRows } from "./LooseSand";
+import { warmth } from "../nebula/warmth";
 
 /** Re-render once a minute so relative times stay honest. */
 function useMinuteTick() {
@@ -196,7 +198,7 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
   if (!project) {
     return (
       <section className="sessions sessions-empty">
-        <p>{state.loaded ? "Pick a project on the left." : "Loading projects…"}</p>
+        {state.loaded ? <p>Pick a project on the left.</p> : <LooseRows count={4} size={24} label="Loading projects…" />}
       </section>
     );
   }
@@ -464,18 +466,48 @@ function Band({
               {showArchived ? "Hide" : "Show"} {archived.length} archived
             </button>
           )}
-          {archivedOpen && (
-            <ul className="rows rows-archived">
-              {archived.map((a) => (
-                <li key={a.id}>
-                  <AgentRow agent={a} onMenu={onMenu} />
-                </li>
-              ))}
-            </ul>
-          )}
+          {/* A search lists what it found as rows; otherwise the archive is a
+              contact sheet of the plates its threads made. */}
+          {archivedOpen &&
+            (searching ? (
+              <ul className="rows rows-archived">
+                {archived.map((a) => (
+                  <li key={a.id}>
+                    <AgentRow agent={a} onMenu={onMenu} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ContactSheet agents={archived} selectedId={selectedId} onMenu={onMenu} />
+            ))}
         </>
       )}
     </section>
+  );
+}
+
+/** Archived threads as a sheet of negatives, newest first: each one's last
+ *  plate, so you can spot a thread again by the figure its work made. */
+function ContactSheet({ agents, selectedId, onMenu }: { agents: Agent[]; selectedId: string | null; onMenu: OpenMenu }) {
+  const newest = [...agents].sort((a, b) => (b.archived_at || b.status_changed_at) - (a.archived_at || a.status_changed_at));
+  return (
+    <ul className="contact-sheet" aria-label="Archived threads">
+      {newest.map((a) => (
+        <li key={a.id}>
+          <button
+            data-agent={a.id}
+            aria-current={a.id === selectedId ? "true" : undefined}
+            onClick={() => setState({ selectedSession: { Agent: a.id } })}
+            onContextMenu={(e) => onMenu(e, { Agent: a })}
+            title={a.name}
+          >
+            <Plate seed={a.id} work={a.recent_prompts.length} tone="sand" size={56} />
+            <span className="sheet-name">{a.name}</span>
+            <small>{relativeTime(a.archived_at || a.status_changed_at)}</small>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -734,9 +766,10 @@ function AgentRow({
   const isPicked = picks?.ids.has(agent.id) ?? false;
   const usual = useMemo(() => usualHarness(Object.values(state.agents)), [state.agents]);
   const safe = useVerdict(agent)?.tone === "done";
+  const warm = agent.archived ? 0 : warmth(agent.status, agent.status_changed_at, Date.now());
   return (
     <button
-      className={`row row-${agent.status}${selected ? " is-selected" : ""}${isPicked ? " is-picked" : ""}${agent.unseen ? " is-unseen" : ""}${colorStyle ? " has-color" : ""}`}
+      className={`row row-${agent.status}${warm ? ` warm-${warm}` : ""}${selected ? " is-selected" : ""}${isPicked ? " is-picked" : ""}${agent.unseen ? " is-unseen" : ""}${colorStyle ? " has-color" : ""}`}
       data-agent={agent.id}
       style={colorStyle}
       onClick={(e) => picks?.click(e, agent.id) || setState({ selectedSession: { Agent: agent.id } })}
@@ -761,7 +794,7 @@ function AgentRow({
         title={statusLabel(agent)}
         aria-label={statusLabel(agent)}
       >
-        <Plate seed={agent.id} work={agent.recent_prompts.length} tone={plateTone(agent)} size={18} drift={agent.status === "running"} />
+        <ThreadPlate agent={agent} size={18} />
       </span>
       <span className="row-main">
         <span className="row-name">

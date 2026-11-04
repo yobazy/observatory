@@ -106,3 +106,24 @@ test('the working line\'s cat acts out the step under way', async () => {
   for (let i = 0; i < 3; i++) d = deskStep(d, 'run');
   assert.equal(d.bubble, null);
 });
+
+test('while a thread waits the cat keeps to its telescope, and goes back to its day after', async () => {
+  const { keepWatch } = await import('../src/components/petBrain.ts');
+  const cat = { x: 200, dir: -1, mode: 'walk', left: 30, frame: 'walkA', step: 0, bubble: null, bubbleLeft: 0, ball: null };
+  const w = keepWatch(cat, 260, true);
+  assert.equal(w.mode, 'gaze');
+  assert.equal(w.dir, 1);
+  assert.ok(w.watch);
+  assert.ok(w.x <= 260 - 32 - 32, 'the scope fits on its right');
+  // It stays: a gaze running out is topped up while anything waits.
+  assert.ok(keepWatch({ ...w, left: 1 }, 260, true).left >= 20);
+  // An alert plays out first.
+  assert.equal(keepWatch({ ...cat, mode: 'alert' }, 260, true).mode, 'alert');
+  // Too narrow a yard for the telescope: no watching.
+  assert.equal(keepWatch(cat, 60, true).mode, 'walk');
+  // Nothing waits: it's free again soon.
+  const done = keepWatch({ ...w, left: 500 }, 260, false);
+  assert.equal(done.watch, false);
+  assert.ok(done.left <= 30);
+  assert.equal(keepWatch(cat, 260, false), cat);
+});

@@ -24,7 +24,7 @@ import { isSliding } from "./Resizer";
 import { AgentServerLink } from "./Run";
 import { usePaneMode, useStandIn } from "../nebula/pane";
 import { closeThread, useVerdict } from "../nebula/verdicts";
-import { Plate, plateTone } from "./Plate";
+import { ThreadPlate } from "./Plate";
 import { LiveStrip } from "./LiveStrip";
 
 const THEME = {
@@ -348,7 +348,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
           <div className="pane-title" data-tauri-drag-region>
             {agent && (
               <span className={`sdot has-plate dot-${agent.status}`} aria-hidden>
-                <Plate seed={agent.id} work={agent.recent_prompts.length} tone={plateTone(agent)} size={18} drift={agent.status === "running"} />
+                <ThreadPlate agent={agent} size={18} />
               </span>
             )}
             <RenameableTitle

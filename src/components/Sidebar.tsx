@@ -15,6 +15,7 @@ import { UsageChip } from "./Usage";
 import { AutomationsButton } from "./Automations";
 import { ActivityGlyph, LoadMeter } from "./Activity";
 import { Pet } from "./Pet";
+import { LooseRows } from "./LooseSand";
 import { restartToUpdate, useUpdateState } from "../nebula/updates";
 import { QuickAnswer } from "./QuickAnswer";
 import { AwayDigest } from "./AwayDigest";
@@ -370,6 +371,11 @@ export function Sidebar({
               <button className="link-btn" onClick={() => setNeedsOnly(false)} title="These have nothing waiting, working or unread. Show them too.">
                 {hiddenCount} quiet {hiddenCount === 1 ? "project" : "projects"}
               </button>
+            </li>
+          )}
+          {!state.loaded && shown.length === 0 && (
+            <li>
+              <LooseRows label="Loading projects…" />
             </li>
           )}
           {shown.length === 0 && state.loaded && !needsOnly && (

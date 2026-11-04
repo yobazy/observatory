@@ -26,7 +26,7 @@ import type { Agent } from "../nebula/types";
 import type { Choice, Question } from "../nebula/screen";
 import { AskChoices } from "./AskStrip";
 import { ReaderFind } from "./ReaderFind";
-import { Plate, plateTone } from "./Plate";
+import { ThreadPlate, plateTone } from "./Plate";
 import { WorkCat } from "./Pet";
 
 /** Earlier decisions you put away, per agent, for as long as the app runs. */
@@ -44,7 +44,7 @@ function ReaderHero({ agent, work }: { agent: Agent; work: number }) {
   return (
     <header className={`rd-hero is-${tone}`}>
       <span className="rd-hero-lamp" aria-hidden />
-      <Plate seed={agent.id} work={work} tone={tone} size={128} drift={agent.status === "running"} />
+      <ThreadPlate agent={agent} work={work} size={128} />
       <div className="rd-hero-text">
         <p className="rd-hero-where">{[project, branch].filter(Boolean).join(" · ")}</p>
         <h2 className="rd-hero-name">{agent.name}</h2>
