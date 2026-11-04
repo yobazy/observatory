@@ -142,6 +142,21 @@ pub fn read_preview_text(path: String, scope: State<'_, PreviewScope>) -> Result
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
+/// A previewed file's bytes, for the PDF view: pdf.js can't fetch `preview://`
+/// from the app's own origin.
+#[tauri::command]
+pub fn read_preview_bytes(
+    path: String,
+    scope: State<'_, PreviewScope>,
+) -> Result<tauri::ipc::Response, String> {
+    let path = PathBuf::from(path);
+    if !scope.allows(&path) {
+        return Err("not opened for preview".into());
+    }
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// When each previewed file last changed, in ms (0 when gone): what live
 /// reload polls.
 #[tauri::command]

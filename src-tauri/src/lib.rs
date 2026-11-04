@@ -135,6 +135,7 @@ pub fn run() {
             preview::resolve_paths,
             preview::open_preview,
             preview::read_preview_text,
+            preview::read_preview_bytes,
             preview::preview_modified,
             relocate::carry_project_state,
             icons::read_icon,
