@@ -29,6 +29,13 @@ export function pageAt(tops: number[], heights: number[], y: number): number {
   return i === -1 ? Math.max(0, tops.length - 1) : i;
 }
 
+/** The line down the scroll that says which page you're on: the pane's top at
+ *  the start, its bottom at the end, so the first and last page both count
+ *  even when several pages fit in the pane. */
+export function readingLine(scrollTop: number, pane: number, maxScroll: number): number {
+  return maxScroll > 0 ? scrollTop + pane * Math.min(1, scrollTop / maxScroll) : scrollTop;
+}
+
 /** What a PDF may link to from the preview. A PDF is a file an agent or a
  *  download made, so `file:` and script links stay dead. */
 export const safeLink = (url: unknown): url is string => typeof url === "string" && /^(https?|mailto):/i.test(url);
