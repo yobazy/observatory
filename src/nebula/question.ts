@@ -10,6 +10,15 @@ export interface Choice {
   /** The keys to press in turn to pick it, when typing `key` doesn't: a
    *  choice in a row is reached by arrow keys, then Enter. */
   keys?: string[];
+  /** The explanation under it, in a question an agent put to you. */
+  note?: string;
+  /** Its box, ticked or not, when the question lets you pick several. */
+  checked?: boolean;
+  /** Picking it leaves the prompt up, on another step or with a box ticked,
+   *  so the session is still waiting on you. */
+  stays?: boolean;
+  /** It opens a line to type your own answer on, in the terminal. */
+  typed?: boolean;
 }
 
 export interface Question {
@@ -27,6 +36,12 @@ const EDGE = /^[\s│┃|╭╰╮╯─]+|[\s│┃|╭╰╮╯─]+$/g;
 const CHOICE = /^([❯›>▶●]\s*)?(\d{1,2})[.)]\s+(.+)$/;
 /** The rule or box top a permission panel starts under. */
 const RULE = /^\s*[╭─━]{3}[─━╮]*\s*$/;
+/** The last row of a question an agent put to you, under a rule of its own. */
+const CHAT = "Chat about this";
+/** A box before a choice's label, when the question lets you pick several. */
+const BOX = /^\[(.)\]\s+(.+)$/;
+/** The row of tabs above such a question, one box per question. */
+const TABS = /^(?:←\s*)?[☐☒]/;
 
 /** The screen without the blank rows under its last text: a short session
  *  draws its prompt partway down a tall pane, not on the bottom row. */
@@ -56,25 +71,31 @@ function numbered(screen: string[]): Question | null {
   }
   if (end < 0 || !CHOICE.test(rows[end])) return null;
   const choices: Choice[] = [];
-  // Rows a label wrapped onto, waiting for the choice above them.
+  // Rows a label wrapped onto, or a note under it, waiting for the choice
+  // above them, and those rows for each choice.
   let wrapped: string[] = [];
+  const under: string[][] = [];
   let i = end;
   for (; i >= 0; i--) {
     const m = rows[i].match(CHOICE);
     if (!m) {
-      // A choice's label may wrap onto a row or two of its own: keep going
-      // if the choice before this one sits just above.
+      // A choice's label may wrap onto a few rows of its own, and a rule
+      // may part the last choice from the rest: keep going if the choice
+      // before this one sits just above.
+      const rule = RULE.test(lines[i]);
       const want = String(Number(choices[0].key) - 1);
-      const wraps = rows[i].trim() && [1, 2].some((k) => rows[i - k]?.match(CHOICE)?.[2] === want);
-      if (wraps) {
-        wrapped.unshift(rows[i].trim());
+      if ((rows[i].trim() || rule) && choiceAbove(lines, rows, i, want)) {
+        if (!rule) wrapped.unshift(rows[i].trim());
         continue;
       }
       break;
     }
-    choices.unshift({ key: m[2], label: [m[3].trim(), ...wrapped].join(" "), selected: !!m[1] });
+    choices.unshift({ key: m[2], label: m[3].trim(), selected: !!m[1] });
+    under.unshift(wrapped);
     wrapped = [];
   }
+  const asked = choices[choices.length - 1]?.label === CHAT;
+  if (!asked) choices.forEach((c, n) => (c.label = [c.label, ...under[n]].join(" ")));
   // The last choice's label may wrap too, onto rows the footer skip above
   // passed over: rows indented exactly to where its label starts.
   const lastRaw = lines[end].replace(/^[│┃|]/, "");
@@ -89,11 +110,13 @@ function numbered(screen: string[]): Question | null {
   if (!choices.length || choices[0].key !== "1") return null;
   if (!choices.every((c, n) => Number(c.key) === n + 1)) return null;
   // A picker marks exactly one row as current; a numbered list in prose
-  // marks none.
-  if (choices.filter((c) => c.selected).length !== 1) return null;
+  // marks none. An agent's own question can have its mark on the row under
+  // the numbers instead.
+  const marked = choices.filter((c) => c.selected).length;
+  if (marked > 1 || (!marked && !asked)) return null;
   const above: string[] = [];
   let j = i;
-  for (; j >= 0 && above.length < 3; j--) {
+  for (; j >= 0 && above.length < (asked ? 8 : 3); j--) {
     const t = rows[j].trim();
     if (!t) {
       if (above.length) break;
@@ -102,7 +125,50 @@ function numbered(screen: string[]): Question | null {
     above.unshift(t);
   }
   const detail = panelAbove(lines, rows, j);
+  if (asked) return putToYou(above.join(" "), detail, choices, under);
   return detail ? { prompt: above.join(" "), detail, choices } : { prompt: above.join(" "), choices };
+}
+
+/** Whether the next row up that isn't a label's wrap or a rule is choice
+ *  number `want`. */
+function choiceAbove(lines: string[], rows: string[], from: number, want: string): boolean {
+  for (let j = from - 1; j >= 0 && from - j <= 6; j--) {
+    const m = rows[j].match(CHOICE);
+    if (m) return m[2] === want;
+    if (!rows[j].trim() && !RULE.test(lines[j])) return false;
+  }
+  return false;
+}
+
+/** A question an agent put to you, Claude Code's AskUserQuestion: a note
+ *  under each choice, then a line for your own answer, then "Chat about
+ *  this". With several questions a digit answers and moves to the next tab;
+ *  with boxes a digit ticks one and Tab moves on, so that's a choice too. */
+function putToYou(prompt: string, panel: string[] | undefined, choices: Choice[], under: string[][]): Question | null {
+  const own = choices.length - 2;
+  // On your own line, digits would land in your answer, not pick a choice.
+  if (own < 0 || choices[own].selected) return null;
+  const tabs = panel && TABS.test(panel[0]) ? panel[0] : null;
+  const several = (tabs?.match(/[☐☒]/g) ?? []).length > 1;
+  const boxes = choices.some((c) => BOX.test(c.label));
+  // "Next", or "Submit" on the last question, is under the boxes.
+  const onward = boxes ? under[own].pop()?.replace(MARK, "") : undefined;
+  const asked = choices.map((c, n) => {
+    const box = c.label.match(BOX);
+    const note = under[n].join(" ");
+    return {
+      ...c,
+      label: box ? box[2] : c.label,
+      ...(note ? { note } : {}),
+      ...(box ? { checked: box[1] !== " " } : {}),
+      ...(n === choices.length - 1 ? {} : several || boxes || n === own ? { stays: true } : {}),
+      ...(n === own ? { typed: true } : {}),
+    };
+  });
+  if (boxes) asked.splice(-1, 0, { key: "next", label: onward || "Next", selected: false, keys: ["\t"], stays: true });
+  // The tabs say how far along you are, which one question doesn't need.
+  const rest = (tabs ? (several ? panel! : panel!.slice(1)) : (panel ?? [])).filter((t, n, all) => t || (n && n < all.length - 1));
+  return rest.length ? { prompt, detail: rest, choices: asked } : { prompt, choices: asked };
 }
 
 /** A mark before one of several short choices spaced apart on one row, as
@@ -166,7 +232,7 @@ function panelAbove(lines: string[], rows: string[], from: number): string[] | u
       while (out.length && !out[0]) out.shift();
       while (out.length && !out[out.length - 1]) out.pop();
       // One blank row between paragraphs is enough.
-      const kept = out.filter((t, n) => t || out[n - 1]);
+      const kept = out.filter((t, n) => t || out[n - 1]).map((t) => t.replace(/^←\s*|\s*→$/g, ""));
       return kept.length ? kept : undefined;
     }
     out.unshift(rows[j].trim());

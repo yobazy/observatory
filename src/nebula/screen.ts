@@ -54,7 +54,7 @@ export async function answer(agent: Agent, q: Question, choice: Choice): Promise
     now && now.prompt === q.prompt && now.choices.find((c) => c.key === choice.key && c.label === choice.label);
   if (!same) throw new Error(`${agent.name} isn't asking that any more`);
   await sendChoice({ Agent: agent.id }, same);
-  promptAnswered(agent);
+  if (!same.stays) promptAnswered(agent);
 }
 
 /** Type what picks a choice: its key, or its arrow keys and Enter one at a

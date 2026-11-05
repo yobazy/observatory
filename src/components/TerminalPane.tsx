@@ -335,7 +335,10 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     const ref = current.current;
     if (!ref || !asking) return;
     setMenu(null);
-    void sendChoice(ref, c).then(() => agent && promptAnswered(agent));
+    void sendChoice(ref, c).then(() => {
+      if (agent && !c.stays) promptAnswered(agent);
+    });
+    if (c.typed) toTerminal();
   };
 
   const project = agent || tab ? projectOfWorktree(state, (agent ?? tab)!.worktree_id) : undefined;

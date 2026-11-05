@@ -2,13 +2,29 @@ import type { Choice, Question } from "../nebula/screen";
 
 /** The choices a session is waiting on, as buttons: the same menu its
  *  terminal shows, answered without clicking into it. */
+export function ChoiceText({ choice: c, notes }: { choice: Choice; notes?: boolean }) {
+  return (
+    <>
+      {!c.keys && <kbd>{c.key}</kbd>}
+      {c.checked !== undefined && <i className="qa-box" aria-hidden>{c.checked ? "☑" : "☐"}</i>}
+      <span>{c.label}</span>
+      {notes && c.note && <small>{c.note}</small>}
+    </>
+  );
+}
+
 export function AskChoices({ question, onPick }: { question: Question; onPick: (c: Choice) => void }) {
   return (
     <div className="ask-choices" role="group" aria-label={question.prompt || "Choices"}>
       {question.choices.map((c) => (
-        <button key={c.key} className={`qa-choice${c.selected ? " is-current" : ""}`} onClick={() => onPick(c)} title={c.label}>
-          {!c.keys && <kbd>{c.key}</kbd>}
-          <span>{c.label}</span>
+        <button
+          key={c.key}
+          className={`qa-choice${c.selected ? " is-current" : ""}`}
+          aria-pressed={c.checked}
+          onClick={() => onPick(c)}
+          title={c.label}
+        >
+          <ChoiceText choice={c} notes />
         </button>
       ))}
     </div>

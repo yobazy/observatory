@@ -112,3 +112,127 @@ test("the ordinary input line is not a menu", () => {
   assert.equal(looksLikePicker(['⏺ Done.', '', '❯ ', '  ? for shortcuts']), false);
   assert.equal(looksLikePicker(['❯ fix the build please']), false);
 });
+
+// Drawn by Claude Code 2.1.318, read through a terminal.
+const rule = '─'.repeat(90);
+const tabs = (...rows) => [rule, ...rows];
+const footer = ['', 'Enter to select · Tab/Arrow keys to navigate · Esc to cancel'];
+
+test("an agent's question reads past the rule above Chat about this, with a note under each choice", () => {
+  const q = findQuestion([
+    '⏺ Calling Flowsavvy 4 times…',
+    ...tabs(
+      '←  ☐ Sangeet bus  ☐ Wedding bus  ☐ Old block  ✔ Submit  →',
+      '',
+      "│ Devon and Ishita's RSVP form requires shuttle answers before it can be submitted. Both",
+      '│ shuttles leave from the Sheraton Parkway hotel. Do you want the Sangeet shuttle?',
+      '',
+      '❯ 1. No, thank you',
+      '     You get to the Sangeet yourself. This is what is selected in the',
+      '     unsubmitted form.',
+      '  2. Yes, please',
+      '     Take the 5:30 PM shuttle from the Sheraton Parkway.',
+      '  3. Type something.',
+      rule,
+      '  4. Chat about this',
+      ...footer,
+    ),
+  ]);
+  assert.match(q.prompt, /^Devon and Ishita's RSVP .* Sangeet shuttle\?$/);
+  assert.deepEqual(q.detail, ['☐ Sangeet bus  ☐ Wedding bus  ☐ Old block  ✔ Submit']);
+  assert.deepEqual(q.choices.map((c) => [c.key, c.label]), [
+    ['1', 'No, thank you'],
+    ['2', 'Yes, please'],
+    ['3', 'Type something.'],
+    ['4', 'Chat about this'],
+  ]);
+  assert.equal(q.choices[0].note, 'You get to the Sangeet yourself. This is what is selected in the unsubmitted form.');
+  assert.ok(q.choices[0].selected);
+  // More questions follow, so the session is still waiting after a pick;
+  // only leaving for a chat ends it.
+  assert.deepEqual(q.choices.map((c) => !!c.stays), [true, true, true, false]);
+  assert.deepEqual(q.choices.map((c) => !!c.typed), [false, false, true, false]);
+});
+
+test('a single question ends with its pick, and its lone tab is left out', () => {
+  const q = findQuestion(tabs(
+    ' ☐ Bus',
+    '',
+    'Do you want the bus option?',
+    '',
+    '❯ 1. No',
+    '     Do not use the bus.',
+    '  2. Yes',
+    '     Use the bus.',
+    '  3. Type something.',
+    rule,
+    '  4. Chat about this',
+    ...footer,
+  ));
+  assert.equal(q.detail, undefined);
+  assert.deepEqual(q.choices.map((c) => !!c.stays), [false, false, true, false]);
+});
+
+test('boxes keep the session waiting, and Tab goes on to the next step', () => {
+  const q = findQuestion(tabs(
+    '←  ☒ Bus  ☒ Food  ☐ Old block  ✔ Submit  →',
+    '',
+    'Which foods do you like?',
+    '',
+    '❯ 1. [✔] Fish',
+    '         Fish as a main dish.',
+    '  2. [ ] Lamb',
+    '         Lamb as a main dish.',
+    '  3. [ ] Type something',
+    '     Next',
+    rule,
+    '  4. Chat about this',
+    ...footer,
+  ));
+  assert.deepEqual(q.choices.map((c) => [c.label, c.checked, !!c.stays]), [
+    ['Fish', true, true],
+    ['Lamb', false, true],
+    ['Type something', false, true],
+    ['Next', undefined, true],
+    ['Chat about this', undefined, false],
+  ]);
+  assert.equal(q.choices[0].note, 'Fish as a main dish.');
+  assert.deepEqual(q.choices[3].keys, ['\t']);
+});
+
+test('the review step shows your answers, and its Submit ends the prompt', () => {
+  const q = findQuestion(tabs(
+    '←  ☒ Bus  ☒ Food  ✔ Submit  →',
+    '',
+    'Review your answers',
+    '',
+    ' ● Do you take the bus?',
+    '   → Yes',
+    '',
+    'Ready to submit your answers?',
+    '',
+    '❯ 1. Submit answers',
+    '  2. Cancel',
+  ));
+  assert.equal(q.prompt, 'Ready to submit your answers?');
+  assert.deepEqual(q.detail.slice(0, 2), ['☒ Bus  ☒ Food  ✔ Submit', '']);
+  assert.ok(!q.choices[0].stays);
+});
+
+test('with the mark on your own answer, digits would type there, so choices are not offered', () => {
+  const q = findQuestion(tabs(
+    ' ☐ Bus',
+    '',
+    'Do you want the bus option?',
+    '',
+    '  1. No',
+    '     Do not use the bus.',
+    '  2. Yes',
+    '     Use the bus.',
+    '❯ 3. walk',
+    rule,
+    '  4. Chat about this',
+    ...footer,
+  ));
+  assert.equal(q, null);
+});
