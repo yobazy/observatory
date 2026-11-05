@@ -5097,6 +5097,16 @@ td.task-last {
 .ask-choices .qa-choice {
   max-width: 100%;
 }
+.ask-choices .qa-choice small {
+  min-width: 0;
+  font-size: 11px;
+  text-align: left;
+  color: var(--muted);
+}
+.qa-box {
+  font-style: normal;
+  color: var(--st-waiting);
+}
 .rd-ask {
   display: grid;
   gap: 7px;
