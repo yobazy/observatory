@@ -30,6 +30,9 @@ interface Props {
   fill?: number;
   /** Sand that hasn't found its figure: what's behind it is still loading. */
   loose?: boolean;
+  /** One of many on a sheet: settles once when it comes on screen, out of
+   *  sight of the animation loop, and never moves again. */
+  still?: boolean;
   className?: string;
   label?: string;
 }
@@ -59,6 +62,8 @@ interface Live {
   visible: boolean;
   /** Grain size, times the usual: an icon the Dock shrinks needs coarser sand. */
   dot?: number;
+  /** Passes left before a still plate's figure is done. */
+  developing?: number;
 }
 
 const DPR = Math.min(3, Math.max(2, window.devicePixelRatio || 2));
@@ -104,7 +109,8 @@ subscribe(() => {
 
 const isBig = (p: Live) => p.size > 48;
 const moving = (p: Live) =>
-  p.drift || p.loose || p.tone === "running" || p.tone === "needs_feedback" || p.settling > 0 || p.k < 1 || p.kick > 0;
+  p.developing === undefined &&
+  (p.drift || p.loose || p.tone === "running" || p.tone === "needs_feedback" || p.settling > 0 || p.k < 1 || p.kick > 0);
 
 function grainsFor(size: number) {
   return size > 110 ? 20000 : size > 70 ? 9000 : size > 48 ? 4200 : 260;
@@ -206,12 +212,48 @@ function wake() {
   frame = requestAnimationFrame(loop);
 }
 
+/** Still plates on screen with their figure to come. */
+const darkroom = new Set<Live>();
+let developing = 0;
+
+/** Works through the darkroom a few milliseconds a frame, so a long sheet of
+ *  still plates fills in without holding the window up. */
+function develop() {
+  const until = performance.now() + 4;
+  for (const p of darkroom) {
+    if (!plates.has(p) || !p.visible) {
+      darkroom.delete(p);
+      continue;
+    }
+    while (p.developing! > 0 && performance.now() < until) {
+      settle(p.grains, p.to, p.to, 1, 0.14, 0.016);
+      p.developing!--;
+    }
+    if (p.developing! > 0) break;
+    darkroom.delete(p);
+    p.count = p.grains.length / 2;
+    draw(p);
+    if (performance.now() >= until) break;
+  }
+  developing = darkroom.size ? requestAnimationFrame(develop) : 0;
+}
+
+function sendToDarkroom(p: Live) {
+  if (!p.developing) return;
+  darkroom.add(p);
+  if (!developing) developing = requestAnimationFrame(develop);
+}
+
 const watcher =
   typeof IntersectionObserver === "undefined"
     ? null
     : new IntersectionObserver((entries) => {
         for (const e of entries) {
-          for (const p of plates) if (p.canvas === e.target) p.visible = e.isIntersecting;
+          for (const p of plates) {
+            if (p.canvas !== e.target) continue;
+            p.visible = e.isIntersecting;
+            if (p.visible) sendToDarkroom(p);
+          }
         }
         wake();
       });
@@ -219,7 +261,7 @@ const watcher =
 const countFor = (size: number, fill: number | undefined) =>
   fill === undefined ? grainsFor(size) : Math.round(grainsFor(size) * sandFill(fill, size <= 48));
 
-export function Plate({ seed, work, tone, size, drift = false, round = true, fill, loose = false, className, label }: Props) {
+export function Plate({ seed, work, tone, size, drift = false, round = true, fill, loose = false, still = false, className, label }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   const live = useRef<Live | null>(null);
 
@@ -243,10 +285,24 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, fil
       t: (hashT(seed) % 997) / 997 * 3,
       settling: 0,
       kick: 0,
-      count: countFor(size, fill),
+      count: still ? 0 : countFor(size, fill),
       loose,
       visible: true,
+      developing: still ? 45 : undefined,
     };
+    if (still) {
+      // One of many: bare metal for now, its figure once it's on screen.
+      draw(p);
+      plates.add(p);
+      live.current = p;
+      if (watcher) watcher.observe(canvas);
+      else sendToDarkroom(p);
+      return () => {
+        plates.delete(p);
+        watcher?.unobserve(canvas);
+        live.current = null;
+      };
+    }
     // Small plates arrive settled: their first frame is their figure. A big
     // one (a thread or project just opened) arrives half formed and settles
     // in front of you, and so does any plate that comes in with the first
@@ -278,7 +334,7 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, fil
 
   useEffect(() => {
     const p = live.current;
-    if (!p) return;
+    if (!p || still) return;
     // A thread that just finished gets one last shake before it rests,
     // read or not: one you're watching is marked seen as it finishes.
     if ((tone === "finished" || tone === "fresh") && (p.tone === "running" || p.tone === "needs_feedback") && !reduced()) {

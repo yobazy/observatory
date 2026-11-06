@@ -25,6 +25,13 @@ test('a moment task whose PR merged at this commit, with every thread stopped, i
   assert.deepEqual(cleanable(state(), now, true), ['w1']);
 });
 
+test('a branch rebased after its PR merged is the same work; a new commit on it is not', () => {
+  const rebased = { git: { w1: git({ head: 'ghi' }) } };
+  assert.deepEqual(cleanable(state({ ...rebased, prs: { w1: merged({ rebasedHead: 'ghi' }) } }), now, false), ['w1']);
+  // The check is about one commit: moving on from it counts as new work again.
+  assert.deepEqual(cleanable(state({ ...rebased, prs: { w1: merged({ rebasedHead: 'old' }) } }), now, false), []);
+});
+
 test('not while a thread there is still going, or only just stopped', () => {
   assert.deepEqual(cleanable(state({ agents: { a: agent('a'), r: agent('r', { status: 'running' }) } }), now, false), []);
   assert.deepEqual(cleanable(state({ agents: { a: agent('a'), r: agent('r', { status: 'needs_feedback' }) } }), now, false), []);

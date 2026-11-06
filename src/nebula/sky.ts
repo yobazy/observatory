@@ -37,18 +37,46 @@ export function skyTokens(minute: number): Record<string, string> {
   return { "--night": hex(c), "--panel": hex(c, 3), "--term": hex(c, -2) };
 }
 
+/** The terminal's well at `minute`: --term, darkened as styles.css does for
+ *  .pane-body::before. xterm paints its own background, so it needs the color. */
+export function skyWell(minute: number): string {
+  const c = skyAt(minute).map((v) => Math.round(Math.max(0, v - 2) * 0.7)) as [number, number, number];
+  return hex(c);
+}
+
+let well: string | null = null;
+const wellWatchers = new Set<() => void>();
+
+/** The well's color while the sky is moving, or null on the fixed palette. */
+export const currentWell = () => well;
+
+/** Calls `fn` when the well's color changes; returns the way to stop. */
+export function onWellChange(fn: () => void): () => void {
+  wellWatchers.add(fn);
+  return () => void wellWatchers.delete(fn);
+}
+
+function setWell(next: string | null) {
+  if (next === well) return;
+  well = next;
+  for (const fn of wellWatchers) fn();
+}
+
 /** Paints the sky now and every few minutes after, until the returned
  *  stop, which puts the fixed palette back. For the default dark mode only. */
 export function followClock(): () => void {
   const root = document.documentElement;
   const paint = () => {
     const d = new Date();
-    for (const [k, v] of Object.entries(skyTokens(d.getHours() * 60 + d.getMinutes()))) root.style.setProperty(k, v);
+    const minute = d.getHours() * 60 + d.getMinutes();
+    for (const [k, v] of Object.entries(skyTokens(minute))) root.style.setProperty(k, v);
+    setWell(skyWell(minute));
   };
   paint();
   const t = setInterval(paint, 5 * 60_000);
   return () => {
     clearInterval(t);
     for (const k of Object.keys(skyTokens(0))) root.style.removeProperty(k);
+    setWell(null);
   };
 }

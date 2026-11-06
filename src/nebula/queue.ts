@@ -8,6 +8,7 @@ import { onAgentStatus, readSettings } from "./client";
 import { trackedCommand } from "./command";
 import { endRun, startRun } from "./shellruns";
 import { flash, getState, setState } from "./store";
+import { heldAtPrompt } from "./transcript";
 import type { Agent } from "./types";
 
 export interface Queued {
@@ -99,15 +100,27 @@ async function type(agent: Agent, text: string, select: boolean, stay = false) {
   }
 }
 
+/** Held at its prompt, and nothing typed in since that hasn't reached the log. */
+function reads(a: Agent, turnEndedAt: number | null | undefined): boolean {
+  return !sending.has(a.id) && heldAtPrompt(a, turnEndedAt, lastSent.get(a.id));
+}
+
 /** Queue `text` for `agent`, or send it now if the agent is idle and
  *  nothing is queued ahead of it. The agent is looked up afresh: a dialog
  *  may have been open for a while. Resolves with what happened. `stay`
- *  keeps you on the view you sent it from. */
-export async function enqueue(agent: Agent, text: string, opts: { stay?: boolean } = {}): Promise<"sent" | "queued"> {
+ *  keeps you on the view you sent it from. `turnEndedAt` is when the thread's
+ *  log says its turn ended (heldAtPrompt): it may still be "running" for its
+ *  background subagents, with its CLI reading. */
+export async function enqueue(
+  agent: Agent,
+  text: string,
+  opts: { stay?: boolean; turnEndedAt?: number | null } = {},
+): Promise<"sent" | "queued"> {
   const s = getState();
   const now = s.agents[agent.id] ?? agent;
   const ahead = s.queue[agent.id] ?? [];
-  if (!ahead.length && readyForNext(now)) {
+  const reading = reads(now, opts.turnEndedAt);
+  if (!ahead.length && (reading || readyForNext(now))) {
     await type(now, text, !opts.stay, opts.stay);
     return "sent";
   }
@@ -144,6 +157,26 @@ export function editQueued(agentId: string, id: string, text: string): boolean {
  *  queued, or once it's been taken back or edited out of the queue. */
 export function queuedSentAt(id: string): number | undefined {
   return sentAt.get(id);
+}
+
+/** Send a queued prompt without waiting, for a thread at its prompt with
+ *  subagents still out. If it can't go, it goes back in the queue and this
+ *  throws. */
+export async function sendQueued(agent: Agent, id: string, turnEndedAt: number | null | undefined) {
+  const items = getState().queue[agent.id] ?? [];
+  const item = items.find((q) => q.id === id);
+  if (!item) return;
+  const now = getState().agents[agent.id] ?? agent;
+  if (!reads(now, turnEndedAt)) throw new Error(`${now.name} isn't at its prompt`);
+  sentAt.set(id, Date.now());
+  write(agent.id, items.filter((q) => q.id !== id));
+  try {
+    await type(now, item.text, false);
+  } catch (e) {
+    sentAt.delete(id);
+    write(agent.id, [item, ...(getState().queue[agent.id] ?? [])]);
+    throw e;
+  }
 }
 
 export function unqueue(agentId: string, id: string) {

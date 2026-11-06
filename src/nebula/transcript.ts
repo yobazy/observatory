@@ -24,6 +24,26 @@ export interface Entry {
 export interface Transcript {
   entries: Entry[];
   dropped: number;
+  /** When the turn ended (ms), if the log says it has: the CLI takes a
+   *  message now, even while the daemon says running for subagents out in
+   *  the background. */
+  turnEndedAt?: number | null;
+}
+
+/** Its turn is over and only subagents are out: the thread reads what you
+ *  send, though the daemon still says running. The ending has to be from
+ *  after it went running: a new turn's prompt reaches the log after the
+ *  status changes, so until then the log still shows the turn before. It has
+ *  to be from after `sent` too, the last prompt this app typed in, which
+ *  changes no status. One the CLI swallowed mustn't stop this for good. */
+export function heldAtPrompt(
+  a: { status: string; status_changed_at: number },
+  turnEndedAt: number | null | undefined,
+  sent = 0,
+  now = Date.now(),
+): boolean {
+  const ended = turnEndedAt ?? 0;
+  return a.status === "running" && ended > a.status_changed_at && (ended > sent || now - sent > 60_000);
 }
 
 /** `prev` brought up to date with `next`, which starts at some entry `prev`

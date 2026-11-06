@@ -15,6 +15,9 @@ export interface PullRequest {
   url: string;
   /** The commit the PR's branch pointed at on GitHub. */
   headOid: string;
+  /** The commit checked out, when it's that branch rebased with its work
+   *  unchanged (git.rs); only asked of a merged PR. */
+  rebasedHead?: string;
   title: string;
   state: "open" | "draft" | "merged" | "closed";
   checks: Checks;
@@ -62,6 +65,7 @@ export function foldPr(v: Record<string, unknown>): PullRequest {
   return {
     number: Number(v.number) || 0,
     headOid: str(v.headRefOid),
+    rebasedHead: str(v.rebasedHead) || undefined,
     url: str(v.url),
     title: str(v.title),
     state: state === "MERGED" ? "merged" : state === "CLOSED" ? "closed" : v.isDraft ? "draft" : "open",

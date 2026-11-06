@@ -56,13 +56,20 @@ reply() { # $1 = a prompt, typed or given at start
     # A command run outside any turn, as Claude Code does "! cmd": no hooks,
     # so the status doesn't move. Slept on, never run: it may be a replay's.
     '! '*) echo "running: ${line#! }"; sleep "${FAKE_RUN_SECONDS:-20}"; echo "done." ;;
+    # Subagents sent off and the turn over: the prompt is back, but nebula
+    # holds the thread at running until they report in, which here is never.
+    agents*)
+      hook UserPromptSubmit "$line"
+      hook SubagentStart
+      echo "two agents are working in the background."
+      hook Stop ;;
     *) hook UserPromptSubmit "$line"; echo "working on: $line"; sleep 3; echo "done."; hook Stop ;;
   esac
 }
 # A task it starts on: the prompts above work as tasks too, so scripts/drive
 # can start one without typing into a terminal.
 case "$1" in
-  ask* | menu* | mcp* | quiz*) reply "$1" ;;
+  ask* | menu* | mcp* | quiz* | agents*) reply "$1" ;;
   ?*) hook UserPromptSubmit "$1"; echo "task: $1"; sleep 2; hook Stop ;;
 esac
 while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do reply "$line"; done
