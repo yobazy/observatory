@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { commandIn, commandOf, stepOf } from '../src/nebula/command.ts';
+import { commandIn, commandOf, stepOf, trackedCommand } from '../src/nebula/command.ts';
 
 test('an untagged one-line command is runnable as it is', () => {
   const cmd = "ssh pc 'cd ~/Programming/site && git pull -q && ./run.sh'";
@@ -28,6 +28,12 @@ test("a prompt starting with ! is a command to run", () => {
   assert.equal(commandOf("! npm test\n"), "npm test");
   assert.equal(commandOf("!ls"), "ls");
   assert.equal(commandOf("run ! this"), null);
+});
+
+test("only a Claude thread shows a command as running", () => {
+  assert.equal(trackedCommand("claude", "! npm test"), "npm test");
+  assert.equal(trackedCommand("codex", "! npm test"), null);
+  assert.equal(trackedCommand("claude", "run the tests"), null);
 });
 
 test("a run's step counts once it has stopped or gone to the background", () => {

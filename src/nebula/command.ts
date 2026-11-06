@@ -44,6 +44,12 @@ export function commandOf(text: string): string | null {
   return m ? m[1] : null;
 }
 
+/** The command to show as running for a prompt to a thread of `kind`. Only
+ *  Claude Code logs "! cmd" as a step, and that step is what ends a run. */
+export function trackedCommand(kind: string, text: string): string | null {
+  return kind === "claude" ? commandOf(text) : null;
+}
+
 export function isRun(run: ShellRun, command: string): boolean {
   return sameCommand(run.command, command);
 }

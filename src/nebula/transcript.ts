@@ -63,6 +63,15 @@ export function stepsLine(steps: TStep[]): string {
   return line ? line[0].toUpperCase() + line.slice(1) : "Worked";
 }
 
+/** The step under way at the end of `entries`, if any. While you have a
+ *  command running that comes first: one that went to the background stays
+ *  unfinished in the log for good, and would stand in front of the next. */
+export function liveStep(entries: Entry[] | undefined, commandRunning: boolean): TStep | null {
+  const last = entries?.[entries.length - 1];
+  const step = last?.kind === "steps" ? last.steps[last.steps.length - 1] : undefined;
+  return !commandRunning && step?.ok === null ? step : null;
+}
+
 /** What the step under way is doing, for the reader's working line:
  *  "Editing sync.ts", "Running npm test". */
 export function doingLine(s: TStep): string {

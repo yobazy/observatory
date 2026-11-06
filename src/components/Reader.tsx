@@ -7,7 +7,7 @@ import { flash, getState, projectOfWorktree, subscribe, useAppState } from "../n
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, unqueue, queuedSentAt } from "../nebula/queue";
-import { actOf, clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
+import { actOf, clock, doingLine, liveStep, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
 import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
@@ -751,23 +751,22 @@ export function Reader({
     }
     return out;
   }, [t?.entries]);
+  // A command run outside any turn: the status won't say, so this does.
+  const runs = state.shellRuns[agent.id];
+  const run = runs?.[0];
+  const runStep = useMemo(() => (run ? ({ tool: "Bash", target: run.command, ok: null } as const) : null), [run]);
   // The step under way, said as what it's doing; its kind and the run's
   // failed steps are for the cat on the working line.
   const { doing, act, failed } = useMemo(() => {
     const last = t?.entries[t.entries.length - 1];
     const steps = last?.kind === "steps" ? last.steps : [];
-    const step = steps[steps.length - 1];
-    const live = step && step.ok === null ? step : undefined;
+    const live = liveStep(t?.entries, !!run);
     return {
       doing: live ? doingLine(live) : null,
       act: live ? actOf(live) : null,
       failed: steps.filter((s) => s.ok === false).length,
     };
-  }, [t?.entries]);
-  // A command run outside any turn: the status won't say, so this does.
-  const runs = state.shellRuns[agent.id];
-  const run = runs?.[0];
-  const runStep = useMemo(() => (run ? ({ tool: "Bash", target: run.command, ok: null } as const) : null), [run]);
+  }, [t?.entries, !!run]);
   useEffect(() => {
     for (const r of runs ?? []) {
       const step = stepOf(r, t?.entries ?? []);
