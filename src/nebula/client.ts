@@ -206,6 +206,13 @@ export function runTagger(prompt: string, previewReply: () => string): Promise<s
   return invoke("tag_threads", { prompt });
 }
 
+/** The next-prompt suggestions prompt (nextprompts.ts) to the
+ *  `suggestCommand` CLI, the same way (router.rs). */
+export function runSuggester(prompt: string, previewReply: () => string): Promise<string> {
+  if (isPreview()) return new Promise((r) => setTimeout(() => r(previewReply()), 900));
+  return invoke("suggest_next", { prompt });
+}
+
 /** The native folder picker; null when cancelled. */
 export async function pickFolder(defaultPath?: string, title = "Open a folder as a project"): Promise<string | null> {
   if (mockSend) return title.includes("Home") ? "/Users/dev/home" : "/Users/dev/code/new-idea";

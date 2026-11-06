@@ -367,6 +367,24 @@ function DispatchSettings() {
       </div>
       <div className="setting">
         <div className="setting-text">
+          <label className="setting-label" htmlFor="set-suggest">
+            Next-prompt suggestions
+          </label>
+          <span className="setting-hint">
+            The agent CLI that offers a few things you might send next, under a finished thread's latest reply in the
+            Read view, run headless with the prompt on stdin. Empty uses Haiku; <code>off</code> turns them off.
+          </span>
+        </div>
+        <TextSetting
+          id="set-suggest"
+          value={prefs.suggestCommand ?? ""}
+          placeholder="claude -p --model haiku --no-session-persistence"
+          suggestions={["off", "claude -p --model haiku --no-session-persistence", "codex exec --skip-git-repo-check"]}
+          onCommit={(v) => void savePrefs({ ...prefs, suggestCommand: v || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
           <label className="setting-label" htmlFor="set-dispatch-cap">
             Sessions at once
           </label>

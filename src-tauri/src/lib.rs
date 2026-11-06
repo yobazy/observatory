@@ -97,6 +97,7 @@ pub fn run() {
             cards::read_card_sources,
             router::route_list,
             router::tag_threads,
+            router::suggest_next,
             git::git_status,
             git::git_diff,
             git::delete_branch,
