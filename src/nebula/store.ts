@@ -95,6 +95,9 @@ export interface State {
   fileOpened: Record<string, number>;
   /** Comments on previewed files, by path (comments.ts). */
   comments: Record<string, MockComment[]>;
+  /** A tag looked for across projects: the sidebar's "#tag" filter, or one
+   *  picked in ⌘K. A project opened meanwhile turns its chip on. */
+  tagFilter: string | null;
 }
 
 function loadFanOuts(): Record<string, FanOut> {
@@ -146,6 +149,7 @@ let state: State = {
   shelf: {},
   fileOpened: {},
   comments: {},
+  tagFilter: null,
   theme: "default",
   prefs: {},
   mode: "dark",

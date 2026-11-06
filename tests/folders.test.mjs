@@ -39,6 +39,17 @@ test('the filter finds an alias, the real name, the folder or a tag', () => {
   assert.ok(!matches(p('b'), 'b', prefs, '#client'));
 });
 
+test('"#tag" also finds a project whose threads carry the tag, and its chip lists it', () => {
+  const prefs = { projectTags: { '/r/a': ['client'] } };
+  const studio = { repo_path: '/r/b', name: 'Studio' };
+  assert.ok(matches(studio, 'studio', prefs, '#blk', ['blkwtr', 'hoam']), 'a thread tag, by its start');
+  assert.ok(!matches(studio, 'studio', prefs, '#acme', ['blkwtr']));
+  assert.ok(!matches(studio, 'studio', prefs, '#blk'), 'no thread tags given: as before');
+  assert.ok(!matches(studio, 'studio', prefs, 'blkwtr', ['blkwtr']), 'a plain search reads names, not thread tags');
+  // A tag on both a project and its threads counts that project once.
+  assert.deepEqual(allTags(prefs, ['/r/a', '/r/b', '/r/c'], { '/r/a': ['client'], '/r/b': ['blkwtr', 'client'], '/r/c': ['blkwtr'] }), ['blkwtr', 'client']);
+});
+
 test('a move inside a group leaves everything outside it where it was', () => {
   assert.deepEqual(moveWithin(['a', 'x', 'b', 'y', 'c'], ['a', 'b', 'c'], 'c', 0), ['c', 'x', 'a', 'y', 'b']);
   assert.deepEqual(moveWithin(['a', 'b', 'c'], ['a', 'b', 'c'], 'a', 9), ['b', 'c', 'a']);

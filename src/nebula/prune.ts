@@ -33,6 +33,7 @@ export function pruned(s: PruneState, prefs: DesktopPrefs): DesktopPrefs {
     projectTags: ofRepo(prefs.projectTags),
     projectPriorities: ofRepo(prefs.projectPriorities),
     threadTagLists: ofRepo(prefs.threadTagLists),
+    threadTagColors: ofRepo(prefs.threadTagColors),
     pinnedTasks,
     taskColors: keep(prefs.taskColors),
     taskPriorities: keep(prefs.taskPriorities),

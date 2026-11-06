@@ -2,13 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   addTag,
+  carriedTags,
+  chipFor,
   deleteTag,
   filterThreads,
   renameTag,
   searchTerms,
+  setTagColor,
   setThreadTags,
+  tagColor,
   tagCounts,
+  tagShare,
+  tagThreads,
+  threadAnswersTag,
   threadShows,
+  toggleChip,
 } from '../src/nebula/threadtags.ts';
 import { pruned } from '../src/nebula/prune.ts';
 
@@ -94,18 +102,97 @@ test('filterThreads shows only the chip’s threads, archived ones and other bra
     threadTagLists: { [REPO]: ['blkwtr', 'hoam', 'acme'] },
     threadTags: { a: rec(['blkwtr']), b: rec(['blkwtr']), c: rec(['blkwtr', 'x']), d: rec(['hoam']) },
   };
-  assert.deepEqual(filterThreads(threads, prefs, 'blkwtr').map((t) => t.id), ['a', 'b', 'c']);
-  assert.equal(filterThreads(threads, prefs, null).length, 5);
-  assert.deepEqual(filterThreads(threads, prefs, 'acme'), []);
+  assert.deepEqual(filterThreads(threads, prefs, ['blkwtr']).map((t) => t.id), ['a', 'b', 'c']);
+  assert.equal(filterThreads(threads, prefs, []).length, 5);
+  assert.deepEqual(filterThreads(threads, prefs, ['acme']), []);
   assert.deepEqual([...tagCounts(threads, prefs, REPO)], [['blkwtr', 3], ['hoam', 1], ['acme', 0]]);
 });
 
 test('with a search typed and a chip on, a row shows only when it matches both', () => {
   const prefs = { threadTags: { A: rec(['blkwtr']), B: rec(['hoam']) } };
   const terms = searchTerms('  Logo ');
-  assert.equal(threadShows(prefs, 'A', 'blkwtr', terms, ['New logo', 'main']), true, 'both');
-  assert.equal(threadShows(prefs, 'A', 'blkwtr', terms, ['Pricing page', 'main']), false, 'tag only');
-  assert.equal(threadShows(prefs, 'B', 'blkwtr', terms, ['New logo', 'main']), false, 'search only');
-  assert.equal(threadShows(prefs, 'B', null, terms, ['New logo']), true, 'no chip: the search alone');
-  assert.equal(threadShows(prefs, 'A', 'blkwtr', [], ['anything']), true, 'no search: the chip alone');
+  assert.equal(threadShows(prefs, 'A', ['blkwtr'], terms, ['New logo', 'main']), true, 'both');
+  assert.equal(threadShows(prefs, 'A', ['blkwtr'], terms, ['Pricing page', 'main']), false, 'tag only');
+  assert.equal(threadShows(prefs, 'B', ['blkwtr'], terms, ['New logo', 'main']), false, 'search only');
+  assert.equal(threadShows(prefs, 'B', [], terms, ['New logo']), true, 'no chip: the search alone');
+  assert.equal(threadShows(prefs, 'A', ['blkwtr'], [], ['anything']), true, 'no search: the chip alone');
+});
+
+
+test('several chips on at once show only the threads carrying every one', () => {
+  const threads = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+  const prefs = {
+    threadTags: { a: rec(['blkwtr', 'logo']), b: rec(['blkwtr']), c: rec(['logo', 'hoam']), d: rec([]) },
+  };
+  let on = toggleChip([], 'blkwtr');
+  assert.deepEqual(on, ['blkwtr']);
+  on = toggleChip(on, 'logo');
+  assert.deepEqual(on, ['blkwtr', 'logo'], 'a second chip joins the first');
+  assert.deepEqual(filterThreads(threads, prefs, on).map((t) => t.id), ['a']);
+  assert.deepEqual(filterThreads(threads, prefs, ['logo', 'hoam']).map((t) => t.id), ['c']);
+  assert.deepEqual(filterThreads(threads, prefs, ['blkwtr', 'hoam']), [], 'no thread carries both');
+  on = toggleChip(on, 'blkwtr');
+  assert.deepEqual(on, ['logo'], 'clicking one that is on lets only it go');
+  assert.deepEqual(filterThreads(threads, prefs, on).map((t) => t.id), ['a', 'c']);
+  const terms = searchTerms('logo');
+  assert.equal(threadShows(prefs, 'a', ['blkwtr', 'logo'], terms, ['New logo']), true);
+  assert.equal(threadShows(prefs, 'b', ['blkwtr', 'logo'], terms, ['New logo']), false);
+});
+
+test('a tag color is set and cleared, follows a rename, and goes with a delete', () => {
+  let prefs = { threadTagLists: { [REPO]: ['blkwtr', 'hoam'], [OTHER]: ['blkwtr'] }, threadTags: { A: rec(['blkwtr']) } };
+  assert.equal(tagColor(prefs, REPO, 'blkwtr'), null);
+  prefs = setTagColor(prefs, REPO, 'blkwtr', 'teal');
+  assert.equal(tagColor(prefs, REPO, 'blkwtr'), 'teal');
+  assert.equal(tagColor(prefs, OTHER, 'blkwtr'), null, "another project's same-named tag keeps its own");
+  assert.equal(setTagColor(prefs, REPO, 'acme', 'red'), prefs, 'a tag not in the list gets none');
+
+  const renamed = renameTag(prefs, REPO, 'blkwtr', 'blackwater', ['A']);
+  assert.deepEqual(renamed.threadTagColors[REPO], { blackwater: 'teal' });
+
+  const withHoam = setTagColor(prefs, REPO, 'hoam', 'pink');
+  const merged = renameTag(withHoam, REPO, 'blkwtr', 'hoam', ['A']);
+  assert.deepEqual(merged.threadTagColors[REPO], { hoam: 'pink' }, 'merging keeps the color of the tag merged into');
+  const mergedPlain = renameTag(setTagColor(withHoam, REPO, 'hoam', null), REPO, 'blkwtr', 'hoam', ['A']);
+  assert.deepEqual(mergedPlain.threadTagColors[REPO], { hoam: 'teal' }, 'or takes the renamed one when it had none');
+
+  const deleted = deleteTag(prefs, REPO, 'blkwtr', ['A']);
+  assert.equal(deleted.threadTagColors?.[REPO], undefined, 'the last color gone, the entry goes too');
+  assert.equal(tagColor(setTagColor(prefs, REPO, 'blkwtr', null), REPO, 'blkwtr'), null, 'cleared');
+});
+
+test('pruned() drops the tag colors of a removed project', () => {
+  const s = { loaded: true, projects: { p1: { id: 'p1', repo_path: REPO } }, worktrees: {}, agents: {} };
+  const prefs = { threadTagColors: { [REPO]: { blkwtr: 'teal' }, [OTHER]: { hoam: 'pink' } } };
+  assert.deepEqual(pruned(s, prefs).threadTagColors, { [REPO]: { blkwtr: 'teal' } });
+});
+
+test('tagThreads tags several picked threads at once, as you, and keeps their other tags', () => {
+  const prefs = { threadTags: { A: rec(['hoam'], 'prompt'), B: rec(['blkwtr']) } };
+  const on = tagThreads(prefs, ['A', 'B', 'C'], '#BlkWtr', true, 9);
+  assert.deepEqual(on.threadTags.A, { tags: ['hoam', 'blkwtr'], by: 'you', at: 9 });
+  assert.deepEqual(on.threadTags.B, { tags: ['blkwtr'], by: 'you', at: 9 }, 'carried once');
+  assert.deepEqual(on.threadTags.C, { tags: ['blkwtr'], by: 'you', at: 9 }, 'a thread with no record yet');
+  assert.equal(tagShare(on, ['A', 'B', 'C'], 'blkwtr'), 'all');
+  assert.equal(tagShare(on, ['A', 'B', 'C'], 'hoam'), 'some');
+  assert.equal(tagShare(on, ['A', 'B', 'C'], 'acme'), 'none');
+
+  const off = tagThreads(on, ['A', 'C'], 'blkwtr', false, 10);
+  assert.deepEqual(off.threadTags.A, { tags: ['hoam'], by: 'you', at: 10 });
+  assert.deepEqual(off.threadTags.C, { tags: [], by: 'you', at: 10 }, 'cleared by you, so the prompt leaves it alone');
+  assert.deepEqual(off.threadTags.B.tags, ['blkwtr'], 'a thread not picked is left alone');
+  assert.equal(tagThreads(prefs, ['A'], '#', true), prefs, 'an empty name does nothing');
+});
+
+test('a tag looked for across projects: what threads carry, what "#tag" finds, and the chip it turns on', () => {
+  const prefs = { threadTags: { A: rec(['blkwtr', 'logo']), B: rec(['hoam']), C: rec(['blkwtr']) } };
+  assert.deepEqual(carriedTags(prefs, ['A', 'B', 'C', 'none']), ['blkwtr', 'logo', 'hoam']);
+  assert.equal(threadAnswersTag(prefs, 'A', '#blk'), true);
+  assert.equal(threadAnswersTag(prefs, 'B', '#blk'), false);
+  assert.equal(threadAnswersTag(prefs, 'A', '#'), false, 'nothing typed after the #');
+  assert.deepEqual(chipFor('blkwtr', ['hoam', 'blkwtr']), ['blkwtr']);
+  assert.deepEqual(chipFor('#blk', ['hoam', 'blkwtr', 'blk']), ['blk'], 'the tag itself before one that starts with it');
+  assert.deepEqual(chipFor('blk', ['hoam', 'blkwtr']), ['blkwtr']);
+  assert.deepEqual(chipFor('acme', ['hoam']), [], "a project without it: no chip");
+  assert.deepEqual(chipFor(null, ['hoam']), []);
 });
