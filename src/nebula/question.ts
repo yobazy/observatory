@@ -38,6 +38,10 @@ const CHOICE = /^([❯›>▶●]\s*)?(\d{1,2})[.)]\s+(.+)$/;
 const RULE = /^\s*[╭─━]{3}[─━╮]*\s*$/;
 /** The last row of a question an agent put to you, under a rule of its own. */
 const CHAT = "Chat about this";
+/** That row when its choices have previews: no number, and only ↓ reaches it. */
+const CHAT_ROW = /^(?:[❯›▶]\s*)?Chat about this$/;
+/** A choice's preview box, to the right of its row. */
+const BOXED = /\s{2,}[┌│├└].*$/;
 /** A box before a choice's label, when the question lets you pick several. */
 const BOX = /^\[(.)\]\s+(.+)$/;
 /** The row of tabs above such a question, one box per question. */
@@ -56,7 +60,7 @@ function upToText(lines: string[]): string[] {
  *  a run numbered 1, 2, 3… in the last rows counts, so a numbered list in
  *  the agent's prose above doesn't. */
 export function findQuestion(screen: string[]): Question | null {
-  return numbered(screen) ?? inRow(screen);
+  return previewed(screen) ?? numbered(screen) ?? inRow(screen);
 }
 
 function numbered(screen: string[]): Question | null {
@@ -114,9 +118,18 @@ function numbered(screen: string[]): Question | null {
   // the numbers instead.
   const marked = choices.filter((c) => c.selected).length;
   if (marked > 1 || (!marked && !asked)) return null;
+  const [prompt, j] = textAbove(rows, i, asked ? 8 : 3);
+  const detail = panelAbove(lines, rows, j, asked);
+  if (asked) return putToYou(prompt, detail, choices, under);
+  return detail ? { prompt, detail, choices } : { prompt, choices };
+}
+
+/** The paragraph ending at or above row `from`, up to `most` rows of it, and
+ *  the row above where it stopped. */
+function textAbove(rows: string[], from: number, most: number): [string, number] {
   const above: string[] = [];
-  let j = i;
-  for (; j >= 0 && above.length < (asked ? 8 : 3); j--) {
+  let j = from;
+  for (; j >= 0 && above.length < most; j--) {
     const t = rows[j].trim();
     if (!t) {
       if (above.length) break;
@@ -124,9 +137,7 @@ function numbered(screen: string[]): Question | null {
     }
     above.unshift(t);
   }
-  const detail = panelAbove(lines, rows, j);
-  if (asked) return putToYou(above.join(" "), detail, choices, under);
-  return detail ? { prompt: above.join(" "), detail, choices } : { prompt: above.join(" "), choices };
+  return [above.join(" "), j];
 }
 
 /** Whether the next row up that isn't a label's wrap or a rule is choice
@@ -148,8 +159,7 @@ function putToYou(prompt: string, panel: string[] | undefined, choices: Choice[]
   const own = choices.length - 2;
   // On your own line, digits would land in your answer, not pick a choice.
   if (own < 0 || choices[own].selected) return null;
-  const tabs = panel && TABS.test(panel[0]) ? panel[0] : null;
-  const several = (tabs?.match(/[☐☒]/g) ?? []).length > 1;
+  const { last, detail } = steps(panel);
   const boxes = choices.some((c) => BOX.test(c.label));
   // "Next", or "Submit" on the last question, is under the boxes.
   const onward = boxes ? under[own].pop()?.replace(MARK, "") : undefined;
@@ -161,14 +171,62 @@ function putToYou(prompt: string, panel: string[] | undefined, choices: Choice[]
       label: box ? box[2] : c.label,
       ...(note ? { note } : {}),
       ...(box ? { checked: box[1] !== " " } : {}),
-      ...(n === choices.length - 1 ? {} : several || boxes || n === own ? { stays: true } : {}),
+      ...(n === choices.length - 1 ? {} : !last || boxes || n === own ? { stays: true } : {}),
       ...(n === own ? { typed: true } : {}),
     };
   });
   if (boxes) asked.splice(-1, 0, { key: "next", label: onward || "Next", selected: false, keys: ["\t"], stays: true });
+  return detail.length ? { prompt, detail, choices: asked } : { prompt, choices: asked };
+}
+
+/** What a form's tabs say: whether this is its only question, and the panel
+ *  rows to show. A lone tab is drawn too, so with no tabs on screen they may
+ *  have scrolled off, and more steps may follow. */
+function steps(panel: string[] | undefined): { last: boolean; detail: string[] } {
+  const tabs = panel && TABS.test(panel[0]) ? panel[0] : null;
+  const last = !!tabs && (tabs.match(/[☐☒]/g) ?? []).length === 1;
   // The tabs say how far along you are, which one question doesn't need.
-  const rest = (tabs ? (several ? panel! : panel!.slice(1)) : (panel ?? [])).filter((t, n, all) => t || (n && n < all.length - 1));
-  return rest.length ? { prompt, detail: rest, choices: asked } : { prompt, choices: asked };
+  const shown = last ? panel!.slice(1) : (panel ?? []);
+  return { last, detail: shown.filter((t, n, all) => t || (n && n < all.length - 1)) };
+}
+
+/** A question whose choices each have a preview, drawn in a box beside them.
+ *  There's no line for your own answer and "Chat about this" has no number.
+ *  A digit only moves the mark here, so Enter has to follow it, and ↓ from
+ *  the last choice reaches the chat row. */
+function previewed(screen: string[]): Question | null {
+  const lines = upToText(screen);
+  const rows = lines.map((l) => l.replace(EDGE, ""));
+  const beside = (l: string) => l.replace(BOXED, "").trim();
+  let chat = rows.length - 1;
+  while (chat >= 0 && rows.length - chat <= 6 && !CHAT_ROW.test(rows[chat].trim())) chat--;
+  if (chat < 0 || !CHAT_ROW.test(rows[chat].trim())) return null;
+  let first = chat - 1;
+  while (first >= 0 && chat - first < 40 && beside(lines[first]).match(CHOICE)?.[2] !== "1") first--;
+  if (first < 0 || chat - first >= 40) return null;
+  const choices: Choice[] = [];
+  for (let i = first; i < chat; i++) {
+    const t = beside(lines[i]);
+    const m = t.match(CHOICE);
+    if (m) choices.push({ key: m[2], label: m[3].trim(), selected: !!m[1], keys: [m[2], "\r"] });
+    else if (t && !RULE.test(lines[i])) choices[choices.length - 1].label += ` ${t}`;
+    else if (!BOXED.test(lines[i])) break;
+  }
+  if (!choices.every((c, n) => Number(c.key) === n + 1)) return null;
+  const [prompt, j] = textAbove(rows, first - 1, 8);
+  const { last, detail } = steps(panelAbove(lines, rows, j, true));
+  // With the mark on the chat row, the last choice keeps a mark of its own.
+  const onChat = rows[chat].trim() !== CHAT;
+  const asked: Choice[] = [
+    ...choices.map((c) => ({ ...c, selected: c.selected && !onChat, ...(last ? {} : { stays: true }) })),
+    {
+      key: "chat",
+      label: CHAT,
+      selected: onChat,
+      keys: [choices[choices.length - 1].key, "\x1b[B", "\r"],
+    },
+  ];
+  return detail.length ? { prompt, detail, choices: asked } : { prompt, choices: asked };
 }
 
 /** A mark before one of several short choices spaced apart on one row, as
@@ -225,14 +283,18 @@ function inRow(screen: string[]): Question | null {
 /** The panel rows above the prompt, up to the rule or box top the panel
  *  starts under. Without one close by, the rows above are the agent's
  *  prose, not part of the question, so there's no detail. */
-function panelAbove(lines: string[], rows: string[], from: number): string[] | undefined {
+function panelAbove(lines: string[], rows: string[], from: number, asked = false): string[] | undefined {
   const out: string[] = [];
   for (let j = from; j >= 0 && from - j < 40; j--) {
-    if (RULE.test(lines[j])) {
+    // In a short terminal the rule above an agent's question scrolls off
+    // first, and its tabs are the top of the panel.
+    const tabs = asked && TABS.test(rows[j].trim());
+    if (tabs) out.unshift(rows[j].trim());
+    if (tabs || RULE.test(lines[j])) {
       while (out.length && !out[0]) out.shift();
       while (out.length && !out[out.length - 1]) out.pop();
       // One blank row between paragraphs is enough.
-      const kept = out.filter((t, n) => t || out[n - 1]).map((t) => t.replace(/^←\s*|\s*→$/g, ""));
+      const kept = out.filter((t, n) => t || out[n - 1]).map((t) => (TABS.test(t) ? t.replace(/^←\s*|\s*→$/g, "") : t));
       return kept.length ? kept : undefined;
     }
     out.unshift(rows[j].trim());
@@ -252,7 +314,8 @@ export function looksLikePicker(lines: string[]): boolean {
   return (
     rows.some((l) => /^[❯›▶>]\s*\d{1,2}[.)]\s/.test(l)) ||
     rows.filter((l) => /^\d{1,2}[.)]\s/.test(l)).length >= 2 ||
-    rows.some((l) => /^[❯›▶]\s*\S+(?: \S+)?\s{3,}\S/.test(l) || /\S\s{3,}[❯›▶]\s*\S/.test(l))
+    rows.some((l) => /^[❯›▶]\s*\S+(?: \S+)?\s{3,}\S/.test(l) || /\S\s{3,}[❯›▶]\s*\S/.test(l)) ||
+    rows.some((l) => CHAT_ROW.test(l.trim()))
   );
 }
 
