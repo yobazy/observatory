@@ -5,6 +5,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { debugLog, onExit, onPty, promptAnswered, request, send, sendInput } from "../nebula/client";
+import { RUNNING_LABEL, runningCommand } from "../nebula/shellruns";
 import { flash, getState, projectOfWorktree, setState, useAppState } from "../nebula/store";
 import { agentSpec, harnessLabel, statusLabel, usualHarness } from "../nebula/status";
 import { sessionKey, type Agent, type SessionRef } from "../nebula/types";
@@ -93,6 +94,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const state = useAppState();
   const session = state.selectedSession;
   const agent = session && "Agent" in session ? state.agents[session.Agent] : undefined;
+  const shellRun = !!agent && runningCommand(state, agent);
   // What its last reply said about closing it.
   const verdict = useVerdict(agent);
   const tab = session && "Terminal" in session ? state.terminals[session.Terminal] : undefined;
@@ -380,8 +382,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
             />
             <span className="pane-meta">
               {agent && (
-                <span className={`pill pill-${agent.status}`} title={agentSpec(agent)}>
-                  {statusLabel(agent)}
+                <span className={`pill pill-${shellRun ? "running" : agent.status}`} title={agentSpec(agent)}>
+                  {shellRun ? RUNNING_LABEL : statusLabel(agent)}
                 </span>
               )}
               {!agent && <span>Shell</span>}

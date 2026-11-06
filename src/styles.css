@@ -4414,6 +4414,10 @@ td.task-last {
   opacity: 1;
   color: var(--text);
 }
+.rd-run.is-running {
+  color: var(--st-running);
+  cursor: default;
+}
 .rd-you {
   align-self: flex-end;
   max-width: 80%;

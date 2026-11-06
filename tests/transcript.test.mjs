@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { heldAtPrompt, merge, stepsLine } from '../src/nebula/transcript.ts';
+import { heldAtPrompt, liveStep, merge, stepsLine } from '../src/nebula/transcript.ts';
 
 const e = (n, kind = 'claude', text = `e${n}`) => ({ n, kind, text, at: 0, steps: [] });
 const s = (tool, target = '', ok = true) => ({ tool, target, ok });
@@ -79,4 +79,14 @@ test('the step under way is sorted for the working line\'s cat', async () => {
   assert.equal(actOf(s('WebSearch')), 'web');
   assert.equal(actOf(s('Agent')), 'wait');
   assert.equal(actOf(s('mcp__pencil__execute')), 'other');
+});
+
+test('a command you run comes before a backgrounded step left open in the log', () => {
+  const steps = (step) => [{ n: 0, kind: 'steps', text: '', at: 0, steps: [step] }];
+  const old = { tool: 'Bash', target: 'deploy', ok: null, detail: 'moved to the background' };
+  assert.equal(liveStep(steps(old), false), old);
+  assert.equal(liveStep(steps(old), true), null);
+  assert.equal(liveStep(steps({ ...old, ok: true }), false), null);
+  assert.equal(liveStep([{ n: 0, kind: 'you', text: 'hi', at: 0, steps: [] }], false), null);
+  assert.equal(liveStep(undefined, false), null);
 });
