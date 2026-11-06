@@ -53,13 +53,20 @@ reply() { # $1 = a prompt, typed or given at start
       printf '\e[15A\e[J%s\n←  ☒ Bus  ☒ Food  ✔ Submit  →\n\nReview your answers\n\n ● Do you want the shuttle from the hotel?\n   → Yes\n\nReady to submit your answers?\n\n❯ 1. Submit answers\n  2. Cancel\n' "$rule"
       read -rsn1 _
       printf '\e[12A\e[J  ⎿  answered\n'; sleep 2; echo "done."; hook Stop ;;
+    # Subagents sent off and the turn over: the prompt is back, but nebula
+    # holds the thread at running until they report in, which here is never.
+    agents*)
+      hook UserPromptSubmit "$line"
+      hook SubagentStart
+      echo "two agents are working in the background."
+      hook Stop ;;
     *) hook UserPromptSubmit "$line"; echo "working on: $line"; sleep 3; echo "done."; hook Stop ;;
   esac
 }
 # A task it starts on: the prompts above work as tasks too, so scripts/drive
 # can start one without typing into a terminal.
 case "$1" in
-  ask* | menu* | mcp* | quiz*) reply "$1" ;;
+  ask* | menu* | mcp* | quiz* | agents*) reply "$1" ;;
   ?*) hook UserPromptSubmit "$1"; echo "task: $1"; sleep 2; hook Stop ;;
 esac
 while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do reply "$line"; done

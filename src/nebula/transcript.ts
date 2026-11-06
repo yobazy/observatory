@@ -24,6 +24,9 @@ export interface Entry {
 export interface Transcript {
   entries: Entry[];
   dropped: number;
+  /** The turn is over and the CLI takes a message now, even while the
+   *  daemon says running for subagents out in the background. */
+  atPrompt?: boolean;
 }
 
 /** `prev` brought up to date with `next`, which starts at some entry `prev`

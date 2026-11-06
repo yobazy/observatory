@@ -38,6 +38,8 @@ struct Reading {
     dropped: u64,
     /// Tool calls waiting on a result, by tool-use id: entry number and step.
     pending: HashMap<String, (u64, usize)>,
+    /// The log's last word is a turn ending, so the CLI is at its prompt.
+    at_prompt: bool,
 }
 
 #[derive(Clone, Serialize, Debug, PartialEq)]
@@ -65,10 +67,15 @@ pub struct Step {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Transcript {
     entries: Vec<Entry>,
     /// Entries before the first one sent, no longer kept.
     dropped: u64,
+    /// The turn is over and the CLI takes a message now, even if the daemon
+    /// still says running: it holds that until subagents sent off in the
+    /// background report in.
+    at_prompt: bool,
 }
 
 #[derive(Deserialize)]
@@ -76,6 +83,7 @@ pub struct Transcript {
 struct Line {
     #[serde(rename = "type")]
     kind: Option<String>,
+    subtype: Option<String>,
     timestamp: Option<String>,
     #[serde(default)]
     is_meta: bool,
@@ -183,18 +191,33 @@ impl Reading {
         if l.is_sidechain {
             return;
         }
+        if matches!(
+            l.subtype.as_deref(),
+            Some("stop_hook_summary" | "turn_duration")
+        ) {
+            self.at_prompt = true;
+            return;
+        }
         let Some(content) = l.message.and_then(|m| m.content) else {
             return;
         };
         let at = l.timestamp.as_deref().and_then(parse_time).unwrap_or(0);
         match l.kind.as_deref() {
             Some("user") => self.user(&content, l.is_meta, at),
-            Some("assistant") => self.assistant(&content, at),
+            Some("assistant") => {
+                self.at_prompt = false;
+                self.assistant(&content, at);
+            }
             _ => {}
         }
     }
 
     fn user(&mut self, content: &serde_json::Value, meta: bool, at: i64) {
+        // A turn starting, or carrying on. What the harness adds between
+        // turns is meta, and a task's notification starts one of its own.
+        if !meta {
+            self.at_prompt = false;
+        }
         if let serde_json::Value::Array(blocks) = content {
             for b in blocks {
                 let kind = b.get("type").and_then(|t| t.as_str());
@@ -204,6 +227,7 @@ impl Reading {
                         .is_some_and(|t| t.starts_with("[Request interrupted"))
                 {
                     self.push("stopped", String::new(), at);
+                    self.at_prompt = true;
                     return;
                 }
                 if kind != Some("tool_result") {
@@ -303,7 +327,7 @@ impl Reading {
                     for l in codex_log::as_claude(text) {
                         self.read_line(&l);
                     }
-                } else if text.contains("\"message\"") {
+                } else if text.contains("\"message\"") || text.contains("\"subtype\"") {
                     self.read_line(text);
                 }
             }
@@ -353,6 +377,7 @@ pub async fn thread_transcript(
         Ok(Some(Transcript {
             entries: r.entries.iter().filter(|e| e.n >= from).cloned().collect(),
             dropped: r.dropped,
+            at_prompt: r.at_prompt,
         }))
     })
     .await
@@ -390,6 +415,27 @@ mod tests {
             [None, Some(false), Some(true)]
         );
         assert_eq!(r.entries[3].text, "Fixed it.");
+    }
+
+    #[test]
+    fn a_turn_ending_means_the_prompt_is_back_until_the_next_one_starts() {
+        const SUMMARY: &str = r#"{"type":"system","subtype":"stop_hook_summary","hookCount":3}"#;
+        const ENDED: &str =
+            r#"{"type":"system","subtype":"turn_duration","pendingWorkflowCount":1}"#;
+        const NOTIFIED: &str = r#"{"type":"user","message":{"content":"<task-notification>done</task-notification>"}}"#;
+        const STOPPED: &str = r#"{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}"#;
+        const CAVEAT: &str = r#"{"type":"user","isMeta":true,"message":{"content":"a reminder"}}"#;
+        const HELPER: &str = r#"{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"a subagent"}]}}"#;
+        const QUEUE: &str = r#"{"type":"queue-operation","operation":"enqueue"}"#;
+
+        assert!(!read(&[PROMPT, WORK]).at_prompt, "mid-turn");
+        assert!(read(&[PROMPT, DONE, SUMMARY]).at_prompt);
+        assert!(read(&[PROMPT, DONE, SUMMARY, ENDED]).at_prompt);
+        // Subagents and the harness carry on past the end of the turn.
+        assert!(read(&[DONE, ENDED, HELPER, CAVEAT, QUEUE]).at_prompt);
+        assert!(!read(&[DONE, ENDED, PROMPT]).at_prompt, "you replied");
+        assert!(!read(&[DONE, ENDED, NOTIFIED]).at_prompt, "a task reported");
+        assert!(read(&[PROMPT, WORK, STOPPED]).at_prompt, "you stopped it");
     }
 
     #[test]

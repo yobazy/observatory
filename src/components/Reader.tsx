@@ -6,7 +6,7 @@ import { isPreview, sendInput } from "../nebula/client";
 import { flash, getState, projectOfWorktree, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
-import { enqueue, isIdle, unqueue, queuedSentAt } from "../nebula/queue";
+import { enqueue, isIdle, sendQueued, unqueue, queuedSentAt, type Queued } from "../nebula/queue";
 import { actOf, clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
 import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
@@ -58,9 +58,9 @@ function ReaderHero({ agent, work }: { agent: Agent; work: number }) {
 }
 
 /** The thread's conversation, read again as it moves. */
-function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | null {
+function useTranscript(agent: Agent): Transcript | null {
   const standIn = useStandIn(agent.id);
-  const [got, setGot] = useState<{ entries: Entry[]; dropped: number } | null>(null);
+  const [got, setGot] = useState<Transcript | null>(null);
   const last = useRef<number | null>(null);
   const session = agent.session_id;
   useEffect(() => {
@@ -75,11 +75,11 @@ function useTranscript(agent: Agent): { entries: Entry[]; dropped: number } | nu
         if (!live || !t) return;
         setGot((prev) => {
           // Nothing new since the last read: keep what's shown as it is.
-          const same = prev && from !== null && t.dropped === prev.dropped;
+          const same = prev && from !== null && t.dropped === prev.dropped && t.atPrompt === prev.atPrompt;
           if (same && JSON.stringify(t.entries) === JSON.stringify(prev.entries.filter((e) => e.n >= from))) return prev;
           const entries = from === null || !prev ? t.entries : merge(prev.entries, t.entries, t.dropped);
           last.current = entries.length ? entries[entries.length - 1].n : null;
-          return { entries, dropped: t.dropped };
+          return { entries, dropped: t.dropped, atPrompt: t.atPrompt };
         });
       } catch {
         // No log to read: the reader says so.
@@ -106,7 +106,12 @@ const toHtml = (md: string, inline = false) =>
 
 /** What a reply's paths and "#75"s are read against: the thread they're
  *  from, its checkout, and any PR of its project, for the repo's address. */
-const Where = createContext<{ from: string; root: string; prUrl: string | null }>({ from: "", root: "", prUrl: null });
+const Where = createContext<{ from: string; root: string; prUrl: string | null; atPrompt: boolean }>({
+  from: "",
+  root: "",
+  prUrl: null,
+  atPrompt: false,
+});
 
 /** Links in a reply open in the browser, not in the app's webview; a path
  *  opens in the preview. */
@@ -133,11 +138,11 @@ function copy(text: string, what: string) {
 
 /** Have the thread's agent run `command` itself, as "! <command>", so its
  *  output lands in the thread; one mid-turn gets it when its turn ends. */
-async function runIn(agentId: string, command: string) {
+async function runIn(agentId: string, command: string, atPrompt: boolean) {
   const agent = getState().agents[agentId];
   if (!agent) return;
   try {
-    const how = await enqueue(agent, `! ${command}`);
+    const how = await enqueue(agent, `! ${command}`, { atPrompt });
     flash(how === "queued" ? `Queued for ${agent.name}: runs when its turn ends` : `Running it in ${agent.name}`, 2500);
   } catch {
     flash(`Couldn't send that to ${agent.name}. Copy it instead.`, 6000);
@@ -179,7 +184,7 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
         r.title = `Have the agent run this, as "! ${command}"`;
         r.onclick = (e) => {
           e.stopPropagation();
-          void runIn(where.from, command);
+          void runIn(where.from, command, where.atPrompt);
         };
         acts.append(r);
         pre.classList.add("is-command");
@@ -633,14 +638,17 @@ export function Reader({
 }) {
   const t = useTranscript(agent);
   const state = useAppState();
+  // Its turn is over and only subagents are out: it reads what you send now,
+  // as its terminal would, though the daemon still says running.
+  const atPrompt = agent.status === "running" && !!t?.atPrompt;
   const where = useMemo(() => {
     const project = state.worktrees[agent.worktree_id]?.project_id;
     const pr = Object.values(state.worktrees)
       .filter((w) => w.project_id === project)
       .map((w) => state.prs[w.id])
       .find((p) => p?.kind === "found");
-    return { from: agent.id, root, prUrl: pr?.kind === "found" ? pr.pr.url : null };
-  }, [agent.id, agent.worktree_id, root, state.worktrees, state.prs]);
+    return { from: agent.id, root, prUrl: pr?.kind === "found" ? pr.pr.url : null, atPrompt };
+  }, [agent.id, agent.worktree_id, root, state.worktrees, state.prs, atPrompt]);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const lastTop = useRef(0);
@@ -851,12 +859,12 @@ export function Reader({
       label: SHIP_LABEL[kind],
       title: `Ask ${agent.name} to ${what}`,
       run: () =>
-        void enqueue(agent, shipPrompt(kind, g)).then(
+        void enqueue(agent, shipPrompt(kind, g), { atPrompt }).then(
           (how) => flash(how === "queued" ? `Queued for ${agent.name}: ${what}` : `Asked ${agent.name} to ${what}`),
           () => flash(`Couldn't ask ${agent.name} to ${what}`, 6000),
         ),
     };
-  }, [state.git, state.worktrees, agent]);
+  }, [state.git, state.worktrees, agent, atPrompt]);
   const showReply = (n: number, which = ".rd-reply") => {
     if (foldTo !== null && n < foldTo) setUnfolded(true);
     // After the fold opens, if it had to.
@@ -978,6 +986,8 @@ export function Reader({
     el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   };
 
+  // Behind a queued prompt, a reply still waits its turn.
+  const canSend = isIdle(agent) || (atPrompt && !queue?.length);
   const send = async () => {
     const text = outgoing;
     if (!text || waiting) return;
@@ -989,7 +999,7 @@ export function Reader({
     const after = t?.entries.length ? t.entries[t.entries.length - 1].n : -1;
     setOutbox({ text, after, sent: false });
     try {
-      const how = await enqueue(agent, text);
+      const how = await enqueue(agent, text, { atPrompt });
       setQueued({ entry: latest, picks, text, how });
       // A queued one shows in the queue instead.
       setOutbox(how === "queued" ? null : { text, after, sent: true });
@@ -1001,6 +1011,22 @@ export function Reader({
       setTapped(was.tapped);
       setPointed(was.pointed);
       flash(`Couldn't send to ${agent.name}. Your reply is still in the box.`, 6000);
+    }
+  };
+
+  // A prompt queued before the turn ended would otherwise wait out the agents.
+  const sendNow = async (q: Queued) => {
+    stick.current = true;
+    const after = t?.entries.length ? t.entries[t.entries.length - 1].n : -1;
+    setOutbox({ text: q.text, after, sent: false });
+    setQueued((was) => (was.text === q.text ? { ...was, how: "sent" } : was));
+    try {
+      await sendQueued(agent, q.id);
+      setOutbox({ text: q.text, after, sent: true });
+    } catch {
+      setOutbox(null);
+      setQueued((was) => (was.text === q.text ? { ...was, how: "queued" } : was));
+      flash(`Couldn't send to ${agent.name}. It's still queued.`, 6000);
     }
   };
 
@@ -1153,7 +1179,12 @@ export function Reader({
                   <div key={q.id} className="rd-you is-queued">
                     {q.text}
                     <span className="rd-queued-bar">
-                      <span>Queued, sent when its turn ends</span>
+                      <span>{atPrompt ? "Queued, sent when its agents finish" : "Queued, sent when its turn ends"}</span>
+                      {atPrompt && (
+                        <button className="link-btn" onClick={() => void sendNow(q)}>
+                          Send now
+                        </button>
+                      )}
                       <button
                         className="link-btn"
                         onClick={() => {
@@ -1177,7 +1208,9 @@ export function Reader({
                     ) : (
                       <span className="rd-pulse" aria-hidden />
                     )}
-                    <span className="rd-doing">{doing ?? "Working…"}</span>
+                    <span className="rd-doing">
+                      {atPrompt ? "Agents are working in the background. You can keep talking." : (doing ?? "Working…")}
+                    </span>
                     <Elapsed since={agent.status_changed_at} />
                   </p>
                 )}
@@ -1215,7 +1248,7 @@ export function Reader({
             onClick={() => {
               const asked = { after: t.entries[t.entries.length - 1].n, at: Date.now(), queued: null };
               setCatching(asked);
-              void enqueue(agent, CATCH_UP).then(
+              void enqueue(agent, CATCH_UP, { atPrompt }).then(
                 (how) => {
                   // The ask just went on the end of the queue.
                   const id = getState().queue[agent.id]?.at(-1)?.id ?? null;
@@ -1295,7 +1328,9 @@ export function Reader({
                     ? "Add anything else, or just send"
                     : isIdle(agent)
                       ? `Reply to ${agent.name}`
-                      : `Queue a reply for when ${agent.name} is done`
+                      : canSend
+                        ? `Reply to ${agent.name}. Its agents keep working`
+                        : `Queue a reply for when ${agent.name} is done`
                 }
                 aria-label="Reply"
                 onChange={(e) => setDraft(e.target.value)}
@@ -1311,7 +1346,7 @@ export function Reader({
                 }}
               />
               <button className="btn btn-primary" disabled={!outgoing} onClick={() => void send()} title="Send (↵). Shift-↵ for a new line">
-                {isIdle(agent) ? "Send" : "Queue"}
+                {canSend ? "Send" : "Queue"}
               </button>
             </>
           )}
