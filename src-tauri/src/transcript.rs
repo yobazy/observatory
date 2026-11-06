@@ -262,8 +262,10 @@ impl Reading {
 
     fn user(&mut self, content: &serde_json::Value, meta: bool, at: i64, ended: i64) {
         // A turn starting, or carrying on: a peer's message or a task's
-        // notification starts one of its own, even as a meta row.
-        if !(meta && between_turns(content)) {
+        // notification starts one of its own, even as a meta row. A command you
+        // ran, "! cmd", happens at the prompt and starts nothing.
+        let ran = content.as_str().is_some_and(|t| t.starts_with("<bash-"));
+        if !ran && !(meta && between_turns(content)) {
             self.turn_ended_at = None;
         }
         if let serde_json::Value::Array(blocks) = content {
@@ -559,6 +561,14 @@ mod tests {
         const ENDED: &str = r#"{"type":"system","subtype":"turn_duration"}"#;
         const PEER: &str = r#"{"type":"user","isMeta":true,"message":{"content":"Another Claude session sent a message"}}"#;
         assert!(read(&[DONE, ENDED, PEER]).turn_ended_at.is_none());
+    }
+
+    #[test]
+    fn a_command_you_ran_at_the_prompt_leaves_the_turn_ended() {
+        const ENDED: &str = r#"{"type":"system","subtype":"turn_duration"}"#;
+        const RAN: &str = r#"{"type":"user","message":{"content":"<bash-input>ls</bash-input>"}}"#;
+        const OUT: &str = r#"{"type":"user","message":{"content":"<bash-stdout>a</bash-stdout><bash-stderr></bash-stderr>"}}"#;
+        assert!(read(&[DONE, ENDED, RAN, OUT]).turn_ended_at.is_some());
     }
 
     #[test]
