@@ -13,7 +13,10 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
 
-pub const DEFAULT_COMMAND: &str = "claude -p";
+/// Plain `claude -p`, minus what a router call doesn't need: no session
+/// saved to history or usage scans, and no tools, since it only reads the
+/// prompt and replies. A `routerCommand` pref replaces it whole.
+pub const DEFAULT_COMMAND: &str = r#"claude -p --no-session-persistence --tools """#;
 /// Routing a long list on a slow model can take a while, but not forever.
 const TIMEOUT: Duration = Duration::from_secs(120);
 /// Far more than any plan; the rest of a runaway reply is dropped.
@@ -209,13 +212,17 @@ fn run(
 /// its reply back as text.
 #[tauri::command]
 pub async fn route_list(app: AppHandle, prompt: String) -> Result<String, String> {
-    let command = configured(&app, "routerCommand").unwrap_or_else(|| DEFAULT_COMMAND.into());
-    let words = split_command(&command)?;
+    let words = router_words(configured(&app, "routerCommand").as_deref())?;
     tauri::async_runtime::spawn_blocking(move || {
         run(&words, prompt, &neutral_dir(), login_path(), TIMEOUT)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The router command as words: the user's, when set, or the default.
+fn router_words(command: Option<&str>) -> Result<Vec<String>, String> {
+    split_command(command.unwrap_or(DEFAULT_COMMAND))
 }
 
 /// The tagging command as words; Err when it isn't set, since tagging has
@@ -355,6 +362,20 @@ mod tests {
             tag_words(Some("  ")).unwrap_err(),
             "No tagging command is set"
         );
+    }
+
+    #[test]
+    fn the_default_router_saves_no_session_and_uses_no_tools() {
+        assert_eq!(
+            router_words(None).unwrap(),
+            ["claude", "-p", "--no-session-persistence", "--tools", ""]
+        );
+        // A command set in Settings is run as typed, flags and all.
+        assert_eq!(
+            router_words(Some("codex exec --skip-git-repo-check")).unwrap(),
+            ["codex", "exec", "--skip-git-repo-check"]
+        );
+        assert_eq!(router_words(Some("claude -p")).unwrap(), ["claude", "-p"]);
     }
 
     /// One real call of the default router: `cargo test -- --ignored router_smoke`.
