@@ -501,7 +501,7 @@ function ContactSheet({ agents, selectedId, onMenu }: { agents: Agent[]; selecte
             onContextMenu={(e) => onMenu(e, { Agent: a })}
             title={a.name}
           >
-            <Plate seed={a.id} work={a.recent_prompts.length} tone="sand" size={56} />
+            <Plate seed={a.id} work={a.recent_prompts.length} tone="sand" size={56} still />
             <span className="sheet-name">{a.name}</span>
             <small>{relativeTime(a.archived_at || a.status_changed_at)}</small>
           </button>
