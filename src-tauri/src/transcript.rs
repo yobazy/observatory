@@ -38,8 +38,9 @@ struct Reading {
     dropped: u64,
     /// Tool calls waiting on a result, by tool-use id: entry number and step.
     pending: HashMap<String, (u64, usize)>,
-    /// The log's last word is a turn ending, so the CLI is at its prompt.
-    at_prompt: bool,
+    /// When the turn ended, in ms, while that's the log's last word: the CLI
+    /// is at its prompt. None once another turn starts.
+    turn_ended_at: Option<i64>,
 }
 
 #[derive(Clone, Serialize, Debug, PartialEq)]
@@ -72,10 +73,18 @@ pub struct Transcript {
     entries: Vec<Entry>,
     /// Entries before the first one sent, no longer kept.
     dropped: u64,
-    /// The turn is over and the CLI takes a message now, even if the daemon
-    /// still says running: it holds that until subagents sent off in the
-    /// background report in.
-    at_prompt: bool,
+    /// When the turn ended, if the log says it has and the CLI takes a
+    /// message now. The daemon can still say running: it holds that until
+    /// subagents sent off in the background report in.
+    turn_ended_at: Option<i64>,
+}
+
+/// A log timestamp in Unix ms, to set against the daemon's clock.
+fn parse_ms(ts: &str) -> Option<i64> {
+    let secs = parse_time(ts)?;
+    let digits = ts.get(20..)?.split(|c: char| !c.is_ascii_digit()).next();
+    let ms = format!("{:0<3}", digits.unwrap_or(""));
+    Some(secs * 1000 + ms.get(..3)?.parse::<i64>().ok()?)
 }
 
 #[derive(Deserialize)]
@@ -191,11 +200,12 @@ impl Reading {
         if l.is_sidechain {
             return;
         }
+        let ended = l.timestamp.as_deref().and_then(parse_ms).unwrap_or(0);
         if matches!(
             l.subtype.as_deref(),
             Some("stop_hook_summary" | "turn_duration")
         ) {
-            self.at_prompt = true;
+            self.turn_ended_at = Some(ended);
             return;
         }
         let Some(content) = l.message.and_then(|m| m.content) else {
@@ -203,20 +213,20 @@ impl Reading {
         };
         let at = l.timestamp.as_deref().and_then(parse_time).unwrap_or(0);
         match l.kind.as_deref() {
-            Some("user") => self.user(&content, l.is_meta, at),
+            Some("user") => self.user(&content, l.is_meta, at, ended),
             Some("assistant") => {
-                self.at_prompt = false;
+                self.turn_ended_at = None;
                 self.assistant(&content, at);
             }
             _ => {}
         }
     }
 
-    fn user(&mut self, content: &serde_json::Value, meta: bool, at: i64) {
+    fn user(&mut self, content: &serde_json::Value, meta: bool, at: i64, ended: i64) {
         // A turn starting, or carrying on. What the harness adds between
         // turns is meta, and a task's notification starts one of its own.
         if !meta {
-            self.at_prompt = false;
+            self.turn_ended_at = None;
         }
         if let serde_json::Value::Array(blocks) = content {
             for b in blocks {
@@ -227,7 +237,7 @@ impl Reading {
                         .is_some_and(|t| t.starts_with("[Request interrupted"))
                 {
                     self.push("stopped", String::new(), at);
-                    self.at_prompt = true;
+                    self.turn_ended_at = Some(ended);
                     return;
                 }
                 if kind != Some("tool_result") {
@@ -377,7 +387,7 @@ pub async fn thread_transcript(
         Ok(Some(Transcript {
             entries: r.entries.iter().filter(|e| e.n >= from).cloned().collect(),
             dropped: r.dropped,
-            at_prompt: r.at_prompt,
+            turn_ended_at: r.turn_ended_at,
         }))
     })
     .await
@@ -428,14 +438,36 @@ mod tests {
         const HELPER: &str = r#"{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"a subagent"}]}}"#;
         const QUEUE: &str = r#"{"type":"queue-operation","operation":"enqueue"}"#;
 
-        assert!(!read(&[PROMPT, WORK]).at_prompt, "mid-turn");
-        assert!(read(&[PROMPT, DONE, SUMMARY]).at_prompt);
-        assert!(read(&[PROMPT, DONE, SUMMARY, ENDED]).at_prompt);
+        assert!(read(&[PROMPT, WORK]).turn_ended_at.is_none(), "mid-turn");
+        assert!(read(&[PROMPT, DONE, SUMMARY]).turn_ended_at.is_some());
+        assert!(read(&[PROMPT, DONE, SUMMARY, ENDED])
+            .turn_ended_at
+            .is_some());
         // Subagents and the harness carry on past the end of the turn.
-        assert!(read(&[DONE, ENDED, HELPER, CAVEAT, QUEUE]).at_prompt);
-        assert!(!read(&[DONE, ENDED, PROMPT]).at_prompt, "you replied");
-        assert!(!read(&[DONE, ENDED, NOTIFIED]).at_prompt, "a task reported");
-        assert!(read(&[PROMPT, WORK, STOPPED]).at_prompt, "you stopped it");
+        assert!(read(&[DONE, ENDED, HELPER, CAVEAT, QUEUE])
+            .turn_ended_at
+            .is_some());
+        assert!(
+            read(&[DONE, ENDED, PROMPT]).turn_ended_at.is_none(),
+            "you replied"
+        );
+        assert!(
+            read(&[DONE, ENDED, NOTIFIED]).turn_ended_at.is_none(),
+            "a task reported"
+        );
+        assert!(
+            read(&[PROMPT, WORK, STOPPED]).turn_ended_at.is_some(),
+            "you stopped it"
+        );
+    }
+
+    #[test]
+    fn a_turn_ending_keeps_its_time_to_the_millisecond() {
+        let ended =
+            r#"{"type":"system","subtype":"turn_duration","timestamp":"2026-11-06T04:13:22.075Z"}"#;
+        let whole = parse_time("2026-11-06T04:13:22Z").unwrap();
+        assert_eq!(read(&[ended]).turn_ended_at, Some(whole * 1000 + 75));
+        assert_eq!(parse_ms("2026-11-06T04:13:22Z"), Some(whole * 1000));
     }
 
     #[test]

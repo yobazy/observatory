@@ -98,7 +98,7 @@ async function type(agent: Agent, text: string, select: boolean, stay = false) {
  *  nothing is queued ahead of it. The agent is looked up afresh: a dialog
  *  may have been open for a while. Resolves with what happened. `stay`
  *  keeps you on the view you sent it from. `atPrompt` says the thread's log
- *  shows its turn over (Transcript.atPrompt): it's still "running" for its
+ *  shows its turn over (heldAtPrompt): it's still "running" for its
  *  background subagents, but its CLI is reading. */
 export async function enqueue(
   agent: Agent,

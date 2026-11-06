@@ -24,10 +24,18 @@ export interface Entry {
 export interface Transcript {
   entries: Entry[];
   dropped: number;
-  /** The turn is over and the CLI takes a message now, even while the
-   *  daemon says running for subagents out in the background. */
-  atPrompt?: boolean;
+  /** When the turn ended (ms), if the log says it has: the CLI takes a
+   *  message now, even while the daemon says running for subagents out in
+   *  the background. */
+  turnEndedAt?: number | null;
 }
+
+/** Its turn is over and only subagents are out: the thread reads what you
+ *  send, though the daemon still says running. The ending has to be from
+ *  after it went running: a new turn's prompt reaches the log after the
+ *  status changes, so until then the log still shows the turn before. */
+export const heldAtPrompt = (a: { status: string; status_changed_at: number }, t: Transcript | null): boolean =>
+  a.status === "running" && (t?.turnEndedAt ?? 0) > a.status_changed_at;
 
 /** `prev` brought up to date with `next`, which starts at some entry `prev`
  *  may already hold (the last one, whose steps can still gain results). */

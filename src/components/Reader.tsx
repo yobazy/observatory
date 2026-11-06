@@ -7,7 +7,7 @@ import { flash, getState, projectOfWorktree, useAppState } from "../nebula/store
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, sendQueued, unqueue, queuedSentAt, type Queued } from "../nebula/queue";
-import { actOf, clock, doingLine, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
+import { actOf, clock, doingLine, heldAtPrompt, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
 import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
@@ -75,11 +75,11 @@ function useTranscript(agent: Agent): Transcript | null {
         if (!live || !t) return;
         setGot((prev) => {
           // Nothing new since the last read: keep what's shown as it is.
-          const same = prev && from !== null && t.dropped === prev.dropped && t.atPrompt === prev.atPrompt;
+          const same = prev && from !== null && t.dropped === prev.dropped && t.turnEndedAt === prev.turnEndedAt;
           if (same && JSON.stringify(t.entries) === JSON.stringify(prev.entries.filter((e) => e.n >= from))) return prev;
           const entries = from === null || !prev ? t.entries : merge(prev.entries, t.entries, t.dropped);
           last.current = entries.length ? entries[entries.length - 1].n : null;
-          return { entries, dropped: t.dropped, atPrompt: t.atPrompt };
+          return { entries, dropped: t.dropped, turnEndedAt: t.turnEndedAt };
         });
       } catch {
         // No log to read: the reader says so.
@@ -165,6 +165,9 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
   const html = useMemo(() => toHtml(text), [text]);
   const el = useRef<HTMLDivElement>(null);
   const where = useContext(Where);
+  // Read when Run is pressed: it changes long after a block's buttons are made.
+  const atPrompt = useRef(where.atPrompt);
+  atPrompt.current = where.atPrompt;
   // Each code block is colored by its language, and gets a Copy for what's
   // in it; a command gets a Run too, when its thread is Claude's.
   useEffect(() => {
@@ -184,7 +187,7 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
         r.title = `Have the agent run this, as "! ${command}"`;
         r.onclick = (e) => {
           e.stopPropagation();
-          void runIn(where.from, command, where.atPrompt);
+          void runIn(where.from, command, atPrompt.current);
         };
         acts.append(r);
         pre.classList.add("is-command");
@@ -640,7 +643,7 @@ export function Reader({
   const state = useAppState();
   // Its turn is over and only subagents are out: it reads what you send now,
   // as its terminal would, though the daemon still says running.
-  const atPrompt = agent.status === "running" && !!t?.atPrompt;
+  const atPrompt = heldAtPrompt(agent, t);
   const where = useMemo(() => {
     const project = state.worktrees[agent.worktree_id]?.project_id;
     const pr = Object.values(state.worktrees)

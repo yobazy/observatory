@@ -1,9 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { merge, stepsLine } from '../src/nebula/transcript.ts';
+import { heldAtPrompt, merge, stepsLine } from '../src/nebula/transcript.ts';
 
 const e = (n, kind = 'claude', text = `e${n}`) => ({ n, kind, text, at: 0, steps: [] });
 const s = (tool, target = '', ok = true) => ({ tool, target, ok });
+
+test('a thread is held at its prompt once its turn ends after it went running', () => {
+  const running = { status: 'running', status_changed_at: 1000 };
+  const log = (turnEndedAt) => ({ entries: [], dropped: 0, turnEndedAt });
+  assert.equal(heldAtPrompt(running, log(2000)), true, 'subagents out');
+  assert.equal(heldAtPrompt(running, log(900)), false, "a new turn, its prompt not logged yet");
+  assert.equal(heldAtPrompt(running, log(null)), false, 'mid-turn');
+  assert.equal(heldAtPrompt(running, log(undefined)), false, 'codex, or a mock');
+  assert.equal(heldAtPrompt(running, null), false, 'no log');
+  assert.equal(heldAtPrompt({ ...running, status: 'finished' }, log(2000)), false, 'just finished');
+});
 
 test('new entries replace the ones from where they start', () => {
   const prev = [e(0), e(1), e(2, 'steps')];
