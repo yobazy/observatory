@@ -4,7 +4,7 @@
 import { projectOfWorktree, useAppState } from "../nebula/store";
 import { statusLabel } from "../nebula/status";
 import { liveThreads } from "../nebula/live";
-import { Plate, plateTone } from "./Plate";
+import { ThreadPlate, plateTone } from "./Plate";
 import { selectAgent } from "./Sidebar";
 
 /** As many lenses as fit a narrow pane; the rest are counted. */
@@ -27,7 +27,7 @@ export function LiveStrip({ current }: { current: string | undefined }) {
             aria-current={a.id === current ? "true" : undefined}
             title={`${a.name}${project ? `, in ${project}` : ""}: ${statusLabel(a)}`}
           >
-            <Plate seed={a.id} work={a.recent_prompts.length} tone={plateTone(a)} size={44} drift={a.status === "running"} />
+            <ThreadPlate agent={a} size={44} />
             <span className="lens-name">{a.name}</span>
           </button>
         );

@@ -38,6 +38,9 @@ struct Reading {
     dropped: u64,
     /// Tool calls waiting on a result, by tool-use id: entry number and step.
     pending: HashMap<String, (u64, usize)>,
+    /// When the turn ended, in ms, while that's the log's last word: the CLI
+    /// is at its prompt. None once another turn starts.
+    turn_ended_at: Option<i64>,
 }
 
 #[derive(Clone, Serialize, Debug, PartialEq)]
@@ -65,10 +68,34 @@ pub struct Step {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Transcript {
     entries: Vec<Entry>,
     /// Entries before the first one sent, no longer kept.
     dropped: u64,
+    /// When the turn ended, if the log says it has and the CLI takes a
+    /// message now. The daemon can still say running: it holds that until
+    /// subagents sent off in the background report in.
+    turn_ended_at: Option<i64>,
+}
+
+/// A meta row the harness adds with the CLI still at its prompt.
+fn between_turns(content: &serde_json::Value) -> bool {
+    let text = match content {
+        serde_json::Value::Array(blocks) => blocks.first().and_then(|b| b.get("text")),
+        other => Some(other),
+    };
+    text.and_then(|t| t.as_str()).is_some_and(|t| {
+        t.starts_with("<system-reminder>") || t.starts_with("<local-command-caveat>")
+    })
+}
+
+/// A log timestamp in Unix ms, to set against the daemon's clock.
+fn parse_ms(ts: &str) -> Option<i64> {
+    let secs = parse_time(ts)?;
+    let digits = ts.get(20..)?.split(|c: char| !c.is_ascii_digit()).next();
+    let ms = format!("{:0<3}", digits.unwrap_or(""));
+    Some(secs * 1000 + ms.get(..3)?.parse::<i64>().ok()?)
 }
 
 #[derive(Deserialize)]
@@ -76,6 +103,7 @@ pub struct Transcript {
 struct Line {
     #[serde(rename = "type")]
     kind: Option<String>,
+    subtype: Option<String>,
     timestamp: Option<String>,
     #[serde(default)]
     is_meta: bool,
@@ -183,18 +211,34 @@ impl Reading {
         if l.is_sidechain {
             return;
         }
+        let ended = l.timestamp.as_deref().and_then(parse_ms).unwrap_or(0);
+        if matches!(
+            l.subtype.as_deref(),
+            Some("stop_hook_summary" | "turn_duration")
+        ) {
+            self.turn_ended_at = Some(ended);
+            return;
+        }
         let Some(content) = l.message.and_then(|m| m.content) else {
             return;
         };
         let at = l.timestamp.as_deref().and_then(parse_time).unwrap_or(0);
         match l.kind.as_deref() {
-            Some("user") => self.user(&content, l.is_meta, at),
-            Some("assistant") => self.assistant(&content, at),
+            Some("user") => self.user(&content, l.is_meta, at, ended),
+            Some("assistant") => {
+                self.turn_ended_at = None;
+                self.assistant(&content, at);
+            }
             _ => {}
         }
     }
 
-    fn user(&mut self, content: &serde_json::Value, meta: bool, at: i64) {
+    fn user(&mut self, content: &serde_json::Value, meta: bool, at: i64, ended: i64) {
+        // A turn starting, or carrying on: a peer's message or a task's
+        // notification starts one of its own, even as a meta row.
+        if !(meta && between_turns(content)) {
+            self.turn_ended_at = None;
+        }
         if let serde_json::Value::Array(blocks) = content {
             for b in blocks {
                 let kind = b.get("type").and_then(|t| t.as_str());
@@ -204,6 +248,7 @@ impl Reading {
                         .is_some_and(|t| t.starts_with("[Request interrupted"))
                 {
                     self.push("stopped", String::new(), at);
+                    self.turn_ended_at = Some(ended);
                     return;
                 }
                 if kind != Some("tool_result") {
@@ -303,7 +348,7 @@ impl Reading {
                     for l in codex_log::as_claude(text) {
                         self.read_line(&l);
                     }
-                } else if text.contains("\"message\"") {
+                } else if text.contains("\"message\"") || text.contains("\"subtype\"") {
                     self.read_line(text);
                 }
             }
@@ -353,6 +398,7 @@ pub async fn thread_transcript(
         Ok(Some(Transcript {
             entries: r.entries.iter().filter(|e| e.n >= from).cloned().collect(),
             dropped: r.dropped,
+            turn_ended_at: r.turn_ended_at,
         }))
     })
     .await
@@ -390,6 +436,73 @@ mod tests {
             [None, Some(false), Some(true)]
         );
         assert_eq!(r.entries[3].text, "Fixed it.");
+    }
+
+    #[test]
+    fn a_turn_ending_means_the_prompt_is_back_until_the_next_one_starts() {
+        const SUMMARY: &str = r#"{"type":"system","subtype":"stop_hook_summary","hookCount":3}"#;
+        const ENDED: &str =
+            r#"{"type":"system","subtype":"turn_duration","pendingWorkflowCount":1}"#;
+        const NOTIFIED: &str = r#"{"type":"user","message":{"content":"<task-notification>done</task-notification>"}}"#;
+        const STOPPED: &str = r#"{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}"#;
+        const CAVEAT: &str =
+            r#"{"type":"user","isMeta":true,"message":{"content":"<local-command-caveat>caveat"}}"#;
+        const REMINDER: &str = r#"{"type":"user","isMeta":true,"message":{"content":[{"type":"text","text":"<system-reminder>tools"}]}}"#;
+        const HELPER: &str = r#"{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"a subagent"}]}}"#;
+        const QUEUE: &str = r#"{"type":"queue-operation","operation":"enqueue"}"#;
+
+        assert!(read(&[PROMPT, WORK]).turn_ended_at.is_none(), "mid-turn");
+        assert!(read(&[PROMPT, DONE, SUMMARY]).turn_ended_at.is_some());
+        assert!(read(&[PROMPT, DONE, SUMMARY, ENDED])
+            .turn_ended_at
+            .is_some());
+        // Subagents and the harness carry on past the end of the turn.
+        assert!(read(&[DONE, ENDED, HELPER, CAVEAT, REMINDER, QUEUE])
+            .turn_ended_at
+            .is_some());
+        assert!(
+            read(&[DONE, ENDED, PROMPT]).turn_ended_at.is_none(),
+            "you replied"
+        );
+        assert!(
+            read(&[DONE, ENDED, NOTIFIED]).turn_ended_at.is_none(),
+            "a task reported"
+        );
+        assert!(
+            read(&[PROMPT, WORK, STOPPED]).turn_ended_at.is_some(),
+            "you stopped it"
+        );
+    }
+
+    #[test]
+    fn a_peers_message_starts_a_turn_though_its_row_is_meta() {
+        const ENDED: &str = r#"{"type":"system","subtype":"turn_duration"}"#;
+        const PEER: &str = r#"{"type":"user","isMeta":true,"message":{"content":"Another Claude session sent a message"}}"#;
+        assert!(read(&[DONE, ENDED, PEER]).turn_ended_at.is_none());
+    }
+
+    #[test]
+    fn a_turn_ending_is_read_from_the_log_though_it_has_no_message() {
+        let log = std::env::temp_dir().join(format!("transcript-{}.jsonl", std::process::id()));
+        let ended =
+            r#"{"type":"system","subtype":"turn_duration","timestamp":"2026-11-06T04:13:22.075Z"}"#;
+        std::fs::write(&log, format!("{DONE}\n{ended}\n")).unwrap();
+        let mut r = Reading {
+            log: log.clone(),
+            ..Reading::default()
+        };
+        r.catch_up();
+        std::fs::remove_file(&log).unwrap();
+        assert!(r.turn_ended_at.is_some_and(|t| t > 0));
+    }
+
+    #[test]
+    fn a_turn_ending_keeps_its_time_to_the_millisecond() {
+        let ended =
+            r#"{"type":"system","subtype":"turn_duration","timestamp":"2026-11-06T04:13:22.075Z"}"#;
+        let whole = parse_time("2026-11-06T04:13:22Z").unwrap();
+        assert_eq!(read(&[ended]).turn_ended_at, Some(whole * 1000 + 75));
+        assert_eq!(parse_ms("2026-11-06T04:13:22Z"), Some(whole * 1000));
     }
 
     #[test]

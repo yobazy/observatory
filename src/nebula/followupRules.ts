@@ -5,6 +5,8 @@
 // Flags you set yourself are yours and never clear on their own.
 // Kept free of the app so its tests run under plain Node.
 
+export type FollowUpOrder = "newest" | "oldest";
+
 export interface FollowUpPrefs {
   followUps?: Record<string, number>;
   autoFollowUps?: Record<string, true>;
@@ -35,6 +37,11 @@ export function afterStatus<P extends FollowUpPrefs>(
     };
   }
   return null;
+}
+
+/** `rows` by when they were flagged, the chosen end first. */
+export function inFollowUpOrder<R extends { at: number }>(rows: R[], order: FollowUpOrder = "newest"): R[] {
+  return [...rows].sort((a, b) => (order === "newest" ? b.at - a.at : a.at - b.at));
 }
 
 /** The prefs with the app's own flags dropped for tasks you've since acted

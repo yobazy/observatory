@@ -499,3 +499,18 @@ test('a lead-in list item that offers a choice is still a decision', () => {
   assert.deepEqual(c.asks.map((a) => a.n), [1]);
   assert.match(c.asksNote, /Two things:\n2\. Read the draft\./);
 });
+
+test('a question under a lead-in line or bold heading is still a decision', () => {
+  for (const [t, n] of [
+    ['**Needs you**\nTwo questions:\n1. What should the app be called?\n2. Which port should it use?', [1, 2]],
+    ['**Needs you**\nDecisions:\n1. Ship today?\n2. Which name, Orbit or Lens?', [1, 2]],
+    ['**Needs you**\n**Before merging**\n1. Should I squash the commits?', [1]],
+    ['**Needs you**\nBefore you sign:\n1. Pay the onboarding time.\n2. Which start date works for you?', [2]],
+  ]) {
+    assert.deepEqual(readCard(t).asks.map((a) => a.n), n, t);
+  }
+  assert.match(
+    readCard('**Needs you**\nBefore you sign:\n1. Pay the onboarding time.\n2. Which start date works for you?').asksNote,
+    /Before you sign:\n1\. Pay the onboarding time\./,
+  );
+});

@@ -38,7 +38,7 @@ import { useAutoFollowUps } from "./nebula/organize";
 import { useProjectSessions } from "./nebula/focus";
 import { useRecentTracking } from "./nebula/recent";
 import { useProjectLogos } from "./nebula/icons";
-import { flash, getState, setState, subscribe, useAppState, waitingAgents } from "./nebula/store";
+import { flash, getState, isSelectingInPlace, setState, subscribe, useAppState, waitingAgents } from "./nebula/store";
 import { usePrPolling } from "./nebula/prs";
 import { useQueueRunner } from "./nebula/queue";
 import { useBatchRunner } from "./nebula/batchRunner";
@@ -61,6 +61,8 @@ import { HoverCard, PreviewPane } from "./components/Preview";
 import { Palette, type PaletteContext } from "./components/Palette";
 import { MomentCard } from "./components/Moments";
 import { TextDialog, type TextDialogSpec } from "./components/Dialogs";
+import { followClock } from "./nebula/sky";
+import { useDockIcon } from "./components/dockIcon";
 
 export default function App() {
   const [launch, setLaunch] = useState<{
@@ -192,6 +194,8 @@ export default function App() {
   useRecentTracking();
   useProjectLogos();
   useMinuteClock();
+  useSky();
+  useDockIcon();
   useLeaveUsageOnSelect();
   useEffect(trackRecent, []);
   const { view, preview, prefs } = useAppState();
@@ -435,6 +439,12 @@ function useGridMode(): [boolean, (v: boolean | ((v: boolean) => boolean)) => vo
   return [grid, setGrid];
 }
 
+/** In the default dark mode the night blue follows the time of day (sky.ts). */
+function useSky() {
+  const { mode } = useAppState();
+  useEffect(() => (mode === "dark" ? followClock() : undefined), [mode]);
+}
+
 /** Keeps `state.minute` current, for views that expire with the clock. */
 function useMinuteClock() {
   useEffect(() => {
@@ -456,7 +466,7 @@ function useLeaveUsageOnSelect() {
       if (s.selectedProject !== selectedProject || s.selectedSession !== selectedSession) {
         selectedProject = s.selectedProject;
         selectedSession = s.selectedSession;
-        if (s.view !== "sessions") setState({ view: "sessions" });
+        if (s.view !== "sessions" && !isSelectingInPlace()) setState({ view: "sessions" });
       }
     });
   }, []);

@@ -2,7 +2,7 @@
 // task, or hand a prompt to one that's idle on a branch.
 import { readSettings, request, sendInput } from "./client";
 import { defaultAgentName, settingsStem } from "./status";
-import { flash, getState, setState, type State } from "./store";
+import { flash, getState, selectInPlace, setState, type State } from "./store";
 import { remoteOf, type GitStatus, type ShipKind } from "./git";
 import type { Agent, AgentKind, AgentPreset } from "./types";
 
@@ -79,9 +79,13 @@ export async function deliverPrompt(agent: Agent, prompt: string) {
  *  woken by opening it, and gets the prompt once its CLI has had a moment
  *  to come up. `select: false` sends it without switching the terminal to
  *  it, for a queued prompt — unless it has to be woken, which takes an
- *  attach. */
-export async function followUp(agent: Agent, text: string, opts: { select?: boolean } = {}) {
-  if (opts.select !== false || !agent.alive) setState({ selectedSession: { Agent: agent.id } });
+ *  attach. `stay` does that attach behind the current view rather than
+ *  leaving it for the thread. */
+export async function followUp(agent: Agent, text: string, opts: { select?: boolean; stay?: boolean } = {}) {
+  if (opts.select !== false || !agent.alive) {
+    if (opts.stay) selectInPlace({ Agent: agent.id });
+    else setState({ selectedSession: { Agent: agent.id } });
+  }
   if (!agent.alive) {
     flash(`Starting ${agent.name}…`);
     const deadline = Date.now() + 20_000;

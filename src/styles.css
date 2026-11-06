@@ -44,6 +44,9 @@
   --plate-idle: #9aa2b8;
   --plate-error: #e0708f;
 
+  /* Fine grain on the night surfaces, so they read as material, not flat fill. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
   --r-sm: 6px;
   --r-md: 9px;
   --r-lg: 14px;
@@ -66,6 +69,7 @@
 /* Night watch by day: ivory pages and ink-blue type. The plates stay night,
    so each lens is a piece of dark sky in the window. */
 :root[data-mode="light"] {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --night: #eceae4;
   --panel: #f6f5f1;
   --raised: #e2e0d8;
@@ -330,7 +334,7 @@ body.is-resizing-rows * {
 .sidebar {
   display: flex;
   flex-direction: column;
-  background: var(--night);
+  background: var(--grain), var(--night);
   border-right: 1px solid var(--line);
   min-height: 0;
 }
@@ -426,6 +430,21 @@ body.is-resizing-rows * {
   width: 20px;
   height: 20px;
   color: var(--faint);
+}
+/* Which end of the list comes first: quiet until you want it. */
+.side-card-sort {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--faint);
+}
+.side-card-sort:hover {
+  color: var(--text);
 }
 .side-card li {
   position: relative;
@@ -776,20 +795,12 @@ body.is-resizing-rows * {
   display: grid;
   place-items: center;
 }
-.badge-needs {
-  background: var(--st-waiting);
-  color: var(--accent-ink);
-}
 .badge-missing {
   background: var(--st-error);
   color: var(--accent-ink);
 }
 .project-row.is-missing .project-name {
   color: var(--muted);
-}
-.badge-unseen {
-  background: rgb(95 212 176 / 0.18);
-  color: var(--st-done);
 }
 
 /* The spectrum: one segment per live session, read at a glance. */
@@ -898,6 +909,7 @@ body.is-resizing-rows * {
 .sessions-title {
   flex: 1 1 150px;
   min-width: 0;
+  container-type: inline-size;
 }
 .sessions-title h1 {
   font-size: 22px;
@@ -1192,7 +1204,7 @@ body.is-resizing-rows * {
 .pane {
   display: flex;
   flex-direction: column;
-  background: var(--term);
+  background: var(--grain), var(--term);
   min-width: 0;
   min-height: 0;
 }
@@ -1291,7 +1303,33 @@ body.is-resizing-rows * {
 }
 .xterm-host {
   position: absolute;
-  inset: 12px 6px 6px 16px;
+  inset: 20px 16px 14px 24px;
+}
+/* The terminal as an eyepiece: a recessed well, darker toward its rim. */
+.pane-body::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--term) 70%, #000);
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 14px 40px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+.pane-body::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 14px;
+  background: radial-gradient(120% 95% at 50% 40%, transparent 62%, rgb(0 0 0 / 0.28));
+  pointer-events: none;
+  z-index: 1;
+}
+:root[data-mode="light"] .pane-body::before {
+  background: var(--term);
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 10px 28px rgb(18 23 38 / 0.06);
+}
+:root[data-mode="light"] .pane-body::after {
+  background: none;
 }
 .xterm-host.is-hidden {
   visibility: hidden;
@@ -3265,14 +3303,44 @@ td.task-last {
   gap: 6px;
   flex: none;
 }
-.project-working {
+/* A project's threads as dots (Sidebar.tsx StatusPips): status in the
+   plate colors, no numbers until there are more than five. */
+.pips {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 650;
+  gap: 3px;
+}
+.pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--st-idle);
+}
+.pip-needs_feedback {
+  background: var(--st-waiting);
+}
+.pip-running {
+  background: var(--st-running);
+  animation: pip-breathe 2.4s ease-in-out infinite;
+}
+.pip-finished {
+  background: var(--st-done);
+}
+.pip-more {
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
-  color: var(--st-running);
+  color: var(--faint);
+  margin-left: 2px;
+}
+@keyframes pip-breathe {
+  50% {
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pip-running {
+    animation: none;
+  }
 }
 /* A dot circling a faint track: work in progress. */
 .orbit {
@@ -3387,6 +3455,15 @@ td.task-last {
   object-fit: contain;
   line-height: 1;
   user-select: none;
+}
+/* A project's sigil: its still plate, round like every lens. */
+.picon-sigil {
+  border-radius: 50%;
+  overflow: hidden;
+}
+.picon-sigil .plate {
+  display: block;
+  box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.08);
 }
 /* A letter on a color of its own, soft enough to sit beside the name. */
 .picon-mono {
@@ -3830,32 +3907,36 @@ td.task-last {
 .pr-link {
   font-weight: 650;
   font-size: 12px;
+  color: var(--text);
+}
+/* One quiet sentence: number, state, then what stands. Only the part that
+   needs you is colored (Pr.tsx), and a failing check is its own fix button. */
+.pr-sentence {
+  min-width: 0;
+  color: var(--muted);
+}
+.pr-sep {
+  color: var(--faint);
 }
 .pr-state {
-  font-weight: 600;
-}
-.pr-open {
-  color: var(--st-done);
-}
-.pr-draft,
-.pr-closed {
-  color: var(--faint);
+  color: var(--muted);
 }
 .pr-merged {
   color: var(--st-merged);
+  font-weight: 600;
 }
-.checks-passing {
-  color: var(--st-done);
-}
-.checks-pending {
-  color: var(--amber);
-}
-.checks-failing {
+.pr-loud {
   color: var(--st-waiting);
   font-weight: 600;
 }
-.pr-approved {
-  color: var(--st-done);
+.link-btn.pr-loud {
+  font-size: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--st-waiting) 45%, transparent);
+  text-underline-offset: 3px;
+}
+.link-btn.pr-loud:hover:not(:disabled) {
+  text-decoration-color: currentColor;
 }
 .pr-line .btn-sm {
   height: 22px;
@@ -4250,7 +4331,7 @@ td.task-last {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  background: var(--term);
+  background: var(--grain), var(--term);
 }
 .rd-scroll {
   flex: 1;
@@ -4994,10 +5075,12 @@ td.task-last {
 
 .ask-strip {
   display: grid;
-  gap: 7px;
-  padding: 9px 16px 10px 20px;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--st-waiting) 7%, var(--night));
+  gap: 8px;
+  margin: 10px 16px 2px;
+  padding: 11px 14px 12px;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-waiting) 32%, transparent);
+  background: color-mix(in srgb, var(--st-waiting) 6%, var(--term));
 }
 .ask-q,
 .rd-ask .rd-wait {
@@ -5014,6 +5097,16 @@ td.task-last {
 }
 .ask-choices .qa-choice {
   max-width: 100%;
+}
+.ask-choices .qa-choice small {
+  min-width: 0;
+  font-size: 11px;
+  text-align: left;
+  color: var(--muted);
+}
+.qa-box {
+  font-style: normal;
+  color: var(--st-waiting);
 }
 .rd-ask {
   display: grid;
@@ -5961,6 +6054,86 @@ button.attempt-status:hover span:nth-child(2) {
   max-height: none;
   margin: auto;
   cursor: zoom-out;
+}
+.fpv-pdf {
+  display: block;
+  overflow: auto;
+  background: var(--panel);
+}
+/* As wide as the widest page when zoomed past the pane, so it scrolls to
+   both edges instead of being cut off by the centring. */
+.fpv-pdf-doc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: fit-content;
+  min-width: 100%;
+  padding: 16px 16px 72px;
+}
+.fpv-pdf-page {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-pop);
+}
+.fpv-pdf-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* pdf.js places these spans, as if the page weren't rotated; the rest of its
+   viewer's stylesheet isn't used. */
+.fpv-pdf-text {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  transform-origin: 0 0;
+}
+.fpv-pdf-text[data-main-rotation="90"] {
+  transform: rotate(90deg) translateY(-100%);
+}
+.fpv-pdf-text[data-main-rotation="180"] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+.fpv-pdf-text[data-main-rotation="270"] {
+  transform: rotate(270deg) translateX(-100%);
+}
+.fpv-pdf-text :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.fpv-pdf-text > :not(.markedContent),
+.fpv-pdf-text .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  z-index: 1;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.fpv-pdf-text .markedContent {
+  display: contents;
+}
+.fpv-pdf-text ::selection {
+  background: rgb(0 90 255 / 25%);
+}
+.fpv-pdf-link {
+  position: absolute;
+  z-index: 2;
 }
 .fpv-picbar {
   position: absolute;
@@ -8055,6 +8228,34 @@ button.board-main:hover .board-text {
   display: grid;
   gap: 8px;
 }
+/* Answered: slides off to the right, then the gap it leaves closes. The
+   list's 16px gap goes with it. */
+.inbox-item.is-leaving {
+  /* overflow: hidden would otherwise let the scrolling list shrink it. */
+  flex-shrink: 0;
+  overflow: hidden;
+  pointer-events: none;
+  animation: inbox-leave 520ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes inbox-leave {
+  0% {
+    height: var(--h);
+    opacity: 1;
+    transform: none;
+  }
+  45% {
+    height: var(--h);
+    opacity: 0;
+    transform: translateX(32px);
+    margin-bottom: 0;
+  }
+  100% {
+    height: 0;
+    opacity: 0;
+    transform: translateX(32px);
+    margin-bottom: -16px;
+  }
+}
 .inbox-head {
   display: flex;
   align-items: baseline;
@@ -8206,12 +8407,21 @@ button.board-main:hover .board-text {
   border-radius: 50%;
   box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 10px 24px -12px rgb(0 0 0 / 0.7);
 }
+/* A long name shrinks to fit its column, down to a floor, and only then
+   ends in an ellipsis instead of being cut mid-letter. --name-len is its
+   length in characters; 32px is the icon and its gap. */
 .sessions-title h1 {
   font-family: var(--display);
-  font-size: 27px;
+  font-size: clamp(19px, calc((100cqi - 32px) / (var(--name-len, 12) * 0.56)), 27px);
   font-weight: 650;
   letter-spacing: -0.03em;
   line-height: 1.05;
+}
+.sessions-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pane-name {
   font-family: var(--display);
@@ -8223,16 +8433,52 @@ button.board-main:hover .board-text {
   background: var(--term);
 }
 
+/* The record sleeve (Reader.tsx ReaderHero): the thread's plate as its
+   art, with a lamp in its status color glowing behind it. */
 .rd-hero {
+  --lamp: var(--plate-idle);
+  position: relative;
+  isolation: isolate;
   display: flex;
-  align-items: flex-end;
-  gap: 22px;
+  align-items: center;
+  gap: 24px;
   margin-bottom: 10px;
+}
+.rd-hero.is-needs_feedback {
+  --lamp: var(--plate-waiting);
+}
+.rd-hero.is-running {
+  --lamp: var(--plate-running);
+}
+.rd-hero.is-finished {
+  --lamp: var(--plate-done);
+}
+.rd-hero.is-terminated {
+  --lamp: var(--plate-error);
+}
+.rd-hero-lamp {
+  position: absolute;
+  z-index: -1;
+  left: -150px;
+  top: -170px;
+  width: 440px;
+  height: 440px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--lamp) 15%, transparent), transparent);
+  pointer-events: none;
+  transition: background 600ms ease;
+}
+:root[data-mode="light"] .rd-hero-lamp {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--lamp) 22%, transparent), transparent);
 }
 .rd-hero .plate {
   flex: none;
   border-radius: 50%;
   box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 28px 50px -24px rgb(0 0 0 / 0.85);
+}
+.rd-hero.is-needs_feedback .plate {
+  box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 0 0 4px color-mix(in srgb, var(--plate-waiting) 30%, transparent),
+    0 28px 50px -24px rgb(0 0 0 / 0.85);
 }
 :root[data-mode="light"] .rd-hero .plate,
 :root[data-mode="light"] .sessions-plate {
@@ -8240,12 +8486,39 @@ button.board-main:hover .board-text {
 }
 .rd-hero-text {
   min-width: 0;
-  padding-bottom: 4px;
+}
+.rd-hero-where {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+.rd-hero-name {
+  margin: 8px 0 8px;
+  font-family: var(--display);
+  font-size: 34px;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.rd-hero-meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 .rd-hero-status {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--muted);
   transition: color 240ms ease;
 }
@@ -8257,20 +8530,6 @@ button.board-main:hover .board-text {
 }
 .rd-hero-status.is-terminated {
   color: var(--st-error);
-}
-.rd-hero-name {
-  margin: 6px 0 6px;
-  font-family: var(--display);
-  font-size: 34px;
-  font-weight: 650;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-  overflow-wrap: anywhere;
-}
-.rd-hero-where {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12.5px;
 }
 .md-doc.rd-md {
   font-size: 15px;
@@ -8413,12 +8672,8 @@ button.board-main:hover .board-text {
 .has-color .seg {
   box-shadow: 0 0 0 1.5px var(--badge-ring);
 }
-.has-color .badge-unseen {
-  background: var(--st-done);
-  color: var(--accent-ink);
-}
-.has-color .project-working {
-  --st-running: var(--on-fill);
+.has-color .pip {
+  box-shadow: 0 0 0 1.5px var(--badge-ring);
 }
 .has-color .live-dot {
   box-shadow: 0 0 0 2px var(--badge-ring);
@@ -8430,4 +8685,140 @@ button.board-main:hover .board-text {
 }
 .row-needs_feedback.has-color .row-age {
   font-weight: 650;
+}
+
+/* ---------- Night watch, round 2 ---------- */
+
+/* Waiting gets warmer: the ring around a waiting thread's plate starts
+   faint and grows, and after an hour the whole row warms (warmth.ts). */
+.row[class*="warm-"] .sdot.has-plate {
+  position: relative;
+}
+.row[class*="warm-"] .sdot.has-plate::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: warm-breathe 2.4s ease-in-out infinite;
+}
+.row.warm-1 .sdot.has-plate::after {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-waiting) 35%, transparent);
+}
+.row.warm-2 .sdot.has-plate::after {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--st-waiting) 60%, transparent),
+    0 0 8px color-mix(in srgb, var(--st-waiting) 25%, transparent);
+}
+.row.warm-3 .sdot.has-plate::after {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--st-waiting) 85%, transparent),
+    0 0 14px color-mix(in srgb, var(--st-waiting) 45%, transparent);
+}
+.row.warm-4 .sdot.has-plate::after {
+  box-shadow: 0 0 0 2px var(--st-waiting), 0 0 20px color-mix(in srgb, var(--st-waiting) 65%, transparent);
+}
+.row.warm-3:not(.is-selected) {
+  background: color-mix(in srgb, var(--st-waiting) 5%, transparent);
+}
+.row.warm-4:not(.is-selected) {
+  background: color-mix(in srgb, var(--st-waiting) 10%, transparent);
+}
+@keyframes warm-breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .row[class*="warm-"] .sdot.has-plate::after {
+    animation: none;
+  }
+}
+
+/* Loading as loose sand: no gray boxes, just plates that haven't settled. */
+.loose-rows {
+  list-style: none;
+  margin: 0;
+  padding: 6px 4px;
+  display: grid;
+  gap: 4px;
+}
+.loose-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 8px;
+}
+.loose-label {
+  color: var(--faint);
+  font-size: 12px;
+}
+.sessions-empty .loose-rows {
+  width: min(280px, 80%);
+}
+
+/* The archive as a contact sheet: every archived thread's last plate,
+   newest first, like a sheet of negatives. */
+.sheet-toggle {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.contact-sheet {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 14px 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 14px 8px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--term) 70%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.contact-sheet button {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.3;
+  text-align: center;
+  cursor: pointer;
+}
+.contact-sheet button:hover,
+.contact-sheet button:focus-visible {
+  background: var(--raised);
+  color: var(--text);
+}
+.contact-sheet button[aria-current="true"] {
+  background: var(--raised);
+  color: var(--text);
+}
+.contact-sheet .sheet-name {
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.contact-sheet small {
+  display: block;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+/* The cat's scope turns toward whatever waits on you. */
+.pet-tube {
+  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pet-tube {
+    transition: none;
+  }
 }

@@ -3,6 +3,7 @@
 //! checkout. `gh` missing, signed out or pointed at a repo with no GitHub
 //! remote is an ordinary "couldn't ask", not an error to flash.
 
+use crate::git::rebased_head;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -104,16 +105,30 @@ fn lookup(dir: &Path) -> PrLookup {
             "pr",
             "view",
             "--json",
-            "number,url,title,state,isDraft,mergeable,statusCheckRollup,reviewDecision,headRefName,headRefOid",
+            "number,url,title,state,isDraft,mergeable,statusCheckRollup,reviewDecision,headRefName,headRefOid,baseRefName",
         ],
     ) {
         Ok(out) => match serde_json::from_str(&out) {
-            Ok(pr) => PrLookup::Found { pr },
+            Ok(pr) => PrLookup::Found {
+                pr: with_rebased_head(dir, pr),
+            },
             Err(e) => PrLookup::Unavailable { reason: e.to_string() },
         },
         Err(e) if e.contains("no pull requests found") => PrLookup::None,
         Err(reason) => PrLookup::Unavailable { reason },
     }
+}
+
+/// A merged PR's branch may have been rebased here since, which changes its
+/// commit but not its work: say so, or the PR line calls it new commits.
+fn with_rebased_head(dir: &Path, mut pr: serde_json::Value) -> serde_json::Value {
+    let field = |key: &str| pr[key].as_str().unwrap_or_default().to_string();
+    if field("state") == "MERGED" {
+        if let Some(head) = rebased_head(dir, &field("baseRefName"), &field("headRefOid")) {
+            pr["rebasedHead"] = head.into();
+        }
+    }
+    pr
 }
 
 #[tauri::command]
@@ -141,6 +156,16 @@ pub async fn gh_pr_create(path: PathBuf, draft: bool) -> Result<String, String> 
             .find(|l| l.starts_with("https://"))
             .map(String::from)
             .ok_or_else(|| format!("gh didn't say where the pull request is: {}", out.trim()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Mark draft pull request `number` ready for review.
+#[tauri::command]
+pub async fn gh_pr_ready(path: PathBuf, number: u64) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        gh(&path, &["pr", "ready", &number.to_string()]).map(|_| ())
     })
     .await
     .map_err(|e| e.to_string())?

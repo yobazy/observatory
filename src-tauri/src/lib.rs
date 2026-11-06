@@ -4,6 +4,7 @@ mod cards;
 mod codex_log;
 mod control;
 mod daemon;
+mod dock;
 mod editor;
 mod gh;
 mod git;
@@ -104,6 +105,7 @@ pub fn run() {
             gh::gh_pr,
             gh::gh_pr_create,
             gh::gh_pr_merge,
+            gh::gh_pr_ready,
             usage::usage_report,
             uselog::append_use_log,
             uselog::use_log_path,
@@ -134,6 +136,7 @@ pub fn run() {
             preview::resolve_paths,
             preview::open_preview,
             preview::read_preview_text,
+            preview::read_preview_bytes,
             preview::preview_modified,
             relocate::carry_project_state,
             icons::read_icon,
@@ -141,6 +144,7 @@ pub fn run() {
             icons::project_images,
             title::suggest_title,
             tray::update_tray,
+            dock::set_dock_icon,
             editor::list_editors,
             editor::open_in_editor,
             show_main_window,

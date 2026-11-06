@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { afterStatus, settled } from '../src/nebula/followupRules.ts';
+import { afterStatus, inFollowUpOrder, settled } from '../src/nebula/followupRules.ts';
 
 const task = (status, extra = {}) => ({ id: 'a1', status, archived: false, ...extra });
 
@@ -36,4 +36,13 @@ test('flags you set yourself never clear on their own', () => {
   const prefs = { followUps: { a1: 1000, b2: 2000 }, autoFollowUps: { a1: true } };
   const next = settled(prefs, { a1: task('running'), b2: { id: 'b2', status: 'running', archived: false } });
   assert.deepEqual(next.followUps, { b2: 2000 });
+});
+
+test('the Follow up list starts from its newest flag unless told otherwise', () => {
+  const rows = [{ id: 'old', at: 1 }, { id: 'new', at: 3 }, { id: 'mid', at: 2 }];
+  const ids = (order) => inFollowUpOrder(rows, order).map((r) => r.id);
+  assert.deepEqual(ids(undefined), ['new', 'mid', 'old']);
+  assert.deepEqual(ids('newest'), ['new', 'mid', 'old']);
+  assert.deepEqual(ids('oldest'), ['old', 'mid', 'new']);
+  assert.equal(rows[0].id, 'old', 'leaves the list it was given alone');
 });

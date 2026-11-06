@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { answer, findQuestion, lastRows, looksLikePicker, readScreen, type Choice, type Question } from "../nebula/screen";
 import { deliverPrompt } from "../nebula/actions";
+import { ChoiceText } from "./AskStrip";
 import { flash } from "../nebula/store";
 import type { Agent } from "../nebula/types";
 
@@ -39,7 +40,8 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
     setBusy(true);
     try {
       await answer(agent, q, c);
-      flash(`Answered ${agent.name}: ${c.label}`);
+      if (c.typed) onOpen();
+      else flash(`Answered ${agent.name}: ${c.label}`);
     } catch (e) {
       flash(e instanceof Error ? e.message : String(e));
     } finally {
@@ -83,11 +85,11 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
               key={c.key}
               className={`qa-choice${c.selected ? " is-current" : ""}`}
               disabled={busy}
+              aria-pressed={c.checked}
               onClick={() => void pick(q, c)}
-              title={c.label}
+              title={c.note ? `${c.label}: ${c.note}` : c.label}
             >
-              {!c.keys && <kbd>{c.key}</kbd>}
-              <span>{c.label}</span>
+              <ChoiceText choice={c} />
             </button>
           ))}
         </div>

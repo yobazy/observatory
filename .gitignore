@@ -36,3 +36,6 @@ dist-ssr
 
 # Release update manifest (scripts/release.sh)
 latest.json
+
+# Playwright MCP output; left untracked it would hold back a worktree's clean up
+.playwright-mcp/

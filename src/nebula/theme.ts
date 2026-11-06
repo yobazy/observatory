@@ -50,6 +50,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   quickCapture?: string;
   /** Chimes for finished turns and questions (delight.ts); on unless off. */
   sounds?: boolean;
+  /** A thread that finishes while the app is in the background sounds like
+   *  sand settling instead of the chime (delight.ts); off unless turned on. */
+  sandSound?: boolean;
   /** 0 to 1; 0.5 when unset. */
   soundVolume?: number;
   /** Quiet hours, "HH:MM" local: no chimes or banners between them. */
@@ -90,6 +93,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   threadTags?: Record<string, ThreadTagRecord>;
   /** Tasks marked to come back to, by agent id: when they were marked (ms). */
   followUps?: Record<string, number>;
+  /** Which end of the Follow up list comes first; newest when unset, since
+   *  nearly every flag is the app's own and the latest are still in mind. */
+  followUpOrder?: "newest" | "oldest";
   /** Ideas not started yet, newest first (ideas.ts). */
   ideas?: Idea[];
   /** Which of those the app flagged itself, when a turn ended while you

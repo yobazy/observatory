@@ -53,6 +53,8 @@ export interface Cat {
   /** A star falling into the yard, for the cat to catch: x from the left,
    *  y over the ground (px). */
   star?: { x: number; y: number; drift: number } | null;
+  /** At the telescope because something waits on you (keepWatch). */
+  watch?: boolean;
 }
 
 const rand = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
@@ -210,4 +212,24 @@ export function pickNext(c: Cat, width: number, r = Math.random()): Cat {
     return { ...idle, mode: "catch", left: 80, star: { x, y: STAR_FROM, drift: (Math.random() - 0.5) * 0.6 } };
   }
   return { ...idle, mode: "sleep", left: rand(80, 220) };
+}
+
+/** While a thread waits on you, the cat stays at its telescope (Pet.tsx
+ *  turns the scope toward the thread); an alert or a party plays out first.
+ *  Once nothing waits it goes back to its day soon after. */
+export function keepWatch(c: Cat, width: number, waiting: boolean): Cat {
+  if (!waiting) return c.watch ? { ...c, watch: false, left: Math.min(c.left, rand(10, 30)) } : c;
+  if (width < SCOPE_AT + SCOPE_W + 8 || c.mode === "alert" || c.mode === "party") return c;
+  if (c.mode === "gaze") return c.watch && c.left >= 20 ? c : { ...c, watch: true, left: Math.max(c.left, 20) };
+  return {
+    ...c,
+    mode: "gaze",
+    dir: 1,
+    x: Math.min(c.x, Math.max(0, width - SCOPE_AT - SCOPE_W)),
+    left: 40,
+    ball: null,
+    star: null,
+    bubble: c.bubble === "z" ? null : c.bubble,
+    watch: true,
+  };
 }

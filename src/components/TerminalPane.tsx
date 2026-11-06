@@ -24,14 +24,17 @@ import { isSliding } from "./Resizer";
 import { AgentServerLink } from "./Run";
 import { usePaneMode, useStandIn } from "../nebula/pane";
 import { closeThread, useVerdict } from "../nebula/verdicts";
-import { Plate, plateTone } from "./Plate";
+import { ThreadPlate } from "./Plate";
+import { currentWell, onWellChange } from "../nebula/sky";
 import { LiveStrip } from "./LiveStrip";
 
 const THEME = {
-  background: "#0d1120",
+  // The eyepiece well's color (styles.css .pane-body::before): --term, darkened.
+  background: "#090c16",
   foreground: "#e6e2d6",
-  cursor: "#f0a28b",
-  cursorAccent: "#0d1120",
+  // The cursor is a grain of sand.
+  cursor: "#efeadf",
+  cursorAccent: "#090c16",
   selectionBackground: "#2b3450",
   black: "#1a2032",
   red: "#f0907a",
@@ -55,7 +58,7 @@ const THEME = {
 const LIGHT_THEME = {
   background: "#fbfaf7",
   foreground: "#121726",
-  cursor: "#b5482c",
+  cursor: "#121726",
   cursorAccent: "#fbfaf7",
   selectionBackground: "#dfe3f2",
   black: "#121726",
@@ -76,8 +79,15 @@ const LIGHT_THEME = {
   brightWhite: "#121726",
 };
 
-export const terminalTheme = (mode: string) =>
-  mode === "light" ? LIGHT_THEME : mode === "black" ? { ...THEME, background: "#000000", cursorAccent: "#000000" } : THEME;
+const on = (background: string) => ({ ...THEME, background, cursorAccent: background });
+
+export const terminalTheme = (mode: string) => {
+  if (mode === "light") return LIGHT_THEME;
+  if (mode === "black") return on("#000000");
+  // The well moves with the sky, so the terminal has to move with it.
+  const well = currentWell();
+  return well ? on(well) : THEME;
+};
 
 export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const state = useAppState();
@@ -123,10 +133,17 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     };
   }, [ready, font.family, font.size, font.lineHeight]);
 
-  // Follow the app's light/dark/black surfaces.
+  // Follow the app's light/dark/black surfaces, and the sky.
   useEffect(() => {
     if (term.current) term.current.options.theme = terminalTheme(state.mode);
   }, [state.mode]);
+  useEffect(
+    () =>
+      onWellChange(() => {
+        if (term.current) term.current.options.theme = terminalTheme(getState().mode);
+      }),
+    [],
+  );
 
   // One xterm for the app's lifetime; sessions swap in and out of it.
   useEffect(() => {
@@ -333,7 +350,10 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     const ref = current.current;
     if (!ref || !asking) return;
     setMenu(null);
-    void sendChoice(ref, c).then(() => agent && promptAnswered(agent));
+    void sendChoice(ref, c).then(() => {
+      if (agent && !c.stays) promptAnswered(agent);
+    });
+    if (c.typed) toTerminal();
   };
 
   const project = agent || tab ? projectOfWorktree(state, (agent ?? tab)!.worktree_id) : undefined;
@@ -346,7 +366,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
           <div className="pane-title" data-tauri-drag-region>
             {agent && (
               <span className={`sdot has-plate dot-${agent.status}`} aria-hidden>
-                <Plate seed={agent.id} work={agent.recent_prompts.length} tone={plateTone(agent)} size={18} drift={agent.status === "running"} />
+                <ThreadPlate agent={agent} size={18} />
               </span>
             )}
             <RenameableTitle

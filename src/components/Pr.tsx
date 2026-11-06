@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { isPreview, request } from "../nebula/client";
-import { flash, getState, useAppState } from "../nebula/store";
+import { flash, useAppState } from "../nebula/store";
 import { changedFiles, type GitStatus } from "../nebula/git";
 import { needsForce, takerFor } from "../nebula/actions";
+import { holdsPrWork } from "../nebula/autoclean";
 import { handToBranch } from "../nebula/queue";
-import { createPr, fixCiPrompt, mergePr, refreshPrs, type PullRequest } from "../nebula/prs";
+import { cleanUp, createPr, fixCiPrompt, mergePr, readyPr, refreshPrs, type PullRequest } from "../nebula/prs";
 import { openLink } from "./Run";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import type { Worktree } from "../nebula/types";
@@ -13,39 +12,15 @@ import type { Worktree } from "../nebula/types";
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const STATE_LABEL: Record<PullRequest["state"], string> = {
-  open: "Open",
-  draft: "Draft",
-  merged: "Merged",
-  closed: "Closed",
+  open: "open",
+  draft: "draft",
+  merged: "merged",
+  closed: "closed",
 };
 
 /** Whether the branch is pushed and has work main lacks: what a PR needs. */
 function canOpenPr(git: GitStatus): boolean {
   return !!git.upstream && !git.upstreamGone && (git.baseAhead ?? 0) > 0;
-}
-
-/** Remove the worktree and its local branch. `landed` (the PR merged at
- *  exactly this commit) deletes the branch with -D, since a squash merge
- *  leaves it "unmerged" to git; otherwise -d, which keeps a branch that
- *  still has commits nothing else holds. */
-async function cleanUp(wt: Worktree, force: boolean, landed: boolean) {
-  const project = getState().projects[wt.project_id];
-  await request("DeleteWorktree", { id: wt.id, force });
-  if (!project || isPreview()) {
-    flash(`Cleaned up ${wt.branch}`);
-    return;
-  }
-  try {
-    await invoke("delete_branch", { repo: project.repo_path, branch: wt.branch, force: landed });
-  } catch (e) {
-    flash(
-      landed
-        ? `Removed the worktree; the branch stayed: ${errText(e)}`
-        : `Removed the worktree. The ${wt.branch} branch has commits that aren't merged, so it was kept.`,
-    );
-    return;
-  }
-  flash(`Cleaned up ${wt.branch}`);
 }
 
 /** A band's pull request: where it stands, and the one next step it needs —
@@ -161,39 +136,65 @@ export function PrLine({ worktree, git }: { worktree: Worktree; git: GitStatus }
   } else {
     const p = pr.pr;
     const done = p.state === "merged" || p.state === "closed";
-    const landed = p.state === "merged" && !!git.head && git.head === p.headOid && !dirty;
+    const landed = p.state === "merged" && holdsPrWork(p, git.head) && !dirty;
     const taker = takerFor(state, worktree.id);
+    // One quiet sentence; only the part that needs you takes color, and when
+    // there's a fix to hand (failing checks), that part is the button for it.
+    const loud = done ? null : p.checks === "failing" ? "checks" : p.conflicts ? "conflicts" : p.review === "changes" ? "changes" : null;
+    const fixCi = () => void run(async () => flash(await handToBranch(worktree.id, fixCiPrompt(p, branch), `fix CI on ${branch}`)));
+    const parts: React.ReactNode[] = [];
+    if (!done && p.checks === "failing")
+      parts.push(
+        <button
+          key="checks"
+          className="link-btn pr-loud"
+          disabled={busy}
+          onClick={fixCi}
+          title={`Failing: ${p.failing.join(", ")}\n${
+            taker.kind === "busy"
+              ? `${taker.agent.name} is mid-turn: fixing them is queued until it finishes`
+              : taker.kind === "agent"
+                ? `Click to ask ${taker.agent.name} to fix them`
+                : "Click to start an agent to fix them"
+          }`}
+        >
+          {p.failing.length === 1 ? "1 check failing" : `${p.failing.length} checks failing`}
+        </button>,
+      );
+    else if (!done && p.checks === "pending") parts.push(<span key="checks">checks running</span>);
+    else if (!done && p.checks === "passing") parts.push(<span key="checks">checks pass</span>);
+    if (!done && p.conflicts) parts.push(<span key="conflicts" className={loud === "conflicts" ? "pr-loud" : undefined}>conflicts with base</span>);
+    if (!done && p.review === "changes") parts.push(<span key="changes" className={loud === "changes" ? "pr-loud" : undefined}>changes requested</span>);
+    if (!done && p.review === "approved") parts.push(<span key="approved">approved</span>);
     body = (
       <>
-        <button className="link-btn pr-link" onClick={() => void openLink(p.url)} title={`${p.title}\n${p.url}`}>
-          #{p.number}
-        </button>
-        <span className={`pr-state pr-${p.state}`}>{STATE_LABEL[p.state]}</span>
-        {!done && p.checks !== "none" && (
-          <span
-            className={`pr-checks checks-${p.checks}`}
-            title={p.checks === "failing" ? `Failing: ${p.failing.join(", ")}` : undefined}
-          >
-            {p.checks === "passing" ? "✓ checks pass" : p.checks === "pending" ? "● checks running" : `✗ ${p.failing.length} failing`}
-          </span>
-        )}
-        {!done && p.conflicts && <span className="git-warn">conflicts with base</span>}
-        {!done && p.review === "approved" && <span className="pr-approved">Approved</span>}
-        {!done && p.review === "changes" && <span className="git-warn">Changes requested</span>}
-        {!done && p.checks === "failing" && (
+        <span className="pr-sentence">
+          <button className="link-btn pr-link" onClick={() => void openLink(p.url)} title={`${p.title}\n${p.url}`}>
+            #{p.number}
+          </button>{" "}
+          <span className={`pr-state pr-${p.state}`}>{STATE_LABEL[p.state]}</span>
+          {parts.map((part, i) => (
+            <span key={i}>
+              <span className="pr-sep" aria-hidden>
+                {" · "}
+              </span>
+              {part}
+            </span>
+          ))}
+        </span>
+        {p.state === "draft" && (
           <button
-            className="btn btn-sm btn-ship is-resolve"
+            className="btn btn-sm"
             disabled={busy}
-            onClick={() => void run(async () => flash(await handToBranch(worktree.id, fixCiPrompt(p, branch), `fix CI on ${branch}`)))}
-            title={
-              taker.kind === "busy"
-                ? `${taker.agent.name} is mid-turn: this is queued until it finishes`
-                : taker.kind === "agent"
-                  ? `Ask ${taker.agent.name} to fix the failing checks`
-                  : "Start an agent to fix the failing checks"
+            onClick={() =>
+              void run(async () => {
+                await readyPr(worktree, p);
+                flash(`Marked #${p.number} ready for review`);
+              })
             }
+            title={`Take #${p.number} out of draft so it can be reviewed and merged (gh pr ready)`}
           >
-            Fix CI
+            {busy ? "Marking…" : "Mark ready"}
           </button>
         )}
         {p.state === "open" && p.checks !== "failing" && p.checks !== "pending" && !p.conflicts && p.review !== "changes" && (
@@ -206,7 +207,7 @@ export function PrLine({ worktree, git }: { worktree: Worktree; git: GitStatus }
             Merge
           </button>
         )}
-        {p.state === "merged" && !!git.head && !!p.headOid && git.head !== p.headOid && (
+        {p.state === "merged" && !!git.head && !!p.headOid && !holdsPrWork(p, git.head) && (
           <span className="git-muted">new commits since</span>
         )}
         {done && cleanUpButton(p.state === "closed" ? "closed" : landed ? "landed" : "merged-newer")}

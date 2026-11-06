@@ -2678,6 +2678,9 @@ version = "0.13.0"
 dependencies = [
  "base64 0.22.1",
  "nebula-core",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "rusqlite",
  "serde",
  "serde_json",

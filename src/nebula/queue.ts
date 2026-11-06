@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { BOOTING_MS, createAgent, defaultKind, followUp, takerFor } from "./actions";
 import { onAgentStatus, readSettings } from "./client";
 import { flash, getState, setState } from "./store";
+import { heldAtPrompt } from "./transcript";
 import type { Agent } from "./types";
 
 export interface Queued {
@@ -58,6 +59,9 @@ const sending = new Set<string>();
 const lastSent = new Map<string, number>();
 /** When you last typed into each agent's terminal (`noteTyped`). */
 const lastTyped = new Map<string, number>();
+/** When this app sent each queued prompt, by id, so one gone from the queue
+ *  can be told apart from one taken back. */
+const sentAt = new Map<string, number>();
 const TYPING_MS = 10_000;
 
 /** Called on your keystrokes into an agent's terminal: a queued prompt
@@ -74,14 +78,14 @@ function readyForNext(a: Agent, now = Date.now()): boolean {
   return isIdle(a, now) && !sending.has(a.id) && (a.status_changed_at > sent || now - sent > 60_000);
 }
 
-async function type(agent: Agent, text: string, select: boolean) {
+async function type(agent: Agent, text: string, select: boolean, stay = false) {
   sending.add(agent.id);
   // Stamped before typing: a turn that starts and ends before followUp
   // returns still counts as after it.
   const before = lastSent.get(agent.id);
   lastSent.set(agent.id, Date.now());
   try {
-    await followUp(agent, text, { select });
+    await followUp(agent, text, { select, stay });
   } catch (e) {
     if (before === undefined) lastSent.delete(agent.id);
     else lastSent.set(agent.id, before);
@@ -91,15 +95,28 @@ async function type(agent: Agent, text: string, select: boolean) {
   }
 }
 
+/** Held at its prompt, and nothing typed in since that hasn't reached the log. */
+function reads(a: Agent, turnEndedAt: number | null | undefined): boolean {
+  return !sending.has(a.id) && heldAtPrompt(a, turnEndedAt, lastSent.get(a.id));
+}
+
 /** Queue `text` for `agent`, or send it now if the agent is idle and
  *  nothing is queued ahead of it. The agent is looked up afresh: a dialog
- *  may have been open for a while. Resolves with what happened. */
-export async function enqueue(agent: Agent, text: string): Promise<"sent" | "queued"> {
+ *  may have been open for a while. Resolves with what happened. `stay`
+ *  keeps you on the view you sent it from. `turnEndedAt` is when the thread's
+ *  log says its turn ended (heldAtPrompt): it may still be "running" for its
+ *  background subagents, with its CLI reading. */
+export async function enqueue(
+  agent: Agent,
+  text: string,
+  opts: { stay?: boolean; turnEndedAt?: number | null } = {},
+): Promise<"sent" | "queued"> {
   const s = getState();
   const now = s.agents[agent.id] ?? agent;
   const ahead = s.queue[agent.id] ?? [];
-  if (!ahead.length && readyForNext(now)) {
-    await type(now, text, true);
+  const reading = reads(now, opts.turnEndedAt);
+  if (!ahead.length && (reading || readyForNext(now))) {
+    await type(now, text, !opts.stay, opts.stay);
     return "sent";
   }
   write(agent.id, [...ahead, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text, at: Date.now() }]);
@@ -131,6 +148,32 @@ export function editQueued(agentId: string, id: string, text: string): boolean {
   return true;
 }
 
+/** When the queued prompt `id` went to its agent; undefined while it's
+ *  queued, or once it's been taken back or edited out of the queue. */
+export function queuedSentAt(id: string): number | undefined {
+  return sentAt.get(id);
+}
+
+/** Send a queued prompt without waiting, for a thread at its prompt with
+ *  subagents still out. If it can't go, it goes back in the queue and this
+ *  throws. */
+export async function sendQueued(agent: Agent, id: string, turnEndedAt: number | null | undefined) {
+  const items = getState().queue[agent.id] ?? [];
+  const item = items.find((q) => q.id === id);
+  if (!item) return;
+  const now = getState().agents[agent.id] ?? agent;
+  if (!reads(now, turnEndedAt)) throw new Error(`${now.name} isn't at its prompt`);
+  sentAt.set(id, Date.now());
+  write(agent.id, items.filter((q) => q.id !== id));
+  try {
+    await type(now, item.text, false);
+  } catch (e) {
+    sentAt.delete(id);
+    write(agent.id, [item, ...(getState().queue[agent.id] ?? [])]);
+    throw e;
+  }
+}
+
 export function unqueue(agentId: string, id: string) {
   write(agentId, (getState().queue[agentId] ?? []).filter((q) => q.id !== id));
 }
@@ -160,11 +203,13 @@ async function sendNext(agentId: string) {
   const [still, ...rest] = getState().queue[agentId] ?? [];
   // It started another turn meanwhile, or the item was removed.
   if (!now || !readyForNext(now) || still?.id !== next.id) return;
+  sentAt.set(next.id, Date.now());
   write(agentId, rest);
   try {
     await type(now, next.text, false);
     flash(`Sent the queued prompt to ${now.name}`);
   } catch (e) {
+    sentAt.delete(next.id);
     write(agentId, [next, ...(getState().queue[agentId] ?? [])]);
     flash(`Couldn't send the queued prompt: ${e instanceof Error ? e.message : String(e)}`);
   }
