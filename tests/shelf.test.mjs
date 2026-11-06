@@ -29,6 +29,12 @@ test('the oldest unpinned files make room; pinned ones never go', () => {
   assert.deepEqual(paths(shelve(had, ['c'], 9, { keep: 2 })), ['p*', 'c', 'a']);
 });
 
+test('making room drops the file least recently shown or opened', () => {
+  // x was shown first but opened last: it's at the front of the row, so y goes.
+  const had = [item('y', 5), item('x', 1)];
+  assert.deepEqual(paths(shelve(had, ['z'], 110, { keep: 2, opened: { x: 100 } })), ['z', 'x']);
+});
+
 test('files sort by when they were last shown or opened, pinned first', () => {
   const items = [item('p', 1, true), item('a', 5), item('b', 4), item('c', 3)];
   const opened = { '/x': 99, c: 8, p: 7 };
