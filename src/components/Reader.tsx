@@ -106,11 +106,11 @@ const toHtml = (md: string, inline = false) =>
 
 /** What a reply's paths and "#75"s are read against: the thread they're
  *  from, its checkout, and any PR of its project, for the repo's address. */
-const Where = createContext<{ from: string; root: string; prUrl: string | null; atPrompt: boolean }>({
+const Where = createContext<{ from: string; root: string; prUrl: string | null; turnEndedAt: number | null }>({
   from: "",
   root: "",
   prUrl: null,
-  atPrompt: false,
+  turnEndedAt: null,
 });
 
 /** Links in a reply open in the browser, not in the app's webview; a path
@@ -138,11 +138,11 @@ function copy(text: string, what: string) {
 
 /** Have the thread's agent run `command` itself, as "! <command>", so its
  *  output lands in the thread; one mid-turn gets it when its turn ends. */
-async function runIn(agentId: string, command: string, atPrompt: boolean) {
+async function runIn(agentId: string, command: string, turnEndedAt: number | null) {
   const agent = getState().agents[agentId];
   if (!agent) return;
   try {
-    const how = await enqueue(agent, `! ${command}`, { atPrompt });
+    const how = await enqueue(agent, `! ${command}`, { turnEndedAt });
     flash(how === "queued" ? `Queued for ${agent.name}: runs when its turn ends` : `Running it in ${agent.name}`, 2500);
   } catch {
     flash(`Couldn't send that to ${agent.name}. Copy it instead.`, 6000);
@@ -166,8 +166,8 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
   const el = useRef<HTMLDivElement>(null);
   const where = useContext(Where);
   // Read when Run is pressed: it changes long after a block's buttons are made.
-  const atPrompt = useRef(where.atPrompt);
-  atPrompt.current = where.atPrompt;
+  const turnEndedAt = useRef(where.turnEndedAt);
+  turnEndedAt.current = where.turnEndedAt;
   // Each code block is colored by its language, and gets a Copy for what's
   // in it; a command gets a Run too, when its thread is Claude's.
   useEffect(() => {
@@ -187,7 +187,7 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
         r.title = `Have the agent run this, as "! ${command}"`;
         r.onclick = (e) => {
           e.stopPropagation();
-          void runIn(where.from, command, atPrompt.current);
+          void runIn(where.from, command, turnEndedAt.current);
         };
         acts.append(r);
         pre.classList.add("is-command");
@@ -643,15 +643,16 @@ export function Reader({
   const state = useAppState();
   // Its turn is over and only subagents are out: it reads what you send now,
   // as its terminal would, though the daemon still says running.
-  const atPrompt = heldAtPrompt(agent, t);
+  const turnEndedAt = t?.turnEndedAt ?? null;
+  const atPrompt = heldAtPrompt(agent, turnEndedAt);
   const where = useMemo(() => {
     const project = state.worktrees[agent.worktree_id]?.project_id;
     const pr = Object.values(state.worktrees)
       .filter((w) => w.project_id === project)
       .map((w) => state.prs[w.id])
       .find((p) => p?.kind === "found");
-    return { from: agent.id, root, prUrl: pr?.kind === "found" ? pr.pr.url : null, atPrompt };
-  }, [agent.id, agent.worktree_id, root, state.worktrees, state.prs, atPrompt]);
+    return { from: agent.id, root, prUrl: pr?.kind === "found" ? pr.pr.url : null, turnEndedAt };
+  }, [agent.id, agent.worktree_id, root, state.worktrees, state.prs, turnEndedAt]);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const lastTop = useRef(0);
@@ -862,12 +863,12 @@ export function Reader({
       label: SHIP_LABEL[kind],
       title: `Ask ${agent.name} to ${what}`,
       run: () =>
-        void enqueue(agent, shipPrompt(kind, g), { atPrompt }).then(
+        void enqueue(agent, shipPrompt(kind, g), { turnEndedAt }).then(
           (how) => flash(how === "queued" ? `Queued for ${agent.name}: ${what}` : `Asked ${agent.name} to ${what}`),
           () => flash(`Couldn't ask ${agent.name} to ${what}`, 6000),
         ),
     };
-  }, [state.git, state.worktrees, agent, atPrompt]);
+  }, [state.git, state.worktrees, agent, turnEndedAt]);
   const showReply = (n: number, which = ".rd-reply") => {
     if (foldTo !== null && n < foldTo) setUnfolded(true);
     // After the fold opens, if it had to.
@@ -1002,7 +1003,7 @@ export function Reader({
     const after = t?.entries.length ? t.entries[t.entries.length - 1].n : -1;
     setOutbox({ text, after, sent: false });
     try {
-      const how = await enqueue(agent, text, { atPrompt });
+      const how = await enqueue(agent, text, { turnEndedAt });
       setQueued({ entry: latest, picks, text, how });
       // A queued one shows in the queue instead.
       setOutbox(how === "queued" ? null : { text, after, sent: true });
@@ -1024,7 +1025,7 @@ export function Reader({
     setOutbox({ text: q.text, after, sent: false });
     setQueued((was) => (was.text === q.text ? { ...was, how: "sent" } : was));
     try {
-      await sendQueued(agent, q.id);
+      await sendQueued(agent, q.id, turnEndedAt);
       setOutbox({ text: q.text, after, sent: true });
     } catch {
       setOutbox(null);
@@ -1251,7 +1252,7 @@ export function Reader({
             onClick={() => {
               const asked = { after: t.entries[t.entries.length - 1].n, at: Date.now(), queued: null };
               setCatching(asked);
-              void enqueue(agent, CATCH_UP, { atPrompt }).then(
+              void enqueue(agent, CATCH_UP, { turnEndedAt }).then(
                 (how) => {
                   // The ask just went on the end of the queue.
                   const id = getState().queue[agent.id]?.at(-1)?.id ?? null;

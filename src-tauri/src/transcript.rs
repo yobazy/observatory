@@ -79,6 +79,17 @@ pub struct Transcript {
     turn_ended_at: Option<i64>,
 }
 
+/// A meta row the harness adds with the CLI still at its prompt.
+fn between_turns(content: &serde_json::Value) -> bool {
+    let text = match content {
+        serde_json::Value::Array(blocks) => blocks.first().and_then(|b| b.get("text")),
+        other => Some(other),
+    };
+    text.and_then(|t| t.as_str()).is_some_and(|t| {
+        t.starts_with("<system-reminder>") || t.starts_with("<local-command-caveat>")
+    })
+}
+
 /// A log timestamp in Unix ms, to set against the daemon's clock.
 fn parse_ms(ts: &str) -> Option<i64> {
     let secs = parse_time(ts)?;
@@ -223,9 +234,9 @@ impl Reading {
     }
 
     fn user(&mut self, content: &serde_json::Value, meta: bool, at: i64, ended: i64) {
-        // A turn starting, or carrying on. What the harness adds between
-        // turns is meta, and a task's notification starts one of its own.
-        if !meta {
+        // A turn starting, or carrying on: a peer's message or a task's
+        // notification starts one of its own, even as a meta row.
+        if !(meta && between_turns(content)) {
             self.turn_ended_at = None;
         }
         if let serde_json::Value::Array(blocks) = content {
@@ -434,7 +445,9 @@ mod tests {
             r#"{"type":"system","subtype":"turn_duration","pendingWorkflowCount":1}"#;
         const NOTIFIED: &str = r#"{"type":"user","message":{"content":"<task-notification>done</task-notification>"}}"#;
         const STOPPED: &str = r#"{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}"#;
-        const CAVEAT: &str = r#"{"type":"user","isMeta":true,"message":{"content":"a reminder"}}"#;
+        const CAVEAT: &str =
+            r#"{"type":"user","isMeta":true,"message":{"content":"<local-command-caveat>caveat"}}"#;
+        const REMINDER: &str = r#"{"type":"user","isMeta":true,"message":{"content":[{"type":"text","text":"<system-reminder>tools"}]}}"#;
         const HELPER: &str = r#"{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"a subagent"}]}}"#;
         const QUEUE: &str = r#"{"type":"queue-operation","operation":"enqueue"}"#;
 
@@ -444,7 +457,7 @@ mod tests {
             .turn_ended_at
             .is_some());
         // Subagents and the harness carry on past the end of the turn.
-        assert!(read(&[DONE, ENDED, HELPER, CAVEAT, QUEUE])
+        assert!(read(&[DONE, ENDED, HELPER, CAVEAT, REMINDER, QUEUE])
             .turn_ended_at
             .is_some());
         assert!(
@@ -459,6 +472,28 @@ mod tests {
             read(&[PROMPT, WORK, STOPPED]).turn_ended_at.is_some(),
             "you stopped it"
         );
+    }
+
+    #[test]
+    fn a_peers_message_starts_a_turn_though_its_row_is_meta() {
+        const ENDED: &str = r#"{"type":"system","subtype":"turn_duration"}"#;
+        const PEER: &str = r#"{"type":"user","isMeta":true,"message":{"content":"Another Claude session sent a message"}}"#;
+        assert!(read(&[DONE, ENDED, PEER]).turn_ended_at.is_none());
+    }
+
+    #[test]
+    fn a_turn_ending_is_read_from_the_log_though_it_has_no_message() {
+        let log = std::env::temp_dir().join(format!("transcript-{}.jsonl", std::process::id()));
+        let ended =
+            r#"{"type":"system","subtype":"turn_duration","timestamp":"2026-11-06T04:13:22.075Z"}"#;
+        std::fs::write(&log, format!("{DONE}\n{ended}\n")).unwrap();
+        let mut r = Reading {
+            log: log.clone(),
+            ..Reading::default()
+        };
+        r.catch_up();
+        std::fs::remove_file(&log).unwrap();
+        assert!(r.turn_ended_at.is_some_and(|t| t > 0));
     }
 
     #[test]

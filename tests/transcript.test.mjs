@@ -7,13 +7,15 @@ const s = (tool, target = '', ok = true) => ({ tool, target, ok });
 
 test('a thread is held at its prompt once its turn ends after it went running', () => {
   const running = { status: 'running', status_changed_at: 1000 };
-  const log = (turnEndedAt) => ({ entries: [], dropped: 0, turnEndedAt });
-  assert.equal(heldAtPrompt(running, log(2000)), true, 'subagents out');
-  assert.equal(heldAtPrompt(running, log(900)), false, "a new turn, its prompt not logged yet");
-  assert.equal(heldAtPrompt(running, log(null)), false, 'mid-turn');
-  assert.equal(heldAtPrompt(running, log(undefined)), false, 'codex, or a mock');
-  assert.equal(heldAtPrompt(running, null), false, 'no log');
-  assert.equal(heldAtPrompt({ ...running, status: 'finished' }, log(2000)), false, 'just finished');
+  assert.equal(heldAtPrompt(running, 2000), true, 'subagents out');
+  assert.equal(heldAtPrompt(running, 900), false, 'a new turn, its prompt not logged yet');
+  assert.equal(heldAtPrompt(running, null), false, 'mid-turn');
+  assert.equal(heldAtPrompt(running, undefined), false, 'codex, a mock, or no log');
+  assert.equal(heldAtPrompt({ ...running, status: 'finished' }, 2000), false, 'just finished');
+  // Sending while held changes no status: only the log can say it landed.
+  assert.equal(heldAtPrompt(running, 2000, 3000, 4000), false, 'a prompt just went in');
+  assert.equal(heldAtPrompt(running, 5000, 3000, 6000), true, 'that turn ended too');
+  assert.equal(heldAtPrompt(running, 2000, 3000, 64_000), true, 'the CLI swallowed it');
 });
 
 test('new entries replace the ones from where they start', () => {
