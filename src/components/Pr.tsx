@@ -2,6 +2,7 @@ import { useState } from "react";
 import { flash, useAppState } from "../nebula/store";
 import { changedFiles, type GitStatus } from "../nebula/git";
 import { needsForce, takerFor } from "../nebula/actions";
+import { holdsPrWork } from "../nebula/autoclean";
 import { handToBranch } from "../nebula/queue";
 import { cleanUp, createPr, fixCiPrompt, mergePr, readyPr, refreshPrs, type PullRequest } from "../nebula/prs";
 import { openLink } from "./Run";
@@ -135,7 +136,7 @@ export function PrLine({ worktree, git }: { worktree: Worktree; git: GitStatus }
   } else {
     const p = pr.pr;
     const done = p.state === "merged" || p.state === "closed";
-    const landed = p.state === "merged" && !!git.head && git.head === p.headOid && !dirty;
+    const landed = p.state === "merged" && holdsPrWork(p, git.head) && !dirty;
     const taker = takerFor(state, worktree.id);
     // One quiet sentence; only the part that needs you takes color, and when
     // there's a fix to hand (failing checks), that part is the button for it.
@@ -206,7 +207,7 @@ export function PrLine({ worktree, git }: { worktree: Worktree; git: GitStatus }
             Merge
           </button>
         )}
-        {p.state === "merged" && !!git.head && !!p.headOid && git.head !== p.headOid && (
+        {p.state === "merged" && !!git.head && !!p.headOid && !holdsPrWork(p, git.head) && (
           <span className="git-muted">new commits since</span>
         )}
         {done && cleanUpButton(p.state === "closed" ? "closed" : landed ? "landed" : "merged-newer")}

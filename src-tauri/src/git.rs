@@ -198,6 +198,29 @@ pub async fn git_status(path: PathBuf, base: Option<String>) -> Result<GitStatus
         .map_err(|e| e.to_string())?
 }
 
+/// The commit checked out, if it isn't `pr_head` but changes exactly what
+/// `pr_head` does over `origin/<base>`: the same branch, rebased. Only the
+/// line numbers and blob ids of the two diffs may differ. A rebase that had
+/// to resolve a conflict can differ for real, so it doesn't count.
+pub(crate) fn rebased_head(dir: &Path, base: &str, pr_head: &str) -> Option<String> {
+    let head = git(dir, &["rev-parse", "HEAD"]).ok()?.trim().to_string();
+    if head == pr_head {
+        return None;
+    }
+    let base = format!("origin/{base}");
+    let work = |commit: &str| -> Option<String> {
+        let fork = git(dir, &["merge-base", commit, &base]).ok()?;
+        let diff = git(dir, &["diff", "--binary", fork.trim(), commit]).ok()?;
+        Some(
+            diff.lines()
+                .filter(|l| !l.starts_with("index ") && !l.starts_with("@@ "))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    };
+    (work(&head)? == work(pr_head)?).then_some(head)
+}
+
 /// Past this, a diff is cut off: the review pane would choke on it long
 /// before anyone read it all.
 const MAX_PATCH: usize = 4 * 1024 * 1024;
@@ -415,6 +438,48 @@ mod tests {
         assert_eq!((s.insertions, s.deletions), (10, 2));
         parse_shortstat(" 1 file changed, 4 deletions(-)\n", &mut s);
         assert_eq!(s.deletions, 4);
+    }
+
+    #[test]
+    fn a_rebase_is_the_same_work_and_a_new_commit_is_not() {
+        let dir = std::env::temp_dir().join(format!("nebula-rebase-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let run = |args: &[&str]| git(&dir, args).unwrap().trim().to_string();
+        let commit = |file: &str, text: &str, msg: &str| {
+            std::fs::write(dir.join(file), text).unwrap();
+            run(&["add", "."]);
+            run(&["commit", "-qm", msg]);
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "t@example.com"]);
+        run(&["config", "user.name", "t"]);
+        commit("a.txt", "one\n", "start");
+        run(&["checkout", "-qb", "topic"]);
+        commit("a.txt", "one\ntwo\n", "topic");
+        let pr_head = run(&["rev-parse", "HEAD"]);
+
+        // Not rebased: this is the PR's own commit.
+        run(&["update-ref", "refs/remotes/origin/main", "main"]);
+        assert_eq!(rebased_head(&dir, "main", &pr_head), None);
+
+        // main moves on and the branch is rebased onto it.
+        run(&["checkout", "-q", "main"]);
+        commit("b.txt", "other\n", "other");
+        run(&["update-ref", "refs/remotes/origin/main", "main"]);
+        run(&["checkout", "-q", "topic"]);
+        run(&["rebase", "-q", "main"]);
+        let rebased = run(&["rev-parse", "HEAD"]);
+        assert_ne!(rebased, pr_head);
+        assert_eq!(rebased_head(&dir, "main", &pr_head), Some(rebased));
+
+        // A commit on top is real work the PR doesn't have.
+        commit("a.txt", "one\ntwo\nthree\n", "more");
+        assert_eq!(rebased_head(&dir, "main", &pr_head), None);
+
+        // Without its base there's nothing to compare against.
+        assert_eq!(rebased_head(&dir, "no-such-base", &pr_head), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

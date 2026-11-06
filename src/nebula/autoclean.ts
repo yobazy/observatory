@@ -13,9 +13,15 @@ export type CleanState = Pick<State, "loaded" | "worktrees" | "agents" | "select
  *  can still be read as it lands. */
 export const GRACE_MS = 60_000;
 
+/** Whether `head` is what the PR merged: its own commit, or that commit
+ *  rebased with nothing added. */
+export function holdsPrWork(pr: { headOid: string; rebasedHead?: string }, head: string | null | undefined): boolean {
+  return !!head && (head === pr.headOid || head === pr.rebasedHead);
+}
+
 const STOPPED = new Set(["finished", "terminated", "disconnected"]);
 
-/** Moment worktrees whose PR merged at the commit checked out, with nothing
+/** Moment worktrees whose PR merged what's checked out, with nothing
  *  uncommitted, every thread stopped a minute or more, and none of them the
  *  one open in front of you (`watching`). */
 export function cleanable(s: CleanState, now: number, watching: boolean): string[] {
@@ -27,7 +33,7 @@ export function cleanable(s: CleanState, now: number, watching: boolean): string
       const p = s.prs[wt.id];
       const g = s.git[wt.id];
       if (p?.kind !== "found" || p.pr.state !== "merged" || !g || "error" in g) return false;
-      if (!g.head || g.head !== p.pr.headOid) return false;
+      if (!holdsPrWork(p.pr, g.head)) return false;
       if (g.staged + g.unstaged + g.untracked + g.conflicted > 0) return false;
       if (watching && open?.worktree_id === wt.id) return false;
       const threads = Object.values(s.agents).filter((a) => a.worktree_id === wt.id);
