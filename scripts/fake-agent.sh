@@ -53,6 +53,9 @@ reply() { # $1 = a prompt, typed or given at start
       printf '\e[15A\e[J%s\n←  ☒ Bus  ☒ Food  ✔ Submit  →\n\nReview your answers\n\n ● Do you want the shuttle from the hotel?\n   → Yes\n\nReady to submit your answers?\n\n❯ 1. Submit answers\n  2. Cancel\n' "$rule"
       read -rsn1 _
       printf '\e[12A\e[J  ⎿  answered\n'; sleep 2; echo "done."; hook Stop ;;
+    # A command run outside any turn, as Claude Code does "! cmd": no hooks,
+    # so the status doesn't move. Slept on, never run: it may be a replay's.
+    '! '*) echo "running: ${line#! }"; sleep "${FAKE_RUN_SECONDS:-20}"; echo "done." ;;
     # Subagents sent off and the turn over: the prompt is back, but nebula
     # holds the thread at running until they report in, which here is never.
     agents*)

@@ -23,6 +23,11 @@ const MAX_PROMPT: usize = 8_000;
 const MAX_REPLY: usize = 40_000;
 /// Lines kept of what a step changed, or of what a failed one printed.
 const MAX_DETAIL_LINES: usize = 40;
+/// What the CLI prints for a "! cmd" that outlasted its time limit.
+const BACKGROUNDED: &str = "was moved to the background";
+/// How the CLI's own note starts, added to stderr when a command `cd`s out of
+/// the project. It says nothing about how the command went.
+const CWD_RESET: &str = "Shell cwd was reset to ";
 
 #[derive(Default)]
 pub struct TranscriptState(Arc<Mutex<HashMap<String, Reading>>>);
@@ -38,6 +43,8 @@ struct Reading {
     dropped: u64,
     /// Tool calls waiting on a result, by tool-use id: entry number and step.
     pending: HashMap<String, (u64, usize)>,
+    /// The entry of a command you ran, until its output comes in.
+    ran: Option<u64>,
     /// When the turn ended, in ms, while that's the log's last word: the CLI
     /// is at its prompt. None once another turn starts.
     turn_ended_at: Option<i64>,
@@ -163,6 +170,26 @@ fn change_of(tool: &str, input: &serde_json::Value) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+/// What's between `<tag>` and `</tag>` in `text`.
+fn between<'a>(text: &'a str, tag: &str) -> Option<&'a str> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let from = text.find(&open)? + open.len();
+    let to = text[from..].find(&close)? + from;
+    Some(&text[from..to])
+}
+
+/// What a command printed, without the XML escaping the CLI logs it with.
+/// `&amp;` goes last, or an escaped "&lt;" would come out as "<".
+fn unescape(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&#39;", "'")
+        .replace("&amp;", "&")
+}
+
 /// The last lines of what a tool printed, from its result's content.
 fn output_tail(content: &serde_json::Value) -> String {
     let text = match content {
@@ -235,8 +262,10 @@ impl Reading {
 
     fn user(&mut self, content: &serde_json::Value, meta: bool, at: i64, ended: i64) {
         // A turn starting, or carrying on: a peer's message or a task's
-        // notification starts one of its own, even as a meta row.
-        if !(meta && between_turns(content)) {
+        // notification starts one of its own, even as a meta row. A command you
+        // ran, "! cmd", happens at the prompt and starts nothing.
+        let ran = content.as_str().is_some_and(|t| t.starts_with("<bash-"));
+        if !ran && !(meta && between_turns(content)) {
             self.turn_ended_at = None;
         }
         if let serde_json::Value::Array(blocks) = content {
@@ -270,10 +299,63 @@ impl Reading {
         if meta {
             return;
         }
+        if content.as_str().is_some_and(|text| self.shell(text, at)) {
+            return;
+        }
         if let Some(prompt) = typed_prompt(content) {
             self.pending.clear();
             self.push("you", clip_to(&prompt, MAX_PROMPT), at);
         }
+    }
+
+    /// A command you had the CLI run, "! cmd": its line, then a line with what
+    /// it printed, both written once it stops. It reads as a step of its own.
+    /// True if `text` was one of those lines. Each starts with its tag, so a
+    /// prompt that only mentions the tags stays a prompt.
+    fn shell(&mut self, text: &str, at: i64) -> bool {
+        if !text.starts_with("<bash-") {
+            return false;
+        }
+        if let Some(command) = between(text, "bash-input") {
+            self.push("steps", String::new(), at);
+            self.ran = Some(self.next_n() - 1);
+            let entry = self.entries.back_mut().expect("just pushed");
+            entry.steps.push(Step {
+                tool: "Bash".to_string(),
+                target: command.trim().to_string(),
+                ok: None,
+                detail: None,
+            });
+            return true;
+        }
+        let Some(out) = between(text, "bash-stdout") else {
+            return false;
+        };
+        // Output with no command before it isn't the CLI's: nothing to fill in.
+        let Some(n) = self.ran.take() else {
+            return false;
+        };
+        let out = unescape(out);
+        let err = unescape(between(text, "bash-stderr").unwrap_or(""));
+        let err = err
+            .lines()
+            .filter(|l| !l.starts_with(CWD_RESET))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let err = err.trim();
+        let printed = [out.trim_end(), err]
+            .into_iter()
+            .filter(|p| !p.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if let Some(step) = self.get_mut(n).and_then(|e| e.steps.last_mut()) {
+            // Over the CLI's time limit it carries on in the background, and
+            // the log never says when that ends: `ok` stays unknown.
+            step.ok = (!out.contains(BACKGROUNDED)).then_some(err.is_empty());
+            step.detail =
+                Some(output_tail(&serde_json::Value::from(printed))).filter(|t| !t.is_empty());
+        }
+        true
     }
 
     fn assistant(&mut self, content: &serde_json::Value, at: i64) {
@@ -482,6 +564,14 @@ mod tests {
     }
 
     #[test]
+    fn a_command_you_ran_at_the_prompt_leaves_the_turn_ended() {
+        const ENDED: &str = r#"{"type":"system","subtype":"turn_duration"}"#;
+        const RAN: &str = r#"{"type":"user","message":{"content":"<bash-input>ls</bash-input>"}}"#;
+        const OUT: &str = r#"{"type":"user","message":{"content":"<bash-stdout>a</bash-stdout><bash-stderr></bash-stderr>"}}"#;
+        assert!(read(&[DONE, ENDED, RAN, OUT]).turn_ended_at.is_some());
+    }
+
+    #[test]
     fn a_turn_ending_is_read_from_the_log_though_it_has_no_message() {
         let log = std::env::temp_dir().join(format!("transcript-{}.jsonl", std::process::id()));
         let ended =
@@ -525,6 +615,129 @@ mod tests {
         ]);
         let kinds: Vec<_> = r.entries.iter().map(|e| e.kind).collect();
         assert_eq!(kinds, ["you", "stopped"]);
+    }
+
+    #[test]
+    fn a_command_you_ran_reads_as_a_step_with_its_output() {
+        let r = read(&[
+            PROMPT,
+            r#"{"type":"user","message":{"content":"<local-command-caveat>Run directly.</local-command-caveat>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-input> npm test && echo ok</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout>12 passed</bash-stdout><bash-stderr></bash-stderr>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-input>false</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout></bash-stdout><bash-stderr>Error: no</bash-stderr>"}}"#,
+        ]);
+        let kinds: Vec<_> = r.entries.iter().map(|e| e.kind).collect();
+        assert_eq!(kinds, ["you", "steps", "steps"]);
+        let ran = &r.entries[1].steps[0];
+        assert_eq!(
+            (ran.tool.as_str(), ran.target.as_str()),
+            ("Bash", "npm test && echo ok")
+        );
+        assert_eq!(
+            (ran.ok, ran.detail.as_deref()),
+            (Some(true), Some("12 passed"))
+        );
+        let bad = &r.entries[2].steps[0];
+        assert_eq!(
+            (bad.ok, bad.detail.as_deref()),
+            (Some(false), Some("Error: no"))
+        );
+    }
+
+    #[test]
+    fn what_a_command_printed_reads_unescaped() {
+        let r = read(&[
+            r#"{"type":"user","message":{"content":"<bash-input>a && b</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout>==&gt; Updating &lt;main&gt;\na &amp;&amp; b, &quot;x&quot; &#39;y&#39; &apos;z&apos;\nliteral &amp;lt;</bash-stdout><bash-stderr></bash-stderr>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-input>false</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout></bash-stdout><bash-stderr>x: no such file &lt;y&gt; &amp; more</bash-stderr>"}}"#,
+        ]);
+        assert_eq!(r.entries[0].steps[0].target, "a && b");
+        assert_eq!(
+            r.entries[0].steps[0].detail.as_deref(),
+            Some("==> Updating <main>\na && b, \"x\" 'y' 'z'\nliteral &lt;")
+        );
+        assert_eq!(
+            (
+                r.entries[1].steps[0].ok,
+                r.entries[1].steps[0].detail.as_deref()
+            ),
+            (Some(false), Some("x: no such file <y> & more"))
+        );
+    }
+
+    #[test]
+    fn the_cwd_notice_is_not_a_failure_and_keeps_the_output() {
+        let r = read(&[
+            r#"{"type":"user","message":{"content":"<bash-input>cd /tmp && ls</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout>a.txt\nb.txt</bash-stdout><bash-stderr>Shell cwd was reset to /Users/me/repo</bash-stderr>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-input>cd /tmp</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout></bash-stdout><bash-stderr>Shell cwd was reset to /Users/me/repo</bash-stderr>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-input>cd /tmp && nope</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout></bash-stdout><bash-stderr>nope: not found\nShell cwd was reset to /Users/me/repo</bash-stderr>"}}"#,
+        ]);
+        let step = |i: usize| {
+            let s = &r.entries[i].steps[0];
+            (s.ok, s.detail.as_deref())
+        };
+        assert_eq!(step(0), (Some(true), Some("a.txt\nb.txt")));
+        assert_eq!(step(1), (Some(true), None));
+        assert_eq!(step(2), (Some(false), Some("nope: not found")));
+    }
+
+    #[test]
+    fn both_streams_show_when_a_command_prints_to_both() {
+        let r = read(&[
+            r#"{"type":"user","message":{"content":"<bash-input>make</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout>built a</bash-stdout><bash-stderr>make: no b</bash-stderr>"}}"#,
+        ]);
+        let step = &r.entries[0].steps[0];
+        assert_eq!(
+            (step.ok, step.detail.as_deref()),
+            (Some(false), Some("built a\nmake: no b"))
+        );
+    }
+
+    #[test]
+    fn a_prompt_mentioning_the_bash_tags_stays_in_the_thread() {
+        let tool = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]}}"#;
+        let done = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}"#;
+        let input = r#"{"type":"user","message":{"content":"Why does <bash-input>ls</bash-input> show up?"}}"#;
+        let output = r#"{"type":"user","message":{"content":"The log has <bash-stdout>hi</bash-stdout><bash-stderr>boom</bash-stderr> in it"}}"#;
+        let r = read(&[PROMPT, tool, done, input, output]);
+        let kinds: Vec<_> = r.entries.iter().map(|e| e.kind).collect();
+        assert_eq!(kinds, ["you", "steps", "you", "you"]);
+        assert!(r.entries[2].text.contains("<bash-input>ls</bash-input>"));
+        assert!(r.entries[3].text.contains("<bash-stdout>hi</bash-stdout>"));
+        let step = &r.entries[1].steps[0];
+        assert_eq!((step.ok, step.detail.as_deref()), (Some(true), None));
+    }
+
+    #[test]
+    fn output_only_lands_on_the_command_it_belongs_to() {
+        let tool = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]}}"#;
+        let done = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}"#;
+        let output = r#"{"type":"user","message":{"content":"<bash-stdout>hi</bash-stdout><bash-stderr>boom</bash-stderr>"}}"#;
+        let r = read(&[PROMPT, tool, done, output]);
+        let kinds: Vec<_> = r.entries.iter().map(|e| e.kind).collect();
+        assert_eq!(kinds, ["you", "steps"]);
+        let step = &r.entries[1].steps[0];
+        assert_eq!((step.ok, step.detail.as_deref()), (Some(true), None));
+    }
+
+    #[test]
+    fn a_command_moved_to_the_background_is_left_unfinished() {
+        let r = read(&[
+            r#"{"type":"user","message":{"content":"<bash-input>deploy</bash-input>"}}"#,
+            r#"{"type":"user","message":{"content":"<bash-stdout>Command did not complete within its 120s timeout and was moved to the background (ID: b1).</bash-stdout><bash-stderr></bash-stderr>"}}"#,
+        ]);
+        let step = &r.entries[0].steps[0];
+        assert_eq!(step.ok, None);
+        assert!(step
+            .detail
+            .as_deref()
+            .is_some_and(|d| d.contains("background")));
     }
 
     #[test]

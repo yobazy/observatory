@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { ShellRun } from "./command";
 import type { GitState } from "./git";
 import type { UsageReport } from "./usage";
 import type { AutomationsReport, Watches } from "./automations";
@@ -51,6 +52,8 @@ export interface State {
   prs: Record<string, PrState>;
   /** Prompts waiting for an agent's turn to end, by agent id (queue.ts). */
   queue: Record<string, Queued[]>;
+  /** Commands each agent was given as "! cmd" and hasn't finished. */
+  shellRuns: Record<string, ShellRun[]>;
   /** The last usage scan (`usage.ts`), and why the latest one failed. */
   usage: UsageReport | null;
   usageError: string | null;
@@ -137,6 +140,7 @@ let state: State = {
   compare: null,
   prs: {},
   queue: {},
+  shellRuns: {},
   runUrls: {},
   agentUrls: {},
   limits: {},
