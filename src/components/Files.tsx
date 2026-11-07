@@ -60,7 +60,8 @@ export async function sendFile(agent: Agent, path: string) {
   const canRead = hasLog(agent);
   const waiting = agent.status === "needs_feedback";
   const queued = getState().queue[agent.id] ?? [];
-  let to = fileTarget({ reading: canRead && paneMode() === "read", queued: queued.length, alive: agent.alive, waiting });
+  const on = { queued: queued.length, alive: agent.alive, waiting, canRead };
+  let to = fileTarget({ ...on, reading: canRead && paneMode() === "read" });
   const text = shellQuote(path);
   if (to === "queue") {
     const last = queued[queued.length - 1];
@@ -69,15 +70,17 @@ export async function sendFile(agent: Agent, path: string) {
       return;
     }
     // Sent meanwhile: it goes where it would have without one.
-    to = fileTarget({ reading: false, queued: 0, alive: agent.alive, waiting });
+    to = fileTarget({ ...on, reading: false, queued: 0 });
   }
-  // Without a conversation to read, there's no reply box to put it in.
-  if (to === "draft" && !canRead) {
-    if (waiting) {
-      flash(`${agent.name} is waiting on you. Answer it first, then send ${name}`);
-      return;
-    }
-    to = "terminal";
+  // Without a conversation to read, there's no reply box to put it in, and
+  // its terminal would wake it or answer its question.
+  if (to === "nowhere") {
+    flash(
+      waiting
+        ? `${agent.name} is waiting on you. Answer it first, then send ${name}`
+        : `${agent.name} is asleep with no log to reply in. Open its terminal to wake it, then send ${name}`,
+    );
+    return;
   }
   if (to === "draft") {
     addToDraft(agent.id, text);

@@ -23,16 +23,17 @@ export function pinnedFirst(items: ShelfItem[]): ShelfItem[] {
 /** `items` with `paths` put on at the front of the unpinned ones, shown at
  *  `now`; the oldest unpinned past `keep` go. A path already there keeps
  *  its place and time, unless `again` (an agent showed it on purpose, with
- *  `nebula open`): then it's shown at `now` too. The shelf is the same array
- *  when nothing changed. */
-export function shelve(items: ShelfItem[], paths: string[], now: number, { again = false, keep = KEEP } = {}): ShelfItem[] {
+ *  `nebula open`): then it's shown at `now` too. Room is made by when each
+ *  was last shown or `opened`, the order the row shows them in. The shelf
+ *  is the same array when nothing changed. */
+export function shelve(items: ShelfItem[], paths: string[], now: number, { again = false, keep = KEEP, opened = {} as Record<string, number> } = {}): ShelfItem[] {
   const wanted = new Set(paths);
   const fresh = [...wanted].filter((p) => !items.some((i) => i.path === p));
   const bumped = again && items.some((i) => wanted.has(i.path));
   if (!fresh.length && !bumped) return items;
   const touched = items.map((i) => (again && wanted.has(i.path) ? { ...i, at: now } : i));
   // Newest first; a tie keeps its order (the paths as given, then the shelf).
-  const rest = [...fresh.map((path) => ({ path, at: now })), ...touched.filter((i) => !i.pinned)].sort((a, b) => b.at - a.at);
+  const rest = [...fresh.map((path) => ({ path, at: now })), ...touched.filter((i) => !i.pinned)].sort((a, b) => lastTouched(b, opened) - lastTouched(a, opened));
   return [...touched.filter((i) => i.pinned), ...rest.slice(0, keep)];
 }
 
