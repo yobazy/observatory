@@ -19,6 +19,7 @@ const {
   batchSummary,
   boardRows,
   decideSummary,
+  dispatchedLine,
   phaseOf,
   redirectPrompt,
   sortRows,
@@ -224,6 +225,25 @@ test('blocked, failed and listed tasks count as settled, and say so', () => {
   assert.equal(s.text, '1 done, 1 failed, 1 blocked, 1 on your list');
   // A pending task keeps it unsettled.
   assert.equal(batchSummary([...tasks, task(5, { state: 'pending', agentId: undefined })], {}, () => 0, NOW).settled, false);
+});
+
+test("the Dispatch dialog's line counts a session stopped at its plan as needing you, like the board", () => {
+  const tasks = [
+    task(1, { planCheckpoint: true }),
+    task(2),
+    task(3),
+    task(4, { state: 'pending', agentId: undefined }),
+    task(5, { state: 'launching', agentId: undefined }),
+  ];
+  const agents = {
+    a1: agent('a1', 'finished', { status_changed_at: NOW - 100 }),
+    a2: agent('a2', 'running'),
+    a3: agent('a3', 'finished'),
+  };
+  const s = batchSummary(tasks, agents, () => 0, NOW);
+  assert.equal(dispatchedLine(s), '2 working · 1 waiting for a slot · 1 done · 1 needs you');
+  // The settled banner's words don't change: nothing working is ever in them.
+  assert.equal(s.text, '1 done, 1 needs you');
 });
 
 // ---- storage: checking off, retry, dismiss, re-routing ----

@@ -323,6 +323,9 @@ function Previews() {
   );
 }
 
+/** router.rs's DEFAULT_COMMAND: no saved session, no tools. */
+const ROUTER_DEFAULT = 'claude -p --no-session-persistence --tools ""';
+
 /** The agent CLI Dispatch routes a list with (router.rs), the one that tags
  *  threads (tagging.ts), and how many sessions it runs at once (batch.ts). */
 function DispatchSettings() {
@@ -342,8 +345,12 @@ function DispatchSettings() {
         <TextSetting
           id="set-router"
           value={prefs.routerCommand ?? ""}
-          placeholder="claude -p"
-          suggestions={["claude -p", "claude -p --model haiku", "codex exec --skip-git-repo-check"]}
+          placeholder={ROUTER_DEFAULT}
+          suggestions={[
+            ROUTER_DEFAULT,
+            'claude -p --model haiku --no-session-persistence --tools ""',
+            "codex exec --skip-git-repo-check",
+          ]}
           onCommit={(v) => void savePrefs({ ...prefs, routerCommand: v || undefined })}
         />
       </div>

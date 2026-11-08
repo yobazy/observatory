@@ -450,6 +450,45 @@ export function jobList(
   return { jobs, configError: error };
 }
 
+// ---- the banner when a job turns red ----
+
+/** Which shown jobs turned red since the last read, and the red labels to
+ *  keep for the next. `prev` null is the first read ever: what's red then
+ *  is only remembered, since the footer dot already shows it. A job that
+ *  recovers and fails again turns red again. */
+export function turnedRed(
+  prev: string[] | null,
+  jobs: Pick<Job, "label" | "health">[],
+): { fire: string[]; red: string[] } {
+  const red = jobs.filter((j) => toneOf(j.health) === "red").map((j) => j.label);
+  if (!prev) return { fire: [], red };
+  const was = new Set(prev);
+  return { fire: red.filter((l) => !was.has(l)), red };
+}
+
+/** What to banner after a read, and what to keep for the next. A job that
+ *  turns red in quiet hours is held, and bannered at the first read after
+ *  they end if it's still red; one that turns red while you're looking at
+ *  the view is never bannered (nor is anything held then: you've seen it). */
+export function redToBanner(
+  last: { red: string[] | null; held: string[] },
+  jobs: Pick<Job, "label" | "health">[],
+  hush: { quiet: boolean; looking: boolean },
+): { fire: string[]; red: string[]; held: string[] } {
+  const { fire: turned, red } = turnedRed(last.red, jobs);
+  const due = [...new Set([...last.held.filter((l) => red.includes(l)), ...turned])];
+  if (hush.looking) return { fire: [], red, held: [] };
+  if (hush.quiet) return { fire: [], red, held: due };
+  return { fire: due, red, held: [] };
+}
+
+/** The banner's words: one job by name and why, or several by name. */
+export function redBanner(jobs: Pick<Job, "name" | "reason">[]): { title: string; body: string } | null {
+  if (!jobs.length) return null;
+  if (jobs.length === 1) return { title: `${jobs[0].name} is failing`, body: jobs[0].reason };
+  return { title: `${jobs.length} automations are failing`, body: jobs.map((j) => j.name).join(", ") };
+}
+
 // ---- times, in words ----
 
 /** "about 5 min ago": last runs come off log mtimes, so never exact. */

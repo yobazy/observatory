@@ -171,6 +171,10 @@ export function redirectPrompt(text: string): string | null {
 
 export interface Summary {
   settled: boolean;
+  /** Sessions on it, or starting. */
+  working: number;
+  /** Waiting for a slot. */
+  pending: number;
   done: number;
   needsYou: number;
   failed: number;
@@ -187,11 +191,23 @@ export function batchSummary(
   queued: QueuedFor = () => 0,
   now = Date.now(),
 ): Summary {
-  const s = { settled: true, done: 0, needsYou: 0, failed: 0, blocked: 0, listed: 0, cancelled: 0 };
+  const s = {
+    settled: true,
+    working: 0,
+    pending: 0,
+    done: 0,
+    needsYou: 0,
+    failed: 0,
+    blocked: 0,
+    listed: 0,
+    cancelled: 0,
+  };
   for (const t of tasks) {
     const p = phaseOf(t, agents, queued, now);
     if (!isSettled(p)) s.settled = false;
-    if (p === "finished" || p === "archived" || p === "gone" || p === "done") s.done++;
+    if (p === "working" || p === "launching") s.working++;
+    else if (p === "pending") s.pending++;
+    else if (p === "finished" || p === "archived" || p === "gone" || p === "done") s.done++;
     else if (p === "waiting" || p === "plan") s.needsYou++;
     else if (p === "failed" || p === "stopped") s.failed++;
     else if (p === "blocked") s.blocked++;
@@ -209,6 +225,23 @@ export function batchSummary(
     .filter(Boolean)
     .join(", ");
   return { ...s, text };
+}
+
+/** The Dispatch dialog's line, from the same counts as the board:
+ *  "2 working · 1 waiting for a slot · 1 done · 1 needs you". */
+export function dispatchedLine(s: Summary): string {
+  return [
+    s.working && `${s.working} working`,
+    s.pending && `${s.pending} waiting for a slot`,
+    s.done && `${s.done} done`,
+    s.needsYou && `${s.needsYou} ${s.needsYou === 1 ? "needs" : "need"} you`,
+    s.failed && `${s.failed} failed`,
+    s.blocked && `${s.blocked} blocked`,
+    s.listed && `${s.listed} on your list`,
+    s.cancelled && `${s.cancelled} cancelled`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 /** Whether a batch's summary banner fires now, and what to save so it
