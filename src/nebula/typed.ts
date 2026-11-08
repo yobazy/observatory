@@ -50,8 +50,19 @@ function lastEnter(data: string): number {
   return -1;
 }
 
+/** What a terminal reports on its own rather than what you type: mouse
+ *  moves and clicks (Claude Code turns on any-motion tracking) and focus
+ *  in and out. */
+const REPORTS = /^(?:\x1b\[<\d+;\d+;\d+[Mm]|\x1b\[M[\s\S]{3}|\x1b\[[IO])+$/;
+
+/** Whether `data` is only the terminal's own reports: no key in it. */
+export function isReport(data: string): boolean {
+  return REPORTS.test(data);
+}
+
 /** Note `data` written to `agentId`'s terminal. */
 export function noteKeys(agentId: string, data: string) {
+  if (isReport(data)) return;
   const next = afterKeys(lines.has(agentId) ? lines.get(agentId)! : "", data);
   if (next === "") lines.delete(agentId);
   else lines.set(agentId, next);
