@@ -119,14 +119,19 @@ test("parse keeps quoted text whole and refuses what it doesn't understand", () 
 test("the hook says allow for the reviewer only, and nothing otherwise", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "reviewer-allow-"));
   const hook = path.resolve("./.claude/hooks/reviewer-allow.mjs");
+  // A repo with no origin, so what the branch changed can't be told.
+  const repo = path.join(dir, "repo");
+  execFileSync("git", ["init", "-q", repo]);
+  execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"]);
   const run = (prompt, command) => {
     const transcript = path.join(dir, `${Math.random()}.jsonl`);
     writeFileSync(transcript, JSON.stringify({ type: "user", message: { content: prompt } }) + "\n");
-    const input = JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: process.cwd(), transcript_path: transcript });
+    const input = JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: repo, transcript_path: transcript });
     return execFileSync("node", [hook], { input, encoding: "utf8" });
   };
   const reviewer = "Review PR #9 (https://github.com/yobazy/observatory/pull/9) as a fresh reviewer: read the diff";
   assert.equal(JSON.parse(run(reviewer, "gh pr diff 9")).hookSpecificOutput.permissionDecision, "allow");
   assert.equal(run("Fix the login redirect", "gh pr diff 9"), "");
   assert.equal(run(reviewer, "rm -rf src"), "");
+  assert.equal(run(reviewer, "npm test"), "");
 });

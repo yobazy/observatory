@@ -277,13 +277,19 @@ function repoContext(cwd) {
   } catch {
     // No origin/HEAD recorded: main.
   }
-  const changed = [
-    ...git(root, "diff", "--name-only", `origin/${defaultBranch}...HEAD`).split("\n"),
-    ...git(root, "status", "--porcelain", "--untracked-files=all")
-      .split("\n")
-      .flatMap((l) => l.slice(3).split(" -> ")),
-  ].filter(Boolean);
-  return { root, branch, defaultBranch, checksSafe: checksSafe(changed) };
+  let safe = false; // Can't tell what the branch changed: builds and tests ask.
+  try {
+    const changed = [
+      ...git(root, "diff", "--name-only", `origin/${defaultBranch}...HEAD`).split("\n"),
+      ...git(root, "status", "--porcelain", "--untracked-files=all")
+        .split("\n")
+        .flatMap((l) => l.slice(3).split(" -> ")),
+    ].filter(Boolean);
+    safe = checksSafe(changed);
+  } catch {
+    // No origin/<default> here, as in a shallow clone.
+  }
+  return { root, branch, defaultBranch, checksSafe: safe };
 }
 
 function main() {
