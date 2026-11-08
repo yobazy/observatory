@@ -1,0 +1,53 @@
+{
+  "moment": "2026-10-25T08-23-21-832Z",
+  "family": "choices",
+  "note": "the decisions part in the reader panel doesn't have the options as selectable",
+  "fixedBy": "#76 Read a \"Decisions\" list as tappable choices",
+  "source": "The reply open at the time, taken from the thread's Claude log (the moment predates thread.json). Trimmed to the headline, chips, the Decisions list and the verdict; paths and branch names made neutral.",
+  "checks": [
+    {
+      "reads": "card",
+      "input": {
+        "text": "**I've gone through every branch: 7 PRs are open, 2 features aren't pushed yet, and 16 merged branches are deleted**\n\n✅ triage done · 🟠 merges need your OK · ⚪ nothing broken\n\n**How to merge**\nMerge in this order: #75 → #76 → #77. Each merge is a squash with `--delete-branch`.\n\n**Decisions**\n1. Merge now? A) #75, #76, #77 now, and I'll do the #71 rebase · B) all 6 mergeable PRs · C) wait until #77 is tried in the sandbox\n2. #47 telescope cat? A) I fix the conflict and merge it · B) close it\n3. `feature-one` + `feature-two`? A) push both as draft PRs and I'll take the duplicate spec out of one · B) leave them local\n4. `old-branch`? A) delete it · B) check it against main first\n5. Weekly sweep? A) yes · B) no\n\n**🟠 Keep open: waiting on decisions 1–5.** The plan is saved to memory."
+      },
+      "expect": {
+        "asks": [
+          {
+            "n": 1,
+            "letters": "ABC",
+            "labels": [
+              "#75, #76, #77 now, and I'll do the #71 rebase",
+              "all 6 mergeable PRs",
+              "wait until #77 is tried in the sandbox"
+            ]
+          },
+          {
+            "n": 2,
+            "letters": "AB"
+          },
+          {
+            "n": 3,
+            "letters": "AB"
+          },
+          {
+            "n": 4,
+            "letters": "AB",
+            "labels": [
+              "delete it",
+              "check it against main first"
+            ]
+          },
+          {
+            "n": 5,
+            "letters": "AB",
+            "labels": [
+              "yes",
+              "no"
+            ]
+          }
+        ],
+        "verdict": "wait"
+      }
+    }
+  ]
+}

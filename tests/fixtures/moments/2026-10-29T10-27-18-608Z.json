@@ -1,0 +1,34 @@
+{
+  "moment": "2026-10-29T10-27-18-608Z",
+  "family": "choices",
+  "note": "The reader didnt catch the options here",
+  "fixedBy": "#113 Read a decision's options when one quotes a line with dots in it",
+  "source": "The latest reply in thread.json. Option C quotes a ticket stub with · in it, which split the options apart. Product names and scratchpad paths made neutral; Details trimmed.",
+  "checks": [
+    {
+      "reads": "card",
+      "input": {
+        "text": "**A is live: the app now reads the event list through one fixed search. E is at the mockup stage.**\n\n✅ A done · 🟠 E waiting on your pick · 🔴 posters on phones untested\n\nMockups for E, light and dark:\n- `/tmp/scratchpad/shots/006-event-cards-light.png`\n- `/tmp/scratchpad/shots/007-event-cards-dark.png`\n\n**Needs you**\n1. Which look for event invites?  A as built today (poster behind our title) · B poster tile (card takes the poster's colour, poster shown whole like a stuck-on flyer) · C admit one (B plus a tear line and a same-colour stub: \"ADMIT ONE · Standard Time · DOORS 10 PM\") · D marquee (blurred poster with a venue strip). I'd go with **C**. Option A shows the real problem: club posters have their own lettering, so two titles fight.\n2. Can you test one thing on your phone? Search a show, pick one with a poster, and send the invite to yourself. If it blocks phones too, the poster won't show or upload.\n\n**Details**\n- **Search:** the search function now makes one call to that contract instead of reading the tables.\n\n**🟠 Keep open:** waiting on your card pick (1) and the poster test on your phone (2)."
+      },
+      "expect": {
+        "asks": [
+          {
+            "n": 1,
+            "letters": "ABCD",
+            "labelsStart": [
+              "as built today",
+              "poster tile",
+              "admit one (B plus a tear line and a same-colour stub: \"ADMIT ONE · Standard Time · DOORS 10 PM\")",
+              "marquee"
+            ]
+          },
+          {
+            "n": 2,
+            "letters": ""
+          }
+        ],
+        "verdict": "wait"
+      }
+    }
+  ]
+}
