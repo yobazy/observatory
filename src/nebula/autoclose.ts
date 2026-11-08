@@ -2,8 +2,8 @@
 // reply said "✅ Safe to close" and that have sat finished a day since, with
 // nothing said to them after it. Anything that hints you mean to come back
 // (pinned, flagged to follow up, a draft or a queued prompt, open in front of
-// you) keeps it. Pure, so its tests run under Node; autocloseRunner.ts acts
-// on it.
+// you, brought back from the archive) keeps it. Pure, so its tests run under
+// Node; autocloseRunner.ts acts on it.
 import type { State } from "./store";
 import type { Tone } from "./replycard";
 import type { Agent } from "./types";
@@ -21,27 +21,40 @@ export interface Reading {
   last: number;
 }
 
+/** What else a sweep goes by. */
+export interface CloseOptions {
+  /** How long a thread sits finished first; a day unless given. */
+  after?: number;
+  /** Whether the thread has an unsent draft in the Read view. */
+  hasDraft?: (id: string) => boolean;
+  /** The `status_changed_at` each thread had when it was last closed this
+   *  way: one back from the archive at that same rest was brought back on
+   *  purpose, so it stays until it works again. */
+  closedAt?: Record<string, number>;
+}
+
 /** Whether a thread is the kind whose log the app reads, at rest long
  *  enough, and not kept for any reason the verdict can't see. The cheap
  *  part, checked before any log is read. */
-export function mayClose(s: CloseState, a: Agent, now: number, after = CLOSE_AFTER_MS, hasDraft: (id: string) => boolean = () => false): boolean {
+export function mayClose(s: CloseState, a: Agent, now: number, o: CloseOptions = {}): boolean {
   if (a.archived || a.status !== "finished" || !a.session_id) return false;
   if (a.kind !== "claude" && a.kind !== "codex") return false;
-  if (now - a.status_changed_at < after) return false;
+  if (now - a.status_changed_at < (o.after ?? CLOSE_AFTER_MS)) return false;
+  if (o.closedAt?.[a.id] === a.status_changed_at) return false;
   const sel = s.selectedSession;
   if (sel && "Agent" in sel && sel.Agent === a.id) return false;
   if (s.prefs.pinnedTasks?.[a.worktree_id]?.includes(a.id)) return false;
   // A flag you set yourself; the app's own (autoFollowUps) don't count.
   if (s.prefs.followUps?.[a.id] && !s.prefs.autoFollowUps?.[a.id]) return false;
   if (s.queue[a.id]?.length) return false;
-  if (hasDraft(a.id)) return false;
+  if (o.hasDraft?.(a.id)) return false;
   return true;
 }
 
 /** Threads to read the latest turn of, before deciding. */
-export function candidates(s: CloseState, now: number, after = CLOSE_AFTER_MS, hasDraft?: (id: string) => boolean): Agent[] {
+export function candidates(s: CloseState, now: number, o: CloseOptions = {}): Agent[] {
   if (!s.loaded || s.prefs.autoCloseSafe === false) return [];
-  return Object.values(s.agents).filter((a) => mayClose(s, a, now, after, hasDraft));
+  return Object.values(s.agents).filter((a) => mayClose(s, a, now, o));
 }
 
 /** Whether a read turn lets the thread go: it ended on ✅, and no prompt
@@ -58,10 +71,9 @@ export function closable(
   s: CloseState,
   now: number,
   readings: (a: Agent) => Reading | null | undefined,
-  after = CLOSE_AFTER_MS,
-  hasDraft?: (id: string) => boolean,
+  o: CloseOptions = {},
 ): string[] {
-  return candidates(s, now, after, hasDraft)
+  return candidates(s, now, o)
     .filter((a) => readingAllows(a, readings(a)))
     .map((a) => a.id);
 }

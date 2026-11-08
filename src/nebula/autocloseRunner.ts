@@ -25,6 +25,31 @@ function closeAfter(): number {
 
 const hasDraft = (id: string) => draftFor(id) !== "";
 
+/** Each thread closed here, by id, with the status_changed_at it had then
+ *  (autoclose.ts's `closedAt`), kept across launches. */
+const KEY = "observatory.autoclosed";
+
+function loadClosed(): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Note `ids` as closed now, forgetting threads the daemon no longer has. */
+function noteClosed(ids: string[]) {
+  const { agents } = getState();
+  const kept = Object.fromEntries(Object.entries(loadClosed()).filter(([id]) => agents[id]));
+  for (const id of ids) if (agents[id]) kept[id] = agents[id].status_changed_at;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(kept));
+  } catch {
+    // Without storage, one brought back may be closed again next sweep.
+  }
+}
+
 function reading(a: Agent): Reading | null {
   const r = readingOf(a);
   return r && r.last != null ? { tone: r.verdict?.tone ?? null, last: r.last } : null;
@@ -41,17 +66,19 @@ async function sweep(after: number): Promise<boolean> {
   sweeping = true;
   try {
     const now = Date.now();
-    for (const a of candidates(s, now, after, hasDraft)) await readTurn(a);
+    const o = { after, hasDraft, closedAt: loadClosed() };
+    for (const a of candidates(s, now, o)) await readTurn(a);
     // The prefs file as well as what's in memory: a pin either one has, or
     // the switch turned off in either, keeps the thread.
     const saved = await loadPrefs();
     const fresh = getState();
-    const kept = new Set(closable({ ...fresh, prefs: saved }, now, reading, after, hasDraft));
-    const ids = closable(fresh, now, reading, after, hasDraft).filter((id) => kept.has(id));
+    const kept = new Set(closable({ ...fresh, prefs: saved }, now, reading, o));
+    const ids = closable(fresh, now, reading, o).filter((id) => kept.has(id));
     if (!ids.length) return true;
     const results = await Promise.allSettled(ids.map((id) => request("ArchiveAgent", { id })));
     const closed = ids.filter((_, i) => results[i].status === "fulfilled");
     const failed = ids.length - closed.length;
+    noteClosed(closed);
     logUse("threads.autoclose", { count: closed.length, failed: failed || undefined });
     if (!closed.length) return true;
     const n = closed.length;

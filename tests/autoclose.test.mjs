@@ -70,7 +70,7 @@ test('a follow-up flag you set keeps it; one the app set does not', () => {
 test('a queued prompt or an unsent draft keeps it', () => {
   const queued = state([agent('a')], { queue: { a: [{ id: 'q', text: 'then push', at: now }] } });
   assert.deepEqual(closable(queued, now, all(safe)), []);
-  assert.deepEqual(closable(state([agent('a')]), now, all(safe), day, (id) => id === 'a'), []);
+  assert.deepEqual(closable(state([agent('a')]), now, all(safe), { hasDraft: (id) => id === 'a' }), []);
 });
 
 test('only threads whose log the app reads, with a session', () => {
@@ -88,5 +88,11 @@ test('switched off, or before the daemon has loaded, nothing is closed or read',
 
 test('a shorter wait can be given', () => {
   const a = agent('a', { status_changed_at: now - 60_000 });
-  assert.deepEqual(closable(state([a]), now, all(safe), 60_000), ['a']);
+  assert.deepEqual(closable(state([a]), now, all(safe), { after: 60_000 }), ['a']);
+});
+
+test('one closed this way and brought back stays, until it works again', () => {
+  const s = state([agent('a')]);
+  assert.deepEqual(closable(s, now, all(safe), { closedAt: { a: now - day } }), []);
+  assert.deepEqual(closable(s, now, all(safe), { closedAt: { a: now - 2 * day } }), ['a']);
 });
