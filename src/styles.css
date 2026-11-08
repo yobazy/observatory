@@ -5063,6 +5063,7 @@ td.task-last {
   .rd-compose > .rd-wait,
   .rd-catchup,
   .rd-catchup.is-busy .rd-catchup-icon,
+  .rd-next,
   .rd-open,
   .rd-picked,
   .rd-pulse,
@@ -7865,6 +7866,36 @@ button.board-main:hover .board-text {
 }
 .rd-steps li > code {
   flex: 1 1 0;
+}
+
+/* What you might send next, under the latest reply; a tap puts one in the box. */
+.rd-next {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+  animation: fade 180ms ease-out both;
+}
+.rd-next-chip {
+  max-width: 100%;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 120ms,
+    border-color 120ms;
+}
+.rd-next-chip:hover,
+.rd-next-chip:focus-visible {
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 /* Decisions earlier replies left open, folded above the reply box. */

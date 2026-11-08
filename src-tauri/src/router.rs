@@ -3,7 +3,9 @@
 //! and its reply comes back for the webview to read as a plan. Which CLI is
 //! the desktop app's `routerCommand` pref. It's split into words and run
 //! directly, never through a shell, in an empty folder of its own. The
-//! tagging prompt (tagging.ts) runs the same way, through `tagCommand`.
+//! tagging prompt (tagging.ts) runs the same way, through `tagCommand`, and
+//! so does the Read view's next-prompt suggestions (nextprompts.ts), through
+//! `suggestCommand`.
 
 use serde_json::Value;
 use std::io::{Read, Write};
@@ -17,6 +19,10 @@ use tauri::AppHandle;
 /// saved to history or usage scans, and no tools, since it only reads the
 /// prompt and replies. A `routerCommand` pref replaces it whole.
 pub const DEFAULT_COMMAND: &str = r#"claude -p --no-session-persistence --tools """#;
+/// Matches DEFAULT_SUGGEST in nextprompts.ts.
+const SUGGEST_COMMAND: &str = "claude -p --model haiku --no-session-persistence";
+/// Suggestions are only worth having while you're still reading the reply.
+const SUGGEST_TIMEOUT: Duration = Duration::from_secs(60);
 /// Routing a long list on a slow model can take a while, but not forever.
 const TIMEOUT: Duration = Duration::from_secs(120);
 /// Far more than any plan; the rest of a runaway reply is dropped.
@@ -247,6 +253,41 @@ pub async fn tag_threads(app: AppHandle, prompt: String) -> Result<String, Strin
     .map_err(|e| e.to_string())?
 }
 
+/// The suggestions command as words: Err unless they're turned on, or when
+/// it's set to "off"; a cheap model when it isn't set.
+fn suggest_words(on: bool, command: Option<&str>) -> Result<Vec<String>, String> {
+    if !on {
+        return Err("Next-prompt suggestions are off".into());
+    }
+    match command {
+        Some(c) if c.eq_ignore_ascii_case("off") => Err("Next-prompt suggestions are off".into()),
+        Some(c) => split_command(c),
+        None => split_command(SUGGEST_COMMAND),
+    }
+}
+
+/// Suggest next prompts: the suggestions prompt (nextprompts.ts) to the
+/// `suggestCommand` CLI, its reply back as text.
+#[tauri::command]
+pub async fn suggest_next(app: AppHandle, prompt: String) -> Result<String, String> {
+    let on = crate::settings::read_desktop_prefs(app.clone())
+        .get("suggestNext")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let words = suggest_words(on, configured(&app, "suggestCommand").as_deref())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        run(
+            &words,
+            prompt,
+            &neutral_dir(),
+            login_path(),
+            SUGGEST_TIMEOUT,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +311,21 @@ mod tests {
         assert_eq!(words("echo $HOME; rm"), ["echo", "$HOME;", "rm"]);
         assert!(split_command("claude \"-p").is_err());
         assert!(words("   ").is_empty());
+    }
+
+    #[test]
+    fn suggestions_are_off_until_turned_on_then_a_cheap_model() {
+        assert!(suggest_words(false, None).is_err());
+        assert!(suggest_words(false, Some("codex exec")).is_err());
+        assert_eq!(
+            suggest_words(true, None).unwrap()[0..3],
+            ["claude", "-p", "--model"]
+        );
+        assert_eq!(
+            suggest_words(true, Some("codex exec")).unwrap(),
+            ["codex", "exec"]
+        );
+        assert!(suggest_words(true, Some("OFF")).is_err());
     }
 
     #[test]
