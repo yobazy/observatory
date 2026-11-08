@@ -185,6 +185,17 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     t.loadAddon(new Unicode11Addon());
     t.unicode.activeVersion = "11";
 
+    // The scrollbar stays faint while the pointer is only resting on the
+    // terminal, and firms up while you scroll (styles.css, .is-scrolling).
+    const el = host.current;
+    let still: ReturnType<typeof setTimeout> | undefined;
+    const scrolling = () => {
+      el?.classList.add("is-scrolling");
+      clearTimeout(still);
+      still = setTimeout(() => el?.classList.remove("is-scrolling"), 900);
+    };
+    el?.addEventListener("wheel", scrolling, { passive: true, capture: true });
+
     // Shift+Enter is a newline in Claude Code and friends: send ESC CR
     // (what their terminal setup maps it to) instead of a bare CR.
     t.attachCustomKeyEventHandler((e) => {
@@ -196,6 +207,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       if (e.metaKey && !e.altKey && !e.ctrlKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
         if (e.type === "keydown") {
           e.preventDefault();
+          scrolling();
           const up = e.key === "ArrowUp";
           if (e.shiftKey) {
             if (up) t.scrollToTop();
@@ -262,6 +274,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     return () => {
       disposed = true;
       observer.disconnect();
+      clearTimeout(still);
+      el?.removeEventListener("wheel", scrolling, { capture: true });
       window.removeEventListener("observatory:slid", onSlid);
       unlink();
       files.current?.dispose();
