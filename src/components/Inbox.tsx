@@ -1,57 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { isPreview } from "../nebula/client";
-import { flash, getState, setState, useAppState } from "../nebula/store";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flash, setState, useAppState } from "../nebula/store";
 import { enqueue } from "../nebula/queue";
-import { CATCH_UP, answerText, pendingCard, suggested, typedAnswers, type Pending } from "../nebula/replycard";
+import { keepPutAway, useWaiting, type Waiting } from "../nebula/decisions";
+import { CATCH_UP, answerText, asksYou, isCard, readCard, suggested, typedAnswers, type Card } from "../nebula/replycard";
 import { relativeTime } from "../nebula/status";
-import type { Transcript } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
 import { useOverlayKeys } from "./Overlay";
-import { AskText, CardReply, Where, toHtml } from "./Reader";
+import { AskText, CardReply, Md, Where, toHtml } from "./Reader";
+import { QuickAnswer } from "./QuickAnswer";
 
-/** A thread whose latest reply waits on your decisions. */
-interface Waiting extends Pending {
-  agent: Agent;
-}
-
-/** Earlier replies whose open decisions you put away here, as
- *  "agent:entry", so they stay away the next time Decisions opens. */
-const PUT_AWAY = "observatory.decisions.putAway";
-function putAway(): Set<string> {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(PUT_AWAY) ?? "[]") as string[]);
-  } catch {
-    return new Set();
-  }
-}
-function keepPutAway(keys: Set<string>) {
-  try {
-    // The newest few hundred: enough for any thread still around.
-    localStorage.setItem(PUT_AWAY, JSON.stringify([...keys].slice(-300)));
-  } catch {
-    // Private mode or full: put away for this visit only.
-  }
-}
-
-const keyOf = (w: Waiting) => `${w.agent.id}:${w.n}`;
-
-/** How many threads the inbox last found waiting, for its sidebar entry. */
-let lastCount: number | null = null;
-
-async function waitingOn(agent: Agent): Promise<Waiting | null> {
-  if (!agent.session_id) return null;
-  const t: Transcript | null = isPreview()
-    ? (await import("../nebula/mock")).mockTranscript(getState(), agent.id)
-    : await invoke<Transcript | null>("thread_transcript", { session: agent.session_id, from: null, kind: agent.kind }).catch(() => null);
-  const got = t && pendingCard(t.entries);
-  if (!got) return null;
-  const away = putAway();
-  const earlier = got.earlier.filter((d) => !away.has(`${agent.id}:${d.entry}`));
-  // Put away everything earlier, and the latest reply asks nothing itself.
-  if (!earlier.length && !got.card.asks.length && !got.card.asksNote) return null;
-  return { ...got, agent, earlier };
-}
+const keyOf = (w: Waiting) => `${w.agent.id}:${w.prompt ? `p${w.agent.status_changed_at}` : w.n}`;
 
 /** Decisions (⌥⌘J): every thread whose latest reply asks you to decide
  *  something, as its card, to answer one after another without opening each. */
@@ -59,28 +17,13 @@ export function InboxView() {
   const state = useAppState();
   const head = useRef<HTMLDivElement>(null);
   useOverlayKeys(head);
-  // Threads that have finished a turn; one still working can't be answered yet.
-  const idle = useMemo(
-    () =>
-      Object.values(state.agents)
-        .filter((a) => !a.archived && a.session_id && a.status !== "running")
-        .sort((a, b) => b.status_changed_at - a.status_changed_at),
-    [state.agents],
-  );
-  const key = idle.map((a) => `${a.id}:${a.status_changed_at}`).join(",");
-  const [found, setFound] = useState<Waiting[] | null>(null);
+  const found = useWaiting();
+  // How long each has waited, kept current while the list is open.
+  const [, tick] = useState(0);
   useEffect(() => {
-    let live = true;
-    void Promise.all(idle.map(waitingOn)).then((all) => {
-      if (!live) return;
-      const waiting = all.filter((w): w is Waiting => !!w);
-      lastCount = waiting.length;
-      setFound(waiting);
-    });
-    return () => {
-      live = false;
-    };
-  }, [key]);
+    const t = window.setInterval(() => tick((n) => n + 1), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
   // Answered here: gone from the list while the thread takes it up. The
   // thread starts working at once and so drops out of `found`; a card on
   // its way out keeps its place until its animation ends.
@@ -100,8 +43,8 @@ export function InboxView() {
             {found === null
               ? "Reading your threads…"
               : shown.length
-                ? `${shown.length === 1 ? "1 thread waits" : `${shown.length} threads wait`} on you to decide something`
-                : "No thread is waiting on a decision."}
+                ? `${shown.length === 1 ? "1 thread waits" : `${shown.length} threads wait`} on you`
+                : "No thread is waiting on you."}
           </p>
         </div>
         <div className="usage-controls" ref={head}>
@@ -115,12 +58,15 @@ export function InboxView() {
           const k = keyOf(w);
           const isLeaving = leaving.some((l) => keyOf(l.w) === k);
           const wt = state.worktrees[w.agent.worktree_id];
+          const project = state.projects[wt?.project_id ?? ""]?.name ?? "";
+          const branch = wt?.branch ?? "";
+          if (w.prompt) return <PromptItem key={k} waiting={w} project={project} branch={branch} root={wt?.path ?? ""} />;
           return (
             <InboxItem
               key={k}
-              waiting={w}
-              project={state.projects[wt?.project_id ?? ""]?.name ?? ""}
-              branch={wt?.branch ?? ""}
+              waiting={w as Waiting & { card: Card }}
+              project={project}
+              branch={branch}
               root={wt?.path ?? ""}
               leaving={isLeaving}
               onSent={(animate) => {
@@ -148,7 +94,7 @@ function InboxItem({
   onSent,
   onGone,
 }: {
-  waiting: Waiting;
+  waiting: Waiting & { card: Card };
   project: string;
   branch: string;
   /** Its checkout, for the paths its reply names. */
@@ -177,20 +123,27 @@ function InboxItem({
     .map(([quote, said]) => `About your reply that starts "${quote}": ${said}`);
   // Answers to earlier replies keep a paragraph of their own, as in the Read view.
   const outgoing = [answerText(picks, draft), backLines.join("\n")].filter(Boolean).join("\n\n");
+  // Answering only earlier replies sends the thread off with its latest
+  // decisions unsaid, and it won't wait here for them again.
+  const latestLeft = backLines.length > 0 && card.asks.some((a) => a.options.length) && !answerText(picks, draft);
   const ghost = !draft && !answerText(picks, "") && !backLines.length ? answerText(recommended, "") : "";
   const self = useRef<HTMLElement>(null);
   // Answered: the card slides away and its space closes, then it leaves the
   // list. You stay here for the next one.
+  // Slides away, then leaves the list; you stay for the next one.
+  const leave = () => {
+    const el = self.current;
+    const animate = !!el && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Measured before the class goes on, for the height to close from.
+    if (el && animate) el.style.setProperty("--h", `${el.offsetHeight}px`);
+    onSent(animate);
+  };
   const send = async () => {
     if (!outgoing || leaving) return;
     try {
       const how = await enqueue(agent, outgoing, { stay: true });
       flash(how === "queued" ? `Queued for ${agent.name}` : `Sent to ${agent.name}`);
-      const el = self.current;
-      const animate = !!el && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-      // Measured before the class goes on, for the height to close from.
-      if (el && animate) el.style.setProperty("--h", `${el.offsetHeight}px`);
-      onSent(animate);
+      leave();
     } catch {
       flash(`Couldn't send to ${agent.name}. Your answer is still here.`, 6000);
     }
@@ -204,32 +157,7 @@ function InboxItem({
         if (e.target === e.currentTarget && leaving) onGone();
       }}
     >
-      <div className="inbox-head">
-        <span className="inbox-name">{agent.name}</span>
-        {project && <span className="inbox-project">{project}</span>}
-        {branch && (
-          <span className="inbox-branch" title={`On branch ${branch}`}>
-            {branch}
-          </span>
-        )}
-        {agent.status_changed_at > 0 && (
-          <span className="inbox-age" title={`Waiting since ${new Date(agent.status_changed_at).toLocaleString()}`}>
-            waiting {relativeTime(agent.status_changed_at)}
-          </span>
-        )}
-        <button
-          className="link-btn"
-          onClick={() => {
-            setState((s) => ({
-              view: "sessions",
-              selectedProject: s.worktrees[agent.worktree_id]?.project_id ?? s.selectedProject,
-              selectedSession: { Agent: agent.id },
-            }));
-          }}
-        >
-          Open thread
-        </button>
-      </div>
+      <ItemHead agent={agent} project={project} branch={branch} />
       {asked && <Asked text={asked} />}
       <Where.Provider value={{ from: agent.id, root, prUrl: null, turnEndedAt: null }}>
         <CardReply
@@ -249,7 +177,7 @@ function InboxItem({
       </Where.Provider>
       {earlier.length > 0 && (
         // Folded while the latest reply asks its own; open when it's all there is.
-        <details className="inbox-earlier" open={!card.asks.length && !card.asksNote}>
+        <details className="inbox-earlier" open={!asksYou(card)}>
           <summary>
             {earlierCount === 1 ? "1 decision left open earlier" : `${earlierCount} decisions left open earlier`}
             {backLines.length > 0 && (
@@ -263,10 +191,10 @@ function InboxItem({
                 <button
                   className="link-btn"
                   onClick={() => {
-                    const all = putAway();
-                    all.add(`${agent.id}:${d.entry}`);
-                    keepPutAway(all);
+                    keepPutAway(agent.id, d.entry);
                     setAway((x) => new Set(x).add(d.entry));
+                    // That was all it waited on: nothing left to answer here.
+                    if (earlier.length === 1 && !asksYou(card)) leave();
                     setBack(({ [d.entry]: _, ...rest }) => rest);
                   }}
                   title="These don't matter any more: don't list them again"
@@ -296,7 +224,31 @@ function InboxItem({
               ))}
             </div>
           ))}
+          <p className="inbox-earlier-foot">
+            Not sure these still matter?{" "}
+            <button
+              className="link-btn"
+              disabled={leaving}
+              onClick={() => {
+                void enqueue(agent, CATCH_UP, { stay: true }).then(
+                  () => {
+                    flash(`Asked ${agent.name} to catch you up`);
+                    leave();
+                  },
+                  () => flash(`Couldn't ask ${agent.name} to catch you up`, 6000),
+                );
+              }}
+              title="Ask for a fresh card: where it stands, and every decision still open"
+            >
+              Catch me up
+            </button>
+          </p>
         </details>
+      )}
+      {latestLeft && (
+        <p className="inbox-hint" role="status">
+          This answers the earlier replies only. Its latest decisions above go unanswered.
+        </p>
       )}
       <div className="inbox-compose">
         <input
@@ -322,19 +274,84 @@ function InboxItem({
   );
 }
 
+/** A thread's name, where it is, how long it has waited, and a way in. */
+function ItemHead({ agent, project, branch, prompt = false }: { agent: Agent; project: string; branch: string; prompt?: boolean }) {
+  return (
+    <div className="inbox-head">
+      <span className="inbox-name">{agent.name}</span>
+      {project && <span className="inbox-project">{project}</span>}
+      {branch && (
+        <span className="inbox-branch" title={`On branch ${branch}`}>
+          {branch}
+        </span>
+      )}
+      {prompt && <span className="inbox-kind">in its terminal</span>}
+      {agent.status_changed_at > 0 && (
+        <span className="inbox-age" title={`Waiting since ${new Date(agent.status_changed_at).toLocaleString()}`}>
+          waiting {relativeTime(agent.status_changed_at)}
+        </span>
+      )}
+      <button className="link-btn" onClick={() => openThread(agent)} aria-label={`Open ${agent.name}`}>
+        Open thread
+      </button>
+    </div>
+  );
+}
+
+function openThread(agent: Agent) {
+  setState((s) => ({
+    view: "sessions",
+    selectedProject: s.worktrees[agent.worktree_id]?.project_id ?? s.selectedProject,
+    selectedSession: { Agent: agent.id },
+  }));
+}
+
+/** A thread stopped on a choice in its terminal (a permission, a question):
+ *  what it was doing, and the choice as buttons. Picking one answers the
+ *  terminal; the thread then works on and leaves the list. */
+function PromptItem({ waiting, project, branch, root }: { waiting: Waiting; project: string; branch: string; root: string }) {
+  const { agent, asked, said } = waiting;
+  const card = useMemo(() => (said ? readCard(said) : null), [said]);
+  return (
+    <article className="inbox-item">
+      <ItemHead agent={agent} project={project} branch={branch} prompt />
+      {asked && <Asked text={asked} />}
+      {said && card && (
+        <Where.Provider value={{ from: agent.id, root, prUrl: null, turnEndedAt: null }}>
+          {isCard(card) && card.headline ? (
+            <p className="inbox-said" dangerouslySetInnerHTML={{ __html: toHtml(card.headline, true) }} />
+          ) : (
+            <Md className="inbox-said" text={said} />
+          )}
+        </Where.Provider>
+      )}
+      <QuickAnswer agent={agent} onOpen={() => openThread(agent)} every={4000} />
+    </article>
+  );
+}
+
 /** What you said that set this turn off: one line, all of it on a click. */
 function Asked({ text }: { text: string }) {
   const [full, setFull] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const line = useRef<HTMLSpanElement>(null);
   const said = text.trim() === CATCH_UP ? "Catch me up" : text.trim();
+  useLayoutEffect(() => {
+    const el = line.current;
+    if (el && !full) setClamped(el.scrollWidth > el.clientWidth || said.includes("\n"));
+  }, [said, full]);
   return (
-    <button
-      className={`inbox-asked${full ? " is-full" : ""}`}
-      onClick={() => setFull(!full)}
-      aria-expanded={full}
-      title={full ? "Show less" : "Show all of it"}
-    >
-      <span className="inbox-asked-label">You asked</span> {said}
-    </button>
+    <p className={`inbox-asked${full ? " is-full" : ""}`}>
+      <span className="inbox-asked-label">You asked</span>
+      <span className="inbox-asked-text" ref={line}>
+        {said}
+      </span>
+      {(clamped || full) && (
+        <button className="link-btn" onClick={() => setFull(!full)} aria-expanded={full}>
+          {full ? "Less" : "All of it"}
+        </button>
+      )}
+    </p>
   );
 }
 
@@ -342,18 +359,19 @@ function Asked({ text }: { text: string }) {
 export function InboxEntry() {
   const state = useAppState();
   const on = state.view === "inbox";
+  const count = useWaiting()?.length ?? null;
   return (
     <button
-      className={`side-stat${lastCount ? " is-hot" : ""}${on ? " is-on" : ""}`}
+      className={`side-stat${count ? " is-hot" : ""}${on ? " is-on" : ""}`}
       onClick={() => setState({ view: on ? "sessions" : "inbox" })}
-      title={`Decisions: ${lastCount === null ? "" : `${lastCount || "none"} waiting. `}Every thread whose latest reply asks you to decide something, to answer from one place (⌥⌘J)`}
+      title={`Decisions: ${count === null ? "" : `${count || "none"} waiting. `}Every thread waiting on you to decide something or answer its terminal, to answer from one place (⌥⌘J)`}
     >
       <span className="side-stat-top">
         <ForkGlyph />
-        {!!lastCount && <span className="side-stat-badge" aria-hidden />}
+        {!!count && <span className="side-stat-badge" aria-hidden />}
       </span>
-      {/* Counted when Decisions last opened; a dash until then. */}
-      <span className="side-stat-value">{lastCount ?? "–"}</span>
+      {/* A dash while the threads are first read. */}
+      <span className="side-stat-value">{count ?? "–"}</span>
       <span className="side-stat-label">Decisions</span>
     </button>
   );

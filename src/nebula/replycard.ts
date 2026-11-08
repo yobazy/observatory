@@ -592,10 +592,43 @@ export function pendingCard(entries: { n: number; kind: string; text: string }[]
   const last = [...entries].reverse().find((e) => e.kind === "claude" || e.kind === "you");
   if (!last || last.kind !== "claude") return null;
   const card = readCard(last.text);
-  const earlier = openDecisions(entries, last.n);
-  const asking = card.asks.length > 0 || !!card.asksNote;
   const open = card.verdict?.tone === "wait" || card.verdict?.tone === "bad";
-  if (!asking && !(earlier.length && open)) return null;
-  const asked = [...entries].reverse().find((e) => e.kind === "you" && e.n < last.n)?.text ?? "";
-  return { n: last.n, card, asked, earlier };
+  // A reply that says it's safe to close has moved past what was asked before.
+  const earlier = card.verdict?.tone === "done" ? [] : openDecisions(entries, last.n);
+  if (!asksYou(card) && !(earlier.length && open)) return null;
+  return { n: last.n, card, asked: askedBefore(entries, last.n), earlier };
+}
+
+/** What set a turn off: the last thing you said before entry `n` that
+ *  wasn't only answers to decisions. */
+export function askedBefore(entries: { n: number; kind: string; text: string }[], n: number): string {
+  return [...entries].reverse().find((e) => e.kind === "you" && e.n < n && !onlyAnswers(e.text))?.text ?? "";
+}
+
+/** What a thread stopped on to ask in its terminal: what you asked, and
+ *  the last thing it said before the prompt came up. */
+export function promptContext(entries: { n: number; kind: string; text: string }[]): { asked: string; said: string } {
+  const asked = [...entries].reverse().find((e) => e.kind === "you" && !onlyAnswers(e.text));
+  // Only what it said since you last spoke: the card you just answered
+  // isn't where it stands now.
+  const lastYou = [...entries].reverse().find((e) => e.kind === "you")?.n ?? -1;
+  const said = [...entries].reverse().find((e) => e.kind === "claude" && e.n > lastYou);
+  return { asked: asked?.text ?? "", said: said?.text ?? "" };
+}
+
+/** The card itself asks you something: numbered decisions, or a Needs
+ *  you note on a card that isn't finished ("Needs you: Nothing." isn't). */
+export const asksYou = (card: Card) => card.asks.length > 0 || (!emptyNote(card.asksNote) && card.verdict?.tone !== "done");
+
+/** A Needs you that says there's nothing: "Nothing.", "- None", "n/a". */
+export const emptyNote = (note: string) => !note.trim() || /^[-*•\s]*(nothing|none|n\/a|—|-)[\s.!:;)—-]*$/i.test(note.trim());
+
+/** A message that only answers decisions: "1 A, 2 B", or lines said
+ *  against earlier replies. */
+function onlyAnswers(text: string): boolean {
+  const rest = text
+    .replace(/^About your reply that starts ".+": [^\n]+$/gm, "")
+    .replace(/\b\d{1,2}\s*[A-Za-z]\b/g, "")
+    .replace(/\band\b|[,.;&\s]/gi, "");
+  return !rest && text.trim() !== "";
 }

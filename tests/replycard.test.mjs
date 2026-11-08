@@ -413,6 +413,24 @@ test('Decisions also lists a Needs you without options, and decisions left open 
   assert.equal(pendingCard([...earlier, { n: 2, kind: 'claude', text: 'Done.' }]), null);
 });
 
+test('Decisions skips a Needs you that says nothing, earlier asks on a safe-to-close card, and answer-only messages as what you asked', async () => {
+  const { pendingCard } = await import('../src/nebula/replycard.ts');
+  const { emptyNote } = await import('../src/nebula/replycard.ts');
+  assert.equal(emptyNote('Nothing yet, but confirm the API key'), false);
+  for (const note of ['Nothing.', '- None', 'n/a']) {
+    assert.equal(pendingCard([{ n: 0, kind: 'you', text: 'go' }, { n: 1, kind: 'claude', text: `**Done.**\n\n**Needs you**\n${note}` }]), null, note);
+  }
+  const asks = '**Needs you**\n1. Ship?  A yes · B no';
+  const entries = [
+    { n: 0, kind: 'you', text: 'fix the header' },
+    { n: 1, kind: 'claude', text: '**Needs you**\n1. Queue or lock?  A queue · B lock' },
+    { n: 2, kind: 'you', text: 'About your reply that starts "x": 2 B\n\n1 A, 3 B' },
+  ];
+  const safe = pendingCard([...entries, { n: 3, kind: 'claude', text: `${asks}\n\n**✅ Safe to close.**` }]);
+  assert.deepEqual(safe?.earlier, []);
+  assert.equal(safe?.asked, 'fix the header');
+});
+
 test('answers written in, or given in the tray alongside taps, count as answered', async () => {
   const { openDecisions, answersSaid } = await import('../src/nebula/replycard.ts');
   assert.deepEqual(answersSaid('1 A\n2: keep it for a week'), { 1: 'A', 2: 'keep it for a week' });
@@ -529,4 +547,19 @@ test('a question under a lead-in line or bold heading is still a decision', () =
     readCard('**Needs you**\nBefore you sign:\n1. Pay the onboarding time.\n2. Which start date works for you?').asksNote,
     /Before you sign:\n1\. Pay the onboarding time\./,
   );
+});
+
+test('a terminal prompt is shown with what you asked and what the thread said this turn', async () => {
+  const { promptContext } = await import('../src/nebula/replycard.ts');
+  const entries = [
+    { n: 0, kind: 'you', text: 'fix the header' },
+    { n: 1, kind: 'claude', text: 'Header fixed.' },
+    { n: 2, kind: 'you', text: '1 A' },
+    { n: 3, kind: 'you', text: 'now run the e2e suite' },
+  ];
+  assert.deepEqual(promptContext(entries), { asked: 'now run the e2e suite', said: '' });
+  // A card you just answered isn't what it's doing now.
+  assert.deepEqual(promptContext(entries.slice(0, 3)), { asked: 'fix the header', said: '' });
+  assert.deepEqual(promptContext([...entries, { n: 4, kind: 'claude', text: 'Running it.' }]), { asked: 'now run the e2e suite', said: 'Running it.' });
+  assert.deepEqual(promptContext(entries.slice(0, 2)), { asked: 'fix the header', said: 'Header fixed.' });
 });
