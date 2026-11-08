@@ -2,7 +2,7 @@
   "moment": "2026-10-30T20-25-03-826Z",
   "family": "sent",
   "note": "The text didnt show up on reader after i submitted it",
-  "fixedBy": "A message that starts with a picture shows its words in the Read view",
+  "fixedBy": "#166 A message that starts with a picture shows its words in the Read view",
   "source": "The first user record of the thread's Claude log: one text block that starts with [Image #1] and holds a paste, then two image blocks. The words and the paste are replaced with neutral text; the block layout is kept.",
   "checks": [
     {
