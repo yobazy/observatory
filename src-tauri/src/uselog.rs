@@ -6,7 +6,7 @@ use serde_json::Value;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 const FILE: &str = "usage-log.jsonl";
 /// Past this the log moves aside to `usage-log.1.jsonl`, replacing the one
@@ -14,10 +14,7 @@ const FILE: &str = "usage-log.jsonl";
 const ROTATE_AT: u64 = 20 * 1024 * 1024;
 
 fn log_path(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|d| d.join(FILE))
-        .map_err(|e| e.to_string())
+    crate::app_dirs::data_dir(app).map(|d| d.join(FILE))
 }
 
 fn rotated(path: &std::path::Path) -> PathBuf {

@@ -1,4 +1,5 @@
 mod activity;
+mod app_dirs;
 mod automations;
 mod cards;
 mod codex_log;
