@@ -245,7 +245,11 @@ function InboxItem({
           </p>
         </details>
       )}
-      {latestLeft && <p className="inbox-hint">This answers the earlier replies only. Its latest decisions above go unanswered.</p>}
+      {latestLeft && (
+        <p className="inbox-hint" role="status">
+          This answers the earlier replies only. Its latest decisions above go unanswered.
+        </p>
+      )}
       <div className="inbox-compose">
         <input
           value={draft}
@@ -287,7 +291,7 @@ function ItemHead({ agent, project, branch, prompt = false }: { agent: Agent; pr
           waiting {relativeTime(agent.status_changed_at)}
         </span>
       )}
-      <button className="link-btn" onClick={() => openThread(agent)}>
+      <button className="link-btn" onClick={() => openThread(agent)} aria-label={`Open ${agent.name}`}>
         Open thread
       </button>
     </div>
@@ -321,7 +325,7 @@ function PromptItem({ waiting, project, branch, root }: { waiting: Waiting; proj
           )}
         </Where.Provider>
       )}
-      <QuickAnswer agent={agent} onOpen={() => openThread(agent)} />
+      <QuickAnswer agent={agent} onOpen={() => openThread(agent)} every={4000} />
     </article>
   );
 }

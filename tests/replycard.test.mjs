@@ -415,7 +415,9 @@ test('Decisions also lists a Needs you without options, and decisions left open 
 
 test('Decisions skips a Needs you that says nothing, earlier asks on a safe-to-close card, and answer-only messages as what you asked', async () => {
   const { pendingCard } = await import('../src/nebula/replycard.ts');
-  for (const note of ['Nothing.', '- None', 'nothing, all done']) {
+  const { emptyNote } = await import('../src/nebula/replycard.ts');
+  assert.equal(emptyNote('Nothing yet, but confirm the API key'), false);
+  for (const note of ['Nothing.', '- None', 'n/a']) {
     assert.equal(pendingCard([{ n: 0, kind: 'you', text: 'go' }, { n: 1, kind: 'claude', text: `**Done.**\n\n**Needs you**\n${note}` }]), null, note);
   }
   const asks = '**Needs you**\n1. Ship?  A yes · B no';
@@ -556,6 +558,8 @@ test('a terminal prompt is shown with what you asked and what the thread said th
     { n: 3, kind: 'you', text: 'now run the e2e suite' },
   ];
   assert.deepEqual(promptContext(entries), { asked: 'now run the e2e suite', said: '' });
+  // A card you just answered isn't what it's doing now.
+  assert.deepEqual(promptContext(entries.slice(0, 3)), { asked: 'fix the header', said: '' });
   assert.deepEqual(promptContext([...entries, { n: 4, kind: 'claude', text: 'Running it.' }]), { asked: 'now run the e2e suite', said: 'Running it.' });
-  assert.deepEqual(promptContext(entries.slice(0, 3)), { asked: 'fix the header', said: 'Header fixed.' });
+  assert.deepEqual(promptContext(entries.slice(0, 2)), { asked: 'fix the header', said: 'Header fixed.' });
 });

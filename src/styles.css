@@ -8465,7 +8465,7 @@ button.board-main:hover .board-text {
 }
 /* Stopped on a terminal prompt: a quiet tag, and what it last said. */
 .inbox-kind {
-  color: var(--st-waiting);
+  color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
 }

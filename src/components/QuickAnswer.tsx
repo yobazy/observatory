@@ -10,7 +10,7 @@ const POLL_MS = 1_500;
 /** Answer a waiting agent without opening its terminal: its numbered
  *  choices as buttons when it's showing some (a permission prompt), else
  *  the end of its screen and a line to reply on. */
-export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
+export function QuickAnswer({ agent, onOpen, every = POLL_MS }: { agent: Agent; onOpen: () => void; /** How often to read its screen. */ every?: number }) {
   // undefined while the first read is out; null when there's no live
   // terminal to read.
   const [screen, setScreen] = useState<string[] | null | undefined>(undefined);
@@ -25,7 +25,7 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
       const lines = document.hidden ? undefined : await readScreen(agent).catch(() => null);
       if (!live) return;
       if (lines !== undefined) setScreen(lines);
-      t = setTimeout(read, POLL_MS);
+      t = setTimeout(read, every);
     };
     void read();
     return () => {

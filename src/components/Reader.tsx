@@ -540,7 +540,8 @@ function More({ card, from, pair }: { card: Card; from: string; pair: [string, s
   if (!what.length) return null;
   // Its opening words, unfolded, when they're prose: often what decides it.
   const lead = card.body.trim().split(/\n\s*\n/)[0];
-  const prose = !!lead && !/^(```|~~~|\||[-*+] |\d+\. |#|>)/.test(lead);
+  // Not one that leads into what's folded ("…like this:").
+  const prose = !!lead && !/^(```|~~~|\||[-*+] |\d+\. |#|>|!\[|<)/.test(lead) && !/:\s*$/.test(lead);
   return (
     <>
       {prose && !open && <Md className="rd-lead" text={lead} />}

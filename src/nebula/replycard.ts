@@ -609,8 +609,10 @@ export function askedBefore(entries: { n: number; kind: string; text: string }[]
  *  the last thing it said before the prompt came up. */
 export function promptContext(entries: { n: number; kind: string; text: string }[]): { asked: string; said: string } {
   const asked = [...entries].reverse().find((e) => e.kind === "you" && !onlyAnswers(e.text));
-  // Only what it said this turn: an older reply is about something else.
-  const said = [...entries].reverse().find((e) => e.kind === "claude" && e.n > (asked?.n ?? -1));
+  // Only what it said since you last spoke: the card you just answered
+  // isn't where it stands now.
+  const lastYou = [...entries].reverse().find((e) => e.kind === "you")?.n ?? -1;
+  const said = [...entries].reverse().find((e) => e.kind === "claude" && e.n > lastYou);
   return { asked: asked?.text ?? "", said: said?.text ?? "" };
 }
 
@@ -619,7 +621,7 @@ export function promptContext(entries: { n: number; kind: string; text: string }
 export const asksYou = (card: Card) => card.asks.length > 0 || (!emptyNote(card.asksNote) && card.verdict?.tone !== "done");
 
 /** A Needs you that says there's nothing: "Nothing.", "- None", "n/a". */
-export const emptyNote = (note: string) => !note.trim() || /^[-*•\s]*(nothing|none|n\/a|—|-)(\b[^\n]*)?$/i.test(note.trim());
+export const emptyNote = (note: string) => !note.trim() || /^[-*•\s]*(nothing|none|n\/a|—|-)[\s.!:;)—-]*$/i.test(note.trim());
 
 /** A message that only answers decisions: "1 A, 2 B", or lines said
  *  against earlier replies. */
