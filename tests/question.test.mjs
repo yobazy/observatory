@@ -236,3 +236,119 @@ test('with the mark on your own answer, digits would type there, so choices are 
   ));
   assert.equal(q, null);
 });
+
+// Drawn by Claude Code 2.1.319, read through a terminal.
+const previewFoot = ['', 'Enter to select · ↑/↓ to navigate · n to add notes · Tab to switch questions · Esc to cancel'];
+const previewed = (marks, topTabs = ['←  ☐ Layout  ☐ Food  ✔ Submit  →']) => [
+  rule,
+  ...topTabs,
+  '',
+  'Which layout do you want?',
+  '',
+  `${marks[0]} 1. Stacked                      ┌──────────────────────────────────────────┐`,
+  `${marks[1]} 2. Grid                         │ [ a ]                                    │`,
+  '                                  │ [ b ]                                    │',
+  '                                  └──────────────────────────────────────────┘',
+  '',
+  '                                  Notes: press n to add notes',
+  '',
+  rule,
+  `${marks[2]} Chat about this`,
+  ...previewFoot,
+];
+
+test('choices with previews leave the box out, and a digit needs Enter after it', () => {
+  const q = findQuestion(previewed(['❯', ' ', ' ']));
+  assert.equal(q.prompt, 'Which layout do you want?');
+  assert.deepEqual(q.detail, ['☐ Layout  ☐ Food  ✔ Submit']);
+  assert.deepEqual(q.choices.map((c) => [c.label, c.selected, !!c.stays]), [
+    ['Stacked', true, true],
+    ['Grid', false, true],
+    ['Chat about this', false, false],
+  ]);
+  assert.deepEqual(q.choices[1].keys, ['2', '\r']);
+  // Chat has no number, so it's a step down from the last choice.
+  assert.deepEqual(q.choices[2].keys, ['2', '\x1b[B', '\r']);
+});
+
+test('a lone question with previews ends with its pick, and the mark can sit on Chat', () => {
+  const q = findQuestion(previewed([' ', '❯', '❯'], [' ☐ Layout']));
+  assert.equal(q.detail, undefined);
+  assert.deepEqual(q.choices.map((c) => !!c.stays), [false, false, false]);
+  assert.deepEqual(q.choices.map((c) => c.selected), [false, false, true]);
+});
+
+test('from the chat row a preview choice steps up first, since a digit does nothing there', () => {
+  const q = findQuestion(previewed([' ', '❯', '❯'], [' ☐ Layout']));
+  assert.deepEqual(q.choices[0].keys, ['\x1b[A', '1', '\r']);
+  assert.deepEqual(q.choices[1].keys, ['\x1b[A', '2', '\r']);
+  assert.deepEqual(q.choices[2].keys, ['\r']);
+});
+
+test('a preview form with its notes line open is not read, or digits would land in the note', () => {
+  const screen = previewed(['❯', ' ', ' ']).map((l) => (l.includes('Notes: press n') ? '                                  Notes: shorter please' : l));
+  assert.equal(findQuestion(screen), null);
+});
+
+test('in a short terminal the notes row beside the last choice stays out of its label', () => {
+  const q = findQuestion([
+    rule,
+    ' ☐ Layout',
+    '',
+    'Which layout do you want?',
+    '',
+    '❯ 1. A                           ┌──────────┐',
+    '  2. B                           │ [ a ]    │',
+    '  3. C                           └──────────┘',
+    '  4. D                           Notes: press n to add notes',
+    '',
+    rule,
+    '  Chat about this',
+    ...previewFoot,
+  ]);
+  assert.deepEqual(q.choices.map((c) => c.label), ['A', 'B', 'C', 'D', 'Chat about this']);
+});
+
+test('a preview form that fails to read still counts as a picker', () => {
+  const screen = ['  1. Stacked', '  7. Grid', '', '  Chat about this', ...previewFoot];
+  assert.equal(findQuestion(screen), null);
+  assert.ok(looksLikePicker(screen));
+});
+
+test('in a short terminal the tabs stand in for the rule that scrolled off', () => {
+  const q = findQuestion([
+    '←  ☐ Bus  ☐ Food  ✔ Submit  →',
+    '',
+    'Do you want the bus?',
+    '',
+    '❯ 1. No',
+    '     Walk there.',
+    '  2. Yes',
+    '     Take the 5:30 shuttle.',
+    '  3. Type something.',
+    rule,
+    '  4. Chat about this',
+    ...footer,
+  ]);
+  assert.deepEqual(q.detail, ['☐ Bus  ☐ Food  ✔ Submit']);
+  assert.deepEqual(q.choices.map((c) => !!c.stays), [true, true, true, false]);
+});
+
+test('with no tabs on screen, more steps may follow, so a pick stays', () => {
+  const q = findQuestion([
+    'Do you want the bus?',
+    '',
+    '❯ 1. No',
+    '  2. Yes',
+    '  3. Type something.',
+    rule,
+    '  4. Chat about this',
+    ...footer,
+  ]);
+  assert.deepEqual(q.choices.map((c) => !!c.stays), [true, true, true, false]);
+});
+
+test('a permission prompt keeps an arrow at the end of its command', () => {
+  const q = findQuestion([rule, ' Bash command', '', '   echo next →', '', ' Do you want to proceed?', ' ❯ 1. Yes', '   2. No']);
+  assert.deepEqual(q.detail, ['Bash command', '', 'echo next →']);
+});
