@@ -167,7 +167,7 @@ export function AskText({ n, text }: { n: number; text: string }) {
   );
 }
 
-function Md({ text, className = "" }: { text: string; className?: string }) {
+export function Md({ text, className = "" }: { text: string; className?: string }) {
   const html = useMemo(() => toHtml(text), [text]);
   const el = useRef<HTMLDivElement>(null);
   const where = useContext(Where);
@@ -529,18 +529,24 @@ function More({ card, from, pair }: { card: Card; from: string; pair: [string, s
     card.details && "Details",
   ].filter(Boolean);
   if (!what.length) return null;
+  // Its opening words, unfolded, when they're prose: often what decides it.
+  const lead = card.body.trim().split(/\n\s*\n/)[0];
+  const prose = !!lead && !/^(```|~~~|\||[-*+] |\d+\. |#|>)/.test(lead);
   return (
-    <details className="rd-fold rd-more" onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>More: {what.join(", ")}</summary>
-      {open && (
-        <>
-          <Pictures paths={card.images} from={from} pair={pair} />
-          <Videos paths={card.videos} from={from} />
-          {card.body && <Md text={card.body} />}
-          {card.details && <Md text={card.details} />}
-        </>
-      )}
-    </details>
+    <>
+      {prose && !open && <Md className="rd-lead" text={lead} />}
+      <details className="rd-fold rd-more" onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary>More: {what.join(", ")}</summary>
+        {open && (
+          <>
+            <Pictures paths={card.images} from={from} pair={pair} />
+            <Videos paths={card.videos} from={from} />
+            {card.body && <Md text={card.body} />}
+            {card.details && <Md text={card.details} />}
+          </>
+        )}
+      </details>
+    </>
   );
 }
 

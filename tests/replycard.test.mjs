@@ -546,3 +546,16 @@ test('a question under a lead-in line or bold heading is still a decision', () =
     /Before you sign:\n1\. Pay the onboarding time\./,
   );
 });
+
+test('a terminal prompt is shown with what you asked and what the thread said this turn', async () => {
+  const { promptContext } = await import('../src/nebula/replycard.ts');
+  const entries = [
+    { n: 0, kind: 'you', text: 'fix the header' },
+    { n: 1, kind: 'claude', text: 'Header fixed.' },
+    { n: 2, kind: 'you', text: '1 A' },
+    { n: 3, kind: 'you', text: 'now run the e2e suite' },
+  ];
+  assert.deepEqual(promptContext(entries), { asked: 'now run the e2e suite', said: '' });
+  assert.deepEqual(promptContext([...entries, { n: 4, kind: 'claude', text: 'Running it.' }]), { asked: 'now run the e2e suite', said: 'Running it.' });
+  assert.deepEqual(promptContext(entries.slice(0, 3)), { asked: 'fix the header', said: 'Header fixed.' });
+});

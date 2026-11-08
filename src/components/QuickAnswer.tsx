@@ -78,6 +78,8 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
   if (q) {
     return (
       <div className="qa" role="group" aria-label={`Answer ${agent.name}`}>
+        {/* What it asks about: the command, the file. */}
+        {q.detail && <pre className="rd-ask-detail">{q.detail.join("\n")}</pre>}
         {q.prompt && <p className="qa-prompt">{q.prompt}</p>}
         <div className="qa-choices">
           {q.choices.map((c) => (

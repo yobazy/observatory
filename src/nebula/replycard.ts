@@ -596,9 +596,22 @@ export function pendingCard(entries: { n: number; kind: string; text: string }[]
   // A reply that says it's safe to close has moved past what was asked before.
   const earlier = card.verdict?.tone === "done" ? [] : openDecisions(entries, last.n);
   if (!asksYou(card) && !(earlier.length && open)) return null;
-  // What set this turn off: the last thing you said that wasn't only answers.
-  const asked = [...entries].reverse().find((e) => e.kind === "you" && e.n < last.n && !onlyAnswers(e.text))?.text ?? "";
-  return { n: last.n, card, asked, earlier };
+  return { n: last.n, card, asked: askedBefore(entries, last.n), earlier };
+}
+
+/** What set a turn off: the last thing you said before entry `n` that
+ *  wasn't only answers to decisions. */
+export function askedBefore(entries: { n: number; kind: string; text: string }[], n: number): string {
+  return [...entries].reverse().find((e) => e.kind === "you" && e.n < n && !onlyAnswers(e.text))?.text ?? "";
+}
+
+/** What a thread stopped on to ask in its terminal: what you asked, and
+ *  the last thing it said before the prompt came up. */
+export function promptContext(entries: { n: number; kind: string; text: string }[]): { asked: string; said: string } {
+  const asked = [...entries].reverse().find((e) => e.kind === "you" && !onlyAnswers(e.text));
+  // Only what it said this turn: an older reply is about something else.
+  const said = [...entries].reverse().find((e) => e.kind === "claude" && e.n > (asked?.n ?? -1));
+  return { asked: asked?.text ?? "", said: said?.text ?? "" };
 }
 
 /** The card itself asks you something: numbered decisions, or a Needs

@@ -8439,6 +8439,44 @@ button.board-main:hover .board-text {
   margin-left: auto;
   white-space: nowrap;
 }
+/* A compact card's opening words, two lines at most. */
+.rd-lead {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--muted);
+}
+.rd-lead > :first-child {
+  margin-top: 0;
+}
+.rd-lead > :last-child {
+  margin-bottom: 0;
+}
+/* Stopped on a terminal prompt: a quiet tag, and what it last said. */
+.inbox-kind {
+  color: var(--st-waiting);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.inbox-said {
+  margin: 0;
+  max-height: 7.5em;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  font-size: 13.5px;
+}
+.inbox-item > .qa {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--st-waiting) 7%, transparent);
+}
+.inbox-earlier-foot {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
 .rd-more > summary {
   margin-bottom: 2px;
 }
