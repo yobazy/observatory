@@ -4480,6 +4480,9 @@ td.task-last {
   font-size: 16.5px;
   font-weight: 600;
   line-height: 1.4;
+  /* A long link or path in the headline breaks rather than running past
+     the card, where the pane would cut it off. */
+  overflow-wrap: anywhere;
 }
 .rd-head code {
   font-family: var(--mono);
@@ -4624,6 +4627,14 @@ td.task-last {
 .rd-opt b {
   font-weight: 600;
   color: var(--faint);
+}
+/* An option that's a long link or path wraps inside its pill. */
+.rd-opt {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.rd-opt > span {
+  min-width: 0;
 }
 .rd-opt:hover:not(:disabled) {
   border-color: var(--accent);
@@ -8313,6 +8324,10 @@ button.board-main:hover .board-text {
 }
 .rd-verdict-row .rd-verdict {
   flex: 1;
+  /* A long verdict wraps beside its button instead of pushing it out of
+     the card. */
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding-top: 0;
   border-top: none;
 }
