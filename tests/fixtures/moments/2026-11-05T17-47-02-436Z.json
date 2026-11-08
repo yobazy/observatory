@@ -1,0 +1,43 @@
+{
+  "moment": "2026-11-05T17-47-02-436Z",
+  "family": "choices",
+  "note": "choices missing from reader",
+  "fixedBy": "#147 Answer an agent's questions from the Read view, step by step",
+  "source": "The question text is the pending AskUserQuestion step's target in thread.json. The moment kept no screen, so the form's layout is the real Claude Code 2.1.318 capture #147 used for this same moment. Names and the hotel made neutral.",
+  "checks": [
+    {
+      "reads": "screen",
+      "input": {
+        "screen": [
+          "⏺ Calling the calendar 4 times…",
+          "──────────────────────────────────────────────────────────────────────────────────────────",
+          "←  ☐ First bus  ☐ Second bus  ☐ Old block  ✔ Submit  →",
+          "",
+          "│ The RSVP form requires shuttle answers before it can be submitted. Both shuttles",
+          "│ leave from the hotel. Do you want the first evening's shuttle?",
+          "",
+          "❯ 1. No, thank you",
+          "     You get there yourself. This is what is selected in the",
+          "     unsubmitted form.",
+          "  2. Yes, please",
+          "     Take the 5:30 PM shuttle from the hotel.",
+          "  3. Type something.",
+          "──────────────────────────────────────────────────────────────────────────────────────────",
+          "  4. Chat about this",
+          "",
+          "Enter to select · Tab/Arrow keys to navigate · Esc to cancel"
+        ]
+      },
+      "expect": {
+        "promptEnds": "Do you want the first evening's shuttle?",
+        "choices": [
+          "No, thank you",
+          "Yes, please",
+          "Type something.",
+          "Chat about this"
+        ],
+        "selected": "No, thank you"
+      }
+    }
+  ]
+}

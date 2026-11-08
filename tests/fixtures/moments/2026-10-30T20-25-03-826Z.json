@@ -1,0 +1,66 @@
+{
+  "moment": "2026-10-30T20-25-03-826Z",
+  "family": "sent",
+  "note": "The text didnt show up on reader after i submitted it",
+  "fixedBy": null,
+  "todo": "Still live: typed_prompt in src-tauri/src/turns.rs drops every text block that starts with \"[Image\", so a message whose text opens with an [Image #1] reference is hidden, words and all. thread.json had only a steps entry.",
+  "source": "The first user record of the thread's Claude log: one text block that starts with [Image #1] and holds a paste, then two image blocks. The words and the paste are replaced with neutral text; the block layout is kept.",
+  "checks": [
+    {
+      "reads": "transcript",
+      "input": {
+        "log": [
+          {
+            "type": "user",
+            "timestamp": "2026-10-30T20:24:53.405Z",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[Image #1] a friend gave me a lot of good feedback. let's understand it first. regarding image 1: A) I like the camera icon here.\n\n<pasted_content id=\"294d\">\nThe mascot is great, but it might be better somewhere it doesn't take up space.\n</pasted_content id=\"294d\">\n\n[Image #2]\n"
+                },
+                {
+                  "type": "image",
+                  "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": ""
+                  }
+                },
+                {
+                  "type": "image",
+                  "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": ""
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "assistant",
+            "timestamp": "2026-10-30T20:24:58.000Z",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "id": "t1",
+                  "name": "Bash",
+                  "input": {
+                    "command": "ls docs"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "youContains": [
+          "a friend gave me a lot of good feedback"
+        ]
+      }
+    }
+  ]
+}

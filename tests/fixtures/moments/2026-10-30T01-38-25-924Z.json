@@ -1,0 +1,58 @@
+{
+  "moment": "2026-10-30T01-38-25-924Z",
+  "family": "choices",
+  "note": "Terminal choices dont show up on the reader",
+  "fixedBy": "#126 Answer an MCP server's Accept / Decline prompt from the Read view",
+  "source": "The terminal rows transcribed from screenshot.png (the moment keeps no screen text). Long prose rows shortened; the MCP server name and project id made neutral. The numbered decisions above the prompt are in the agent's prose and must not be read as the prompt.",
+  "checks": [
+    {
+      "reads": "screen",
+      "input": {
+        "screen": [
+          "🔴 Don't close: commit 9a79cf0 isn't pushed, and decision 1 is waiting on you.",
+          "",
+          "1. Apply the two new database changes to production, and then push?",
+          "[ A yes, I'll do it the usual way ] [ B hold for now ]",
+          "",
+          "2. Getting tagged skips the 20-minute cooldown on chat pings. Keep that?",
+          "[ A keep ] [ B give mentions the 20-minute cooldown too ]",
+          "",
+          "[ Pick options to send ]",
+          "",
+          "✻ Cooked for 22m 26s · done 9:25 PM · 2 shells still running",
+          "",
+          "> 1 A, 2 A",
+          "",
+          "● Applying the first migration (the enum value has to land on its own):",
+          "",
+          "  Searched for 1 pattern, called the database, ran 1 shell command",
+          "",
+          "● Now the function change:",
+          "",
+          "● Reading 1 file, calling the database · 10m 36s…",
+          "  ⎿ Fulfilling input required by 'tools/call' (round 1)",
+          "──────────────────────────────────────────────────────────────────── Example Thread ─",
+          "",
+          "────────────────────────────────────────────────────────────────────────────────────",
+          "  MCP server “example-db” requests your input",
+          "",
+          "  This SQL includes destructive operations (DROP, DELETE, TRUNCATE or UPDATE without WHERE).",
+          "  It may permanently remove data, tables, schemas or other objects.",
+          "  Run it on project example-project?",
+          "",
+          "  ❯ Accept    Decline",
+          "",
+          "  Esc to cancel · ↑/↓ to navigate"
+        ]
+      },
+      "expect": {
+        "promptEnds": "Run it on project example-project?",
+        "choices": [
+          "Accept",
+          "Decline"
+        ],
+        "selected": "Accept"
+      }
+    }
+  ]
+}

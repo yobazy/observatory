@@ -1,0 +1,63 @@
+{
+  "moment": "2026-11-06T19-39-40-197Z",
+  "family": "queue",
+  "note": "queue didnt work right in the reader",
+  "fixedBy": "#152 A prompt queued in the Read view can't get stuck behind a finished turn",
+  "source": "thread.json: 1 A sent 19:38:29, queued 19:38:46 while the turn ran, turn ended 19:38:58 with Observatory in the background, and the thread was Done and alive at the moment. #152 found a send whose promise never settled held the thread busy for good; when that send started is inferred (as the turn ended), and the check is a minute after it, as the stall lasted. The terminal reports are the sequences #152 captured from the CLI.",
+  "checks": [
+    {
+      "reads": "card",
+      "input": {
+        "text": "**The work is committed on a new branch, not on `main`, and nothing is pushed**\n\n✅ commit `ef40f97` · 🟠 branch waiting on you\n\n**Needs you**\n1. What should happen to `feature-sync`?\n   - A: merge it into `main` and push\n   - B: merge it into `main`, no push\n   - C: leave it on the branch\n\n🟠 **Keep open:** waiting on 1, because the commit isn't on `main` or pushed yet."
+      },
+      "expect": {
+        "asks": [
+          {
+            "n": 1,
+            "letters": "ABC",
+            "labels": [
+              "merge it into `main` and push",
+              "merge it into `main`, no push",
+              "leave it on the branch"
+            ]
+          }
+        ],
+        "verdict": "wait"
+      }
+    },
+    {
+      "reads": "queue",
+      "input": {
+        "agent": {
+          "status": "finished",
+          "status_changed_at": "2026-11-06T19:38:58Z",
+          "alive": true
+        },
+        "sends": {
+          "sendingSince": "2026-11-06T19:38:58.500Z",
+          "lastSent": "2026-11-06T19:38:29Z"
+        },
+        "onScreen": true,
+        "now": "2026-11-06T19:39:59Z"
+      },
+      "expect": {
+        "hold": null,
+        "canSendNow": true
+      }
+    },
+    {
+      "reads": "reports",
+      "input": {
+        "data": [
+          "\u001b[<35;40;12M",
+          "\u001b[<35;41;12M\u001b[<35;42;12M",
+          "\u001b[I",
+          "\u001b[O"
+        ]
+      },
+      "expect": {
+        "report": true
+      }
+    }
+  ]
+}
