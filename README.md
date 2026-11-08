@@ -293,6 +293,8 @@ scripts/sandbox.sh automations-clean  # remove it
 `scripts/drive` works the sandbox app from a shell, so an agent can check a change without you
 clicking for it: `state`, `view`, `select`, `click`, `type`, `key`, `shot` and more (run it with
 `-h`). `scripts/drive replay <moment dir>` puts a marked moment's view and thread back on screen.
+`scripts/drive run <steps>` does a whole list of those in one go, one per line, and stops at the
+first that fails; its `shot before` and `shot after` land numbered in one folder.
 
 `npm run dev` on its own serves a browser preview with demo data and a canned terminal. It's
 handy for styling, and needs no daemon. The screenshots above are from it:
