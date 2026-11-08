@@ -383,19 +383,25 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, fil
 }
 
 /** A thread's plate: its figure moved by its prompts (or `work`, when the
- *  caller counts its steps too), its sand as deep as the turns it has taken. */
+ *  caller counts its steps too), its sand as deep as the turns it has taken.
+ *  While it works, a ring hums out from its rim (styles.css .plate-hum): a
+ *  CSS animation the compositor runs, so it costs no drawing. */
 export function ThreadPlate({ agent, size, work, loose }: { agent: Agent; size: number; work?: number; loose?: boolean }) {
   const turns = useTurns(agent);
+  const working = agent.status === "running";
   return (
-    <Plate
-      seed={agent.id}
-      work={work ?? agent.recent_prompts.length}
-      tone={plateTone(agent)}
-      size={size}
-      drift={agent.status === "running"}
-      fill={turns}
-      loose={loose}
-    />
+    <span className={`plate-mount${size > 48 ? " is-big" : ""}`}>
+      <Plate
+        seed={agent.id}
+        work={work ?? agent.recent_prompts.length}
+        tone={plateTone(agent)}
+        size={size}
+        drift={working}
+        fill={turns}
+        loose={loose}
+      />
+      {working && !loose && <span className="plate-hum" aria-hidden />}
+    </span>
   );
 }
 

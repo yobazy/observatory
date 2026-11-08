@@ -8790,6 +8790,74 @@ button.board-main:hover .board-text {
   }
 }
 
+/* A working thread's plate hums: a faint ring of its blue leaves the rim
+   and fades, over and over, so you can tell it's working at a glance even
+   when its sand is sparse (ThreadPlate). Only transform and opacity move,
+   on one element, so the compositor runs it without repainting the page
+   or redrawing the plate. It goes when the thread stops working. */
+.plate-mount {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  vertical-align: top;
+  line-height: 0;
+  border-radius: 50%;
+}
+.plate-mount > .plate {
+  display: block;
+}
+.plate-hum {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--plate-running);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: plate-hum 1.6s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+}
+/* A big plate's ring spreads less of its size, or it would reach far past it. */
+.plate-mount.is-big .plate-hum {
+  border-width: 2px;
+  animation-name: plate-hum-big;
+  animation-duration: 2.2s;
+}
+@keyframes plate-hum {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  55% {
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(1.32);
+    opacity: 0;
+  }
+}
+@keyframes plate-hum-big {
+  from {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  55% {
+    opacity: 0.35;
+  }
+  to {
+    transform: scale(1.14);
+    opacity: 0;
+  }
+}
+/* No motion: a still ring at the rim says the same thing. */
+@media (prefers-reduced-motion: reduce) {
+  .plate-hum,
+  .plate-mount.is-big .plate-hum {
+    animation: none;
+    opacity: 0.55;
+    transform: scale(1.1);
+  }
+}
+
 /* ---------- a picked color fills the row ---------- */
 
 /* A project (Icon & color) or task (Color…) in a color of yours is a solid
