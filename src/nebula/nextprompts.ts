@@ -6,6 +6,13 @@
 // Node. Value imports name their .ts files for the same reason.
 import { extractJson } from "./router.ts";
 
+/** Whether a reply is worth suggesting for: you hadn't seen it when you
+ *  opened the thread, or the agent worked while you had it open. Opening an
+ *  old thread just to read it costs nothing. */
+export function freshReply(unseenAtOpen: boolean, workedSinceOpen: boolean): boolean {
+  return unseenAtOpen || workedSinceOpen;
+}
+
 /** How many suggestions show, and how long one may be. */
 export const MAX_PROMPTS = 3;
 export const MAX_PROMPT_LENGTH = 140;
@@ -14,9 +21,12 @@ export const MAX_PROMPT_LENGTH = 140;
 const MAX_REPLY = 6000;
 const MAX_YOURS = 1200;
 
-/** The command a pref names, or null when suggestions are off. */
+/** The command to run, or null when suggestions are off. Off until you turn
+ *  them on in Settings, since each one is a model call; then an unset
+ *  command is a cheap model. */
 export const DEFAULT_SUGGEST = "claude -p --model haiku --no-session-persistence";
-export function suggestCommand(pref: string | undefined): string | null {
+export function suggestCommand(on: boolean | undefined, pref: string | undefined): string | null {
+  if (!on) return null;
   const c = pref?.trim();
   if (!c) return DEFAULT_SUGGEST;
   return c.toLowerCase() === "off" ? null : c;

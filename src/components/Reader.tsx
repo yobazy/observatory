@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { isPreview, runSuggester, sendInput } from "../nebula/client";
-import { buildSuggestPrompt, previewSuggestions, readSuggestions, suggestCommand } from "../nebula/nextprompts";
+import { buildSuggestPrompt, freshReply, previewSuggestions, readSuggestions, suggestCommand } from "../nebula/nextprompts";
 import { flash, getState, projectOfWorktree, subscribe, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
@@ -864,11 +864,18 @@ export function Reader({
   );
   const turns = useMemo(() => turnsOf(t?.entries ?? []), [t?.entries]);
   // What you might send next, asked of a cheap model once the latest reply
-  // is in and the agent has stopped, offered as chips under it.
+  // is in and the agent has stopped, offered as chips under it. Only for a
+  // reply that's new to you, not an old thread opened to read.
   const nextKey = latest >= 0 ? `${thread}:${latest}` : "";
   const [, setNextGot] = useState(0);
   const next = nextKey ? nextFor.get(nextKey) : undefined;
-  const suggesting = !!suggestCommand(state.prefs.suggestCommand) && isIdle(agent);
+  // Taken when the thread opens, before opening marks it seen.
+  const opened = useMemo(() => ({ unseen: agent.unseen, worked: { current: false } }), [agent.id]);
+  if (!isIdle(agent)) opened.worked.current = true;
+  const suggesting =
+    !!suggestCommand(state.prefs.suggestNext, state.prefs.suggestCommand) &&
+    isIdle(agent) &&
+    freshReply(opened.unseen, opened.worked.current);
   useEffect(() => {
     if (!nextKey || !suggesting || nextFor.has(nextKey)) return;
     const all = t?.entries ?? [];

@@ -253,9 +253,12 @@ pub async fn tag_threads(app: AppHandle, prompt: String) -> Result<String, Strin
     .map_err(|e| e.to_string())?
 }
 
-/// The suggestions command as words: a cheap model when it isn't set, Err
-/// when it's set to "off".
-fn suggest_words(command: Option<&str>) -> Result<Vec<String>, String> {
+/// The suggestions command as words: Err unless they're turned on, or when
+/// it's set to "off"; a cheap model when it isn't set.
+fn suggest_words(on: bool, command: Option<&str>) -> Result<Vec<String>, String> {
+    if !on {
+        return Err("Next-prompt suggestions are off".into());
+    }
     match command {
         Some(c) if c.eq_ignore_ascii_case("off") => Err("Next-prompt suggestions are off".into()),
         Some(c) => split_command(c),
@@ -267,7 +270,11 @@ fn suggest_words(command: Option<&str>) -> Result<Vec<String>, String> {
 /// `suggestCommand` CLI, its reply back as text.
 #[tauri::command]
 pub async fn suggest_next(app: AppHandle, prompt: String) -> Result<String, String> {
-    let words = suggest_words(configured(&app, "suggestCommand").as_deref())?;
+    let on = crate::settings::read_desktop_prefs(app.clone())
+        .get("suggestNext")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let words = suggest_words(on, configured(&app, "suggestCommand").as_deref())?;
     tauri::async_runtime::spawn_blocking(move || {
         run(
             &words,
@@ -307,16 +314,18 @@ mod tests {
     }
 
     #[test]
-    fn suggestions_default_to_a_cheap_model_and_turn_off() {
+    fn suggestions_are_off_until_turned_on_then_a_cheap_model() {
+        assert!(suggest_words(false, None).is_err());
+        assert!(suggest_words(false, Some("codex exec")).is_err());
         assert_eq!(
-            suggest_words(None).unwrap()[0..3],
+            suggest_words(true, None).unwrap()[0..3],
             ["claude", "-p", "--model"]
         );
         assert_eq!(
-            suggest_words(Some("codex exec")).unwrap(),
+            suggest_words(true, Some("codex exec")).unwrap(),
             ["codex", "exec"]
         );
-        assert!(suggest_words(Some("OFF")).is_err());
+        assert!(suggest_words(true, Some("OFF")).is_err());
     }
 
     #[test]

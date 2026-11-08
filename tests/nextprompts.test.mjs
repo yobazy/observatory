@@ -5,14 +5,23 @@ import {
   MAX_PROMPTS,
   buildSuggestPrompt,
   readSuggestions,
+  freshReply,
   suggestCommand,
 } from '../src/nebula/nextprompts.ts';
 
-test('the command defaults to a cheap model and can be turned off', () => {
-  assert.equal(suggestCommand(undefined), DEFAULT_SUGGEST);
-  assert.equal(suggestCommand('  '), DEFAULT_SUGGEST);
-  assert.equal(suggestCommand('Off'), null);
-  assert.equal(suggestCommand(' codex exec '), 'codex exec');
+test('suggestions are off until turned on, then default to a cheap model', () => {
+  assert.equal(suggestCommand(undefined, undefined), null);
+  assert.equal(suggestCommand(false, 'codex exec'), null);
+  assert.equal(suggestCommand(true, undefined), DEFAULT_SUGGEST);
+  assert.equal(suggestCommand(true, '  '), DEFAULT_SUGGEST);
+  assert.equal(suggestCommand(true, 'Off'), null);
+  assert.equal(suggestCommand(true, ' codex exec '), 'codex exec');
+});
+
+test('only a reply new to you gets suggestions, not an old thread opened to read', () => {
+  assert.equal(freshReply(false, false), false);
+  assert.equal(freshReply(false, true), true);
+  assert.equal(freshReply(true, false), true);
 });
 
 test('the prompt carries the ends of your message and the reply', () => {

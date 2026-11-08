@@ -374,19 +374,34 @@ function DispatchSettings() {
       </div>
       <div className="setting">
         <div className="setting-text">
-          <label className="setting-label" htmlFor="set-suggest">
+          <label className="setting-label" htmlFor="set-suggest-on">
             Next-prompt suggestions
           </label>
           <span className="setting-hint">
-            The agent CLI that offers a few things you might send next, under a finished thread's latest reply in the
-            Read view, run headless with the prompt on stdin. Empty uses Haiku; <code>off</code> turns them off.
+            A few things you might send next, under a reply that finished while you watched or that you haven't seen
+            yet. Each one is a model call.
+          </span>
+        </div>
+        <Switch
+          id="set-suggest-on"
+          on={prefs.suggestNext === true}
+          onChange={(on) => void savePrefs({ ...prefs, suggestNext: on || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-suggest">
+            Suggestions command
+          </label>
+          <span className="setting-hint">
+            The agent CLI the suggestions come from, run headless with the prompt on stdin. Empty uses Haiku.
           </span>
         </div>
         <TextSetting
           id="set-suggest"
           value={prefs.suggestCommand ?? ""}
           placeholder="claude -p --model haiku --no-session-persistence"
-          suggestions={["off", "claude -p --model haiku --no-session-persistence", "codex exec --skip-git-repo-check"]}
+          suggestions={["claude -p --model haiku --no-session-persistence", "codex exec --skip-git-repo-check"]}
           onCommit={(v) => void savePrefs({ ...prefs, suggestCommand: v || undefined })}
         />
       </div>

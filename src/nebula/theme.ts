@@ -107,8 +107,10 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   /** The agent CLI the tagging prompt runs through, headless (tagging.ts,
    *  router.rs). No default: tagging is off until it's set. */
   tagCommand?: string;
-  /** The agent CLI that suggests next prompts in the Read view; unset is a
-   *  cheap model, "off" is off (nextprompts.ts). */
+  /** Next-prompt suggestions in the Read view; off unless true. */
+  suggestNext?: boolean;
+  /** The agent CLI that suggests them; unset is a cheap model, "off" is off
+   *  (nextprompts.ts). */
   suggestCommand?: string;
   /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
   dispatchCap?: number;
