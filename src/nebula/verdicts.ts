@@ -11,7 +11,7 @@ import type { Turn } from "./turnsummary";
 import { noteTurnNumber } from "./turnCount";
 import { sameSession, type Agent } from "./types";
 
-const known = new Map<string, { key: string; verdict: Chip | null }>();
+const known = new Map<string, { key: string; verdict: Chip | null; last: number | null }>();
 const listeners = new Set<() => void>();
 let version = 0;
 // One log read at a time: a sidebar full of threads shouldn't read them all at once.
@@ -23,8 +23,8 @@ const keyOf = (a: Agent) => `${a.session_id}:${a.status}:${a.status_changed_at}`
 /** Only a finished thread whose log the app reads can say it's done. */
 const readable = (a: Agent) => !a.archived && a.status === "finished" && !!a.session_id && (a.kind === "claude" || a.kind === "codex");
 
-function set(agent: Agent, verdict: Chip | null) {
-  known.set(agent.id, { key: keyOf(agent), verdict });
+function set(agent: Agent, verdict: Chip | null, last: number | null = null) {
+  known.set(agent.id, { key: keyOf(agent), verdict, last });
   version++;
   listeners.forEach((l) => l());
 }
@@ -32,13 +32,27 @@ function set(agent: Agent, verdict: Chip | null) {
 /** A turn already read elsewhere (the turn strip) counts too. */
 export function noteTurn(agent: Agent, turn: Turn | null) {
   noteTurnNumber(agent.id, turn?.number);
-  if (readable(agent) && turn) set(agent, readVerdict(turn.saidEnd ?? turn.said ?? ""));
+  if (readable(agent) && turn) set(agent, readVerdict(turn.saidEnd ?? turn.said ?? ""), turn.last);
 }
 
 /** The thread's verdict, if it's at rest and its last reply gave one. */
 export function verdictOf(agent: Agent): Chip | null {
   const got = known.get(agent.id);
   return readable(agent) && got?.key === keyOf(agent) ? got.verdict : null;
+}
+
+/** The verdict and when its reply landed (Unix seconds), once read for the
+ *  thread as it is now; undefined until then. */
+export function readingOf(agent: Agent): { verdict: Chip | null; last: number | null } | undefined {
+  const got = known.get(agent.id);
+  return readable(agent) && got?.key === keyOf(agent) ? got : undefined;
+}
+
+/** Read the thread's latest turn if it hasn't been yet, in line with the
+ *  rest; resolves once it's been read (or found unreadable). */
+export function readTurn(agent: Agent): Promise<unknown> {
+  check(agent);
+  return line;
 }
 
 function check(agent: Agent) {
@@ -52,7 +66,7 @@ function check(agent: Agent) {
         ? (await import("./mock")).mockTurn(getState(), now.id)
         : await invoke<Turn | null>("thread_turn", { session: now.session_id, kind: now.kind });
       noteTurnNumber(now.id, turn?.number);
-      set(now, turn ? readVerdict(turn.saidEnd ?? turn.said ?? "") : null);
+      set(now, turn ? readVerdict(turn.saidEnd ?? turn.said ?? "") : null, turn?.last ?? null);
     } catch {
       set(now, null);
     } finally {

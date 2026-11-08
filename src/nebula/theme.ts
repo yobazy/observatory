@@ -117,6 +117,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   suggestCommand?: string;
   /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
   dispatchCap?: number;
+  /** Archive a finished thread whose last reply said ✅ Safe to close once
+   *  it has sat a day (autoclose.ts); on unless turned off. */
+  autoCloseSafe?: boolean;
   /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */
   keepUseLog?: boolean;
   /** Label prefixes of the launchd agents the Automations view lists
