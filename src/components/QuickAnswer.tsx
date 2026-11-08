@@ -55,7 +55,8 @@ export function QuickAnswer({
       if (c.typed) onOpen();
       else {
         flash(`Answered ${agent.name}: ${c.label}`);
-        onPicked?.();
+        // A box ticked or a step forward leaves it waiting on you still.
+        if (!c.stays) onPicked?.();
       }
     } catch (e) {
       flash(e instanceof Error ? e.message : String(e));

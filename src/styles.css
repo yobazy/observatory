@@ -8500,11 +8500,15 @@ button.board-main:hover .board-text {
   }
 }
 /* Put off with Later: at the bottom, quieter. */
-.inbox-item.is-later {
+/* Its name and card fade; its buttons keep full contrast. */
+.inbox-item.is-later > :not(.inbox-head),
+.inbox-item.is-later .inbox-name {
   opacity: 0.62;
 }
-.inbox-item.is-later:hover,
-.inbox-item.is-later:focus-within {
+.inbox-item.is-later:hover > :not(.inbox-head),
+.inbox-item.is-later:hover .inbox-name,
+.inbox-item.is-later:focus-within > :not(.inbox-head),
+.inbox-item.is-later:focus-within .inbox-name {
   opacity: 1;
 }
 .inbox-later-head {
@@ -8517,6 +8521,10 @@ button.board-main:hover .board-text {
 }
 .inbox-head .inbox-later-btn {
   margin-left: auto;
+  color: var(--muted);
+}
+.inbox-head .inbox-later-btn:hover {
+  color: var(--accent);
 }
 .inbox-head .inbox-later-btn + .link-btn {
   margin-left: 0;

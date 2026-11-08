@@ -26,11 +26,13 @@ interface Keys {
  *  app runs, so closing Decisions doesn't bring them back. */
 const later = new Set<string>();
 /** Threads answered from here, newest first, for the Moving strip. */
-let moving: { id: string; at: number }[] = [];
+let moving: { id: string; at: number; queued: boolean }[] = [];
 const MOVING_MS = 30 * 60_000;
-function answered(agent: Agent) {
-  moving = [{ id: agent.id, at: Date.now() }, ...moving.filter((m) => m.id !== agent.id)].slice(0, 12);
+function answered(agent: Agent, queued = false) {
+  moving = [{ id: agent.id, at: Date.now(), queued }, ...moving.filter((m) => m.id !== agent.id)].slice(0, 12);
 }
+/** Keys a card takes for itself, so no option letter is picked by them alone. */
+const ACTION_KEYS = new Set(["J", "K", "R", "E", "O", "L"]);
 
 const editable = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
 
@@ -63,7 +65,8 @@ export function InboxView() {
   // of one that just left.
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const lastAt = useRef(0);
-  const live = list.filter((w) => !leaving.some((l) => keyOf(l.w) === keyOf(w)));
+  // Later cards come last, and can have the keys too.
+  const live = [...list, ...putOff].filter((w) => !leaving.some((l) => keyOf(l.w) === keyOf(w)));
   const at = live.findIndex((w) => keyOf(w) === focusKey);
   const focus = at >= 0 ? focusKey : live.length ? keyOf(live[Math.min(lastAt.current, live.length - 1)]) : null;
   if (at >= 0) lastAt.current = at;
@@ -83,8 +86,10 @@ export function InboxView() {
         return;
       }
       if (e.ctrlKey || e.altKey || (e.metaKey && e.key !== "Enter") || e.isComposing) return;
-      // A focused button takes Enter and Space itself.
-      if ((e.key === "Enter" || e.key === " ") && e.target instanceof HTMLButtonElement) return;
+      // A focused control takes Enter and Space itself, but an option you
+      // just clicked keeps focus, and Enter there means send.
+      const control = e.target instanceof Element ? e.target.closest("button, a, summary, [role=button]") : null;
+      if (control && (e.key === " " || (e.key === "Enter" && !control.classList.contains("rd-opt")))) return;
       const i = live.findIndex((w) => keyOf(w) === focus);
       if (e.key === "j" || e.key === "ArrowDown" || e.key === "k" || e.key === "ArrowUp") {
         const next = live[Math.max(0, Math.min(live.length - 1, i + (e.key === "j" || e.key === "ArrowDown" ? 1 : -1)))];
@@ -239,7 +244,7 @@ function InboxItem({
     try {
       const how = await enqueue(agent, outgoing, { stay: true });
       flash(how === "queued" ? `Queued for ${agent.name}` : `Sent to ${agent.name}`);
-      answered(agent);
+      answered(agent, how === "queued");
       leave();
     } catch {
       flash(`Couldn't send to ${agent.name}. Your answer is still here.`, 6000);
@@ -253,6 +258,9 @@ function InboxItem({
   // A number, then a letter, picks that option: "2" "b". With one question
   // the letter alone does.
   const [chord, setChord] = useState<number | null>(null);
+  useEffect(() => {
+    if (!keys.focused) setChord(null);
+  }, [keys.focused]);
   const box = useRef<HTMLInputElement>(null);
   if (keys.focused)
     keys.handler.current = (e) => {
@@ -267,12 +275,16 @@ function InboxItem({
         return true;
       }
       if (e.metaKey || !/^[a-z]$/i.test(k)) return false;
-      const ask = chord !== null ? asks.find((a) => a.n === chord) : asks.length === 1 ? asks[0] : undefined;
+      const alone = asks.length === 1 && !asks[0].options.some((o) => ACTION_KEYS.has(o.letter)) ? asks[0] : undefined;
+      const ask = chord !== null ? asks.find((a) => a.n === chord) : alone;
+      const chorded = chord !== null;
       setChord(null);
       if (ask?.options.some((o) => o.letter === k.toUpperCase())) {
         pick(ask.n, k.toUpperCase());
         return true;
       }
+      // A letter after a number was meant for that decision, not an action.
+      if (chorded) return true;
       if (k === "r" && Object.keys(recommended).length) setPicks(recommended);
       else if (k === "e") box.current?.focus();
       else if (k === "o") openThread(agent);
@@ -513,9 +525,12 @@ function Moving({ waiting }: { waiting: Waiting[] | null }) {
       <span className="inbox-moving-label">Moving</span>
       {recent.map((m) => {
         const a = agents[m.id];
-        const asks = waiting?.some((w) => w.agent.id === a.id);
-        const [what, tone] =
-          a.status === "running"
+        // Until its status moves, it's still on the answer you just gave.
+        const moved = a.status_changed_at > m.at;
+        const asks = moved && waiting?.some((w) => w.agent.id === a.id);
+        const [what, tone] = !moved
+          ? [m.queued ? "queued" : "sent", "run"]
+          : a.status === "running"
             ? ["working", "run"]
             : asks
               ? [a.status === "needs_feedback" ? "on a prompt" : "asks again", "wait"]
