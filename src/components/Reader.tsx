@@ -1042,7 +1042,8 @@ export function Reader({
     }
   };
 
-  // A prompt queued before the turn ended would otherwise wait out the agents.
+  // A prompt queued before the turn ended would otherwise wait out the agents,
+  // or, on a thread that's done, whatever held it back.
   const sendNow = async (q: Queued) => {
     stick.current = true;
     const after = t?.entries.length ? t.entries[t.entries.length - 1].n : -1;
@@ -1207,8 +1208,14 @@ export function Reader({
                   <div key={q.id} className="rd-you is-queued">
                     {q.text}
                     <span className="rd-queued-bar">
-                      <span>{atPrompt ? "Queued, sent when its agents finish" : "Queued, sent when its turn ends"}</span>
-                      {atPrompt && (
+                      <span>
+                        {atPrompt
+                          ? "Queued, sent when its agents finish"
+                          : isIdle(agent)
+                            ? "Queued. Its turn is over, so it goes in a moment"
+                            : "Queued, sent when its turn ends"}
+                      </span>
+                      {(atPrompt || isIdle(agent)) && (
                         <button className="link-btn" onClick={() => void sendNow(q)}>
                           Send now
                         </button>

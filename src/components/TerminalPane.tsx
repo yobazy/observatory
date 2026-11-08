@@ -214,7 +214,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     t.onData((data) => {
       const ref = current.current;
       if (!ref) return;
-      if ("Agent" in ref) noteTyped(ref.Agent);
+      if ("Agent" in ref) noteTyped(ref.Agent, data);
       void sendInput(ref, data);
     });
 

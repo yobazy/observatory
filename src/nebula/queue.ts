@@ -9,6 +9,7 @@ import { trackedCommand } from "./command";
 import { endRun, startRun } from "./shellruns";
 import { flash, getState, setState } from "./store";
 import { heldAtPrompt } from "./transcript";
+import { isReport } from "./typed";
 import type { Agent } from "./types";
 
 export interface Queued {
@@ -57,7 +58,11 @@ export function isIdle(a: Agent, now = Date.now()): boolean {
 /** Agents a prompt is being typed into, and when this app last typed one
  *  into each: until the agent reports a status change after that, it's
  *  still "finished" only because the daemon hasn't said it's running yet. */
-const sending = new Set<string>();
+const sending = new Map<string, number>();
+/** Longest a send holds its agent: one whose promise never settles (an
+ *  IPC call or timer lost while the window was hidden) mustn't hold the
+ *  queue for good. Waking an agent takes up to about 23s of it. */
+const SEND_MS = 45_000;
 const lastSent = new Map<string, number>();
 /** When you last typed into each agent's terminal (`noteTyped`). */
 const lastTyped = new Map<string, number>();
@@ -66,9 +71,16 @@ const lastTyped = new Map<string, number>();
 const sentAt = new Map<string, number>();
 const TYPING_MS = 10_000;
 
-/** Called on your keystrokes into an agent's terminal: a queued prompt
- *  waits rather than land in the middle of what you're typing. */
-export function noteTyped(agentId: string) {
+/** Whether a send to `agentId` is under way. */
+function busy(agentId: string, now = Date.now()): boolean {
+  const since = sending.get(agentId);
+  return since !== undefined && now - since < SEND_MS;
+}
+
+/** Called on what goes into an agent's terminal from its view: a queued
+ *  prompt waits rather than land in the middle of what you're typing. */
+export function noteTyped(agentId: string, data = "") {
+  if (isReport(data)) return;
   lastTyped.set(agentId, Date.now());
 }
 
@@ -77,11 +89,11 @@ function readyForNext(a: Agent, now = Date.now()): boolean {
   const sent = lastSent.get(a.id) ?? 0;
   // A prompt that never started a turn (the CLI swallowed it) mustn't
   // stall the queue for good: after a minute, idle is idle.
-  return isIdle(a, now) && !sending.has(a.id) && (a.status_changed_at > sent || now - sent > 60_000);
+  return isIdle(a, now) && !busy(a.id, now) && (a.status_changed_at > sent || now - sent > 60_000);
 }
 
 async function type(agent: Agent, text: string, select: boolean, stay = false) {
-  sending.add(agent.id);
+  sending.set(agent.id, Date.now());
   // Stamped before typing: a turn that starts and ends before followUp
   // returns still counts as after it.
   const before = lastSent.get(agent.id);
@@ -102,7 +114,7 @@ async function type(agent: Agent, text: string, select: boolean, stay = false) {
 
 /** Held at its prompt, and nothing typed in since that hasn't reached the log. */
 function reads(a: Agent, turnEndedAt: number | null | undefined): boolean {
-  return !sending.has(a.id) && heldAtPrompt(a, turnEndedAt, lastSent.get(a.id));
+  return !busy(a.id) && heldAtPrompt(a, turnEndedAt, lastSent.get(a.id));
 }
 
 /** Queue `text` for `agent`, or send it now if the agent is idle and
@@ -159,15 +171,15 @@ export function queuedSentAt(id: string): number | undefined {
   return sentAt.get(id);
 }
 
-/** Send a queued prompt without waiting, for a thread at its prompt with
- *  subagents still out. If it can't go, it goes back in the queue and this
- *  throws. */
+/** Send a queued prompt without waiting: for a thread at its prompt with
+ *  subagents still out, or one whose turn is over and the prompt hasn't
+ *  gone. If it can't go, it goes back in the queue and this throws. */
 export async function sendQueued(agent: Agent, id: string, turnEndedAt: number | null | undefined) {
   const items = getState().queue[agent.id] ?? [];
   const item = items.find((q) => q.id === id);
   if (!item) return;
   const now = getState().agents[agent.id] ?? agent;
-  if (!reads(now, turnEndedAt)) throw new Error(`${now.name} isn't at its prompt`);
+  if (!canSendQueued(now, turnEndedAt)) throw new Error(`${now.name} isn't at its prompt`);
   sentAt.set(id, Date.now());
   write(agent.id, items.filter((q) => q.id !== id));
   try {
@@ -177,6 +189,12 @@ export async function sendQueued(agent: Agent, id: string, turnEndedAt: number |
     write(agent.id, [item, ...(getState().queue[agent.id] ?? [])]);
     throw e;
   }
+}
+
+/** Whether a queued prompt for `a` can go now, by hand: it's at its prompt,
+ *  done with its turn or held there for its subagents. */
+export function canSendQueued(a: Agent, turnEndedAt: number | null | undefined, now = Date.now()): boolean {
+  return reads(a, turnEndedAt) || (isIdle(a, now) && !busy(a.id, now));
 }
 
 export function unqueue(agentId: string, id: string) {
@@ -197,7 +215,7 @@ async function sendNext(agentId: string) {
   if (!next || !first || !readyForNext(first)) return;
   if (!first.alive && !onScreen(agentId)) return;
   if (Date.now() - (lastTyped.get(agentId) ?? 0) < TYPING_MS) return;
-  sending.add(agentId);
+  sending.set(agentId, Date.now());
   try {
     // Let the CLI settle back to its prompt before typing into it.
     await new Promise((r) => setTimeout(r, 1_200));

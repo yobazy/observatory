@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { afterKeys, forgetKeys, noteKeys, rubOut, unsentLine } from '../src/nebula/typed.ts';
+import { afterKeys, forgetKeys, isReport, noteKeys, rubOut, unsentLine } from '../src/nebula/typed.ts';
 
 test('keys typed build up the line, and Enter empties it', () => {
   assert.equal(afterKeys('', 'cool yeah'), 'cool yeah');
@@ -37,4 +37,19 @@ test('the line is kept per agent, and rubbed out from the end', () => {
   assert.equal(unsentLine('a2'), null);
   forgetKeys('a2');
   assert.equal(unsentLine('a2'), '');
+});
+
+test("the terminal's own mouse and focus reports aren't keys", () => {
+  assert.equal(isReport('\x1b[<35;12;7M'), true, 'a mouse move');
+  assert.equal(isReport('\x1b[<0;3;4M\x1b[<0;3;4m'), true, 'a click');
+  assert.equal(isReport('\x1b[I'), true, 'focus in');
+  assert.equal(isReport('\x1b[O'), true, 'focus out');
+  assert.equal(isReport('\x1b[M #!'), true, 'an old-style mouse report');
+  assert.equal(isReport('a'), false);
+  assert.equal(isReport('\x1b[D'), false, 'an arrow key');
+  assert.equal(isReport('\x1b[<35;12;7Mx'), false, 'a key after a report');
+  noteKeys('t-report', 'draft');
+  noteKeys('t-report', '\x1b[<35;1;1M');
+  assert.equal(unsentLine('t-report'), 'draft', 'a mouse move leaves the draft known');
+  forgetKeys('t-report');
 });
