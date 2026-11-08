@@ -4674,6 +4674,9 @@ td.task-last {
 .pane-verdict.is-bad {
   color: var(--st-error);
 }
+.pane-verdict.is-landed {
+  color: var(--st-done);
+}
 .notice-action {
   margin-left: 12px;
   font-weight: 600;
@@ -4715,6 +4718,13 @@ td.task-last {
 }
 .rd-verdict.is-bad {
   --tone: var(--st-error);
+}
+/* What it waited on landed since: said after the verdict, in done's color. */
+.rd-verdict-landed {
+  margin-left: 8px;
+  color: var(--st-done);
+  font-weight: 600;
+  white-space: nowrap;
 }
 /* Every reply can be pointed at: a screenshot of it goes to the agent with
    what you say about it. The button shows on hover. */

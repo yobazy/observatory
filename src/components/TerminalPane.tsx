@@ -25,6 +25,7 @@ import { isSliding } from "./Resizer";
 import { AgentServerLink } from "./Run";
 import { usePaneMode, useStandIn } from "../nebula/pane";
 import { closeThread, useVerdict } from "../nebula/verdicts";
+import { useLanded } from "../nebula/prwatch";
 import { ThreadPlate } from "./Plate";
 import { currentWell, onWellChange } from "../nebula/sky";
 import { LiveStrip } from "./LiveStrip";
@@ -97,6 +98,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const shellRun = !!agent && runningCommand(state, agent);
   // What its last reply said about closing it.
   const verdict = useVerdict(agent);
+  const landed = useLanded(agent ? state.worktrees[agent.worktree_id]?.path : undefined, verdict);
   const tab = session && "Terminal" in session ? state.terminals[session.Terminal] : undefined;
   const exists = !!(agent || tab);
 
@@ -431,8 +433,11 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
                   </button>
                 )}
                 {verdict && verdict.tone !== "done" && (
-                  <span className={`pane-verdict is-${verdict.tone}`} title={verdict.text}>
-                    {verdict.text}
+                  <span
+                    className={`pane-verdict is-${verdict.tone}${landed ? " is-landed" : ""}`}
+                    title={landed ? `${verdict.text} (${landed} since)` : verdict.text}
+                  >
+                    {landed ? `${landed} since` : verdict.text}
                   </span>
                 )}
                 <button
