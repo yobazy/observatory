@@ -105,14 +105,14 @@ function useTranscript(agent: Agent): Transcript | null {
 
 // A line break in a reply is one on screen too, so lines written one under
 // another (a list after a bold label, with no blank line) don't run together.
-const toHtml = (md: string, inline = false) =>
+export const toHtml = (md: string, inline = false) =>
   DOMPurify.sanitize(
     (inline ? marked.parseInline(md, { async: false, breaks: true }) : marked.parse(md, { async: false, breaks: true })) as string,
   );
 
 /** What a reply's paths and "#75"s are read against: the thread they're
  *  from, its checkout, and any PR of its project, for the repo's address. */
-const Where = createContext<{ from: string; root: string; prUrl: string | null; turnEndedAt: number | null }>({
+export const Where = createContext<{ from: string; root: string; prUrl: string | null; turnEndedAt: number | null }>({
   from: "",
   root: "",
   prUrl: null,
@@ -156,7 +156,7 @@ async function runIn(agentId: string, command: string, turnEndedAt: number | nul
 }
 
 /** A question, with any command fenced under it as its own block. */
-function AskText({ n, text }: { n: number; text: string }) {
+export function AskText({ n, text }: { n: number; text: string }) {
   const at = text.search(/^(```|~~~)/m);
   const lead = at < 0 ? text : text.slice(0, at);
   return (
@@ -471,9 +471,10 @@ export function CardReply({
       {!compact && <Pictures paths={card.images} from={from} pair={pair} />}
       {!compact && <Videos paths={card.videos} from={from} />}
       {!compact && card.body && <Md text={card.body} />}
+      {compact && <More card={card} from={from} pair={pair} />}
       {/* Needs you without numbered decisions still says what you're to do:
           a command to run, a file to look at. */}
-      {(card.asks.length > 0 || (!compact && card.asksNote)) && (
+      {(card.asks.length > 0 || card.asksNote) && (
         <section className="rd-needs" aria-label="Needs you">
           <h4>Needs you</h4>
           {card.asks.map((a) => (
@@ -515,6 +516,33 @@ export function CardReply({
 }
 
 type Ship = { label: string; title: string; run: () => void };
+
+/** The rest of a compact card, folded: what was done and why, its
+ *  pictures and Details, for when the headline isn't enough to decide on.
+ *  Nothing in it loads until it's opened. */
+function More({ card, from, pair }: { card: Card; from: string; pair: [string, string] | null }) {
+  const [open, setOpen] = useState(false);
+  const pics = card.images.length + card.videos.length;
+  const what = [
+    card.body && "what it did",
+    pics && (pics === 1 ? "1 picture" : `${pics} pictures`),
+    card.details && "Details",
+  ].filter(Boolean);
+  if (!what.length) return null;
+  return (
+    <details className="rd-fold rd-more" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>More: {what.join(", ")}</summary>
+      {open && (
+        <>
+          <Pictures paths={card.images} from={from} pair={pair} />
+          <Videos paths={card.videos} from={from} />
+          {card.body && <Md text={card.body} />}
+          {card.details && <Md text={card.details} />}
+        </>
+      )}
+    </details>
+  );
+}
 
 function Reply(props: {
   ship?: Ship | null;

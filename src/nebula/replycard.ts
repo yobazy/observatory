@@ -572,11 +572,30 @@ export function noteFor(text: string, from: { thread: string; project: string; d
   return { name, body };
 }
 
-/** The reply a thread is waiting on you to decide: its latest, when that
- *  asks decisions and nothing you said came after it. */
-export function pendingCard(entries: { n: number; kind: string; text: string }[]): { n: number; text: string; card: Card } | null {
+/** What a thread waits on you for, as Decisions lists it. */
+export interface Pending {
+  /** Its latest reply. */
+  n: number;
+  card: Card;
+  /** What you said that set this turn off, for remembering what it's about. */
+  asked: string;
+  /** Decisions earlier replies asked that you haven't answered. */
+  earlier: ReturnType<typeof openDecisions>;
+}
+
+/** What a thread is waiting on you to decide: its latest reply, when that
+ *  has a Needs you and nothing you said came after it, with any decisions
+ *  left open before it. Earlier ones alone count only while the latest
+ *  reply keeps the thread open; one that says it's safe to close, or ends
+ *  without a verdict, has moved past them. */
+export function pendingCard(entries: { n: number; kind: string; text: string }[]): Pending | null {
   const last = [...entries].reverse().find((e) => e.kind === "claude" || e.kind === "you");
   if (!last || last.kind !== "claude") return null;
   const card = readCard(last.text);
-  return card.asks.some((a) => a.options.length) ? { n: last.n, text: last.text, card } : null;
+  const earlier = openDecisions(entries, last.n);
+  const asking = card.asks.length > 0 || !!card.asksNote;
+  const open = card.verdict?.tone === "wait" || card.verdict?.tone === "bad";
+  if (!asking && !(earlier.length && open)) return null;
+  const asked = [...entries].reverse().find((e) => e.kind === "you" && e.n < last.n)?.text ?? "";
+  return { n: last.n, card, asked, earlier };
 }

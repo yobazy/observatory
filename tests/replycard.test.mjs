@@ -395,6 +395,22 @@ test('a thread waits on you when its latest reply asks and you have not answered
   assert.equal(pendingCard([...asked, { n: 3, kind: 'you', text: '1 A' }]), null);
   assert.equal(pendingCard([...asked, { n: 3, kind: 'claude', text: 'Done.' }]), null);
   assert.equal(pendingCard([]), null);
+  assert.equal(pendingCard(asked)?.asked, 'go');
+});
+
+test('Decisions also lists a Needs you without options, and decisions left open while the thread stays open', async () => {
+  const { pendingCard } = await import('../src/nebula/replycard.ts');
+  const note = '**Built it.**\n\n**Needs you**\nRun `npm run dev` and look at the header.';
+  assert.equal(pendingCard([{ n: 0, kind: 'you', text: 'go' }, { n: 1, kind: 'claude', text: note }])?.card.asksNote.includes('npm run dev'), true);
+  const earlier = [
+    { n: 0, kind: 'claude', text: '**Needs you**\n1. Queue or lock?  A queue · B lock' },
+    { n: 1, kind: 'you', text: 'look at the tests first' },
+  ];
+  const open = pendingCard([...earlier, { n: 2, kind: 'claude', text: 'Tests read.\n\n**🟠 Keep open:** waiting on 1.' }]);
+  assert.deepEqual(open?.earlier.map((d) => d.entry), [0]);
+  assert.equal(open?.asked, 'look at the tests first');
+  assert.equal(pendingCard([...earlier, { n: 2, kind: 'claude', text: 'Done.\n\n**✅ Safe to close.**' }]), null);
+  assert.equal(pendingCard([...earlier, { n: 2, kind: 'claude', text: 'Done.' }]), null);
 });
 
 test('answers written in, or given in the tray alongside taps, count as answered', async () => {
