@@ -531,7 +531,10 @@ mod tests {
         assert_eq!(typed_prompt(&with_pictures(text, 0)).as_deref(), Some(text));
         let text = "[Image of the logo] is wrong";
         assert_eq!(typed_prompt(&with_pictures(text, 0)).as_deref(), Some(text));
-        assert_eq!(typed_prompt(&serde_json::json!(text)).as_deref(), Some(text));
+        assert_eq!(
+            typed_prompt(&serde_json::json!(text)).as_deref(),
+            Some(text)
+        );
     }
 
     #[test]
