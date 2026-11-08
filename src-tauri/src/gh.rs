@@ -161,6 +161,35 @@ pub async fn gh_pr_create(path: PathBuf, draft: bool) -> Result<String, String> 
     .map_err(|e| e.to_string())?
 }
 
+/// The state gh gives each of these pull requests ("OPEN", "MERGED",
+/// "CLOSED"), looked up from the checkout at `path`; ones it can't find are
+/// left out.
+#[tauri::command]
+pub async fn gh_pr_states(path: PathBuf, numbers: Vec<u64>) -> Result<Vec<(u64, String)>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut out = Vec::new();
+        for n in numbers {
+            if let Ok(json) = gh(&path, &["pr", "view", &n.to_string(), "--json", "state"]) {
+                if let Some(state) = pr_state(&json) {
+                    out.push((n, state));
+                }
+            }
+        }
+        if out.is_empty() {
+            return Err("gh found none of those pull requests".into());
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The `state` in `gh pr view --json state`'s answer.
+fn pr_state(json: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    v["state"].as_str().map(str::to_string)
+}
+
 /// Mark draft pull request `number` ready for review.
 #[tauri::command]
 pub async fn gh_pr_ready(path: PathBuf, number: u64) -> Result<(), String> {
@@ -217,6 +246,13 @@ pub async fn gh_pr_merge(path: PathBuf, number: u64, head: String) -> Result<Str
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_pr_state_is_read_from_ghs_answer() {
+        assert_eq!(pr_state(r#"{"state":"MERGED"}"#).as_deref(), Some("MERGED"));
+        assert_eq!(pr_state("not json"), None);
+        assert_eq!(pr_state("{}"), None);
+    }
 
     #[test]
     fn a_merge_squashes_where_it_can() {

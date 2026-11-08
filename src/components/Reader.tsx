@@ -10,6 +10,7 @@ import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, sendQueued, unqueue, queuedSentAt, type Queued } from "../nebula/queue";
 import { actOf, clock, doingLine, heldAtPrompt, liveStep, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
+import { useLanded } from "../nebula/prwatch";
 import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { useStandIn } from "../nebula/pane";
@@ -364,11 +365,16 @@ function Videos({ paths, from }: { paths: string[]; from: string }) {
 /** How the reply closes: safe to close, with the button that does it while
  *  this is the latest reply, or what's keeping it open, with what's left to
  *  ship beside it. */
-function VerdictLine({ verdict, onClose, ship }: { verdict: Chip; onClose?: () => void; ship?: Ship | null }) {
+function VerdictLine({ verdict, onClose, ship, landed }: { verdict: Chip; onClose?: () => void; ship?: Ship | null; landed?: string | null }) {
   return (
     <div className="rd-verdict-row">
       <p className={`rd-verdict is-${verdict.tone}`}>
         <span className="rd-verdict-text" dangerouslySetInnerHTML={{ __html: toHtml(verdict.text, true) }} />
+        {landed && (
+          <span className="rd-verdict-landed" title="Every pull request this waited on has landed since">
+            {landed} since
+          </span>
+        )}
       </p>
       {verdict.tone === "done" && onClose && (
         <button className="btn btn-primary btn-sm" onClick={onClose} title="Archives the thread; Undo brings it back">
@@ -438,6 +444,7 @@ export function CardReply({
   picks,
   onPick,
   onClose,
+  landed,
 }: {
   card: Card;
   /** Its two pictures as before and after, when it says which is which. */
@@ -454,6 +461,8 @@ export function CardReply({
   picks: Record<number, string>;
   onPick: (n: number, letter: string) => void;
   onClose?: () => void;
+  /** The PRs its verdict waits on, once they've all landed: "#134 merged". */
+  landed?: string | null;
 }) {
   const headline = useMemo(() => (card.headline ? toHtml(card.headline, true) : ""), [card.headline]);
   return (
@@ -510,7 +519,7 @@ export function CardReply({
           <Md text={card.details} />
         </details>
       )}
-      {card.verdict && <VerdictLine verdict={card.verdict} onClose={onClose} ship={ship} />}
+      {card.verdict && <VerdictLine verdict={card.verdict} onClose={onClose} ship={ship} landed={landed} />}
     </article>
   );
 }
@@ -559,6 +568,7 @@ function Reply(props: {
   picks: Record<number, string>;
   onPick: (n: number, letter: string) => void;
   onClose?: () => void;
+  landed?: string | null;
 }) {
   const card = useMemo(() => readCard(props.text), [props.text]);
   const pair = useMemo(() => beforeAfter(card.images, props.text), [card.images, props.text]);
@@ -829,6 +839,8 @@ export function Reader({
     const e = t?.entries.find((x) => x.n === latest);
     return e ? readCard(e.text) : null;
   }, [t?.entries, latest]);
+  // The PRs the latest reply's verdict waits on, once they've all landed.
+  const prsLanded = useLanded(state.worktrees[agent.worktree_id]?.path, latestCard?.verdict ?? null);
   // Answers typed or dictated into the box ("2 a, 3 b") light up as taps.
   const typed = typedAnswers(latestCard, draft);
   const shown = { ...typed.picks, ...Object.fromEntries(Object.entries(picks).filter(([, l]) => l)) };
@@ -1221,6 +1233,7 @@ export function Reader({
                         picks={e.n !== latest ? (answered[e.n] ?? {}) : showQueued ? queued.picks : shown}
                         onPick={pick}
                         onClose={e.n === latest && agent.status === "finished" && !agent.archived ? () => closeThread(agent) : undefined}
+                        landed={e.n === latest ? prsLanded : null}
                       />
                       <div className="rd-tools">
                         <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">
