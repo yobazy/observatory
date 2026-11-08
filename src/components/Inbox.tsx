@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { flash, setState, useAppState } from "../nebula/store";
 import { enqueue } from "../nebula/queue";
 import { keepPutAway, useWaiting, type Waiting } from "../nebula/decisions";
@@ -10,6 +10,29 @@ import { AskText, CardReply, Md, Where, toHtml } from "./Reader";
 import { QuickAnswer } from "./QuickAnswer";
 
 const keyOf = (w: Waiting) => `${w.agent.id}:${w.prompt ? `p${w.agent.status_changed_at}` : w.n}`;
+
+/** What the focused card does with a key; true when it used it. */
+type KeyHandler = (e: KeyboardEvent) => boolean;
+/** Each card's say in the keys, and whether it's the one they go to. */
+interface Keys {
+  focused: boolean;
+  handler: MutableRefObject<KeyHandler | null>;
+  /** Put off till later, or brought back. */
+  later: boolean;
+  onLater: () => void;
+}
+
+/** Cards put off with Later, until their thread moves on; kept while the
+ *  app runs, so closing Decisions doesn't bring them back. */
+const later = new Set<string>();
+/** Threads answered from here, newest first, for the Moving strip. */
+let moving: { id: string; at: number }[] = [];
+const MOVING_MS = 30 * 60_000;
+function answered(agent: Agent) {
+  moving = [{ id: agent.id, at: Date.now() }, ...moving.filter((m) => m.id !== agent.id)].slice(0, 12);
+}
+
+const editable = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
 
 /** Decisions (⌥⌘J): every thread whose latest reply asks you to decide
  *  something, as its card, to answer one after another without opening each. */
@@ -31,8 +54,57 @@ export function InboxView() {
   const [leaving, setLeaving] = useState<{ w: Waiting; at: number }[]>([]);
   const gone = (w: Waiting) => sent.has(keyOf(w)) || leaving.some((l) => keyOf(l.w) === keyOf(w));
   const shown = (found ?? []).filter((w) => !gone(w));
-  const list = [...shown];
-  for (const l of [...leaving].sort((a, b) => a.at - b.at)) list.splice(Math.min(l.at, list.length), 0, l.w);
+  const all = [...shown];
+  for (const l of [...leaving].sort((a, b) => a.at - b.at)) all.splice(Math.min(l.at, all.length), 0, l.w);
+  const [, bump] = useState(0);
+  const list = all.filter((w) => !later.has(keyOf(w)));
+  const putOff = all.filter((w) => later.has(keyOf(w)));
+  // The card keys go to: the one you moved to, or whichever took the place
+  // of one that just left.
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const lastAt = useRef(0);
+  const live = list.filter((w) => !leaving.some((l) => keyOf(l.w) === keyOf(w)));
+  const at = live.findIndex((w) => keyOf(w) === focusKey);
+  const focus = at >= 0 ? focusKey : live.length ? keyOf(live[Math.min(lastAt.current, live.length - 1)]) : null;
+  if (at >= 0) lastAt.current = at;
+  const handler = useRef<KeyHandler | null>(null);
+  // The focused card sets it again as it renders below.
+  handler.current = null;
+  const body = useRef<HTMLDivElement>(null);
+  const moveTo = (k: string) => {
+    setFocusKey(k);
+    requestAnimationFrame(() => body.current?.querySelector(`[data-key="${CSS.escape(k)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (editable(e.target)) {
+        // Back from the reply box to the list; Esc again closes it.
+        if (e.key === "Escape") (e.target as HTMLElement).blur();
+        return;
+      }
+      if (e.ctrlKey || e.altKey || (e.metaKey && e.key !== "Enter") || e.isComposing) return;
+      // A focused button takes Enter and Space itself.
+      if ((e.key === "Enter" || e.key === " ") && e.target instanceof HTMLButtonElement) return;
+      const i = live.findIndex((w) => keyOf(w) === focus);
+      if (e.key === "j" || e.key === "ArrowDown" || e.key === "k" || e.key === "ArrowUp") {
+        const next = live[Math.max(0, Math.min(live.length - 1, i + (e.key === "j" || e.key === "ArrowDown" ? 1 : -1)))];
+        if (next) moveTo(keyOf(next));
+      } else if (!handler.current?.(e)) return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  const keysFor = (w: Waiting): Keys => ({
+    focused: keyOf(w) === focus,
+    handler,
+    later: later.has(keyOf(w)),
+    onLater: () => {
+      if (later.has(keyOf(w))) later.delete(keyOf(w));
+      else later.add(keyOf(w));
+      bump((n) => n + 1);
+    },
+  });
 
   return (
     <section className="usage inbox" aria-labelledby="inbox-title">
@@ -43,27 +115,39 @@ export function InboxView() {
             {found === null
               ? "Reading your threads…"
               : shown.length
-                ? `${shown.length === 1 ? "1 thread waits" : `${shown.length} threads wait`} on you`
+                ? `${shown.length === 1 ? "1 thread waits" : `${shown.length} threads wait`} on you${putOff.length ? `, ${putOff.length} of them later` : ""}`
                 : "No thread is waiting on you."}
           </p>
         </div>
         <div className="usage-controls" ref={head}>
+          {live.length > 0 && (
+            <p className="inbox-keys" aria-label="Keys">
+              <kbd>j</kbd> <kbd>k</kbd> move · <kbd>1</kbd> <kbd>a</kbd> pick · <kbd>r</kbd> recommended · <kbd>↵</kbd> send · <kbd>e</kbd> reply · <kbd>l</kbd>{" "}
+              later · <kbd>o</kbd> open
+            </p>
+          )}
           <button className="btn" onClick={() => setState({ view: "sessions" })}>
             Done
           </button>
         </div>
       </header>
-      <div className="usage-body inbox-body">
-        {list.map((w, i) => {
+      <div className="usage-body inbox-body" ref={body}>
+        <Moving waiting={found} />
+        {[...list, ...putOff].map((w, i) => {
           const k = keyOf(w);
           const isLeaving = leaving.some((l) => keyOf(l.w) === k);
           const wt = state.worktrees[w.agent.worktree_id];
           const project = state.projects[wt?.project_id ?? ""]?.name ?? "";
           const branch = wt?.branch ?? "";
-          if (w.prompt) return <PromptItem key={k} waiting={w} project={project} branch={branch} root={wt?.path ?? ""} />;
-          return (
+          const first = i === list.length && putOff.length > 0;
+          const keys = keysFor(w);
+          const item = w.prompt ? (
+            <PromptItem key={k} waiting={w} project={project} branch={branch} root={wt?.path ?? ""} keys={keys} onFocus={() => setFocusKey(k)} />
+          ) : (
             <InboxItem
               key={k}
+              keys={keys}
+              onFocus={() => setFocusKey(k)}
               waiting={w as Waiting & { card: Card }}
               project={project}
               branch={branch}
@@ -79,6 +163,14 @@ export function InboxView() {
               }}
             />
           );
+          return first
+            ? [
+                <h2 key="later" className="inbox-later-head">
+                  Later · {putOff.length}
+                </h2>,
+                item,
+              ]
+            : item;
         })}
       </div>
     </section>
@@ -86,6 +178,8 @@ export function InboxView() {
 }
 
 function InboxItem({
+  keys,
+  onFocus,
   waiting,
   project,
   branch,
@@ -94,6 +188,8 @@ function InboxItem({
   onSent,
   onGone,
 }: {
+  keys: Keys;
+  onFocus: () => void;
   waiting: Waiting & { card: Card };
   project: string;
   branch: string;
@@ -143,37 +239,63 @@ function InboxItem({
     try {
       const how = await enqueue(agent, outgoing, { stay: true });
       flash(how === "queued" ? `Queued for ${agent.name}` : `Sent to ${agent.name}`);
+      answered(agent);
       leave();
     } catch {
       flash(`Couldn't send to ${agent.name}. Your answer is still here.`, 6000);
     }
   };
+  const pick = (n: number, letter: string) => {
+    const base = Object.keys(typed.picks).length ? { ...typed.picks, ...picks } : picks;
+    if (Object.keys(typed.picks).length) setDraft(typed.rest);
+    setPicks({ ...base, [n]: base[n] === letter ? "" : letter });
+  };
+  // A number, then a letter, picks that option: "2" "b". With one question
+  // the letter alone does.
+  const [chord, setChord] = useState<number | null>(null);
+  const box = useRef<HTMLInputElement>(null);
+  if (keys.focused)
+    keys.handler.current = (e) => {
+      const k = e.key;
+      if (k === "Enter") {
+        void send();
+        return true;
+      }
+      const asks = card.asks.filter((a) => a.options.length);
+      if (/^[1-9]$/.test(k) && asks.some((a) => a.n === Number(k))) {
+        setChord(Number(k));
+        return true;
+      }
+      if (e.metaKey || !/^[a-z]$/i.test(k)) return false;
+      const ask = chord !== null ? asks.find((a) => a.n === chord) : asks.length === 1 ? asks[0] : undefined;
+      setChord(null);
+      if (ask?.options.some((o) => o.letter === k.toUpperCase())) {
+        pick(ask.n, k.toUpperCase());
+        return true;
+      }
+      if (k === "r" && Object.keys(recommended).length) setPicks(recommended);
+      else if (k === "e") box.current?.focus();
+      else if (k === "o") openThread(agent);
+      else if (k === "l") keys.onLater();
+      else return false;
+      return true;
+    };
   return (
     <article
       ref={self}
-      className={`inbox-item${leaving ? " is-leaving" : ""}`}
+      data-key={`${waiting.agent.id}:${waiting.n}`}
+      className={`inbox-item${leaving ? " is-leaving" : ""}${keys.focused ? " is-focus" : ""}${keys.later ? " is-later" : ""}`}
       inert={leaving}
+      onFocusCapture={onFocus}
+      onMouseDown={onFocus}
       onAnimationEnd={(e) => {
         if (e.target === e.currentTarget && leaving) onGone();
       }}
     >
-      <ItemHead agent={agent} project={project} branch={branch} />
+      <ItemHead agent={agent} project={project} branch={branch} keys={keys} />
       {asked && <Asked text={asked} />}
       <Where.Provider value={{ from: agent.id, root, prUrl: null, turnEndedAt: null }}>
-        <CardReply
-          card={card}
-          pair={null}
-          compact
-          from={agent.id}
-          live
-          sent={false}
-          picks={shown}
-          onPick={(n, letter) => {
-            const base = Object.keys(typed.picks).length ? { ...typed.picks, ...picks } : picks;
-            if (Object.keys(typed.picks).length) setDraft(typed.rest);
-            setPicks({ ...base, [n]: base[n] === letter ? "" : letter });
-          }}
-        />
+        <CardReply card={card} pair={null} compact from={agent.id} live sent={false} picks={shown} onPick={pick} />
       </Where.Provider>
       {earlier.length > 0 && (
         // Folded while the latest reply asks its own; open when it's all there is.
@@ -250,8 +372,14 @@ function InboxItem({
           This answers the earlier replies only. Its latest decisions above go unanswered.
         </p>
       )}
+      {keys.focused && chord !== null && (
+        <p className="inbox-hint inbox-chord" role="status">
+          Decision {chord}: now its letter
+        </p>
+      )}
       <div className="inbox-compose">
         <input
+          ref={box}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={ghost ? `${ghost}    Tab to use it` : `Reply to ${agent.name}`}
@@ -275,7 +403,7 @@ function InboxItem({
 }
 
 /** A thread's name, where it is, how long it has waited, and a way in. */
-function ItemHead({ agent, project, branch, prompt = false }: { agent: Agent; project: string; branch: string; prompt?: boolean }) {
+function ItemHead({ agent, project, branch, keys, prompt = false }: { agent: Agent; project: string; branch: string; keys: Keys; prompt?: boolean }) {
   return (
     <div className="inbox-head">
       <span className="inbox-name">{agent.name}</span>
@@ -291,6 +419,14 @@ function ItemHead({ agent, project, branch, prompt = false }: { agent: Agent; pr
           waiting {relativeTime(agent.status_changed_at)}
         </span>
       )}
+      <button
+        className="link-btn inbox-later-btn"
+        onClick={keys.onLater}
+        aria-label={keys.later ? `Bring ${agent.name} back` : `Later for ${agent.name}`}
+        title={keys.later ? "Back into the list" : "Put this off: it moves to the bottom until the thread moves on (l)"}
+      >
+        {keys.later ? "Bring back" : "Later"}
+      </button>
       <button className="link-btn" onClick={() => openThread(agent)} aria-label={`Open ${agent.name}`}>
         Open thread
       </button>
@@ -309,12 +445,46 @@ function openThread(agent: Agent) {
 /** A thread stopped on a choice in its terminal (a permission, a question):
  *  what it was doing, and the choice as buttons. Picking one answers the
  *  terminal; the thread then works on and leaves the list. */
-function PromptItem({ waiting, project, branch, root }: { waiting: Waiting; project: string; branch: string; root: string }) {
+function PromptItem({
+  waiting,
+  project,
+  branch,
+  root,
+  keys,
+  onFocus,
+}: {
+  waiting: Waiting;
+  project: string;
+  branch: string;
+  root: string;
+  keys: Keys;
+  onFocus: () => void;
+}) {
   const { agent, asked, said } = waiting;
   const card = useMemo(() => (said ? readCard(said) : null), [said]);
+  const self = useRef<HTMLElement>(null);
+  // A choice's number picks it, as in the terminal.
+  if (keys.focused)
+    keys.handler.current = (e) => {
+      if (/^[1-9]$/.test(e.key)) {
+        const choice = [...(self.current?.querySelectorAll<HTMLButtonElement>(".qa-choice") ?? [])].find((b) => b.querySelector("kbd")?.textContent === e.key);
+        choice?.click();
+        return !!choice;
+      }
+      if (e.key === "o") openThread(agent);
+      else if (e.key === "l") keys.onLater();
+      else return false;
+      return true;
+    };
   return (
-    <article className="inbox-item">
-      <ItemHead agent={agent} project={project} branch={branch} prompt />
+    <article
+      ref={self}
+      data-key={`${agent.id}:p${agent.status_changed_at}`}
+      className={`inbox-item${keys.focused ? " is-focus" : ""}${keys.later ? " is-later" : ""}`}
+      onFocusCapture={onFocus}
+      onMouseDown={onFocus}
+    >
+      <ItemHead agent={agent} project={project} branch={branch} keys={keys} prompt />
       {asked && <Asked text={asked} />}
       {said && card && (
         <Where.Provider value={{ from: agent.id, root, prUrl: null, turnEndedAt: null }}>
@@ -325,8 +495,56 @@ function PromptItem({ waiting, project, branch, root }: { waiting: Waiting; proj
           )}
         </Where.Provider>
       )}
-      <QuickAnswer agent={agent} onOpen={() => openThread(agent)} every={4000} />
+      <QuickAnswer agent={agent} onOpen={() => openThread(agent)} onPicked={() => answered(agent)} every={4000} />
     </article>
+  );
+}
+
+/** Threads answered from here in the last half hour, and how each is
+ *  getting on: working, asking again, or done. A click opens it. */
+function Moving({ waiting }: { waiting: Waiting[] | null }) {
+  const { agents } = useAppState();
+  const [, bump] = useState(0);
+  const now = Date.now();
+  const recent = moving.filter((m) => now - m.at < MOVING_MS && agents[m.id] && !agents[m.id].archived);
+  if (!recent.length) return null;
+  return (
+    <div className="inbox-moving" role="group" aria-label="Answered from here">
+      <span className="inbox-moving-label">Moving</span>
+      {recent.map((m) => {
+        const a = agents[m.id];
+        const asks = waiting?.some((w) => w.agent.id === a.id);
+        const [what, tone] =
+          a.status === "running"
+            ? ["working", "run"]
+            : asks
+              ? [a.status === "needs_feedback" ? "on a prompt" : "asks again", "wait"]
+              : a.status === "finished"
+                ? ["done", "done"]
+                : ["stopped", "idle"];
+        return (
+          <button
+            key={m.id}
+            className={`inbox-moving-item is-${tone}`}
+            onClick={() => openThread(a)}
+            title={`Answered ${relativeTime(m.at) === "now" ? "just now" : `${relativeTime(m.at)} ago`}. Open ${a.name}`}
+          >
+            <span className="inbox-moving-dot" aria-hidden />
+            {a.name} <span className="inbox-moving-what">{what}</span>
+          </button>
+        );
+      })}
+      <button
+        className="link-btn"
+        onClick={() => {
+          moving = [];
+          bump((n) => n + 1);
+        }}
+        aria-label="Clear the Moving list"
+      >
+        Clear
+      </button>
+    </div>
   );
 }
 

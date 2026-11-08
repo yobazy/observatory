@@ -8482,6 +8482,109 @@ button.board-main:hover .board-text {
   border-radius: 12px;
   background: color-mix(in srgb, var(--st-waiting) 7%, transparent);
 }
+/* The card keys go to: a bar at its left edge, out in the gutter. */
+.inbox-item {
+  position: relative;
+}
+.inbox-item.is-focus::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -14px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .inbox-item.is-focus::before {
+    animation: fade 140ms ease-out;
+  }
+}
+/* Put off with Later: at the bottom, quieter. */
+.inbox-item.is-later {
+  opacity: 0.62;
+}
+.inbox-item.is-later:hover,
+.inbox-item.is-later:focus-within {
+  opacity: 1;
+}
+.inbox-later-head {
+  margin: 8px 0 -6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inbox-head .inbox-later-btn {
+  margin-left: auto;
+}
+.inbox-head .inbox-later-btn + .link-btn {
+  margin-left: 0;
+}
+.inbox-keys {
+  margin: 0 8px 0 0;
+  color: var(--faint);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .inbox-keys {
+    display: none;
+  }
+}
+.inbox-chord {
+  color: var(--accent);
+}
+/* Threads answered from here, and how each is getting on. */
+.inbox-moving {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 12.5px;
+}
+.inbox-moving-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inbox-moving-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: default;
+}
+.inbox-moving-what {
+  color: var(--muted);
+}
+.inbox-moving-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--st-idle);
+}
+.inbox-moving-item.is-run .inbox-moving-dot {
+  background: var(--st-running);
+}
+.inbox-moving-item.is-wait .inbox-moving-dot {
+  background: var(--st-waiting);
+}
+.inbox-moving-item.is-done .inbox-moving-dot {
+  background: var(--st-done);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .inbox-moving-item.is-run .inbox-moving-dot {
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+}
 .inbox-earlier-foot {
   margin: 0;
   color: var(--muted);

@@ -10,7 +10,19 @@ const POLL_MS = 1_500;
 /** Answer a waiting agent without opening its terminal: its numbered
  *  choices as buttons when it's showing some (a permission prompt), else
  *  the end of its screen and a line to reply on. */
-export function QuickAnswer({ agent, onOpen, every = POLL_MS }: { agent: Agent; onOpen: () => void; /** How often to read its screen. */ every?: number }) {
+export function QuickAnswer({
+  agent,
+  onOpen,
+  onPicked,
+  every = POLL_MS,
+}: {
+  agent: Agent;
+  onOpen: () => void;
+  /** A choice went to its terminal. */
+  onPicked?: () => void;
+  /** How often to read its screen. */
+  every?: number;
+}) {
   // undefined while the first read is out; null when there's no live
   // terminal to read.
   const [screen, setScreen] = useState<string[] | null | undefined>(undefined);
@@ -41,7 +53,10 @@ export function QuickAnswer({ agent, onOpen, every = POLL_MS }: { agent: Agent; 
     try {
       await answer(agent, q, c);
       if (c.typed) onOpen();
-      else flash(`Answered ${agent.name}: ${c.label}`);
+      else {
+        flash(`Answered ${agent.name}: ${c.label}`);
+        onPicked?.();
+      }
     } catch (e) {
       flash(e instanceof Error ? e.message : String(e));
     } finally {
