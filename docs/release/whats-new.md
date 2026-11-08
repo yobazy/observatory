@@ -10,18 +10,26 @@
   underneath on its own.
 -->
 
-### Zoom into pictures
+### The Read view keeps up with the whole thread
 
-Click a picture in the preview to zoom in where you clicked, and click again to fit. Pinch, ⌘-scroll, **+** and **−** zoom too, and **0** fits. A bar under the picture shows **‹ 2 of 5 ›** and steps through the files you have open.
+When an agent asks you questions one step at a time, the Read view shows each question with its choices, so you can answer it there. A command you run yourself with `! cmd` shows **Running…** while it works, then stays in the thread as a step with what it printed. You can keep talking to a thread while its subagents are still working. A finished reply can offer a few next prompts to send in one click (off by default; turn it on under Settings → Next-prompt suggestions).
 
-### Answer more from the Read view
+### Tags that do more
 
-When an MCP server asks for input with **Accept / Decline**, the Read view shows the question and both buttons, so you no longer have to switch to the terminal. After you say **Yes** to a permission prompt, the thread shows Working while the command runs, not Waiting on you. **Catch me up** spins and says *Catching you up…* until the fresh card arrives.
+Turn on several tag chips at once to narrow the list. Give each tag a color, tag many picked threads at once with **Tags…**, and type `#tag` in ⌘K to find threads with that tag in every project.
+
+### The night watch
+
+In dark mode the sky changes through the night. A thread's sand plate fills in as its turns add up and warms the longer it waits. The Dock icon shows the plate of the thread that has waited longest. Projects with no icon get a sand plate of their own, and archived threads show as a grid of plates.
 
 ### And smaller things
 
-- Web links open in your browser instead of inside the app.
-- A worktree whose folder was deleted says **The folder is gone** and offers **Remove from list**, instead of showing git's error.
-- An always-on job that's running but whose log ends in an error shows **Running, with errors** in orange.
-- Waiting on you uses the same calm card as While you were away and Follow up.
-- A numbered list under a line like "Before you sign:" stays in place in the Read view, instead of turning into empty decisions.
+- The preview shows every page of a PDF, with a page count and zoom.
+- A thread waiting on pull requests says **#N merged since** once they land.
+- Mark a draft pull request ready with one click from its branch.
+- Text you typed in the terminal and didn't send moves into the Read view's reply box.
+- Decisions stays open after you send an answer.
+- Follow up lists the newest flags first, and its header flips the order.
+- A prompt queued in the Read view no longer gets stuck behind a finished turn, and **Send now** sends it at once.
+- Long project names shrink to fit and end in an ellipsis.
+- A long archive opens without freezing the window.
