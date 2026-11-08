@@ -278,6 +278,37 @@ test('a lone question with previews ends with its pick, and the mark can sit on 
   assert.deepEqual(q.choices.map((c) => c.selected), [false, false, true]);
 });
 
+test('from the chat row a preview choice steps up first, since a digit does nothing there', () => {
+  const q = findQuestion(previewed([' ', '❯', '❯'], [' ☐ Layout']));
+  assert.deepEqual(q.choices[0].keys, ['\x1b[A', '1', '\r']);
+  assert.deepEqual(q.choices[1].keys, ['\x1b[A', '2', '\r']);
+  assert.deepEqual(q.choices[2].keys, ['\r']);
+});
+
+test('a preview form with its notes line open is not read, or digits would land in the note', () => {
+  const screen = previewed(['❯', ' ', ' ']).map((l) => (l.includes('Notes: press n') ? '                                  Notes: shorter please' : l));
+  assert.equal(findQuestion(screen), null);
+});
+
+test('in a short terminal the notes row beside the last choice stays out of its label', () => {
+  const q = findQuestion([
+    rule,
+    ' ☐ Layout',
+    '',
+    'Which layout do you want?',
+    '',
+    '❯ 1. A                           ┌──────────┐',
+    '  2. B                           │ [ a ]    │',
+    '  3. C                           └──────────┘',
+    '  4. D                           Notes: press n to add notes',
+    '',
+    rule,
+    '  Chat about this',
+    ...previewFoot,
+  ]);
+  assert.deepEqual(q.choices.map((c) => c.label), ['A', 'B', 'C', 'D', 'Chat about this']);
+});
+
 test('a preview form that fails to read still counts as a picker', () => {
   const screen = ['  1. Stacked', '  7. Grid', '', '  Chat about this', ...previewFoot];
   assert.equal(findQuestion(screen), null);

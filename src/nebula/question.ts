@@ -40,6 +40,9 @@ const RULE = /^\s*[╭─━]{3}[─━╮]*\s*$/;
 const CHAT = "Chat about this";
 /** That row when its choices have previews: no number, and only ↓ reaches it. */
 const CHAT_ROW = /^(?:[❯›▶]\s*)?Chat about this$/;
+/** The notes row of a preview form, while its line is closed. */
+const NOTES_HINT = "press n to add notes";
+const NOTES = /(?:^|\s{2,})Notes: press n to add notes$/;
 /** A choice's preview box, to the right of its row. */
 const BOXED = /\s{2,}[┌│├└].*$/;
 /** A box before a choice's label, when the question lets you pick several. */
@@ -193,17 +196,22 @@ function steps(panel: string[] | undefined): { last: boolean; detail: string[] }
 /** A question whose choices each have a preview, drawn in a box beside them.
  *  There's no line for your own answer and "Chat about this" has no number.
  *  A digit only moves the mark here, so Enter has to follow it, and ↓ from
- *  the last choice reaches the chat row. */
+ *  the last choice reaches the chat row. On the chat row a digit does
+ *  nothing, so ↑ comes first. */
 function previewed(screen: string[]): Question | null {
   const lines = upToText(screen);
   const rows = lines.map((l) => l.replace(EDGE, ""));
-  const beside = (l: string) => l.replace(BOXED, "").trim();
+  // The box, and the notes row under it, drawn to the right of the choices.
+  const beside = (l: string) => l.replace(BOXED, "").replace(NOTES, "").trim();
   let chat = rows.length - 1;
   while (chat >= 0 && rows.length - chat <= 6 && !CHAT_ROW.test(rows[chat].trim())) chat--;
   if (chat < 0 || !CHAT_ROW.test(rows[chat].trim())) return null;
   let first = chat - 1;
   while (first >= 0 && chat - first < 40 && beside(lines[first]).match(CHOICE)?.[2] !== "1") first--;
   if (first < 0 || chat - first >= 40) return null;
+  // With the notes line open its hint is gone, and digits would land in the
+  // note.
+  if (!lines.slice(first, chat).some((l) => l.includes(NOTES_HINT))) return null;
   const choices: Choice[] = [];
   for (let i = first; i < chat; i++) {
     const t = beside(lines[i]);
@@ -218,12 +226,17 @@ function previewed(screen: string[]): Question | null {
   // With the mark on the chat row, the last choice keeps a mark of its own.
   const onChat = rows[chat].trim() !== CHAT;
   const asked: Choice[] = [
-    ...choices.map((c) => ({ ...c, selected: c.selected && !onChat, ...(last ? {} : { stays: true }) })),
+    ...choices.map((c) => ({
+      ...c,
+      selected: c.selected && !onChat,
+      ...(onChat ? { keys: ["\x1b[A", ...c.keys!] } : {}),
+      ...(last ? {} : { stays: true }),
+    })),
     {
       key: "chat",
       label: CHAT,
       selected: onChat,
-      keys: [choices[choices.length - 1].key, "\x1b[B", "\r"],
+      keys: onChat ? ["\r"] : [choices[choices.length - 1].key, "\x1b[B", "\r"],
     },
   ];
   return detail.length ? { prompt, detail, choices: asked } : { prompt, choices: asked };
