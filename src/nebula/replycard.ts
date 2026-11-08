@@ -592,10 +592,28 @@ export function pendingCard(entries: { n: number; kind: string; text: string }[]
   const last = [...entries].reverse().find((e) => e.kind === "claude" || e.kind === "you");
   if (!last || last.kind !== "claude") return null;
   const card = readCard(last.text);
-  const earlier = openDecisions(entries, last.n);
-  const asking = card.asks.length > 0 || !!card.asksNote;
   const open = card.verdict?.tone === "wait" || card.verdict?.tone === "bad";
-  if (!asking && !(earlier.length && open)) return null;
-  const asked = [...entries].reverse().find((e) => e.kind === "you" && e.n < last.n)?.text ?? "";
+  // A reply that says it's safe to close has moved past what was asked before.
+  const earlier = card.verdict?.tone === "done" ? [] : openDecisions(entries, last.n);
+  if (!asksYou(card) && !(earlier.length && open)) return null;
+  // What set this turn off: the last thing you said that wasn't only answers.
+  const asked = [...entries].reverse().find((e) => e.kind === "you" && e.n < last.n && !onlyAnswers(e.text))?.text ?? "";
   return { n: last.n, card, asked, earlier };
+}
+
+/** The card itself asks you something: numbered decisions, or a Needs
+ *  you note on a card that isn't finished ("Needs you: Nothing." isn't). */
+export const asksYou = (card: Card) => card.asks.length > 0 || (!emptyNote(card.asksNote) && card.verdict?.tone !== "done");
+
+/** A Needs you that says there's nothing: "Nothing.", "- None", "n/a". */
+export const emptyNote = (note: string) => !note.trim() || /^[-*•\s]*(nothing|none|n\/a|—|-)(\b[^\n]*)?$/i.test(note.trim());
+
+/** A message that only answers decisions: "1 A, 2 B", or lines said
+ *  against earlier replies. */
+function onlyAnswers(text: string): boolean {
+  const rest = text
+    .replace(/^About your reply that starts ".+": [^\n]+$/gm, "")
+    .replace(/\b\d{1,2}\s*[A-Za-z]\b/g, "")
+    .replace(/\band\b|[,.;&\s]/gi, "");
+  return !rest && text.trim() !== "";
 }

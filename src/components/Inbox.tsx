@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "../nebula/client";
 import { flash, getState, setState, useAppState } from "../nebula/store";
 import { enqueue } from "../nebula/queue";
-import { CATCH_UP, answerText, pendingCard, suggested, typedAnswers, type Pending } from "../nebula/replycard";
+import { CATCH_UP, answerText, asksYou, pendingCard, suggested, typedAnswers, type Pending } from "../nebula/replycard";
 import { relativeTime } from "../nebula/status";
 import type { Transcript } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
@@ -49,7 +49,7 @@ async function waitingOn(agent: Agent): Promise<Waiting | null> {
   const away = putAway();
   const earlier = got.earlier.filter((d) => !away.has(`${agent.id}:${d.entry}`));
   // Put away everything earlier, and the latest reply asks nothing itself.
-  if (!earlier.length && !got.card.asks.length && !got.card.asksNote) return null;
+  if (!earlier.length && !asksYou(got.card)) return null;
   return { ...got, agent, earlier };
 }
 
@@ -177,20 +177,27 @@ function InboxItem({
     .map(([quote, said]) => `About your reply that starts "${quote}": ${said}`);
   // Answers to earlier replies keep a paragraph of their own, as in the Read view.
   const outgoing = [answerText(picks, draft), backLines.join("\n")].filter(Boolean).join("\n\n");
+  // Answering only earlier replies sends the thread off with its latest
+  // decisions unsaid, and it won't wait here for them again.
+  const latestLeft = backLines.length > 0 && card.asks.some((a) => a.options.length) && !answerText(picks, draft);
   const ghost = !draft && !answerText(picks, "") && !backLines.length ? answerText(recommended, "") : "";
   const self = useRef<HTMLElement>(null);
   // Answered: the card slides away and its space closes, then it leaves the
   // list. You stay here for the next one.
+  // Slides away, then leaves the list; you stay for the next one.
+  const leave = () => {
+    const el = self.current;
+    const animate = !!el && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Measured before the class goes on, for the height to close from.
+    if (el && animate) el.style.setProperty("--h", `${el.offsetHeight}px`);
+    onSent(animate);
+  };
   const send = async () => {
     if (!outgoing || leaving) return;
     try {
       const how = await enqueue(agent, outgoing, { stay: true });
       flash(how === "queued" ? `Queued for ${agent.name}` : `Sent to ${agent.name}`);
-      const el = self.current;
-      const animate = !!el && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-      // Measured before the class goes on, for the height to close from.
-      if (el && animate) el.style.setProperty("--h", `${el.offsetHeight}px`);
-      onSent(animate);
+      leave();
     } catch {
       flash(`Couldn't send to ${agent.name}. Your answer is still here.`, 6000);
     }
@@ -249,7 +256,7 @@ function InboxItem({
       </Where.Provider>
       {earlier.length > 0 && (
         // Folded while the latest reply asks its own; open when it's all there is.
-        <details className="inbox-earlier" open={!card.asks.length && !card.asksNote}>
+        <details className="inbox-earlier" open={!asksYou(card)}>
           <summary>
             {earlierCount === 1 ? "1 decision left open earlier" : `${earlierCount} decisions left open earlier`}
             {backLines.length > 0 && (
@@ -267,6 +274,8 @@ function InboxItem({
                     all.add(`${agent.id}:${d.entry}`);
                     keepPutAway(all);
                     setAway((x) => new Set(x).add(d.entry));
+                    // That was all it waited on: nothing left to answer here.
+                    if (earlier.length === 1 && !asksYou(card)) leave();
                     setBack(({ [d.entry]: _, ...rest }) => rest);
                   }}
                   title="These don't matter any more: don't list them again"
@@ -298,6 +307,7 @@ function InboxItem({
           ))}
         </details>
       )}
+      {latestLeft && <p className="inbox-hint">This answers the earlier replies only. Its latest decisions above go unanswered.</p>}
       <div className="inbox-compose">
         <input
           value={draft}
@@ -325,16 +335,25 @@ function InboxItem({
 /** What you said that set this turn off: one line, all of it on a click. */
 function Asked({ text }: { text: string }) {
   const [full, setFull] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const line = useRef<HTMLSpanElement>(null);
   const said = text.trim() === CATCH_UP ? "Catch me up" : text.trim();
+  useLayoutEffect(() => {
+    const el = line.current;
+    if (el && !full) setClamped(el.scrollWidth > el.clientWidth || said.includes("\n"));
+  }, [said, full]);
   return (
-    <button
-      className={`inbox-asked${full ? " is-full" : ""}`}
-      onClick={() => setFull(!full)}
-      aria-expanded={full}
-      title={full ? "Show less" : "Show all of it"}
-    >
-      <span className="inbox-asked-label">You asked</span> {said}
-    </button>
+    <p className={`inbox-asked${full ? " is-full" : ""}`}>
+      <span className="inbox-asked-label">You asked</span>
+      <span className="inbox-asked-text" ref={line}>
+        {said}
+      </span>
+      {(clamped || full) && (
+        <button className="link-btn" onClick={() => setFull(!full)} aria-expanded={full}>
+          {full ? "Less" : "All of it"}
+        </button>
+      )}
+    </p>
   );
 }
 

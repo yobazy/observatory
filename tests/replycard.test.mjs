@@ -413,6 +413,22 @@ test('Decisions also lists a Needs you without options, and decisions left open 
   assert.equal(pendingCard([...earlier, { n: 2, kind: 'claude', text: 'Done.' }]), null);
 });
 
+test('Decisions skips a Needs you that says nothing, earlier asks on a safe-to-close card, and answer-only messages as what you asked', async () => {
+  const { pendingCard } = await import('../src/nebula/replycard.ts');
+  for (const note of ['Nothing.', '- None', 'nothing, all done']) {
+    assert.equal(pendingCard([{ n: 0, kind: 'you', text: 'go' }, { n: 1, kind: 'claude', text: `**Done.**\n\n**Needs you**\n${note}` }]), null, note);
+  }
+  const asks = '**Needs you**\n1. Ship?  A yes · B no';
+  const entries = [
+    { n: 0, kind: 'you', text: 'fix the header' },
+    { n: 1, kind: 'claude', text: '**Needs you**\n1. Queue or lock?  A queue · B lock' },
+    { n: 2, kind: 'you', text: 'About your reply that starts "x": 2 B\n\n1 A, 3 B' },
+  ];
+  const safe = pendingCard([...entries, { n: 3, kind: 'claude', text: `${asks}\n\n**✅ Safe to close.**` }]);
+  assert.deepEqual(safe?.earlier, []);
+  assert.equal(safe?.asked, 'fix the header');
+});
+
 test('answers written in, or given in the tray alongside taps, count as answered', async () => {
   const { openDecisions, answersSaid } = await import('../src/nebula/replycard.ts');
   assert.deepEqual(answersSaid('1 A\n2: keep it for a week'), { 1: 'A', 2: 'keep it for a week' });
