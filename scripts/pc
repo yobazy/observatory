@@ -4,7 +4,7 @@
 # ssh. Moments are copied over for `replay`, screenshots copied back.
 #
 #   scripts/pc up [branch]        # the branch (default: this one, pushed) running there
-#   scripts/pc drive <args>       # scripts/drive there: replay, shot and the rest
+#   scripts/pc drive <args>       # scripts/drive there: replay, shot, run and the rest
 #   scripts/pc down               # stop it
 #
 # It renders with WebKitGTK, not macOS's WebKit: check video and anything
@@ -53,6 +53,21 @@ case "${1:-}" in
         mkdir -p "$(dirname "$out")"
         scp -q "$HOST:$remote" "$out"
         echo "$out"
+        ;;
+      run)
+        # The steps go over, the run's screenshots come back: to --shots, or
+        # a new folder beside the Mac's sandbox shots.
+        steps="${2:?run needs a file of steps, or - for stdin}"
+        out=/tmp/observatory-sandbox/shots/pc-run-$(date +%Y%m%d-%H%M%S)
+        [ "${3:-}" = --shots ] && out="${4:?--shots needs a folder}"
+        remote="$DIR/.sandbox/shots/$(basename "$out")"
+        if [ "$steps" = - ]; then steps_text=$(cat); else steps_text=$(cat "$steps"); fi
+        status=0
+        printf '%s\n' "$steps_text" | there "cd $DIR && scripts/drive run - --shots '$remote'" || status=$?
+        mkdir -p "$out"
+        scp -q "$HOST:$remote/*.png" "$out/" 2>/dev/null || true
+        echo "screenshots copied to $out"
+        exit $status
         ;;
       *)
         args=$(printf '%q ' "$@")
