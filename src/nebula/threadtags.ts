@@ -20,6 +20,9 @@ export interface ThreadTagRecord {
 export interface ThreadTagPrefs {
   threadTagLists?: Record<string, string[]>;
   threadTags?: Record<string, ThreadTagRecord>;
+  /** A color for some of a project's tags, by repo path, then tag: a
+   *  PROJECT_COLORS name. */
+  threadTagColors?: Record<string, Record<string, string>>;
 }
 
 /** A thread as far as tags go: its id. */
@@ -68,8 +71,13 @@ export function renameTag<P extends ThreadTagPrefs>(prefs: P, repo: string, from
   const list = tagList(prefs, repo);
   if (!list.includes(from) || name === from) return prefs;
   const renamed = unique(list.map((t) => (t === from ? name : t)));
-  return retag({ ...prefs, threadTagLists: { ...prefs.threadTagLists, [repo]: renamed } }, ids, (tags) =>
-    tags.includes(from) ? unique(tags.map((t) => (t === from ? name : t))) : tags,
+  // The color goes with the name; merging into a tag keeps that tag's own.
+  const { [from]: color, ...colors } = prefs.threadTagColors?.[repo] ?? {};
+  if (color && !colors[name]) colors[name] = color;
+  return retag(
+    { ...withColors(prefs, repo, colors), threadTagLists: { ...prefs.threadTagLists, [repo]: renamed } },
+    ids,
+    (tags) => (tags.includes(from) ? unique(tags.map((t) => (t === from ? name : t))) : tags),
   );
 }
 
@@ -77,9 +85,34 @@ export function renameTag<P extends ThreadTagPrefs>(prefs: P, repo: string, from
 export function deleteTag<P extends ThreadTagPrefs>(prefs: P, repo: string, tag: string, ids?: Iterable<string>): P {
   const list = tagList(prefs, repo);
   if (!list.includes(tag)) return prefs;
-  return retag({ ...prefs, threadTagLists: { ...prefs.threadTagLists, [repo]: list.filter((t) => t !== tag) } }, ids, (tags) =>
-    tags.filter((t) => t !== tag),
+  const { [tag]: _gone, ...colors } = prefs.threadTagColors?.[repo] ?? {};
+  return retag(
+    { ...withColors(prefs, repo, colors), threadTagLists: { ...prefs.threadTagLists, [repo]: list.filter((t) => t !== tag) } },
+    ids,
+    (tags) => tags.filter((t) => t !== tag),
   );
+}
+
+/** The project's tag colors set to `colors`, its entry dropped when empty. */
+function withColors<P extends ThreadTagPrefs>(prefs: P, repo: string, colors: Record<string, string>): P {
+  if (!prefs.threadTagColors?.[repo] && !Object.keys(colors).length) return prefs;
+  const threadTagColors = { ...prefs.threadTagColors };
+  if (Object.keys(colors).length) threadTagColors[repo] = colors;
+  else delete threadTagColors[repo];
+  return { ...prefs, threadTagColors };
+}
+
+/** The tag's color (a PROJECT_COLORS name), or null when it has none. */
+export function tagColor(prefs: ThreadTagPrefs, repo: string, tag: string): string | null {
+  return prefs.threadTagColors?.[repo]?.[tag] ?? null;
+}
+
+/** A color for one of the project's tags; null takes it off. A tag that
+ *  isn't in the list gets none. */
+export function setTagColor<P extends ThreadTagPrefs>(prefs: P, repo: string, tag: string, color: string | null): P {
+  if (!tagList(prefs, repo).includes(tag)) return prefs;
+  const { [tag]: _was, ...colors } = prefs.threadTagColors?.[repo] ?? {};
+  return withColors(prefs, repo, color ? { ...colors, [tag]: color } : colors);
 }
 
 /** The thread's tags as set by you, from its menu: cleared ones included,
@@ -89,14 +122,62 @@ export function setThreadTags<P extends ThreadTagPrefs>(prefs: P, agentId: strin
   return { ...prefs, threadTags: { ...prefs.threadTags, [agentId]: record } };
 }
 
-/** Whether the thread passes the chip: every thread does when none is on. */
-export function hasTag(prefs: ThreadTagPrefs, agentId: string, active: string | null): boolean {
-  return !active || threadTagsOf(prefs, agentId).includes(active);
+/** `tag` on (or off) each of several threads at once, as you, from the
+ *  menu for picked threads. Their other tags stay as they are. */
+export function tagThreads<P extends ThreadTagPrefs>(prefs: P, agentIds: string[], tag: string, on: boolean, at = Date.now()): P {
+  const name = cleanTag(tag);
+  if (!name) return prefs;
+  return agentIds.reduce((next, id) => {
+    const tags = threadTagsOf(next, id);
+    return setThreadTags(next, id, on ? [...tags, name] : tags.filter((t) => t !== name), at);
+  }, prefs);
 }
 
-/** The threads the chip shows, in the order given. */
-export function filterThreads<T extends Tagged>(threads: T[], prefs: ThreadTagPrefs, active: string | null): T[] {
+/** How many of several threads carry `tag`: all, some or none of them. */
+export function tagShare(prefs: ThreadTagPrefs, agentIds: string[], tag: string): "all" | "some" | "none" {
+  const n = agentIds.filter((id) => threadTagsOf(prefs, id).includes(tag)).length;
+  return n === 0 ? "none" : n === agentIds.length ? "all" : "some";
+}
+
+/** The chips on after clicking `tag`: off when it was on, else added. */
+export function toggleChip(active: string[], tag: string): string[] {
+  return active.includes(tag) ? active.filter((t) => t !== tag) : [...active, tag];
+}
+
+/** Whether the thread passes the chips: it carries every one that's on.
+ *  Every thread does when none is. */
+export function hasTag(prefs: ThreadTagPrefs, agentId: string, active: readonly string[]): boolean {
+  if (!active.length) return true;
+  const tags = threadTagsOf(prefs, agentId);
+  return active.every((t) => tags.includes(t));
+}
+
+/** The threads the chips show, in the order given. */
+export function filterThreads<T extends Tagged>(threads: T[], prefs: ThreadTagPrefs, active: readonly string[]): T[] {
   return threads.filter((t) => hasTag(prefs, t.id, active));
+}
+
+/** The tags any of `agentIds` carry, each once, in the order first met. */
+export function carriedTags(prefs: ThreadTagPrefs, agentIds: Iterable<string>): string[] {
+  const out = new Set<string>();
+  for (const id of agentIds) for (const t of threadTagsOf(prefs, id)) out.add(t);
+  return [...out];
+}
+
+/** Whether a thread answers a "#tag" query: one of its tags starts with
+ *  what's typed after the `#`, as projects' own tags do in the sidebar. */
+export function threadAnswersTag(prefs: ThreadTagPrefs, agentId: string, query: string): boolean {
+  const want = cleanTag(query);
+  return !!want && threadTagsOf(prefs, agentId).some((t) => t.startsWith(want));
+}
+
+/** The chip a "#tag" filter turns on in a project with tags `list`: the
+ *  tag itself, else the first that starts with it; none when neither. */
+export function chipFor(filter: string | null, list: string[]): string[] {
+  const want = filter ? cleanTag(filter) : "";
+  if (!want) return [];
+  const tag = list.includes(want) ? want : list.find((t) => t.startsWith(want));
+  return tag ? [tag] : [];
 }
 
 /** How many of `threads` carry each of the project's tags. */
@@ -118,11 +199,11 @@ export function hasTerms(terms: string[], parts: (string | null | undefined)[]):
 }
 
 /** Whether a thread's row shows: it matches the search (`text` is what the
- *  search reads) and carries the chip's tag, when either is on. */
+ *  search reads) and carries the chips' tags, when either is on. */
 export function threadShows(
   prefs: ThreadTagPrefs,
   agentId: string,
-  active: string | null,
+  active: readonly string[],
   terms: string[],
   text: (string | null | undefined)[],
 ): boolean {

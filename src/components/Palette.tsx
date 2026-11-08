@@ -23,6 +23,8 @@ import type { TextDialogSpec } from "./Dialogs";
 import type { Agent } from "../nebula/types";
 import { homeCard } from "../nebula/cards";
 import { afterClosing, recentThreads } from "../nebula/recentThreads";
+import { cleanTag } from "../nebula/folders";
+import { carriedTags, threadAnswersTag, threadTagsOf } from "../nebula/threadtags";
 
 export interface PaletteContext {
   newTask: () => void;
@@ -33,6 +35,8 @@ export interface PaletteContext {
   editHome: () => void;
   addProject: () => void;
   toggleProjects: () => void;
+  /** Show the projects sidebar, where a tag looked for across projects shows. */
+  showProjects: () => void;
   toggleTasks: () => void;
   toggleGrid: () => void;
   prompt: (d: TextDialogSpec) => void;
@@ -40,10 +44,13 @@ export interface PaletteContext {
 
 interface Item {
   id: string;
-  group: "Recent" | "Actions" | "Tasks" | "Projects";
+  group: "Recent" | "Actions" | "Tags" | "Tasks" | "Projects";
   label: string;
   detail?: string;
   keys?: string;
+  /** A task's thread, or a tag looked for across projects: what "#tag" finds. */
+  agentId?: string;
+  tag?: string;
   run: () => void;
 }
 
@@ -146,6 +153,30 @@ function build(s: State, ctx: PaletteContext): Item[] {
   const agents = Object.values(s.agents)
     .filter((a) => !a.archived)
     .sort((a, b) => urgency(a) - urgency(b) || b.status_changed_at - a.status_changed_at);
+  // Each tag threads carry, in every project: picking one filters the
+  // sidebar to "#tag", and the projects open with its chip on.
+  const tagged = carriedTags(s.prefs, agents.map((a) => a.id));
+  for (const t of tagged.sort()) {
+    const carrying = agents.filter((a) => threadTagsOf(s.prefs, a.id).includes(t));
+    const where = new Set(carrying.map((a) => s.worktrees[a.worktree_id]?.project_id));
+    // Stay in the open project when it has some; else open the first that does.
+    const first = sortedProjects(s).find((p) => where.has(p.id));
+    items.push({
+      id: `tag:${t}`,
+      group: "Tags",
+      label: `Threads tagged #${t}, in every project`,
+      detail: `${carrying.length} ${carrying.length === 1 ? "thread" : "threads"} in ${where.size} ${where.size === 1 ? "project" : "projects"}`,
+      tag: t,
+      run: () => {
+        ctx.showProjects();
+        setState((now) => ({
+          tagFilter: t,
+          view: "sessions",
+          selectedProject: now.selectedProject && where.has(now.selectedProject) ? now.selectedProject : (first?.id ?? now.selectedProject),
+        }));
+      },
+    });
+  }
   for (const a of agents) items.push(taskItem(s, a));
 
   sortedProjects(s).forEach((p, i) =>
@@ -165,11 +196,13 @@ function taskItem(s: State, a: Agent): Item {
   const wt = s.worktrees[a.worktree_id];
   const project = projectOfWorktree(s, a.worktree_id);
   const where = [project?.name, wt && !wt.is_main ? wt.branch : null].filter(Boolean).join(" · ");
+  const tags = threadTagsOf(s.prefs, a.id).map((t) => `#${t}`);
   return {
     id: `task:${a.id}`,
     group: "Tasks",
     label: a.name,
-    detail: `${statusLabel(a)} ${relativeTime(a.status_changed_at)} · ${where}`,
+    detail: [`${statusLabel(a)} ${relativeTime(a.status_changed_at)}`, where, ...(tags.length ? [tags.join(" ")] : [])].join(" · "),
+    agentId: a.id,
     run: () => selectAgent(a),
   };
 }
@@ -206,7 +239,15 @@ export function Palette({ ctx, onClose }: { ctx: PaletteContext; onClose: () => 
     const q = query.trim();
     if (!q) {
       let tasks = 0;
-      return all.filter((i) => i.group !== "Tasks" || tasks++ < 40);
+      return all.filter((i) => i.group !== "Tags" && (i.group !== "Tasks" || tasks++ < 40));
+    }
+    // "#tag": the tags that start so, then every project's threads carrying one.
+    if (q.startsWith("#")) {
+      const want = cleanTag(q);
+      const prefs = getState().prefs;
+      return all
+        .filter((i) => (i.tag ? !want || i.tag.startsWith(want) : i.group === "Tasks" && i.agentId && (!want || threadAnswersTag(prefs, i.agentId, want))))
+        .slice(0, 60);
     }
     // Typing searches every task once; the recent ones are among them.
     return all
@@ -246,7 +287,7 @@ export function Palette({ ctx, onClose }: { ctx: PaletteContext; onClose: () => 
           className="palette-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Jump to a task or project, or run an action…"
+          placeholder="Jump to a task or project, run an action, or type # for a tag…"
           aria-label="Search"
           aria-controls="palette-list"
           aria-activedescendant={shown[hover] ? `pal-${shown[hover].id}` : undefined}
