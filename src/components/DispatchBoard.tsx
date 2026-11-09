@@ -199,6 +199,9 @@ function BoardRow({ row, state, holds }: { row: Row; state: State; holds: Holds 
           </div>
         )}
       </div>
+      {row.task.state === "launched" && row.task.past && row.task.note && row.task.note !== "queued" && (
+        <p className="board-note">{row.task.note}</p>
+      )}
       <RowDetail row={row} state={state} holds={holds} />
     </li>
   );
