@@ -32,7 +32,7 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
   const applyModel = () => {
     if (!lead || !model.trim() || model.trim() === lead.model) return;
     setLeadModel(projectId, lead, model)
-      .then(() => flash(state === "running" ? `Switching the lead to ${model.trim()}` : `The lead will use ${model.trim()}`))
+      .then(() => flash(state === "running" ? `Restarted the lead on ${model.trim()}` : `The lead will use ${model.trim()}`))
       .catch((e) => flash(`Couldn't switch the lead's model: ${errText(e)}`));
   };
 

@@ -41,13 +41,20 @@ export const sessionKey = (source: AgentKind, session: string) => `${source}:${s
 
 /** $ per million tokens: input, output, and cache reads as a fraction of
  *  input. Cache writes are 1.25x input (5-minute) and 2x (1-hour) on every
- *  model. Only explicit model names and their dated snapshots match. */
+ *  model. Explicit model names and their dated snapshots match; another
+ *  version of a known Claude family (`claude-haiku-6-0`) takes that family's
+ *  alias row, the latest known price.
+ *  Claude rates from https://platform.claude.com/docs/en/about-claude/pricing,
+ *  checked 2026-11-09. Haiku 5.5 is listed at its price for prompts up to
+ *  100,000 tokens; longer prompts cost 5x, which a usage bucket can't tell. */
 const PRICES: [prefix: string, input: number, output: number, read: number][] = [
   ["claude-fable-5-1", 10, 50, 0.025],
   ["claude-mythos-5-1", 10, 50, 0.025],
   ["claude-fable-5", 10, 50, 0.1],
   ["claude-mythos-5", 10, 50, 0.1],
   ["claude-opus-5-5", 4, 20, 0.05],
+  ["claude-sonnet-5-5", 2, 10, 0.05],
+  ["claude-haiku-5-5", 0.1, 0.5, 0.1],
   ["claude-opus-5", 5, 25, 0.1],
   ["claude-opus-4-8", 5, 25, 0.1],
   ["claude-opus-4-7", 5, 25, 0.1],
@@ -55,12 +62,13 @@ const PRICES: [prefix: string, input: number, output: number, read: number][] = 
   ["claude-sonnet-5", 2, 10, 0.1],
   ["claude-sonnet-4-6", 3, 15, 0.1],
   ["claude-haiku-4-5", 1, 5, 0.1],
-  // Explicit family aliases; unrecognized model versions remain unpriced.
-  ["claude-fable", 10, 50, 0.1],
-  ["claude-mythos", 10, 50, 0.1],
-  ["claude-opus", 5, 25, 0.1],
-  ["claude-sonnet", 3, 15, 0.1],
-  ["claude-haiku", 1, 5, 0.1],
+  // Family aliases (`--model haiku` and friends) and versions not listed
+  // above: the latest known model in each family.
+  ["claude-fable", 10, 50, 0.025],
+  ["claude-mythos", 10, 50, 0.025],
+  ["claude-opus", 4, 20, 0.05],
+  ["claude-sonnet", 2, 10, 0.05],
+  ["claude-haiku", 0.1, 0.5, 0.1],
   // Standard API estimates, verified 2026-09-29:
   // https://developers.openai.com/api/docs/pricing
   ["gpt-5.5", 5, 30, 0.1],
@@ -73,9 +81,15 @@ const PRICES: [prefix: string, input: number, output: number, read: number][] = 
   ["gpt-6-luna", 0.1, 0.5, 0.1],
 ];
 
+const FAMILY = /^(claude-(?:fable|mythos|opus|sonnet|haiku))-\d/;
+
 function priceOf(model: string) {
   const base = model.replace(/-(?:\d{8}|\d{4}-\d{2}-\d{2})$/, "");
-  return PRICES.find(([name]) => name === base) ?? null;
+  const exact = PRICES.find(([name]) => name === base);
+  if (exact) return exact;
+  // A versioned name this table doesn't list yet: its family's latest price.
+  const family = FAMILY.exec(base)?.[1];
+  return (family && PRICES.find(([name]) => name === family)) || null;
 }
 
 export function costOf(t: Tokens & { recordedCost?: number | null }, model: string): number | null {

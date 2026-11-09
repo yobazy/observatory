@@ -145,40 +145,48 @@ test('Given 3 events while the lead is running, then it gets one message with 3 
   assert.equal(await deliver([], stub.q), null);
 });
 
-test('Given "Start a lead" with model haiku, a thread starts with the lead prompt, its first input is /model haiku, and the card stores its id; changing to sonnet sends /model sonnet', async () => {
+test('Given "Start a lead" with model haiku, a thread starts with the lead prompt on haiku (passed at launch, never typed as /model), and the card stores its id; changing to sonnet restarts it on sonnet', async () => {
   globalThis.localStorage.clear();
   reloadCards();
   const calls = [];
   const deps = {
     create: async (prompt, model) => {
       calls.push(['create', prompt, model]);
-      return 'lead-7';
+      return `lead-${calls.length}`;
     },
+    // Typing into the lead isn't how its model is set: /model saves the
+    // user's default for every new Claude session.
     send: async (id, text) => calls.push(['send', id, text]),
     save: (lead) => saveLead('p1', lead, card()),
   };
   const notes = defaultNotes('observatory');
   assert.equal(notes, '~/.config/observatory/leads/observatory.md');
   const lead = await startLead({ project: 'observatory', path: '/repo/observatory', notes, model: 'haiku' }, deps);
-  assert.equal(calls[0][0], 'create');
-  assert.equal(calls[0][1], leadPrompt({ project: 'observatory', path: '/repo/observatory', notes }));
-  assert.equal(calls[0][2], 'haiku');
-  assert.deepEqual(calls[1], ['send', 'lead-7', '/model haiku']);
-  assert.equal(calls.length, 2);
-  assert.deepEqual(cardFor('p1').lead, { agentId: 'lead-7', model: 'haiku', notes });
+  assert.deepEqual(calls, [['create', leadPrompt({ project: 'observatory', path: '/repo/observatory', notes }), 'haiku']]);
+  assert.deepEqual(cardFor('p1').lead, { agentId: 'lead-1', model: 'haiku', notes });
   // Kept across a reload of the cards.
   reloadCards();
-  assert.equal(cardFor('p1').lead.agentId, 'lead-7');
+  assert.equal(cardFor('p1').lead.agentId, 'lead-1');
 
-  const changed = await changeLeadModel(lead, 'sonnet', true, deps);
-  assert.deepEqual(calls[2], ['send', 'lead-7', '/model sonnet']);
-  assert.equal(changed.model, 'sonnet');
-  assert.equal(cardFor('p1').lead.model, 'sonnet');
-  // The same model again, or a stopped lead: nothing is typed.
-  await changeLeadModel(changed, 'sonnet', true, deps);
-  await changeLeadModel(changed, 'opus', false, deps);
-  assert.equal(calls.length, 3);
+  // A running lead on a new model: restarted on it (Restart archives the old thread).
+  const restarts = [];
+  const restart = async (model) => {
+    restarts.push(model);
+    return startLead({ project: 'observatory', path: '/repo/observatory', notes, model }, deps);
+  };
+  const changed = await changeLeadModel(lead, 'sonnet', true, { save: deps.save, restart });
+  assert.deepEqual(restarts, ['sonnet']);
+  assert.equal(calls[1][0], 'create');
+  assert.equal(calls[1][2], 'sonnet');
+  assert.deepEqual(changed, { agentId: 'lead-2', model: 'sonnet', notes });
+  assert.deepEqual(cardFor('p1').lead, changed);
+  // The same model again does nothing; a stopped lead just saves it.
+  await changeLeadModel(changed, 'sonnet', true, { save: deps.save, restart });
+  await changeLeadModel(changed, 'opus', false, { save: deps.save, restart });
+  assert.deepEqual(restarts, ['sonnet']);
   assert.equal(cardFor('p1').lead.model, 'opus');
+  assert.equal(cardFor('p1').lead.agentId, 'lead-2');
+  assert.ok(!calls.some((c) => c[0] === 'send'), 'nothing is typed into a lead to set its model');
 
   await assert.rejects(startLead({ project: 'x', path: '/x', notes, model: 'haiku' }, { ...deps, create: async () => null }));
 });
@@ -353,4 +361,25 @@ test("At launch, threads, stuck flags and reviews already there are the baseline
   );
   assert.deepEqual(poll(loaded), []);
   assert.deepEqual(poll({ ...loaded }), []);
+});
+
+test('A PR opened line names the PR by number with its link, and both survive clipping to 300 characters', () => {
+  const pr = { number: 42, url: 'https://github.com/yobazy/observatory/pull/42' };
+  assert.equal(
+    eventLine({ kind: 'PR opened', title: 'Fix login', branch: 'fix-login', agentId: 'a1', need: 'Ready for review', pr }),
+    '[observatory] PR opened #42: Fix login on fix-login (agent a1) https://github.com/yobazy/observatory/pull/42: Ready for review',
+  );
+  assert.equal(
+    eventLine({ kind: 'PR opened', title: 'T', branch: 'b', agentId: 'a1', need: '', pr: { number: 7 } }),
+    '[observatory] PR opened #7: T on b (agent a1)',
+  );
+  // A long need gives way first.
+  const longNeed = eventLine({ kind: 'PR opened', title: 'Fix login', branch: 'fix-login', agentId: 'a1', need: 'word '.repeat(100), pr });
+  assert.ok(longNeed.length <= MAX_LINE);
+  assert.ok(longNeed.includes('#42') && longNeed.includes(pr.url) && longNeed.includes('(agent a1)'));
+  assert.ok(longNeed.endsWith('…'));
+  // Then a long title.
+  const longTitle = eventLine({ kind: 'PR opened', title: 'Title '.repeat(80), branch: 'fix-login', agentId: 'a1', need: 'x', pr });
+  assert.ok(longTitle.length <= MAX_LINE);
+  assert.ok(longTitle.includes('#42') && longTitle.endsWith(`(agent a1) ${pr.url}`));
 });
