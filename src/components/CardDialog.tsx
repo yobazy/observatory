@@ -216,6 +216,21 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
                   : "This folder isn't a git repo, so tasks run in it side by side."}
             </p>
 
+            {canIsolate && (
+              <div className="field">
+                <label htmlFor="card-push">Push</label>
+                <div className="card-row">
+                  <Switch id="card-push" on={card.pushAfterTurn} onChange={(on) => setCard({ ...card, pushAfterTurn: on })} />
+                  <span className="dialog-note card-flat">Push the branch after every turn</span>
+                </div>
+              </div>
+            )}
+            {canIsolate && card.pushAfterTurn && (
+              <p className="dialog-note card-indent">
+                Fast-forward only, never forced. Only commits go, and never the main branch.
+              </p>
+            )}
+
             <div className="field">
               <label htmlFor="card-home">Home</label>
               {folderHome ? (

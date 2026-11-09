@@ -104,6 +104,7 @@ pub fn run() {
             git::git_diff,
             git::delete_branch,
             git::local_branches,
+            git::git_push_ff,
             gh::gh_pr,
             gh::gh_pr_create,
             gh::gh_pr_merge,
