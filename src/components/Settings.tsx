@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { flash, getState, setState, useAppState } from "../nebula/store";
+import { DEFAULT_STALE_DAYS, DEFAULT_TRIAGE_COMMAND } from "../nebula/triage";
 import {
   AGENTS_HEAD,
   EXPERIMENTAL,
@@ -371,6 +372,67 @@ function DispatchSettings() {
           suggestions={["claude -p --model haiku --no-session-persistence", "codex exec --skip-git-repo-check"]}
           onCommit={(v) => void savePrefs({ ...prefs, tagCommand: v || undefined })}
         />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-triage-on">
+            Triage queue
+          </label>
+          <span className="setting-hint">
+            A cheap model reads the end of each open thread that changed since its last read and says in one line what
+            it needs from you, ranked at the top of the Dispatch board and walked by ⌘J. Each read is a model call, a
+            batch of up to 10 threads at a time; the first one reads every thread that isn't stale. Off, only threads
+            waiting on you show.
+          </span>
+        </div>
+        <Switch
+          id="set-triage-on"
+          on={prefs.triageOn === true}
+          onChange={(on) => void savePrefs({ ...prefs, triageOn: on || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-triage">
+            Triage command
+          </label>
+          <span className="setting-hint">
+            The agent CLI that triages, run headless with the prompt on stdin. Empty uses Haiku with no tools.
+          </span>
+        </div>
+        <TextSetting
+          id="set-triage"
+          value={prefs.triageCommand ?? ""}
+          placeholder={DEFAULT_TRIAGE_COMMAND}
+          suggestions={[DEFAULT_TRIAGE_COMMAND, "codex exec --skip-git-repo-check"]}
+          onCommit={(v) => void savePrefs({ ...prefs, triageCommand: v || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-triage-stale">
+            Stale after
+          </label>
+          <span className="setting-hint">
+            A thread unchanged this long is labelled stale without a model call, and folded away at the end of the queue.
+          </span>
+        </div>
+        <select
+          id="set-triage-stale"
+          className="setting-input"
+          value={String(prefs.triageStaleDays ?? DEFAULT_STALE_DAYS)}
+          onChange={(e) => {
+            const days = Number(e.target.value);
+            void savePrefs({ ...prefs, triageStaleDays: days === DEFAULT_STALE_DAYS ? undefined : days });
+          }}
+        >
+          {[1, 2, 3, 5, 7, 14, 30].map((n) => (
+            <option key={n} value={n}>
+              {n} {n === 1 ? "day" : "days"}
+              {n === DEFAULT_STALE_DAYS ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="setting">
         <div className="setting-text">
@@ -1077,7 +1139,7 @@ const SHORTCUTS: [string, string][] = [
   ["⌘O", "Add a project"],
   ["⌘P", "Filter projects"],
   ["⌘1 – ⌘9", "Jump to a project"],
-  ["⌘J", "Next session waiting on you"],
+  ["⌘J", "Next in the triage queue, or the next session waiting on you"],
   ["⌘I", "Write an idea down for later"],
   ["⇧⌘I", "Ideas: everything written down to start later"],
   ["⌘U", "Agent usage"],

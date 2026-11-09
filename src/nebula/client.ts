@@ -206,6 +206,13 @@ export function runTagger(prompt: string, previewReply: () => string): Promise<s
   return invoke("tag_threads", { prompt });
 }
 
+/** The triage prompt (triage.ts) to the `triageCommand` CLI, the same way
+ *  (router.rs); refused there unless `triageOn`. */
+export function runTriage(prompt: string, previewReply: () => string): Promise<string> {
+  if (isPreview()) return new Promise((r) => setTimeout(() => r(previewReply()), 900));
+  return invoke("triage_threads", { prompt });
+}
+
 /** The next-prompt suggestions prompt (nextprompts.ts) to the
  *  `suggestCommand` CLI, the same way (router.rs). */
 export function runSuggester(prompt: string, previewReply: () => string): Promise<string> {

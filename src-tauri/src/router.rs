@@ -5,7 +5,7 @@
 //! directly, never through a shell, in an empty folder of its own. The
 //! tagging prompt (tagging.ts) runs the same way, through `tagCommand`, and
 //! so does the Read view's next-prompt suggestions (nextprompts.ts), through
-//! `suggestCommand`.
+//! `suggestCommand`, and the triage queue (triage.ts), through `triageCommand`.
 
 use serde_json::Value;
 use std::io::{Read, Write};
@@ -21,6 +21,9 @@ use tauri::AppHandle;
 pub const DEFAULT_COMMAND: &str = r#"claude -p --no-session-persistence --tools """#;
 /// Matches DEFAULT_SUGGEST in nextprompts.ts.
 const SUGGEST_COMMAND: &str = "claude -p --model haiku --no-session-persistence";
+/// Matches DEFAULT_TRIAGE_COMMAND in triage.ts: a cheap model, no saved
+/// session, and no tools, since it only reads the thread tails it's given.
+const TRIAGE_COMMAND: &str = r#"claude -p --model haiku --no-session-persistence --tools """#;
 /// Suggestions are only worth having while you're still reading the reply.
 const SUGGEST_TIMEOUT: Duration = Duration::from_secs(60);
 /// Routing a long list on a slow model can take a while, but not forever.
@@ -288,6 +291,31 @@ pub async fn suggest_next(app: AppHandle, prompt: String) -> Result<String, Stri
     .map_err(|e| e.to_string())?
 }
 
+/// The triage command as words: Err unless triage is turned on, since every
+/// pass is a model call; a cheap model when no command is set.
+fn triage_words(on: bool, command: Option<&str>) -> Result<Vec<String>, String> {
+    if !on {
+        return Err("The triage queue is off".into());
+    }
+    split_command(command.unwrap_or(TRIAGE_COMMAND))
+}
+
+/// Triage threads: the triage prompt (triage.ts) to the `triageCommand` CLI,
+/// its reply back as text.
+#[tauri::command]
+pub async fn triage_threads(app: AppHandle, prompt: String) -> Result<String, String> {
+    let on = crate::settings::read_desktop_prefs(app.clone())
+        .get("triageOn")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let words = triage_words(on, configured(&app, "triageCommand").as_deref())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        run(&words, prompt, &neutral_dir(), login_path(), TIMEOUT)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,6 +354,40 @@ mod tests {
             ["codex", "exec"]
         );
         assert!(suggest_words(true, Some("OFF")).is_err());
+    }
+
+    #[test]
+    fn triage_is_off_until_turned_on_then_a_cheap_model_without_tools() {
+        assert_eq!(
+            triage_words(false, None).unwrap_err(),
+            "The triage queue is off"
+        );
+        assert!(triage_words(false, Some("codex exec")).is_err());
+        assert_eq!(
+            triage_words(true, None).unwrap(),
+            [
+                "claude",
+                "-p",
+                "--model",
+                "haiku",
+                "--no-session-persistence",
+                "--tools",
+                ""
+            ]
+        );
+        assert_eq!(
+            triage_words(true, Some("codex exec --skip-git-repo-check")).unwrap(),
+            ["codex", "exec", "--skip-git-repo-check"]
+        );
+        let command = r#"sh -c 'cat >/dev/null; echo "{\"sessions\":[]}"'"#;
+        let out = run(
+            &triage_words(true, Some(command)).unwrap(),
+            "the triage prompt".into(),
+            &neutral_dir(),
+            "/bin:/usr/bin",
+            TIMEOUT,
+        );
+        assert_eq!(out.unwrap().trim(), r#"{"sessions":[]}"#);
     }
 
     #[test]

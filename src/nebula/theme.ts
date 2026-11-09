@@ -115,6 +115,14 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   /** The agent CLI that suggests them; unset is a cheap model, "off" is off
    *  (nextprompts.ts). */
   suggestCommand?: string;
+  /** The triage queue's model pass (triage.ts); off unless true, since each
+   *  pass over changed threads is a model call. */
+  triageOn?: boolean;
+  /** The agent CLI triage runs through, headless (router.rs); unset is a
+   *  cheap model (DEFAULT_TRIAGE_COMMAND). */
+  triageCommand?: string;
+  /** Days a thread sits unchanged before it's labelled stale; 3 when unset. */
+  triageStaleDays?: number;
   /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
   dispatchCap?: number;
   /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */
