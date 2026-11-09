@@ -41,7 +41,7 @@ async function latestTurn(id: string): Promise<Turn | null> {
 
 /** Every session the checks read; a project's lead isn't checked. */
 function sessions(s: State, stale: (a: Agent) => boolean): StuckSession[] {
-  const leads = leadIds(allCards());
+  const leads = leadIds(allCards(), getState().prefs.topLead);
   return Object.values(s.agents).filter((a) => !leads.has(a.id)).map((a) => ({
     id: a.id,
     kind: a.kind,
@@ -105,7 +105,7 @@ export function useStuckWatch() {
       if (!spent) return;
       const costs = costBySession(s.usage);
       const budget = budgetOf(s);
-      const leads = leadIds(allCards());
+      const leads = leadIds(allCards(), getState().prefs.topLead);
       const open = Object.values(s.agents).filter((a) => !a.archived && a.session_id && !leads.has(a.id));
       const sent = loadSent();
       const fire = budgetNudges(

@@ -5,6 +5,8 @@ import { flash, projectWorktrees, setState, sortedProjects, useAppState } from "
 import { attemptBranches, fanOut, openCompare } from "../nebula/fanout";
 import { suggestBranch } from "../nebula/branches";
 import { capNote, globalCap, queueNewTask, useBatches, workingNow } from "../nebula/batch";
+import { withAskLine } from "../nebula/leadAsk";
+import { askLineNow } from "../nebula/leadRunner";
 import { kickBatches } from "../nebula/batchRunner";
 import { allCards } from "../nebula/cards";
 import { KIND_LABEL, settingsStem } from "../nebula/status";
@@ -180,7 +182,9 @@ export function LaunchDialog({
         worktree = created.Worktree;
       }
 
-      const agent = await createAgent({ worktree, kind, settings, prompt: task, preset: chosenPreset });
+      // A task with a lead to ask is told to ask it before asking you.
+      const prompt = task.trim() ? withAskLine(task, askLineNow(projectId)) : task;
+      const agent = await createAgent({ worktree, kind, settings, prompt, preset: chosenPreset });
       onStarted?.(agent);
       if (moving) {
         if (keepOld) flash(`Started in ${project?.name}; ${moving.name} is still where it was.`);

@@ -85,7 +85,7 @@ function due(s: State): Agent[] {
     pinned,
     inBatch: unsettledAgents(allBatches(), s.agents, queued),
     held: new Set(Object.keys(s.limits).filter((id) => s.limits[id])),
-    leads: leadIds(allCards()),
+    leads: leadIds(allCards(), getState().prefs.topLead),
     kept: s.prefs.parkKeep,
   });
 }

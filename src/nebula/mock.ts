@@ -760,3 +760,16 @@ export function mockTranscript(s: State, agentId: string): Transcript | null {
   );
   return { entries, dropped: 0 };
 }
+
+/** The leads' answers log (leadAsk.ts) as the preview has it: a few of
+ *  today's answers, one passed to you, and one from yesterday. */
+export function mockAnswersLog(now: Date): string {
+  const at = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * 3600_000).toISOString().replace(/\.\d+Z$/, "Z");
+  const today = Math.min(now.getHours() + now.getMinutes() / 60, 6) / 4;
+  return [
+    `${at(26)} Lead shop "Fix login" Q: which auth library? A: next-auth, per CLAUDE.md src: CLAUDE.md`,
+    `${at(today * 3)} Lead shop "Add facets" Q: where do search facets live? A: src/search/facets.ts src: README.md`,
+    `${at(today * 2)} Lead "Docs pass" Q: how does api deploy? A: fly deploy from main, by CI src: ~/code/api/README.md`,
+    `${at(today)} Lead shop "Add facets" Q: size facet first or color? A: ASK_USER: Should the size facet or the color facet ship first? src: ASK_USER`,
+  ].join("\n");
+}

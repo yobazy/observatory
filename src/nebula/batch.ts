@@ -109,12 +109,13 @@ export interface PromptTask {
 
 /** What a task's session is sent: the task (through its skill when it has
  *  one), the items' detail lines, Home's scheduling instruction for Home and
- *  `you` tasks, and the plan-and-stop postfix last when the task stops for
+ *  `you` tasks, the line on asking a lead first when one is running
+ *  (leadAsk.ts), and the plan-and-stop postfix last when the task stops for
  *  approval. Claude runs a skill as `/<skill>`; other harnesses are told it
  *  by name. */
 export function buildStartingPrompt(
   task: PromptTask,
-  opts: { kind: AgentKind | string; schedulingInstruction?: string },
+  opts: { kind: AgentKind | string; schedulingInstruction?: string; askLine?: string | null },
 ): string {
   const text = task.text.trim();
   let body =
@@ -129,6 +130,7 @@ export function buildStartingPrompt(
   if (details.length) parts.push(["Details:", ...details.map((c) => `- ${c}`)].join("\n"));
   const instruction = opts.schedulingInstruction?.trim();
   if (instruction && task.target !== "project") parts.push(`How I schedule things: ${instruction}`);
+  if (opts.askLine) parts.push(opts.askLine);
   if (task.planCheckpoint) parts.push(PLAN_POSTFIX);
   return parts.join("\n\n");
 }
@@ -375,6 +377,9 @@ export interface LaunchDeps {
   /** Saves what's known mid-launch (the prompt, a new worktree), so a
    *  restart can find the session. */
   progress(patch: Partial<BatchTask>): void;
+  /** The line telling a task in this project to ask a lead before asking
+   *  you (leadAsk.ts), or null when no lead is running. */
+  askLine?(projectId: string | null): string | null;
 }
 
 export type Outcome =
@@ -391,7 +396,10 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
   const w = deps.world();
   const where = whereTo(t, w);
   const instruction = t.target !== "project" ? homeCard(w.cards)?.card.schedulingInstruction : undefined;
-  const promptFor = (kind: string) => buildStartingPrompt(t, { kind, schedulingInstruction: instruction });
+  const promptFor = (kind: string, worktreeId: string | null, projectId?: string) => {
+    const project = projectId ?? (worktreeId ? w.worktrees[worktreeId]?.project_id : undefined) ?? null;
+    return buildStartingPrompt(t, { kind, schedulingInstruction: instruction, askLine: deps.askLine?.(project) ?? null });
+  };
 
   switch (where.how) {
     case "wait":
@@ -420,7 +428,7 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
       }
     case "follow_up": {
       const a = where.agent;
-      const prompt = promptFor(a.custom_harness ?? a.kind);
+      const prompt = promptFor(a.custom_harness ?? a.kind, a.worktree_id);
       deps.progress({ prompt, agentId: a.id });
       if (deps.isIdle(a) && deps.queuedFor(a.id) === 0) {
         await deps.followUp(a, prompt);
@@ -431,7 +439,6 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
     }
     case "agent":
     case "new_worktree": {
-      const prompt = promptFor(t.kind ?? deps.kind);
       let worktreeId: string;
       if (where.how === "agent") worktreeId = where.worktreeId;
       else {
@@ -439,6 +446,7 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
         worktreeId = await deps.createWorktree(where.projectId, branch);
         deps.progress({ createdWorktreeId: worktreeId });
       }
+      const prompt = promptFor(t.kind ?? deps.kind, worktreeId, where.how === "new_worktree" ? where.projectId : undefined);
       deps.progress({ prompt });
       const id = await deps.createAgent(worktreeId, prompt, t.kind);
       if (!id) return { state: "failed", note: "The daemon didn't return the new session." };

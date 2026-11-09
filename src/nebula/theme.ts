@@ -139,11 +139,22 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   /** Threads kept out of parking (unticked, resumed, undone), by agent id:
    *  their last change then. A newer change lets them park again. */
   parkKeep?: Record<string, number>;
+  /** The top lead (leadAsk.ts): one thread over every project that
+   *  answers other threads' questions and passes one about a project to its
+   *  lead. Off unless started from Settings; `path` is the folder it runs in. */
+  topLead?: TopLead;
   /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */
   keepUseLog?: boolean;
   /** Label prefixes of the launchd agents the Automations view lists
    *  (automations.ts); unset is every prefix not from Apple, Google, Adobe or Valve. */
   automationLabels?: string[];
+}
+
+export interface TopLead {
+  agentId: string;
+  model: string;
+  notes: string;
+  path?: string;
 }
 
 export type ProjectIconChoice = { kind: "emoji"; value: string } | { kind: "image"; value: string };

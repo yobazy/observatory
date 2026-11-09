@@ -9,6 +9,7 @@ import { readSettings, request } from "./client";
 import { allCards, homeCard, saveCard } from "./cards";
 import { takenBranches } from "./fanout";
 import { enqueue, isIdle } from "./queue";
+import { askLineNow } from "./leadRunner";
 import { loadPrefs, type DesktopPrefs } from "./theme";
 import { flash, getState, subscribe } from "./store";
 import { decideSummary } from "./board";
@@ -82,6 +83,7 @@ async function deps(batchId: string, taskId: string): Promise<LaunchDeps> {
       if (home) saveCard(projectId, { ...home.card, isHome: true });
     },
     progress: (patch) => updateTask(batchId, taskId, patch),
+    askLine: askLineNow,
   };
 }
 
