@@ -474,7 +474,8 @@ export function suggested(card: Card): Record<number, string> {
       out[a.n] = own[1];
       continue;
     }
-    const rec = a.options.find((o) => /^\(recommended\)/i.test(o.label) || /\(recommended\)\s*$/i.test(o.label));
+    // "(recommended)", also with a reason after it: "(recommended; ships now)".
+    const rec = a.options.find((o) => /^\(recommended[;,:)]/i.test(o.label) || /\(recommended(?:[;,:][^)]*)?\)\s*$/i.test(o.label));
     if (rec) out[a.n] = rec.letter;
   }
   return out;
