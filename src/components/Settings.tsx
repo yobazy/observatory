@@ -443,8 +443,9 @@ function DispatchSettings() {
             Task budget
           </label>
           <span className="setting-hint">
-            What one thread may spend, in the dollars the usage view shows. At 85% the queue flags it stuck and a banner
-            says so, then again at 100%. A Dispatch task can set its own on the board. Nothing is stopped on its own.
+            What one thread may spend since your last message to it (a Dispatch task: since it started), in the dollars
+            the usage view shows. At 85% the queue flags it stuck and a banner says so, then again at 100%. A Dispatch
+            task can set its own on the board. Nothing is stopped on its own.
           </span>
         </div>
         <span className="budget-input">

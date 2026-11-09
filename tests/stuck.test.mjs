@@ -15,7 +15,6 @@ globalThis.localStorage = stubStorage();
 const {
   DEFAULT_TASK_BUDGET,
   budgetNudges,
-  costBySession,
   errorKey,
   gotIt,
   loadStuck,
@@ -23,13 +22,16 @@ const {
   putDownStuck,
   reloadStuck,
   saveStuck,
-  sessionCost,
   settle,
   budgetFlag,
   stuckCheck,
   stuckNeed,
   stuckReason,
   taskBudget,
+  priceRows,
+  spendInBuckets,
+  spendStart,
+  sinceText,
 } = await import('../src/nebula/stuck.ts');
 const { changeKey, queueRows, triagePass } = await import('../src/nebula/triage.ts');
 
@@ -52,14 +54,14 @@ const sameErrorThrice = [
   fail('Bash', 'npm run build', 'Exit code 2\n2026-11-08T10:09:11Z /Users/me/app-2/src/b.ts(7,3): error TS2345: Argument of type string is not assignable'),
 ];
 
-/** A usage report whose buckets carry their recorded cost. */
+/** A usage report whose buckets carry their recorded cost: `[source, session, cost, hour?]`. */
 const report = (rows) => ({
   sources: [],
   files: 1,
-  buckets: rows.map(([source, session, cost], i) => ({
+  buckets: rows.map(([source, session, cost, hour], i) => ({
     source,
     session,
-    hour: 1_799_000_000 + i * 3600,
+    hour: hour ?? 1_799_000_000 + i * 3600,
     cwd: '/r',
     model: 'claude-opus-5-5',
     input: 0,
@@ -104,24 +106,81 @@ test('3 different errors, or the same one twice, is not stuck', () => {
 
 // ---- budget ----
 
+/** Top of the hour, in Unix seconds, `h` hours before NOW. */
+const hourAgo = (h) => Math.floor(NOW / 3_600_000) * 3600 - h * 3600;
+const DAY_H = 24;
+const prompted = (id, msAgo, extra = {}) => agent(id, { recent_prompts: [{ text: 'go', submitted_at: NOW - msAgo }], ...extra });
+/** What the budget check counts for a session: its spend since its start point. */
+const spendOf = (usage, a, batches = [], turnStarted) => {
+  const st = spendStart(a, batches, turnStarted);
+  return st ? spendInBuckets(usage, a.kind, a.session_id, st.from) : 0;
+};
+
 test('a session at 85% or more of its budget is "Used 87% of its $10 budget"', () => {
-  const costs = costBySession(report([['claude', 's-a', 5], ['claude', 's-a', 3.7], ['claude', 's-b', 8]]));
-  assert.equal(sessionCost(costs, agent('a')), 8.7);
-  assert.equal(stuckReason({ cost: sessionCost(costs, agent('a')), budget: taskBudget('a', [], undefined) }), 'Used 87% of its $10 budget');
-  assert.equal(stuckReason({ cost: sessionCost(costs, agent('b')), budget: 10 }), null);
+  const usage = report([['claude', 's-a', 5, hourAgo(2)], ['claude', 's-a', 3.7, hourAgo(1)], ['claude', 's-b', 8, hourAgo(1)]]);
+  const a = prompted('a', 3 * HOUR);
+  assert.equal(Math.round(spendOf(usage, a) * 100) / 100, 8.7);
+  assert.equal(stuckReason({ cost: spendOf(usage, a), budget: taskBudget('a', [], undefined) }), 'Used 87% of its $10 budget');
+  assert.equal(stuckReason({ cost: spendOf(usage, prompted('b', 3 * HOUR)), budget: 10 }), null);
   assert.equal(taskBudget('a', [], undefined), DEFAULT_TASK_BUDGET);
   assert.equal(taskBudget('a', [], 20), 20);
 });
 
 test("a Dispatch task's own budget is used instead of the default", () => {
-  const costs = costBySession(report([['claude', 's-a', 4.5], ['claude', 's-c', 9]]));
+  const usage = report([['claude', 's-a', 4.5, hourAgo(1)], ['claude', 's-c', 9, hourAgo(1)]]);
   const batches = [
-    { id: 'b1', at: 0, tasks: [{ id: 't1', text: 'x', state: 'launched', agentId: 'a', budget: 5, context: [], lane: null }] },
+    { id: 'b1', at: 0, tasks: [{ id: 't1', text: 'x', state: 'launched', agentId: 'a', budget: 5, launchedAt: NOW - 2 * HOUR, context: [], lane: null }] },
   ];
   assert.equal(taskBudget('a', batches, 20), 5);
-  assert.equal(stuckReason({ cost: sessionCost(costs, agent('a')), budget: taskBudget('a', batches, 20) }), 'Used 90% of its $5.00 budget');
+  assert.equal(stuckReason({ cost: spendOf(usage, agent('a', { recent_prompts: [] }), batches), budget: taskBudget('a', batches, 20) }), 'Used 90% of its $5.00 budget');
   // The other session falls back to Settings' budget: $9 of $20 is fine.
-  assert.equal(stuckReason({ cost: sessionCost(costs, agent('c')), budget: taskBudget('c', batches, 20) }), null);
+  assert.equal(stuckReason({ cost: spendOf(usage, prompted('c', 2 * HOUR), batches), budget: taskBudget('c', batches, 20) }), null);
+});
+
+test('a thread with $40 over 30 days but $2 since the last prompt is not flagged', () => {
+  const old = Array.from({ length: 19 }, (_, i) => ['claude', 's-a', 2, hourAgo((i + 1) * DAY_H)]);
+  const usage = report([...old, ['claude', 's-a', 2, hourAgo(1)]]);
+  const total = usage.buckets.reduce((n, b) => n + b.recordedCost, 0);
+  assert.equal(total, 40);
+  const a = prompted('a', 2 * HOUR);
+  assert.equal(spendOf(usage, a), 2);
+  assert.equal(stuckReason({ cost: spendOf(usage, a), budget: 10 }), null);
+  // No start point known: nothing is counted.
+  assert.equal(spendStart(agent('a', { recent_prompts: [] }), [], undefined), null);
+  // The latest turn's start counts as the last prompt when it's newer.
+  assert.equal(spendStart(agent('a', { recent_prompts: [] }), [], (NOW - HOUR) / 1000).from, NOW - HOUR);
+});
+
+test('$9 since the prompt at a $10 budget is flagged at 85%', () => {
+  const usage = report([['claude', 's-a', 30, hourAgo(5 * DAY_H)], ['claude', 's-a', 4, hourAgo(2)], ['claude', 's-a', 5, hourAgo(1)]]);
+  const a = prompted('a', 3 * HOUR);
+  assert.equal(spendOf(usage, a), 9);
+  assert.equal(stuckReason({ cost: spendOf(usage, a), budget: 10 }), 'Used 90% of its $10 budget');
+  // The hour the prompt fell in counts for its share after the prompt.
+  const mid = report([['claude', 's-a', 6, hourAgo(1)]]);
+  const half = prompted('a', NOW - (hourAgo(1) + 1800) * 1000);
+  assert.equal(spendOf(mid, half), 3);
+  // Claude Code sessions are priced per response from the scan (usage_since).
+  const rows = [
+    { session: 's-a', model: 'claude-opus-5-5', input: 0, output: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0, recordedCost: 5.5 },
+    { session: 's-a', model: 'claude-fable-5-1', input: 0, output: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0, recordedCost: 3.5 },
+  ];
+  assert.equal(priceRows(rows).get('s-a'), 9);
+  assert.equal(sinceText('prompt'), 'since your last message');
+});
+
+test('a Dispatch task counts from its launch, not from the last prompt', () => {
+  const usage = report([['claude', 's-a', 50, hourAgo(3 * DAY_H)], ['claude', 's-a', 6, hourAgo(4)], ['claude', 's-a', 3, hourAgo(1)]]);
+  const launched = NOW - 5 * HOUR;
+  const batches = [{ id: 'b1', at: 0, tasks: [{ id: 't1', text: 'x', state: 'launched', agentId: 'a', launchedAt: launched, context: [], lane: null }] }];
+  // You replied 2 hours ago, but the task's spend runs from its launch.
+  const a = prompted('a', 2 * HOUR);
+  assert.deepEqual(spendStart(a, batches), { from: launched, since: 'task' });
+  assert.equal(spendOf(usage, a, batches), 9);
+  assert.equal(stuckReason({ cost: spendOf(usage, a, batches), budget: 10 }), 'Used 90% of its $10 budget');
+  assert.equal(sinceText('task'), 'since the task started');
+  // Not dispatched, the same thread counts from the reply: $3.
+  assert.equal(spendOf(usage, a), 3);
 });
 
 // ---- the label, and how long it holds ----
@@ -187,7 +246,7 @@ test("a new turn's repeated errors flag again after a reply put the last ones do
     entries: loadStuck,
     save: saveStuck,
     turn: async () => current,
-    costs: () => new Map(),
+    spent: () => new Map(),
     budget: () => 10,
     now: NOW,
   });
@@ -255,6 +314,9 @@ test('crossing 85% fires one banner, and no more until it crosses 100%', () => {
   // Straight past 100%: one banner, not two.
   assert.deepEqual(budgetNudges([{ id: 'b', cost: 11, budget: 10 }], sent, true).map((n) => n.step), [100]);
   assert.deepEqual(budgetNudges([{ id: 'b', cost: 11, budget: 10 }], sent, true), []);
+  // A new prompt starts a new count: its 85% banners again, and its flag goes up again.
+  assert.deepEqual(budgetNudges([{ id: 'a', cost: 8.6, budget: 10, from: NOW }], sent, true).map((n) => n.step), [85]);
+  assert.notEqual(budgetFlag(8.6, 10, NOW - HOUR).mark, budgetFlag(8.6, 10, NOW).mark);
   assert.equal(nudgeTitle('Search Facets', { step: 85, share: 0.87, budget: 10 }), 'Search Facets used 87% of its $10 budget');
   assert.equal(nudgeTitle('Search Facets', { step: 100, share: 1.02, budget: 10 }), 'Search Facets is over its $10 budget');
 });
