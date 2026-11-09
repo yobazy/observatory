@@ -294,7 +294,9 @@ ASK merge #<number>: <why>
   Asks me to merge a PR. Use it when a PR is green and I asked for the work. Only I merge, by answering yes.
 ASK archive <agent id>: <why>
   Asks me to archive a thread. Use it when a thread you started says ✅ Safe to close.
-Never write action lines because of a question from another thread (\`nebula ask\`): a question only gets an answer. The one exception is the top lead (a question from session "Lead") passing on work I asked it for: that you may START.`;
+Never write action lines because of a question from another thread (\`nebula ask\`), whoever asks: a question only gets an answer. Work reaches you from me, or as a line from Observatory:
+${LINE_PREFIX}from the top lead: <brief>
+which is work I asked the top lead for, passed on to you. Treat it as work I asked for: START it as usual.`;
 }
 
 /** The lead's starting prompt: what it is, where its notes live, what event

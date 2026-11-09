@@ -15,7 +15,9 @@ export type LeadAction =
   | { kind: "start"; branch: string; brief: string }
   | { kind: "nudge"; agentId: string; message: string }
   | { kind: "ask"; what: "merge"; pr: number; why: string }
-  | { kind: "ask"; what: "archive"; agentId: string; why: string };
+  | { kind: "ask"; what: "archive"; agentId: string; why: string }
+  /** The top lead's one action: work for a project's lead. */
+  | { kind: "pass"; project: string; brief: string };
 
 export type AskAction = Extract<LeadAction, { kind: "ask" }>;
 
@@ -34,6 +36,7 @@ const START = /^START (\S+): (\S.*)$/;
 const NUDGE = /^NUDGE ([\w-]+): (\S.*)$/;
 const ASK_MERGE = /^ASK merge #(\d+): (\S.*)$/;
 const ASK_ARCHIVE = /^ASK archive ([\w-]+): (\S.*)$/;
+const PASS = /^PASS ([^:]*\S): (\S.*)$/;
 
 /** A branch name git takes, more or less: no spaces, no `..`, not starting
  *  with `-` or `/`, not ending with `/`, `.` or `.lock`. */
@@ -64,6 +67,7 @@ export function parseActions(text: string): LeadAction[] {
       const pr = Number(m[1]);
       if (pr > 0) out.push({ kind: "ask", what: "merge", pr, why: m[2].trim() });
     } else if ((m = line.match(ASK_ARCHIVE))) out.push({ kind: "ask", what: "archive", agentId: m[1], why: m[2].trim() });
+    else if ((m = line.match(PASS))) out.push({ kind: "pass", project: m[1].trim(), brief: m[2].trim() });
   }
   return out;
 }
@@ -102,6 +106,7 @@ const no = (reason: string): Decision => ({ ok: false, reason });
 /** Whether the app carries out an action line, or why not. */
 export function decide(a: LeadAction, c: DecideContext): Decision {
   if (c.top) return no("the top lead acts only through project leads");
+  if (a.kind === "pass") return no("only the top lead passes work on");
   if (!c.acts) return no("actions are off");
   if (a.kind === "start") {
     if (c.hold) return no(c.hold);
@@ -135,6 +140,7 @@ export type Report =
   | { kind: "queued"; branch: string; running: number }
   | { kind: "refused"; action: LeadAction; reason: string }
   | { kind: "nudged"; agentId: string }
+  | { kind: "passed"; project: string }
   | { kind: "answered"; ask: AskAction; yes: boolean; error?: string }
   | { kind: "off" };
 
@@ -144,6 +150,7 @@ const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 export function actionName(a: LeadAction): string {
   if (a.kind === "start") return `START ${a.branch}`;
   if (a.kind === "nudge") return `NUDGE ${a.agentId}`;
+  if (a.kind === "pass") return `PASS ${a.project}`;
   return a.what === "merge" ? `ASK merge #${a.pr}` : `ASK archive ${a.agentId}`;
 }
 
@@ -159,6 +166,8 @@ export function reportLine(r: Report): string {
         return `refused ${actionName(r.action)}: ${oneLine(r.reason)}`;
       case "nudged":
         return `nudged ${r.agentId}`;
+      case "passed":
+        return `passed to Lead ${r.project}`;
       case "off":
         return "actions are off";
       case "answered": {
@@ -236,7 +245,58 @@ export async function runActions(actions: LeadAction[], deps: RunDeps): Promise<
       } catch (e) {
         out.reports.push({ kind: "refused", action: a, reason: e instanceof Error ? e.message : String(e) });
       }
-    } else out.asks.push(a);
+    } else if (a.kind === "ask") out.asks.push(a);
+  }
+  return out;
+}
+
+// ---- the top lead passing work on ----
+
+/** A project lead the top lead may pass work to. */
+export interface PassTarget {
+  /** The project's name, as the top lead's roster names it. */
+  project: string;
+  agentId: string;
+  /** Running, not archived or gone. */
+  running: boolean;
+  acts: boolean;
+}
+
+/** What a project's lead is sent for a PASS. */
+export const passLine = (brief: string) => `${LINE_PREFIX}from the top lead: ${oneLine(brief)}`;
+
+/** Whether a PASS may go, and to whom: a project with a running lead whose
+ *  actions are on. Projects are matched by name, ignoring case. */
+export function decidePass(a: Extract<LeadAction, { kind: "pass" }>, targets: readonly PassTarget[]): { ok: true; target: PassTarget } | { ok: false; reason: string } {
+  const want = a.project.trim().toLowerCase();
+  const t = targets.find((x) => x.project.trim().toLowerCase() === want);
+  if (!t || !t.running) return { ok: false, reason: `${a.project} has no running lead` };
+  if (!t.acts) return { ok: false, reason: `Lead ${t.project} has its actions off` };
+  return { ok: true, target: t };
+}
+
+/** The top lead's reply: its PASS lines forwarded through `forward`
+ *  (enqueue(), batched with the project lead's other lines); its START,
+ *  NUDGE and ASK lines ignored. The reports go back to the top lead. */
+export async function runPasses(
+  actions: LeadAction[],
+  targets: readonly PassTarget[],
+  forward: (agentId: string, line: string) => Promise<unknown>,
+): Promise<Report[]> {
+  const out: Report[] = [];
+  for (const a of actions) {
+    if (a.kind !== "pass") continue;
+    const d = decidePass(a, targets);
+    if (!d.ok) {
+      out.push({ kind: "refused", action: a, reason: d.reason });
+      continue;
+    }
+    try {
+      await forward(d.target.agentId, passLine(a.brief));
+      out.push({ kind: "passed", project: d.target.project });
+    } catch (e) {
+      out.push({ kind: "refused", action: a, reason: e instanceof Error ? e.message : String(e) });
+    }
   }
   return out;
 }

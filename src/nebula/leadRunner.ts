@@ -59,11 +59,13 @@ import {
   replyToAct,
   reportLine,
   runActions,
+  runPasses,
   startedState,
   tasksOf,
   updateLeadActs,
   type AskAction,
   type DecideContext,
+  type PassTarget,
   type LeadTask,
 } from "./leadActions";
 import { latestReply, watchLeadCalls } from "./leadCalls";
@@ -496,8 +498,9 @@ function followStarts() {
   }
 }
 
-/** Each running lead's finished turn, acted on once. The top lead's action
- *  lines are ignored: it acts only through project leads. */
+/** Each running lead's finished turn, acted on once. The top lead acts
+ *  only through project leads: its PASS lines go on to them, and its other
+ *  action lines are ignored. */
 function actOnTurns() {
   const s = getState();
   const acted = leadActs().acted;
@@ -507,10 +510,27 @@ function actOnTurns() {
     const reply = replyToAct(s.agents[leadId], latestReply(leadId), acted[leadId]);
     if (!reply) continue;
     markActed(leadId, reply.n);
+    if (leadId === top) {
+      void passOn(leadId, reply.text).catch((e) => flash(`The top lead's PASS didn't go: ${errText(e)}`));
+      continue;
+    }
     const mine = projectLead(leadId);
-    if (!mine || leadId === top) continue;
+    if (!mine) continue;
     void act(leadId, mine.projectId, mine.lead, reply.n, reply.text).catch((e) => flash(`The lead's actions didn't go: ${errText(e)}`));
   }
+}
+
+/** The top lead's PASS lines, forwarded to each project's lead; its other
+ *  action lines are ignored. */
+async function passOn(topId: string, text: string) {
+  const s = getState();
+  const targets: PassTarget[] = Object.entries(allCards()).flatMap(([projectId, card]) => {
+    const p = s.projects[projectId];
+    if (!card.lead || !p) return [];
+    return [{ project: p.name, agentId: card.lead.agentId, running: leadState(card.lead, s.agents) === "running", acts: card.lead.acts === true }];
+  });
+  const reports = await runPasses(parseActions(text), targets, (agentId, line) => tell(agentId, [line]));
+  await tell(topId, reports.map(reportLine));
 }
 
 /** Yes or No on a lead's ASK row in the dialogue. */
