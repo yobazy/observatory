@@ -209,6 +209,17 @@ test('a card offers the answers it recommends', async () => {
    - B: Monday`)),
     { 1: 'A' },
   );
+  // A reason inside the brackets, and options on the line under the question.
+  assert.deepEqual(
+    suggested(readCard(`**Needs you**
+1. **Ship when?** It waits on review.
+   A today (recommended; review is done) · B Monday
+2. **Name?**
+   A Nova · B Atlas (recommended, it's shorter)`)),
+    { 1: 'A', 2: 'B' },
+  );
+  assert.deepEqual(suggested(readCard(`**Needs you**
+1. Ship?  A today · B Monday (not recommended)`)), {});
   assert.deepEqual(suggested(readCard(`**Needs you**
 1. Ship?  A today · B Monday`)), {});
   // A pick naming an option the card doesn't have is no suggestion.
