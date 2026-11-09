@@ -1,9 +1,24 @@
 import { memo, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { getState, subscribe, waitingAgents } from "../nebula/store";
 import { onPetMood } from "../nebula/delight";
-import { CAT_W, H, SCALE, SCOPE_AT, keepWatch, step, TICK_MS, W, type Cat, type Frame } from "./petBrain";
+import { CAT_W, H, SCALE, SCOPE_AT, keepWatch, step, TICK_MS, type Cat, type Frame } from "./petBrain";
 import { BOOK, COAT, FRAMES, LAPTOP, TELESCOPE, TELESCOPE_W } from "./petFrames";
-import { EAR, EYE, framePaths, NOSE, SHINE, type Px } from "../vendor/pixel-pets/frames.ts";
+import {
+  coatFor,
+  EAR,
+  EYE,
+  FRAME_H,
+  FRAME_W,
+  FRAMES as PET_FRAMES,
+  framePaths,
+  NOSE,
+  SHINE,
+  spriteBox,
+  type Coat,
+  type CritterKind,
+  type FrameName,
+  type Px,
+} from "../vendor/pixel-pets/frames.ts";
 import { DESK, DESK_W, deskStep, doingNow, PROP_AT, type Desk } from "./workCat";
 import type { Act } from "../nebula/transcript";
 
@@ -13,29 +28,64 @@ import type { Act } from "../nebula/transcript";
 // the terminal, and catches the odd falling star. A click gets a heart; an agent that starts waiting on you gets its
 // attention. Frames face right and are mirrored for walking left.
 
-const COLORS: Record<Exclude<Px, ".">, string> = {
-  O: COAT.O, // fur
-  D: COAT.D, // stripes
-  W: COAT.W, // muzzle, chest, paws
-  S: COAT.S, // shade
-  X: COAT.X, // outline
+type Palette = Record<Exclude<Px, ".">, string>;
+
+/** A coat's colors, with the eyes, nose and ears everyone shares. */
+const paletteOf = (coat: Coat): Palette => ({
+  O: coat.O, // fur
+  D: coat.D, // stripes
+  W: coat.W, // muzzle, chest, paws
+  S: coat.S, // shade
+  X: coat.X, // outline
   K: EYE,
   H: SHINE,
   P: NOSE,
   E: EAR,
-};
+});
 
-/** One path per color, from pixel-pets, rather than a rect per pixel. */
-function Sprite({ frame }: { frame: Frame }) {
-  const paths = useMemo(() => framePaths(FRAMES[frame]), [frame]);
+const COLORS = paletteOf(COAT);
+
+/** One path per color, from pixel-pets, rather than a rect per pixel.
+ *  `size` is the animal's size against the frame (pixel-pets' SIZE), grown
+ *  or shrunk from its feet. */
+function PixelSprite({ rows, colors, width, size = 1 }: { rows: string[]; colors: Palette; width: number; size?: number }) {
+  const paths = useMemo(() => framePaths(rows), [rows]);
+  const fit = size === 1 ? null : { s: size, dx: (FRAME_W * (1 - size)) / 2, dy: FRAME_H * (1 - size) };
+  const body = (Object.keys(paths) as Exclude<Px, ".">[]).map((c) => <path key={c} d={paths[c]} fill={colors[c]} />);
   return (
-    <svg width={CAT_W} height={H * SCALE} viewBox={`0 0 ${W} ${H}`} shapeRendering="crispEdges" aria-hidden>
-      {(Object.keys(paths) as Exclude<Px, ".">[]).map((c) => (
-        <path key={c} d={paths[c]} fill={COLORS[c]} />
-      ))}
+    <svg
+      width={width}
+      height={(width * FRAME_H) / FRAME_W}
+      viewBox={`0 0 ${FRAME_W} ${FRAME_H}`}
+      shapeRendering="crispEdges"
+      overflow="visible"
+      aria-hidden
+    >
+      {fit ? <g transform={`translate(${fit.dx} ${fit.dy}) scale(${fit.s})`}>{body}</g> : body}
     </svg>
   );
 }
+
+function Sprite({ frame }: { frame: Frame }) {
+  return <PixelSprite rows={FRAMES[frame]} colors={COLORS} width={CAT_W} />;
+}
+
+/** A lead's animal (S27, leadChat.ts), in any pixel-pets kind and coat,
+ *  `width` wide, in one of its frames. */
+export const PetSprite = memo(function PetSprite({
+  kind,
+  coat,
+  frame = "sit",
+  width,
+}: {
+  kind: CritterKind;
+  coat: string;
+  frame?: FrameName;
+  width: number;
+}) {
+  const colors = useMemo(() => paletteOf(coatFor(kind, coat)), [kind, coat]);
+  return <PixelSprite rows={PET_FRAMES[kind][frame]} colors={colors} width={width} size={spriteBox(kind, 1).s} />;
+});
 
 const SCOPE_COLORS: Record<string, string> = {
   T: "var(--accent)",

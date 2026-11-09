@@ -9351,6 +9351,303 @@ button.board-main:hover .board-text {
   min-width: 0;
 }
 
+/* A lead as its pet (S27, LeadChat.tsx): the small pet on its project's
+   row and the top lead's row, hopping with a count when it has something
+   for you; and the DS-style dialogue along the bottom of every view. */
+.lead-pet {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
+  cursor: pointer;
+}
+.lead-pet svg {
+  image-rendering: pixelated;
+}
+.lead-pet.is-calling svg,
+.top-lead-row.is-calling .lead-pet svg {
+  animation: lead-hop 0.9s steps(2) infinite;
+}
+@keyframes lead-hop {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.project-line .lead-pet {
+  position: relative;
+  margin: -4px 0 -2px 2px;
+}
+.lead-badge {
+  flex: none;
+  min-width: 16px;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 700 10px/1.2 var(--ui);
+  text-align: center;
+}
+.project-line .lead-pet .lead-badge {
+  position: absolute;
+  top: -5px;
+  right: -9px;
+}
+.top-lead-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(100% - 20px);
+  margin: 0 10px 6px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.top-lead-row:hover {
+  background: var(--raised);
+}
+.top-lead-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.top-lead-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.top-lead-sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--faint);
+}
+.card-cap.lead-pet-pick select {
+  max-width: 220px;
+}
+
+/* The dialogue: paper and ink in every mode, like a game's text box. */
+.talk {
+  --box: #fbf7ec;
+  --box-ink: #23263a;
+  --box-shade: #d9d1bd;
+  --pixel: "Pixelify Sans", "DotGothic16", ui-monospace, Menlo, monospace;
+  --talk: "DotGothic16", "Pixelify Sans", ui-monospace, Menlo, monospace;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 18;
+  height: 250px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 18px 16px;
+  pointer-events: none;
+}
+.talk::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgb(5 7 14 / 0.75), transparent);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.talk.is-open::before {
+  opacity: 1;
+}
+.talk-pet {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 216px;
+  height: 144px;
+  margin-right: -14px;
+  line-height: 0;
+  transform: translateY(170px);
+  transition: transform 0.38s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+.talk.is-open .talk-pet {
+  transform: none;
+}
+.talk-pet svg {
+  image-rendering: pixelated;
+}
+.talk-pet.is-speaking svg {
+  animation: talk-bob 0.26s steps(2) infinite;
+}
+@keyframes talk-bob {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.talk-box {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  max-width: 880px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 20px 12px;
+  background: var(--box);
+  color: var(--box-ink);
+  border: 3px solid var(--box-ink);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 -4px 0 var(--box-shade),
+    0 6px 0 rgb(0 0 0 / 0.35);
+  pointer-events: auto;
+  transform: translateY(260px);
+  transition: transform 0.32s 0.08s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+.talk.is-open .talk-box {
+  transform: none;
+}
+.talk-plate {
+  position: absolute;
+  top: -17px;
+  left: 14px;
+  padding: 3px 10px 4px;
+  border-radius: 4px;
+  background: var(--box-ink);
+  color: var(--box);
+  font: 700 14px var(--pixel);
+  letter-spacing: 0.02em;
+}
+.talk-plate small {
+  margin-left: 6px;
+  font-size: inherit;
+  font-weight: 500;
+  opacity: 0.7;
+}
+.talk-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: 0;
+  background: none;
+  color: var(--box-ink);
+  font: 700 14px var(--pixel);
+  opacity: 0.55;
+  cursor: pointer;
+}
+.talk-close:hover {
+  opacity: 1;
+}
+.talk-say {
+  min-height: 78px;
+  /* Room for the page's ▼ at the end of its last line. */
+  padding-right: 22px;
+  font: 18px/1.45 var(--talk);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  user-select: text;
+}
+.talk-you {
+  opacity: 0.6;
+}
+.talk-ask {
+  padding: 0 4px;
+  background: #ffe2a8;
+  color: inherit;
+}
+.talk-more {
+  position: absolute;
+  right: 18px;
+  bottom: 58px;
+  font: 16px var(--pixel);
+  animation: talk-blink 1s steps(1) infinite;
+}
+@keyframes talk-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.talk-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 2px dashed var(--box-shade);
+}
+.talk-foot input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 2px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--box-ink);
+  font: 16px var(--talk);
+}
+.talk-foot input::placeholder {
+  color: #8b8776;
+}
+.talk-btn {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--box-ink);
+  color: var(--box);
+  font: 700 13px var(--pixel);
+  cursor: pointer;
+}
+.talk-btn.is-quiet {
+  border: 2px solid var(--box-shade);
+  background: transparent;
+  color: var(--box-ink);
+}
+.talk-btn.is-quiet.is-hint {
+  border-color: var(--box-ink);
+}
+.talk-btn:focus-visible,
+.talk-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.talk-page {
+  font: 12px var(--pixel);
+  opacity: 0.55;
+}
+@media (max-width: 700px) {
+  .talk {
+    height: 300px;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 8px 10px;
+  }
+  .talk-pet {
+    width: 120px;
+    height: 80px;
+    margin: 0 0 -6px 6px;
+  }
+  .talk-pet svg {
+    width: 120px;
+    height: 80px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .talk::before,
+  .talk-pet,
+  .talk-box {
+    transition: none;
+  }
+  .lead-pet.is-calling svg,
+  .top-lead-row.is-calling .lead-pet svg,
+  .talk-pet.is-speaking svg,
+  .talk-more {
+    animation: none;
+  }
+}
+
 /* Parking (Park.tsx): the first list of idle threads to confirm, and the
    sidebar's line after a park with its Undo. */
 .park-list {

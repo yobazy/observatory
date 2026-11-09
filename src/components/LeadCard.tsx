@@ -6,6 +6,8 @@ import { DEFAULT_LEAD_MODEL, defaultNotes, leadName, leadState } from "../nebula
 import { setLeadModel, startProjectLead } from "../nebula/leadRunner";
 import { sessionKey } from "../nebula/usageData";
 import { flash, setState, useAppState } from "../nebula/store";
+import { PET_CHOICES, petFromKey, petKey, petOf, type LeadPet } from "../nebula/leadChat";
+import { PetSprite } from "./Pet";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -105,6 +107,16 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
             </button>
           )}
         </div>
+        {lead && (
+          <PetPicker
+            pet={petOf(lead, projectName)}
+            label="The lead's animal"
+            onPick={(pet) => {
+              saveLead(projectId, { ...lead, pet });
+              flash(`${projectName}'s lead is a ${pet.kind} now`);
+            }}
+          />
+        )}
         <label className="card-cap lead-notes">
           notes
           <input
@@ -124,5 +136,37 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
         </span>
       </div>
     </div>
+  );
+}
+
+/** Which pixel-pets animal a lead is (S27): what its pet looks like in the
+ *  sidebar and when you talk to it. */
+export function PetPicker({ pet, label, onPick }: { pet: LeadPet; label: string; onPick: (pet: LeadPet) => void }) {
+  const kinds = [...new Set(PET_CHOICES.map((c) => c.kind))];
+  return (
+    <label className="card-cap lead-pet-pick">
+      pet
+      <span className="lead-pet" aria-hidden>
+        <PetSprite kind={pet.kind} coat={pet.coat} width={34} />
+      </span>
+      <select
+        value={petKey(pet)}
+        onChange={(e) => {
+          const next = petFromKey(e.target.value);
+          if (next) onPick(next);
+        }}
+        aria-label={label}
+      >
+        {kinds.map((k) => (
+          <optgroup key={k} label={k[0].toUpperCase() + k.slice(1)}>
+            {PET_CHOICES.filter((c) => c.kind === k).map((c) => (
+              <option key={petKey(c)} value={petKey(c)}>
+                {c.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
   );
 }

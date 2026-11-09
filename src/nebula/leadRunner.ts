@@ -164,14 +164,17 @@ export async function startProjectLead(projectId: string, opts: { model: string;
   if (!project || !main) throw new Error("the project has no main checkout to run its lead in");
   const settings = await readSettings();
   const kind = defaultKind(settings);
-  await retire(allCards()[projectId]?.lead);
+  const before = allCards()[projectId]?.lead;
+  await retire(before);
+  // A restarted lead stays the same animal.
+  const pet = before?.pet ? { pet: before.pet } : {};
   return startLead(
     { project: project.name, path: main.path, notes: opts.notes, model: opts.model },
     {
       create: (prompt, model) =>
         createAgent({ worktree: main.id, kind, settings, prompt, preset: { name: "Lead", kind, model }, select: false }),
       send: sendToLead,
-      save: (lead) => saveLead(projectId, lead, opts.base),
+      save: (lead) => saveLead(projectId, { ...lead, ...pet }, opts.base),
     },
     answerRules({ name: leadName(project.name), notes: opts.notes }),
   );
@@ -238,7 +241,9 @@ export async function startTopLead(opts: { path: string; model: string; notes: s
   const main = await mainCheckoutAt(opts.path);
   const settings = await readSettings();
   const kind = defaultKind(settings);
-  await retire(getState().prefs.topLead);
+  const before = getState().prefs.topLead;
+  await retire(before);
+  const pet = before?.pet ? { pet: before.pet } : {};
   const s = getState();
   const prompt = topLeadPrompt({
     path: opts.path,
@@ -256,7 +261,7 @@ export async function startTopLead(opts: { path: string; model: string; notes: s
       create: (text, model) =>
         createAgent({ worktree: main.id, kind, settings, prompt: text, preset: { name: "Lead", kind, model }, select: false }),
       send: sendToLead,
-      save: (lead) => void saveTopLead({ ...lead, path: opts.path }),
+      save: (lead) => void saveTopLead({ ...lead, ...pet, path: opts.path }),
     },
     DEFAULT_TOP_MODEL,
   );
@@ -269,6 +274,11 @@ export function setTopLeadModel(top: TopLead, model: string) {
     send: sendToLead,
     save: (next) => void saveTopLead({ ...next, path: top.path }),
   });
+}
+
+/** The top lead's animal, from Settings. */
+export function setTopLeadPet(top: TopLead, pet: { kind: string; coat: string }) {
+  return saveTopLead({ ...top, pet });
 }
 
 /** Turn the top lead off: its thread archived, then forgotten. */

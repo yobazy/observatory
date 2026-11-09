@@ -37,7 +37,9 @@ import { clearUseLog, useLogPath } from "../nebula/uselog";
 import { momentsDir } from "../nebula/moments";
 import { leadState } from "../nebula/lead";
 import { ASK_LINE_TEMPLATE, countsText, DEFAULT_TOP_MODEL, TOP_LEAD_NAME, TOP_NOTES, type LogCounts } from "../nebula/leadAsk";
-import { answerCounts, defaultTopFolder, openAnswersLog, removeTopLead, setTopLeadModel, startTopLead } from "../nebula/leadRunner";
+import { answerCounts, defaultTopFolder, openAnswersLog, removeTopLead, setTopLeadModel, setTopLeadPet, startTopLead } from "../nebula/leadRunner";
+import { petOf } from "../nebula/leadChat";
+import { PetPicker } from "./LeadCard";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
 type Tab = (typeof TABS)[number];
@@ -718,6 +720,15 @@ function LeadsSettings() {
             />
           </label>
         </div>
+        {top && (
+          <div className="setting-inline top-lead-fields">
+            <PetPicker
+              pet={petOf(top, null)}
+              label="The top lead's animal"
+              onPick={(pet) => void setTopLeadPet(top, pet).then(() => flash(`The top lead is a ${pet.kind} now`))}
+            />
+          </div>
+        )}
         <div className="setting-inline">
           {state === "running" && agent && (
             <button
@@ -1440,6 +1451,7 @@ const SHORTCUTS: [string, string][] = [
   ["⌘P", "Filter projects"],
   ["⌘1 – ⌘9", "Jump to a project"],
   ["⌘J", "Next in the triage queue, or the next session waiting on you"],
+  ["⌘L", "Talk to the lead calling you, or else the top lead"],
   ["⌘I", "Write an idea down for later"],
   ["⇧⌘I", "Ideas: everything written down to start later"],
   ["⌘U", "Agent usage"],

@@ -65,7 +65,7 @@ function ReaderHero({ agent, work }: { agent: Agent; work: number }) {
 }
 
 /** The thread's conversation, read again as it moves. */
-function useTranscript(agent: Agent): Transcript | null {
+export function useTranscript(agent: Agent): Transcript | null {
   const standIn = useStandIn(agent.id);
   const [got, setGot] = useState<Transcript | null>(null);
   const last = useRef<number | null>(null);

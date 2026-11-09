@@ -47,6 +47,8 @@ import { useTaggingRunner } from "./nebula/taggingRunner";
 import { queueOf, useTriageRunner } from "./nebula/triageRunner";
 import { useStuckWatch } from "./nebula/stuckRunner";
 import { useLeadRunner } from "./nebula/leadRunner";
+import { openLeadChat, shortcutLead, useLeadCallRunner } from "./nebula/leadCalls";
+import { LeadChat } from "./components/LeadChat";
 import { useThreadIndexRunner } from "./nebula/threadIndexRunner";
 import { useParkRunner } from "./nebula/parkRunner";
 import { useReviewRunner } from "./nebula/reviewRunner";
@@ -196,6 +198,7 @@ export default function App() {
   useTriageRunner();
   useStuckWatch();
   useLeadRunner();
+  useLeadCallRunner();
   useThreadIndexRunner();
   useParkRunner();
   useReviewRunner();
@@ -272,7 +275,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I writes an idea down, ⇧⌘I shows them all; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J walks the triage queue (or the sessions waiting on you), ⌥⌘J shows every decision waiting; ⌘[ goes back to the thread open before this one.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I writes an idea down, ⇧⌘I shows them all; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J walks the triage queue (or the sessions waiting on you), ⌥⌘J shows every decision waiting; ⌘[ goes back to the thread open before this one; ⌘L talks to the lead calling you, else the top lead.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -318,6 +321,12 @@ export default function App() {
         const size = zoomed(prefs, e.key === "0" ? 0 : e.key === "-" ? -1 : 1);
         if (size !== termFont(prefs).size) void savePrefs({ ...prefs, terminalFontSize: size });
         flash(`Terminal text ${size} pt`, 1200);
+      } else if (e.code === "KeyL" && !e.shiftKey && !e.altKey) {
+        // Talk to the lead calling you, else the top lead.
+        e.preventDefault();
+        const id = shortcutLead();
+        if (id) openLeadChat(id);
+        else flash("No lead is calling you, and there's no top lead. Start one in Settings › Leads.");
       } else if (e.key === "[") {
         e.preventDefault();
         previousThread();
@@ -434,6 +443,7 @@ export default function App() {
       {palette && <Palette ctx={paletteCtx} onClose={() => setPalette(false)} />}
       {textDialog && <TextDialog d={textDialog} onClose={() => setTextDialog(null)} />}
       {newIdea && <IdeaDialog onClose={() => setNewIdea(false)} />}
+      <LeadChat />
       <HoverCard />
       <Notice />
       <MomentCard />

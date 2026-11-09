@@ -162,6 +162,8 @@ export interface TopLead {
   model: string;
   notes: string;
   path?: string;
+  /** Its pixel-pets animal (S27, leadChat.ts); unset is the jaguar. */
+  pet?: { kind: string; coat: string };
 }
 
 export type ProjectIconChoice = { kind: "emoji"; value: string } | { kind: "image"; value: string };

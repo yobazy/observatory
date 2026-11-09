@@ -9,6 +9,7 @@ import type { State } from "./store";
 import type { ThreadEdit } from "./threadfiles";
 import type { Step as TurnStep, Turn } from "./turnsummary";
 import type { Entry as TranscriptEntry, Transcript } from "./transcript";
+import { allCards, draftCard, saveLead } from "./cards";
 
 const now = Date.now();
 const min = 60_000;
@@ -92,7 +93,63 @@ const agents: Agent[] = [
   agent("a10", "wm3", "Weekly Invoice Job", "terminated", 45, ["generate the weekly invoice batch"]),
   agent("a12", "w3", "Search Facets", "finished", 60 * 5, ["add size and color facets to search"]),
   agent("a11", "w0", "Old Spike", "finished", 60 * 24 * 6, ["spike on an image CDN"], { archived: true }),
+  // The leads (S17, S26), so the sidebar shows their pets and one calls you.
+  agent("lead0", "w0", "Lead storefront", "finished", 3, ["[observatory] finished: Sequential Cart Sync on cart-sync"], { model: "haiku" }),
+  agent("lead1", "wm0", "Lead marketing-site", "finished", 40, ["[observatory] finished: Lighthouse Fixes on main"], { model: "haiku" }),
+  agent("lead4", "wm3", "Lead billing-api", "finished", 8, ["[observatory] failed: Weekly Invoice Job on main"], { model: "haiku", unseen: true }),
+  agent("leadtop", "wm5", "Lead", "finished", 15, ["[observatory] leads: Lead storefront, Lead marketing-site, Lead billing-api"], { model: "sonnet" }),
 ];
+
+/** Each mock lead's project and what it last said (S27's dialogue). */
+const LEADS: Record<string, { project: string | null; said: string[] }> = {
+  lead0: {
+    project: "p0",
+    said: [
+      "Sequential Cart Sync finished and opened PR #61. Sync applied every update with `Promise.all`, so two tabs raced; now a worker applies one update at a time:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\nThe tests pass, and I've written it into my notes. Search Facets is still waiting on review, and Invoice Webhooks is working.\n\nASK_USER: should a cart sync that fails three times stop and tell you, or keep retrying in the background? Nothing in the notes says.",
+    ],
+  },
+  lead1: { project: "p1", said: ["All quiet. Lighthouse Fixes merged yesterday, and the hero redesign is waiting on you for a permission prompt."] },
+  lead4: {
+    project: "p4",
+    said: [
+      "Weekly Invoice Job stopped with an error: the batch hit a rate limit at invoice 214. I've noted it. It needs a retry with a smaller batch, which I can start for you to send.",
+    ],
+  },
+  leadtop: {
+    project: null,
+    said: ["Morning. Three leads are running, six tasks are open, and two things are waiting on you. storefront has a question about failed cart syncs."],
+  },
+};
+
+/** What you said to a mock lead and what it answered, after the canned start. */
+const leadTalk: Record<string, { you: string; said: string; at: number }[]> = {};
+const typedTo: Record<string, string> = {};
+
+const LEAD_ANSWERS = [
+  "Got it. I've written that into my notes, so I won't ask again, and I'll tell the next task that runs into it.",
+  "That's in the project's CLAUDE.md under Checks: npm run build, then npm test. Source: CLAUDE.md, line 12.",
+  "Nothing new since this morning. Ask me where something lives and I'll find it.",
+];
+
+/** The mock leads on their cards and in Settings, unless you've set your own. */
+function seedLeads() {
+  if (!Object.values(allCards()).some((c) => c.lead))
+    for (const [id, l] of Object.entries(LEADS))
+      if (l.project) saveLead(l.project, { agentId: id, model: "haiku", notes: `~/.config/observatory/leads/${id}.md` }, draftCard({ files: [], isGitRepo: true }));
+  const topLead = { agentId: "leadtop", model: "sonnet", notes: "~/.config/observatory/leads/top.md", path: "/Users/dev" };
+  try {
+    const saved = JSON.parse(localStorage.getItem("observatory.prefs") ?? "{}");
+    if (!("topLead" in saved)) localStorage.setItem("observatory.prefs", JSON.stringify({ ...saved, topLead }));
+  } catch {
+    // The preview without storage has no top lead.
+  }
+  // The prefs may have loaded already, or may load after this.
+  const apply = () => {
+    if (!getState().prefs.topLead) setState((st) => ({ prefs: { ...st.prefs, topLead } }));
+  };
+  apply();
+  setTimeout(apply, 500);
+}
 
 const DEMO = [
   "\x1b[38;5;111m╭──────────────────────────────────────────────╮\x1b[0m",
@@ -231,6 +288,7 @@ export function startMock(handlers: Map<string, PtyHandler>) {
     epoch: 1,
     snapshots: 1,
   });
+  seedLeads();
   // Answer every attach with the canned screen.
   let runSeq = 0;
   return (variant: string, body: Record<string, unknown> | undefined): EntityId | { error: string } | null | void => {
@@ -303,9 +361,18 @@ export function startMock(handlers: Map<string, PtyHandler>) {
       const id = (body.session as { Agent: string }).Agent;
       const cur = getState().agents[id];
       const picked = cur?.status === "needs_feedback" && /^\d$/.test(String(body.data));
+      // A lead answers what was typed to it, when its turn ends.
+      if (LEADS[id] && body.data !== "\r") typedTo[id] = String(body.data).replace(/\x1b\[20[01]~/g, "");
       if (cur && cur.status !== "running" && (body.data === "\r" || picked)) {
         setState((s) => ({ agents: { ...s.agents, [id]: { ...cur, status: "running", status_changed_at: Date.now() } } }));
-        turnEnds(id, "finished", 6_000 + Math.random() * 4_000);
+        const ms = 6_000 + Math.random() * 4_000;
+        if (LEADS[id] && typedTo[id]) {
+          const talk = (leadTalk[id] ??= []);
+          const you = typedTo[id];
+          delete typedTo[id];
+          setTimeout(() => talk.push({ you, said: LEAD_ANSWERS[talk.length % LEAD_ANSWERS.length], at: Math.round(Date.now() / 1000) }), ms - 200);
+        }
+        turnEnds(id, "finished", ms);
       }
       return null;
     }
@@ -723,8 +790,24 @@ export function mockTurn(s: State, agentId: string): Turn | null {
   return t ? { ...t, number: agentId === "a3" ? 3 : 1, dropped: 0, interrupted: false } : null;
 }
 
+/** A mock lead's thread: its start, what it said, and anything you've said to it since. */
+function leadTranscript(s: State, agentId: string): Transcript {
+  const a = s.agents[agentId];
+  const at = Math.round((a?.status_changed_at ?? now) / 1000);
+  const entries: TranscriptEntry[] = [];
+  const add = (kind: TranscriptEntry["kind"], text: string, when = at) => entries.push({ n: entries.length, kind, text, at: when, steps: [] });
+  add("you", a?.recent_prompts[0]?.text ?? "[observatory] leads: ready");
+  for (const said of LEADS[agentId].said) add("claude", said);
+  for (const t of leadTalk[agentId] ?? []) {
+    add("you", t.you, t.at);
+    add("claude", t.said, t.at);
+  }
+  return { entries, dropped: 0 };
+}
+
 /** The reader's conversation, made from the demo's latest turns. */
 export function mockTranscript(s: State, agentId: string): Transcript | null {
+  if (LEADS[agentId]) return leadTranscript(s, agentId);
   const turn = mockTurn(s, agentId);
   if (!turn) return null;
   const entries: TranscriptEntry[] = [];
