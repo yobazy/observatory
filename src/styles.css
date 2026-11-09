@@ -9348,8 +9348,8 @@ button.board-main:hover .board-text {
   padding: 0 5px;
   font-size: 10px;
 }
-.field .card-cap input.lead-model {
-  width: 110px;
+.card-cap.lead-model-pick select.lead-model {
+  max-width: 240px;
 }
 .card-cap.lead-notes {
   display: flex;
@@ -9721,6 +9721,4 @@ button.board-main:hover .board-text {
   width: 260px;
   max-width: 100%;
 }
-.top-lead-fields .setting-input.lead-model {
-  width: 110px;
-}
+

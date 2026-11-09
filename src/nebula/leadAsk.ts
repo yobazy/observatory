@@ -17,9 +17,9 @@ export const TOP_LEAD_NAME = "Lead";
 export const ASK_USER = "ASK_USER:";
 export const ANSWERS_LOG = `${LEADS_DIR}/answers.log`;
 export const TOP_NOTES = `${LEADS_DIR}/top.md`;
-/** The top lead reads across projects, so it gets more than the cheap
- *  model project leads start with. */
-export const DEFAULT_TOP_MODEL = "sonnet";
+/** The top lead reads across every project and passes questions on, so it
+ *  starts on the strongest model, a step above the project leads. */
+export const DEFAULT_TOP_MODEL = "opus";
 /** How long a thread waits for an answer; the top lead gives a project's
  *  lead less, so a passed-on answer still gets back in time. */
 export const ASK_TIMEOUT = 120;

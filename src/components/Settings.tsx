@@ -39,7 +39,7 @@ import { leadState } from "../nebula/lead";
 import { ASK_LINE_TEMPLATE, countsText, DEFAULT_TOP_MODEL, TOP_LEAD_NAME, TOP_NOTES, type LogCounts } from "../nebula/leadAsk";
 import { answerCounts, defaultTopFolder, openAnswersLog, removeTopLead, setTopLeadModel, setTopLeadPet, startTopLead } from "../nebula/leadRunner";
 import { petOf } from "../nebula/leadChat";
-import { PetPicker } from "./LeadCard";
+import { ModelPicker, PetPicker } from "./LeadCard";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
 type Tab = (typeof TABS)[number];
@@ -649,10 +649,11 @@ function LeadsSettings() {
       .catch((e) => flash(`Couldn't start the top lead: ${errText(e)}`, 6000))
       .finally(() => setBusy(false));
   };
-  const applyModel = () => {
-    if (!top || !model.trim() || model.trim() === top.model) return;
-    setTopLeadModel(top, model)
-      .then(() => flash(state === "running" ? `Restarted the top lead on ${model.trim()}` : `The top lead will use ${model.trim()}`))
+  const pickModel = (next: string) => {
+    setModel(next);
+    if (!top || !next.trim() || next.trim() === top.model) return;
+    setTopLeadModel(top, next)
+      .then(() => flash(state === "running" ? `Restarted the top lead on ${next.trim()}` : `The top lead will use ${next.trim()}`))
       .catch((e) => flash(`Couldn't switch the top lead's model: ${errText(e)}`));
   };
 
@@ -696,18 +697,7 @@ function LeadsSettings() {
           )}
         </div>
         <div className="setting-inline top-lead-fields">
-          <label className="card-cap">
-            model
-            <input
-              className="setting-input lead-model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              onBlur={applyModel}
-              onKeyDown={(e) => e.key === "Enter" && top && applyModel()}
-              spellCheck={false}
-              aria-label="The top lead's model"
-            />
-          </label>
+          <ModelPicker model={model} label="The top lead's model" onPick={pickModel} />
           <label className="card-cap">
             notes
             <input

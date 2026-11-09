@@ -2,7 +2,7 @@ import { useState } from "react";
 import { saveLead, useCards, type ProjectCard } from "../nebula/cards";
 import { dollars } from "../nebula/budgetHold";
 import { useSessionCosts } from "../nebula/budget";
-import { DEFAULT_LEAD_MODEL, defaultNotes, leadName, leadState } from "../nebula/lead";
+import { DEFAULT_LEAD_MODEL, defaultNotes, leadModelOptions, leadName, leadState } from "../nebula/lead";
 import { setLeadModel, startProjectLead } from "../nebula/leadRunner";
 import { sessionKey } from "../nebula/usageData";
 import { flash, setState, useAppState } from "../nebula/store";
@@ -31,10 +31,11 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
       .catch((e) => flash(`Couldn't start the lead: ${errText(e)}`))
       .finally(() => setBusy(false));
   };
-  const applyModel = () => {
-    if (!lead || !model.trim() || model.trim() === lead.model) return;
-    setLeadModel(projectId, lead, model)
-      .then(() => flash(state === "running" ? `Restarted the lead on ${model.trim()}` : `The lead will use ${model.trim()}`))
+  const pickModel = (next: string) => {
+    setModel(next);
+    if (!lead || !next.trim() || next.trim() === lead.model) return;
+    setLeadModel(projectId, lead, next)
+      .then(() => flash(state === "running" ? `Restarted the lead on ${next.trim()}` : `The lead will use ${next.trim()}`))
       .catch((e) => flash(`Couldn't switch the lead's model: ${errText(e)}`));
   };
 
@@ -62,23 +63,7 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
           </div>
         )}
         <div className="card-row">
-          <label className="card-cap">
-            model
-            <input
-              className="lead-model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              onBlur={applyModel}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && lead) {
-                  e.preventDefault();
-                  applyModel();
-                }
-              }}
-              spellCheck={false}
-              aria-label="The lead's model"
-            />
-          </label>
+          <ModelPicker model={model} label="The lead's model" onPick={pickModel} />
           {state === "none" ? (
             <button type="button" className="btn" disabled={busy} onClick={start}>
               {busy ? "Starting…" : "Start a lead"}
@@ -136,6 +121,25 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
         </span>
       </div>
     </div>
+  );
+}
+
+/** A lead's model, picked from Haiku, Sonnet and Opus (a saved model that
+ *  isn't one of them shows as "Custom: <model>"). Picking one on a running
+ *  lead restarts it on that model (#189). */
+export function ModelPicker({ model, label, onPick }: { model: string; label: string; onPick: (model: string) => void }) {
+  const options = leadModelOptions(model);
+  return (
+    <label className="card-cap lead-model-pick">
+      model
+      <select className="lead-model" value={model.trim()} onChange={(e) => onPick(e.target.value)} aria-label={label}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.hint ? `${o.label} · ${o.hint}` : o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
