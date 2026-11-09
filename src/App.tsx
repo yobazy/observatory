@@ -17,6 +17,7 @@ import { pickFolder, start } from "./nebula/client";
 import { watchAway } from "./nebula/away";
 import { homeCard, homeKeyFor, isFolderKey } from "./nebula/cards";
 import { useGitPolling } from "./nebula/git";
+import { usePushAfterTurn } from "./nebula/pushRunner";
 import { fitColumns, Resizer, SESSIONS, SIDEBAR, startSlide, useColumnWidth, useHidden, useMountedFor, useWindowWidth } from "./components/Resizer";
 import { PanelGlyph } from "./components/Sidebar";
 import { UsageView } from "./components/Usage";
@@ -170,6 +171,7 @@ export default function App() {
     watchAway();
   }, []);
   useGitPolling();
+  usePushAfterTurn();
   usePrPolling();
   useDelight();
   useBudgetWatch();

@@ -13,6 +13,8 @@ import {
 import { agentSpec, harnessLabel, KIND_LABEL, lastPrompt, relativeTime, statusLabel, usualHarness } from "../nebula/status";
 import { request } from "../nebula/client";
 import { changedFiles, neverPushed, shipKind, type GitState, type GitStatus } from "../nebula/git";
+import { pushNote } from "../nebula/autopush";
+import { usePushResult } from "../nebula/pushRunner";
 import { runOnWorktree, SHIP_LABEL, shipPrompt, shipWhat, takerFor } from "../nebula/actions";
 import { AgentServerMark, BandRunButton, BandRunLine, ProjectRun } from "./Run";
 import { PrLine } from "./Pr";
@@ -624,6 +626,7 @@ function MissingLine({ worktree }: { worktree: Worktree }) {
 /** Where the branch's code stands, in the order it matters: conflicts, then
  *  uncommitted work, then commits that aren't on the remote yet. */
 function GitLine({ git, worktree }: { git: GitState; worktree: Worktree }) {
+  const pushed = usePushResult(worktree.id);
   if ("error" in git && git.missing) return <MissingLine worktree={worktree} />;
   if ("error" in git) {
     return (
@@ -635,6 +638,13 @@ function GitLine({ git, worktree }: { git: GitState; worktree: Worktree }) {
   const files = changedFiles(git);
   const commits = (n: number) => `${n} ${n === 1 ? "commit" : "commits"}`;
   const parts: React.ReactNode[] = [];
+  // After a turn, when the card pushes the branch (autopush.ts).
+  if (pushed)
+    parts.push(
+      <span className={pushed.ok ? "git-muted" : "git-warn"} role="status">
+        {pushNote(pushed)}
+      </span>,
+    );
   if (!git.branch) parts.push(<span className="git-muted">Detached HEAD</span>);
   if (git.conflicted > 0) parts.push(<span className="git-warn">{git.conflicted} in conflict</span>);
   if (files > 0)

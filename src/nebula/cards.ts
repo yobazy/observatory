@@ -32,6 +32,9 @@ export interface ProjectCard {
   /** How Home books time for tasks ("check my calendar, ask, then book it").
    *  Empty: nothing is scheduled, `you` tasks just wait on the board. */
   schedulingInstruction: string;
+  /** Push a thread's branch each time its turn ends (autopush.ts), so other
+   *  machines have the latest work. Off unless turned on. */
+  pushAfterTurn: boolean;
 }
 
 /** A file a card is drafted from, its path relative to the project root. */
@@ -156,6 +159,7 @@ export function draftCard(sources: CardSources): ProjectCard {
     isHome: false,
     homeFolder: null,
     schedulingInstruction: "",
+    pushAfterTurn: false,
   };
 }
 
@@ -198,6 +202,7 @@ function normalize(x: unknown): ProjectCard | null {
     isHome: c.isHome === true,
     homeFolder: typeof c.homeFolder === "string" ? c.homeFolder : null,
     schedulingInstruction: typeof c.schedulingInstruction === "string" ? c.schedulingInstruction : "",
+    pushAfterTurn: c.pushAfterTurn === true,
   };
 }
 

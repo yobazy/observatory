@@ -141,3 +141,16 @@ test('saved cards come back after a reload, and unreadable storage starts with n
   assert.equal(cardFor('a').policy, 'isolated');
   assert.equal(cardFor('a').concurrency, 1);
 });
+
+test('push after every turn is off on a new card and is kept once turned on', () => {
+  fresh();
+  const card = draftCard({ files: [], isGitRepo: true });
+  assert.equal(card.pushAfterTurn, false);
+  saveCard('p1', { ...card, pushAfterTurn: true });
+  reloadCards();
+  assert.equal(cardFor('p1').pushAfterTurn, true);
+  // Cards saved before the setting existed read as off.
+  localStorage.setItem('observatory.cards', JSON.stringify({ cards: { p2: { description: 'x' } } }));
+  reloadCards();
+  assert.equal(cardFor('p2').pushAfterTurn, false);
+});
