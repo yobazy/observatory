@@ -38,6 +38,13 @@ export interface ProjectCard {
   /** Today's spend, in API-equivalent dollars, past which this project's
    *  pending Dispatch tasks wait (budgetHold.ts). Unset: no budget of its own. */
   dailyBudget?: number;
+  /** The commands a finished task's changes are checked with before it shows
+   *  as done (review.ts): drafted from CLAUDE.md's `## Checks` block, else
+   *  package.json's test and lint scripts. Unset: never drafted (a card saved
+   *  before checks existed); empty: nothing to check. */
+  checks?: string[];
+  /** The check before "done" is turned off for this project. */
+  reviewOff?: boolean;
 }
 
 /** A file a card is drafted from, its path relative to the project root. */
@@ -129,6 +136,52 @@ export function excerpt(markdown: string, max = MAX_DESCRIPTION): string {
   return cap(text.trim(), max);
 }
 
+/** The commands in a Markdown file's `## Checks` section: each line of its
+ *  code blocks, blank lines and `#` comments left out. */
+export function checksBlock(markdown: string): string[] {
+  const lines = splitFrontmatter(markdown).body.split(/\r?\n/);
+  const at = lines.findIndex((l) => /^##\s+checks\s*$/i.test(l.trim()));
+  if (at < 0) return [];
+  const out: string[] = [];
+  let fenced = false;
+  for (const raw of lines.slice(at + 1)) {
+    const line = raw.trim();
+    if (!fenced && /^#{1,2}\s/.test(line)) break;
+    if (/^(```|~~~)/.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (!fenced || !line || line.startsWith("#")) continue;
+    // A trailing comment ("npm test   # unit tests") isn't part of the command.
+    const command = line.replace(/\s+#\s.*$/, "").trim();
+    if (command && !out.includes(command)) out.push(command);
+  }
+  return out;
+}
+
+/** The checks a card is drafted with: CLAUDE.md's (else AGENTS.md's) `##
+ *  Checks` block, else package.json's `test` and `lint` scripts. */
+export function draftChecks(files: SourceFile[]): string[] {
+  for (const re of [/^CLAUDE\.md$/i, /^AGENTS\.md$/i]) {
+    for (const f of files.filter((f) => re.test(f.path))) {
+      const found = checksBlock(f.text);
+      if (found.length) return found;
+    }
+  }
+  const pkg = files.find((f) => f.path === "package.json");
+  if (!pkg) return [];
+  let scripts: Record<string, unknown> = {};
+  try {
+    scripts = JSON.parse(pkg.text)?.scripts ?? {};
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  if (typeof scripts.test === "string") out.push("npm test");
+  if (typeof scripts.lint === "string") out.push("npm run lint");
+  return out;
+}
+
 /** Where a description is drafted from, in order of preference. */
 const DESCRIBED_BY = [/^CLAUDE\.md$/i, /^AGENTS\.md$/i, /^README/i];
 const SKILL = /^\.claude\/skills\/([^/]+)\/SKILL\.md$/i;
@@ -162,6 +215,7 @@ export function draftCard(sources: CardSources): ProjectCard {
     isHome: false,
     homeFolder: null,
     schedulingInstruction: "",
+    checks: draftChecks(sources.files),
     pushAfterTurn: false,
   };
 }
@@ -209,6 +263,8 @@ function normalize(x: unknown): ProjectCard | null {
     ...(typeof c.dailyBudget === "number" && Number.isFinite(c.dailyBudget) && c.dailyBudget > 0
       ? { dailyBudget: c.dailyBudget }
       : {}),
+    ...(Array.isArray(c.checks) ? { checks: strings(c.checks).map((x) => x.trim()).filter(Boolean) } : {}),
+    ...(c.reviewOff === true ? { reviewOff: true } : {}),
   };
 }
 

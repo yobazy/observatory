@@ -176,6 +176,8 @@ Acceptance criteria:
 - Given a card with the check turned off, then no review runs for that project (unit test).
 - Given a sandbox task that edits a file and breaks a test, when it finishes, then the reviewer fails it, the builder gets the failure and fixes it, and the second review passes and shows it as done and checked (manual check against the sandbox).
 
+Status: built, with unit tests, in review. An earlier version of this file called S10 done, but its code was never merged. Off unless `reviewOn` (Settings › Check before done), and refused on the Rust side while off. The app runs the card's checks itself and gives their output to the reviewer, since a plan-mode reviewer can't run commands. Not yet checked by hand: the sandbox run above, and real reviewer calls with `claude -p --permission-mode plan` or `codex exec --sandbox read-only`.
+
 ## Automations (S11 to S14)
 
 Problem: I have background jobs in three places: launchd agents on this Mac, Claude cloud routines, and a vault backup inside Obsidian. Nothing shows me whether they're healthy, so a broken job stays broken until I notice what it was supposed to do didn't happen. The check-up done while scoping this (2026-10-22) found exactly that. `com.bazil.todos-notion` isn't loaded in launchd, and its last log lines are a `PermissionError` on `~/Documents/Programming`. `wispr-watch --status` says "trigger url: missing, token: missing, last fired: never", so the meeting-finished trigger has never fired. The Hermes gateway's error log ends in `sqlite3.OperationalError: disk I/O error`. An Automations view puts every job in one list with its health, and lets me run it now.
