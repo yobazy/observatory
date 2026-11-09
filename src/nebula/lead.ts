@@ -158,7 +158,28 @@ export async function deliver(lines: string[], q: LeadQueue): Promise<"sent" | "
 
 // ---- the lead itself ----
 
-export const DEFAULT_LEAD_MODEL = "haiku";
+/** A project lead is its project's orchestrator and needs the context, so it
+ *  starts on the balanced model rather than the cheapest. */
+export const DEFAULT_LEAD_MODEL = "sonnet";
+
+/** The models a lead can be picked on: Claude Code's `--model` aliases. */
+export const LEAD_MODELS = [
+  { value: "haiku", label: "Haiku", hint: "cheapest" },
+  { value: "sonnet", label: "Sonnet", hint: "balanced" },
+  { value: "opus", label: "Opus", hint: "strongest, costs most" },
+] as const;
+
+export type ModelOption = { value: string; label: string; hint: string };
+
+/** The picker's options for a lead whose model is `current`: the three
+ *  aliases, then a "Custom: <value>" one when a saved model isn't one of
+ *  them (an older free-text entry), so it still shows and keeps working. */
+export function leadModelOptions(current: string): ModelOption[] {
+  const options: ModelOption[] = LEAD_MODELS.map((m) => ({ ...m }));
+  const saved = oneLine(current);
+  if (saved && !options.some((o) => o.value === saved)) options.push({ value: saved, label: `Custom: ${saved}`, hint: "" });
+  return options;
+}
 /** Where leads keep their notes: outside every repo. */
 export const LEADS_DIR = "~/.config/observatory/leads";
 

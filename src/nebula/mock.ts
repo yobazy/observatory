@@ -94,10 +94,10 @@ const agents: Agent[] = [
   agent("a12", "w3", "Search Facets", "finished", 60 * 5, ["add size and color facets to search"]),
   agent("a11", "w0", "Old Spike", "finished", 60 * 24 * 6, ["spike on an image CDN"], { archived: true }),
   // The leads (S17, S26), so the sidebar shows their pets and one calls you.
-  agent("lead0", "w0", "Lead storefront", "finished", 3, ["[observatory] finished: Sequential Cart Sync on cart-sync"], { model: "haiku" }),
-  agent("lead1", "wm0", "Lead marketing-site", "finished", 40, ["[observatory] finished: Lighthouse Fixes on main"], { model: "haiku" }),
-  agent("lead4", "wm3", "Lead billing-api", "finished", 8, ["[observatory] failed: Weekly Invoice Job on main"], { model: "haiku", unseen: true }),
-  agent("leadtop", "wm5", "Lead", "finished", 15, ["[observatory] leads: Lead storefront, Lead marketing-site, Lead billing-api"], { model: "sonnet" }),
+  agent("lead0", "w0", "Lead storefront", "finished", 3, ["[observatory] finished: Sequential Cart Sync on cart-sync"], { model: "sonnet" }),
+  agent("lead1", "wm0", "Lead marketing-site", "finished", 40, ["[observatory] finished: Lighthouse Fixes on main"], { model: "sonnet" }),
+  agent("lead4", "wm3", "Lead billing-api", "finished", 8, ["[observatory] failed: Weekly Invoice Job on main"], { model: "sonnet", unseen: true }),
+  agent("leadtop", "wm5", "Lead", "finished", 15, ["[observatory] leads: Lead storefront, Lead marketing-site, Lead billing-api"], { model: "opus" }),
 ];
 
 /** Each mock lead's project and what it last said (S27's dialogue). */
@@ -135,8 +135,8 @@ const LEAD_ANSWERS = [
 function seedLeads() {
   if (!Object.values(allCards()).some((c) => c.lead))
     for (const [id, l] of Object.entries(LEADS))
-      if (l.project) saveLead(l.project, { agentId: id, model: "haiku", notes: `~/.config/observatory/leads/${id}.md` }, draftCard({ files: [], isGitRepo: true }));
-  const topLead = { agentId: "leadtop", model: "sonnet", notes: "~/.config/observatory/leads/top.md", path: "/Users/dev" };
+      if (l.project) saveLead(l.project, { agentId: id, model: "sonnet", notes: `~/.config/observatory/leads/${id}.md` }, draftCard({ files: [], isGitRepo: true }));
+  const topLead = { agentId: "leadtop", model: "opus", notes: "~/.config/observatory/leads/top.md", path: "/Users/dev" };
   try {
     const saved = JSON.parse(localStorage.getItem("observatory.prefs") ?? "{}");
     if (!("topLead" in saved)) localStorage.setItem("observatory.prefs", JSON.stringify({ ...saved, topLead }));

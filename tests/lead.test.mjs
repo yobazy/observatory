@@ -28,6 +28,10 @@ const {
   prOf,
   runningLeads,
   startLead,
+  startLeadThread,
+  DEFAULT_LEAD_MODEL,
+  LEAD_MODELS,
+  leadModelOptions,
   MAX_LINE,
 } = await import('../src/nebula/lead.ts');
 const { cardFor, draftCard, reloadCards, saveLead } = await import('../src/nebula/cards.ts');
@@ -382,4 +386,39 @@ test('A PR opened line names the PR by number with its link, and both survive cl
   const longTitle = eventLine({ kind: 'PR opened', title: 'Title '.repeat(80), branch: 'fix-login', agentId: 'a1', need: 'x', pr });
   assert.ok(longTitle.length <= MAX_LINE);
   assert.ok(longTitle.includes('#42') && longTitle.endsWith(`(agent a1) ${pr.url}`));
+});
+
+test('The lead model picker offers Haiku (cheapest), Sonnet (balanced) and Opus (strongest, costs most), stored as the CLI aliases', () => {
+  assert.deepEqual(
+    leadModelOptions('sonnet').map((o) => [o.value, o.label, o.hint]),
+    [
+      ['haiku', 'Haiku', 'cheapest'],
+      ['sonnet', 'Sonnet', 'balanced'],
+      ['opus', 'Opus', 'strongest, costs most'],
+    ],
+  );
+  assert.deepEqual(LEAD_MODELS.map((m) => m.value), ['haiku', 'sonnet', 'opus']);
+  // Each of the three is chosen as itself, with nothing added.
+  for (const m of ['haiku', 'sonnet', 'opus']) assert.equal(leadModelOptions(m).length, 3);
+});
+
+test('A saved model that is not one of the three still shows, as "Custom: <value>", and keeps its value', () => {
+  const options = leadModelOptions('claude-opus-4-8');
+  assert.equal(options.length, 4);
+  assert.deepEqual(options[3], { value: 'claude-opus-4-8', label: 'Custom: claude-opus-4-8', hint: '' });
+  assert.equal(leadModelOptions('  claude-opus-4-8 ')[3].value, 'claude-opus-4-8');
+  // Empty adds nothing.
+  assert.equal(leadModelOptions('').length, 3);
+});
+
+test('Project leads start on sonnet by default', async () => {
+  assert.equal(DEFAULT_LEAD_MODEL, 'sonnet');
+  const models = [];
+  const saved = await startLeadThread('prompt', { model: '', notes: 'n.md' }, {
+    create: async (_prompt, model) => (models.push(model), 'lead-9'),
+    send: async () => {},
+    save: () => {},
+  });
+  assert.deepEqual(models, ['sonnet']);
+  assert.equal(saved.model, 'sonnet');
 });

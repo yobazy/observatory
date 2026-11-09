@@ -232,11 +232,11 @@ test('Given Start a lead or Start the top lead, the thread is renamed Lead <proj
     },
     DEFAULT_TOP_MODEL,
   );
-  assert.equal(DEFAULT_TOP_MODEL, 'sonnet');
+  assert.equal(DEFAULT_TOP_MODEL, 'opus');
   assert.deepEqual(calls.map((c) => c[0]), ['create', 'save']);
   assert.equal(calls[0][1], top);
-  assert.equal(calls[0][2], 'sonnet');
-  assert.deepEqual(saved, { agentId: 'top-1', model: 'sonnet', notes: TOP_NOTES });
+  assert.equal(calls[0][2], 'opus');
+  assert.deepEqual(saved, { agentId: 'top-1', model: 'opus', notes: TOP_NOTES });
 });
 
 // ---- the log ----
