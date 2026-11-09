@@ -412,8 +412,9 @@ struct Upstream {
 }
 
 /// The arguments for pushing `branch`: always `HEAD` to the remote branch
-/// of the same name, on the upstream's remote, or on `origin` with `-u` when
-/// it has none yet. Never to whatever `branch.<b>.merge` names: a branch made
+/// of the same name. With its own upstream (that same-named branch), on the
+/// upstream's remote; otherwise on `origin` with `-u`, which points the
+/// upstream there. Never to whatever `branch.<b>.merge` names: a branch made
 /// from `origin/main` tracks main, and would otherwise land on it. The
 /// refspec names the remote side in full and carries no `+`, and no force
 /// flag is ever added, so the remote only takes a fast-forward.
@@ -425,18 +426,11 @@ fn push_args(branch: &str, upstream: Option<&Upstream>) -> Vec<String> {
     }
 }
 
-/// Why a branch's upstream rules out pushing it, if it does: it tracks a
-/// remote branch of another name (a branch made from `origin/main` tracks
-/// main), or one of the main branches.
-fn tracking_refusal(branch: &str, upstream: &Upstream, mains: &[&str]) -> Option<String> {
-    let name = upstream
-        .merge
-        .strip_prefix("refs/heads/")
-        .unwrap_or(&upstream.merge);
-    if name == branch && !mains.contains(&name) {
-        return None;
-    }
-    Some(format!("this branch tracks {}/{name}", upstream.remote))
+/// The branch's upstream when it's the remote branch of the same name. One
+/// of another name (a branch made from `origin/main` tracks main) counts as
+/// none: the push goes to `origin/<branch>` and re-points it there.
+fn own_upstream(branch: &str, upstream: Option<Upstream>) -> Option<Upstream> {
+    upstream.filter(|u| u.merge.strip_prefix("refs/heads/") == Some(branch))
 }
 
 fn upstream_of(dir: &Path, branch: &str) -> Option<Upstream> {
@@ -463,7 +457,7 @@ fn push_ff(dir: &Path, main: Option<&str>) -> Result<(), String> {
     if branch.is_empty() || branch.starts_with(['+', '-']) {
         return Err(format!("refusing to push a branch named {branch}"));
     }
-    let upstream = upstream_of(dir, &branch);
+    let upstream = own_upstream(&branch, upstream_of(dir, &branch));
     let remote = upstream.as_ref().map_or("origin", |u| u.remote.as_str());
     // The main branch gets there by merging PRs, never from here.
     let remote_default = git(
@@ -484,12 +478,6 @@ fn push_ff(dir: &Path, main: Option<&str>) -> Result<(), String> {
         .collect();
     if mains.contains(&branch.as_str()) {
         return Err(format!("refusing to push the main branch, {branch}"));
-    }
-    if let Some(why) = upstream
-        .as_ref()
-        .and_then(|u| tracking_refusal(&branch, u, &mains))
-    {
-        return Err(why);
     }
     let args = push_args(&branch, upstream.as_ref());
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -769,11 +757,8 @@ mod tests {
             push_args("feat", Some(&main)),
             ["push", "origin", "HEAD:refs/heads/feat"]
         );
-        assert_eq!(
-            tracking_refusal("feat", &main, &["main", "master"]).as_deref(),
-            Some("this branch tracks origin/main")
-        );
-        assert_eq!(tracking_refusal("feat", &up, &["main", "master"]), None);
+        assert!(own_upstream("feat", Some(main)).is_none());
+        assert!(own_upstream("feat", Some(up)).is_some());
         // And the source has no other way to build one.
         let src = include_str!("git.rs");
         let code = &src[..src.find("#[cfg(test)]").unwrap()];
@@ -821,7 +806,7 @@ mod tests {
     }
 
     #[test]
-    fn a_branch_made_from_origin_main_is_not_pushed_onto_main() {
+    fn a_branch_made_from_origin_main_is_pushed_to_its_own_name_not_main() {
         let (dir, remote) = repo_with_remote("tracks-main");
         let main_before = rev(&remote, "refs/heads/main");
         // How builders make branches: `git worktree add -b x origin/main`.
@@ -833,13 +818,11 @@ mod tests {
         git(&dir, &["add", "."]).unwrap();
         git(&dir, &["commit", "-qm", "x work"]).unwrap();
 
-        let err = push_ff(&dir, Some("main")).unwrap_err();
-        assert_eq!(err, "this branch tracks origin/main");
+        push_ff(&dir, Some("main")).unwrap();
+        assert_eq!(rev(&remote, "refs/heads/x"), rev(&dir, "HEAD"));
         assert_eq!(rev(&remote, "refs/heads/main"), main_before);
-        assert!(git(&remote, &["rev-parse", "--verify", "-q", "refs/heads/x"]).is_err());
-        // Without the main hint too: the upstream alone is enough to refuse.
-        assert!(push_ff(&dir, None).is_err());
-        assert_eq!(rev(&remote, "refs/heads/main"), main_before);
+        let up = git(&dir, &["rev-parse", "--abbrev-ref", "x@{u}"]).unwrap();
+        assert_eq!(up.trim(), "origin/x");
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
 }
