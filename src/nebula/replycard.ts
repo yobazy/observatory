@@ -23,6 +23,9 @@ export interface Ask {
   n: number;
   text: string;
   options: Option[];
+  /** What an earlier reply said about the same question that this one
+   *  leaves out: a decision asked again tends to lose its why. */
+  before?: string;
 }
 
 export interface Card {
@@ -583,6 +586,54 @@ export interface Pending {
   earlier: ReturnType<typeof openDecisions>;
 }
 
+/** The question an ask is about, to know it again when a later reply asks
+ *  it in fewer words: its bold lead, else its first sentence. */
+const BOLD_LEAD = /^\s*(?:\*\*|__)(.+?)(?:\*\*|__)/;
+const afterLead = (text: string) => text.replace(BOLD_LEAD, "");
+
+function askKey(text: string): string {
+  const bold = BOLD_LEAD.exec(text);
+  const lead = bold ? bold[1] : (/^.*?[?.!:](?=\s|$)/.exec(text.trim())?.[0] ?? text);
+  return lead.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+const sentences = (text: string) =>
+  text
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.?!])\s+(?=[A-Z*_`"“(])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+const bare = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** The latest reply's decisions, each with what earlier replies said about
+ *  the same question that it no longer does: the reason it's being asked,
+ *  dropped as the question is asked again and again. The first time it was
+ *  asked is where the why usually is; later askings add only where things
+ *  stand. */
+export function withBefore(card: Card, entries: { n: number; kind: string; text: string }[], n: number): Card {
+  if (!card.asks.length) return card;
+  const earlier = entries.filter((e) => e.kind === "claude" && e.n < n).map((e) => readCard(e.text).asks);
+  const asks = card.asks.map((a) => {
+    const key = askKey(a.text);
+    if (!key) return a;
+    const now = bare(a.text);
+    for (const list of earlier)
+      for (const b of list) {
+        if (askKey(b.text) !== key) continue;
+        // Past the question itself, which this one says already, and any
+        // options it wrote out on a line of their own.
+        const extra = sentences(afterLead(b.text))
+          .slice(BOLD_LEAD.test(b.text) ? 0 : 1)
+          .filter((s) => !/^(?:\*\*|__)?A\b.*·\s*(?:\*\*|__)?B\b/.test(s))
+          .filter((s) => bare(s).length >= 12 && !now.includes(bare(s)));
+        if (extra.length) return { ...a, before: extra.join(" ") };
+      }
+    return a;
+  });
+  return { ...card, asks };
+}
+
 /** What a thread is waiting on you to decide: its latest reply, when that
  *  has a Needs you and nothing you said came after it, with any decisions
  *  left open before it. Earlier ones alone count only while the latest
@@ -596,7 +647,7 @@ export function pendingCard(entries: { n: number; kind: string; text: string }[]
   // A reply that says it's safe to close has moved past what was asked before.
   const earlier = card.verdict?.tone === "done" ? [] : openDecisions(entries, last.n);
   if (!asksYou(card) && !(earlier.length && open)) return null;
-  return { n: last.n, card, asked: askedBefore(entries, last.n), earlier };
+  return { n: last.n, card: withBefore(card, entries, last.n), asked: askedBefore(entries, last.n), earlier };
 }
 
 /** What set a turn off: the last thing you said before entry `n` that
