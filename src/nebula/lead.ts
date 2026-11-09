@@ -13,7 +13,8 @@ export type LeadEventKind = "finished" | "failed" | "needs you" | "PR opened";
 /** A thread as the lead watches it, polled from the store. `failed` is the
  *  mark of the S9 stuck flag that's up, and `review` the mark of a failed
  *  review (S10, reviewMark()). `pr` is the number of the open (or draft) PR
- *  on its branch. */
+ *  on its branch (prOf()): null when gh found none, undefined while it's
+ *  unknown (not looked up yet, or gh couldn't answer). */
 export interface ThreadState {
   id: string;
   projectId: string | null;
@@ -21,7 +22,27 @@ export interface ThreadState {
   archived: boolean;
   failed: string | null;
   review?: string | null;
-  pr: number | null;
+  pr: number | null | undefined;
+}
+
+/** A worktree's PR lookup (prs.ts) as the lead counts it: its open or draft
+ *  PR's number, null when there's none (or it's merged or closed), and
+ *  undefined while it's unknown. The store's PRs fill in after launch, so
+ *  unknown is a baseline, never "no PR". */
+export function prOf(
+  entry: { kind: "found"; pr: { number: number; state: string } } | { kind: "none" } | { kind: "unavailable" } | undefined,
+): number | null | undefined {
+  if (!entry || entry.kind === "unavailable") return undefined;
+  if (entry.kind === "none") return null;
+  return entry.pr.state === "open" || entry.pr.state === "draft" ? entry.pr.number : null;
+}
+
+/** The snapshot to keep: a PR that's unknown now keeps what was last known
+ *  of it, so a lookup that fails and then answers isn't news. */
+export function carryUnknown(before: Snapshot, after: Snapshot): Snapshot {
+  const out: Snapshot = {};
+  for (const [id, t] of Object.entries(after)) out[id] = t.pr === undefined && before[id] ? { ...t, pr: before[id].pr } : t;
+  return out;
 }
 
 /** A failed review as a mark: a new fail (another state, or a second fail)
@@ -60,7 +81,9 @@ export function leadEvents(before: Snapshot, after: Snapshot, leads: Leads): Lea
     const stuck = !!t.failed && t.failed !== was.failed;
     const review = !!t.review && t.review !== was.review;
     if (stuck || review) add("failed");
-    if (t.pr !== null && t.pr !== was.pr) add("PR opened");
+    // Only news against a known answer: none to a PR, or another PR. A PR
+    // first seen once its lookup lands is the baseline.
+    if (typeof t.pr === "number" && was.pr !== undefined && t.pr !== was.pr) add("PR opened");
   }
   return out;
 }

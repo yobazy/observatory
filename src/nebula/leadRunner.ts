@@ -13,7 +13,9 @@ import {
   deliver,
   eventLine,
   eventNeed,
+  carryUnknown,
   leadEvents,
+  prOf,
   leadName,
   reviewMark,
   leadState,
@@ -62,7 +64,7 @@ export function snapshot(s: Pick<State, "agents" | "worktrees" | "prs">, stuck: 
       archived: a.archived,
       failed: raised ? `${raised.kind}:${raised.mark}` : null,
       review: reviewMark(reviews[a.id]),
-      pr: pr?.kind === "found" && (pr.pr.state === "open" || pr.pr.state === "draft") ? pr.pr.number : null,
+      pr: prOf(pr),
     };
   }
   return out;
@@ -338,7 +340,7 @@ export function useLeadRunner() {
       // The top lead is in some project's folder, but it isn't one of its tasks.
       if (top) delete after[top.agentId];
       const events = before ? leadEvents(before, after, runningLeads(allCards(), s.agents, s.projects)) : [];
-      before = after;
+      before = carryUnknown(before ?? {}, after);
       const byLead = new Map<string, LeadEvent[]>();
       for (const e of events) byLead.set(e.leadId, [...(byLead.get(e.leadId) ?? []), e]);
       for (const [leadId, list] of byLead) void inTurn(leadId, () => send(leadId, list));
