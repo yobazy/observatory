@@ -420,13 +420,11 @@ fn push_args(branch: &str, upstream: Option<&Upstream>) -> Vec<String> {
     match upstream {
         Some(u) => vec![
             "push".into(),
-            "--porcelain".into(),
             u.remote.clone(),
             format!("{src}:{}", u.merge),
         ],
         None => vec![
             "push".into(),
-            "--porcelain".into(),
             "-u".into(),
             "origin".into(),
             format!("{src}:{src}"),
@@ -472,7 +470,12 @@ fn push_ff(dir: &Path, main: Option<&str>) -> Result<(), String> {
     )
     .ok()
     .and_then(|s| s.trim().split_once('/').map(|(_, b)| b.to_string()));
-    let mains = [Some("main"), Some("master"), main, remote_default.as_deref()];
+    let mains = [
+        Some("main"),
+        Some("master"),
+        main,
+        remote_default.as_deref(),
+    ];
     if mains.contains(&Some(branch.as_str())) {
         return Err(format!("refusing to push the main branch, {branch}"));
     }
@@ -700,7 +703,14 @@ mod tests {
         let other = dir.parent().unwrap().join("other");
         git(
             dir.parent().unwrap(),
-            &["clone", "-q", "-b", "feat", remote.to_str().unwrap(), "other"],
+            &[
+                "clone",
+                "-q",
+                "-b",
+                "feat",
+                remote.to_str().unwrap(),
+                "other",
+            ],
         )
         .unwrap();
         git(&other, &["config", "user.email", "t@example.com"]).unwrap();
@@ -735,7 +745,7 @@ mod tests {
         }
         assert_eq!(
             push_args("feat", None),
-            ["push", "--porcelain", "-u", "origin", "refs/heads/feat:refs/heads/feat"]
+            ["push", "-u", "origin", "refs/heads/feat:refs/heads/feat"]
         );
         // And the source has no other way to build one.
         let src = include_str!("git.rs");
@@ -752,7 +762,10 @@ mod tests {
         push_ff(&dir, None).unwrap();
         assert_eq!(rev(&remote, "refs/heads/feat"), rev(&dir, "HEAD"));
         let status = git(&dir, &["status", "--porcelain"]).unwrap();
-        assert!(status.contains(" M a.txt") && status.contains("?? new.txt"), "{status}");
+        assert!(
+            status.contains(" M a.txt") && status.contains("?? new.txt"),
+            "{status}"
+        );
         let pushed = git(&remote, &["show", "refs/heads/feat:a.txt"]).unwrap();
         assert_eq!(pushed, "one\ntwo\n");
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
@@ -772,7 +785,11 @@ mod tests {
         git(&dir, &["checkout", "-q", "--detach"]).unwrap();
         assert!(push_ff(&dir, None).unwrap_err().contains("detached"));
         assert_eq!(rev(&remote, "refs/heads/main"), before);
-        assert!(git(&remote, &["rev-parse", "--verify", "-q", "refs/heads/trunk"]).is_err());
+        assert!(git(
+            &remote,
+            &["rev-parse", "--verify", "-q", "refs/heads/trunk"]
+        )
+        .is_err());
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
 }
