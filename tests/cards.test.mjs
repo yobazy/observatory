@@ -171,3 +171,16 @@ test('S10: checks and the check-off switch are saved on the card; a card saved b
   assert.equal(cardFor('p2').checks, undefined);
   assert.equal(cardFor('p2').reviewOff, undefined);
 });
+
+test('push after every turn is off on a new card and is kept once turned on', () => {
+  fresh();
+  const card = draftCard({ files: [], isGitRepo: true });
+  assert.equal(card.pushAfterTurn, false);
+  saveCard('p1', { ...card, pushAfterTurn: true });
+  reloadCards();
+  assert.equal(cardFor('p1').pushAfterTurn, true);
+  // Cards saved before the setting existed read as off.
+  localStorage.setItem('observatory.cards', JSON.stringify({ cards: { p2: { description: 'x' } } }));
+  reloadCards();
+  assert.equal(cardFor('p2').pushAfterTurn, false);
+});

@@ -32,6 +32,9 @@ export interface ProjectCard {
   /** How Home books time for tasks ("check my calendar, ask, then book it").
    *  Empty: nothing is scheduled, `you` tasks just wait on the board. */
   schedulingInstruction: string;
+  /** Push a thread's branch each time its turn ends (autopush.ts), so other
+   *  machines have the latest work. Off unless turned on. */
+  pushAfterTurn: boolean;
   /** Today's spend, in API-equivalent dollars, past which this project's
    *  pending Dispatch tasks wait (budgetHold.ts). Unset: no budget of its own. */
   dailyBudget?: number;
@@ -213,6 +216,7 @@ export function draftCard(sources: CardSources): ProjectCard {
     homeFolder: null,
     schedulingInstruction: "",
     checks: draftChecks(sources.files),
+    pushAfterTurn: false,
   };
 }
 
@@ -255,6 +259,7 @@ function normalize(x: unknown): ProjectCard | null {
     isHome: c.isHome === true,
     homeFolder: typeof c.homeFolder === "string" ? c.homeFolder : null,
     schedulingInstruction: typeof c.schedulingInstruction === "string" ? c.schedulingInstruction : "",
+    pushAfterTurn: c.pushAfterTurn === true,
     ...(typeof c.dailyBudget === "number" && Number.isFinite(c.dailyBudget) && c.dailyBudget > 0
       ? { dailyBudget: c.dailyBudget }
       : {}),
