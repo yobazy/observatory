@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { QuickAnswer } from "./QuickAnswer";
+import { TriageQueue } from "./TriageQueue";
 import { selectAgent } from "./Sidebar";
 import { openLink } from "./Run";
 import { followUp } from "../nebula/actions";
@@ -118,6 +119,7 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
         </div>
       </header>
       <div className="usage-body">
+        <TriageQueue />
         {rows.length === 0 ? (
           <p className="usage-empty">
             Nothing dispatched yet.{" "}

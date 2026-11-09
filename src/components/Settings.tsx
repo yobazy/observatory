@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { flash, getState, setState, useAppState } from "../nebula/store";
+import { DEFAULT_STALE_DAYS, DEFAULT_TRIAGE_COMMAND } from "../nebula/triage";
+import { DEFAULT_PARK_DAYS } from "../nebula/park";
 import {
   AGENTS_HEAD,
   EXPERIMENTAL,
@@ -374,6 +376,109 @@ function DispatchSettings() {
       </div>
       <div className="setting">
         <div className="setting-text">
+          <label className="setting-label" htmlFor="set-triage-on">
+            Triage queue
+          </label>
+          <span className="setting-hint">
+            A cheap model reads the end of each open thread that changed since its last read and says in one line what
+            it needs from you, ranked at the top of the Dispatch board and walked by ⌘J. Each read is a model call, a
+            batch of up to 10 threads at a time; the first one reads every thread that isn't stale. Off, only threads
+            waiting on you show.
+          </span>
+        </div>
+        <Switch
+          id="set-triage-on"
+          on={prefs.triageOn === true}
+          onChange={(on) => void savePrefs({ ...prefs, triageOn: on || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-triage">
+            Triage command
+          </label>
+          <span className="setting-hint">
+            The agent CLI that triages, run headless with the prompt on stdin. Empty uses Haiku with no tools.
+          </span>
+        </div>
+        <TextSetting
+          id="set-triage"
+          value={prefs.triageCommand ?? ""}
+          placeholder={DEFAULT_TRIAGE_COMMAND}
+          suggestions={[DEFAULT_TRIAGE_COMMAND, "codex exec --skip-git-repo-check"]}
+          onCommit={(v) => void savePrefs({ ...prefs, triageCommand: v || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-triage-stale">
+            Stale after
+          </label>
+          <span className="setting-hint">
+            A thread unchanged this long is labelled stale without a model call, and folded away at the end of the queue.
+          </span>
+        </div>
+        <select
+          id="set-triage-stale"
+          className="setting-input"
+          value={String(prefs.triageStaleDays ?? DEFAULT_STALE_DAYS)}
+          onChange={(e) => {
+            const days = Number(e.target.value);
+            void savePrefs({ ...prefs, triageStaleDays: days === DEFAULT_STALE_DAYS ? undefined : days });
+          }}
+        >
+          {[1, 2, 3, 5, 7, 14, 30].map((n) => (
+            <option key={n} value={n}>
+              {n} {n === 1 ? "day" : "days"}
+              {n === DEFAULT_STALE_DAYS ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-park-on">
+            Park idle threads in Ideas
+          </label>
+          <span className="setting-hint">
+            A thread that finished and sat unchanged past the time below becomes an idea in its project, with a brief
+            of what was asked and where it got to, and its session is archived. Never one that's running, waiting on
+            you, dragged into place, or in a Dispatch batch still going. Resume in Ideas brings a thread back as it
+            was; Undo in the sidebar brings back a whole park. The first time, you confirm the list. No model call.
+          </span>
+        </div>
+        <Switch
+          id="set-park-on"
+          on={prefs.parkOn === true}
+          onChange={(on) => void savePrefs({ ...prefs, parkOn: on || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-park-days">
+            Park after
+          </label>
+          <span className="setting-hint">How long a thread sits unchanged before it's parked. Separate from Stale after.</span>
+        </div>
+        <select
+          id="set-park-days"
+          className="setting-input"
+          value={String(prefs.parkDays ?? DEFAULT_PARK_DAYS)}
+          onChange={(e) => {
+            const days = Number(e.target.value);
+            void savePrefs({ ...prefs, parkDays: days === DEFAULT_PARK_DAYS ? undefined : days });
+          }}
+        >
+          {[1, 2, 3, 5, 7, 14, 30].map((n) => (
+            <option key={n} value={n}>
+              {n} {n === 1 ? "day" : "days"}
+              {n === DEFAULT_PARK_DAYS ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
           <label className="setting-label" htmlFor="set-suggest-on">
             Next-prompt suggestions
           </label>
@@ -411,8 +516,8 @@ function DispatchSettings() {
             Sessions at once
           </label>
           <span className="setting-hint">
-            How many dispatched tasks run at the same time. The rest wait and start as these finish. A Shared
-            project's own limit applies too.
+            How many sessions work at the same time, however they were started. Past it, dispatched tasks wait and
+            start as others finish, and New task offers to wait too. A Shared project's own limit applies as well.
           </span>
         </div>
         <select
@@ -1077,7 +1182,7 @@ const SHORTCUTS: [string, string][] = [
   ["⌘O", "Add a project"],
   ["⌘P", "Filter projects"],
   ["⌘1 – ⌘9", "Jump to a project"],
-  ["⌘J", "Next session waiting on you"],
+  ["⌘J", "Next in the triage queue, or the next session waiting on you"],
   ["⌘I", "Write an idea down for later"],
   ["⇧⌘I", "Ideas: everything written down to start later"],
   ["⌘U", "Agent usage"],

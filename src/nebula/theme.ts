@@ -115,8 +115,27 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   /** The agent CLI that suggests them; unset is a cheap model, "off" is off
    *  (nextprompts.ts). */
   suggestCommand?: string;
-  /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
+  /** The triage queue's model pass (triage.ts); off unless true, since each
+   *  pass over changed threads is a model call. */
+  triageOn?: boolean;
+  /** The agent CLI triage runs through, headless (router.rs); unset is a
+   *  cheap model (DEFAULT_TRIAGE_COMMAND). */
+  triageCommand?: string;
+  /** Days a thread sits unchanged before it's labelled stale; 3 when unset. */
+  triageStaleDays?: number;
+  /** Sessions working at once, however they were started; Dispatch's tasks
+   *  and New task's queue wait past it (batch.ts); 4 when unset. */
   dispatchCap?: number;
+  /** Park threads idle past `parkDays` in Ideas, their sessions archived
+   *  (park.ts); off unless true. */
+  parkOn?: boolean;
+  /** Days a thread sits unchanged before it's parked; 3 when unset. */
+  parkDays?: number;
+  /** You OK'd the first list of threads to park: later ones park on their own. */
+  parkConfirmed?: boolean;
+  /** Threads kept out of parking (unticked, resumed, undone), by agent id:
+   *  their last change then. A newer change lets them park again. */
+  parkKeep?: Record<string, number>;
   /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */
   keepUseLog?: boolean;
   /** Label prefixes of the launchd agents the Automations view lists

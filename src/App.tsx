@@ -44,6 +44,11 @@ import { usePrPolling } from "./nebula/prs";
 import { useQueueRunner } from "./nebula/queue";
 import { useBatchRunner } from "./nebula/batchRunner";
 import { useTaggingRunner } from "./nebula/taggingRunner";
+import { queueOf, useTriageRunner } from "./nebula/triageRunner";
+import { useParkRunner } from "./nebula/parkRunner";
+import { ParkConfirm } from "./components/Park";
+import { nextInQueue } from "./nebula/triage";
+import { openQueued } from "./components/TriageQueue";
 import { ReviewView } from "./components/Review";
 import { UncommittedView } from "./components/Uncommitted";
 import { CompareView } from "./components/Compare";
@@ -184,6 +189,8 @@ export default function App() {
   useQueueRunner();
   useBatchRunner();
   useTaggingRunner();
+  useTriageRunner();
+  useParkRunner();
   useUsagePolling();
   useAutomationsPolling();
   useActivityPolling();
@@ -257,7 +264,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I writes an idea down, ⇧⌘I shows them all; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J cycles through the sessions waiting on you, ⌥⌘J shows every decision waiting; ⌘[ goes back to the thread open before this one.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I writes an idea down, ⇧⌘I shows them all; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J walks the triage queue (or the sessions waiting on you), ⌥⌘J shows every decision waiting; ⌘[ goes back to the thread open before this one.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -312,9 +319,13 @@ export default function App() {
       } else if (e.key === "j") {
         e.preventDefault();
         const s = getState();
+        const sel = s.selectedSession;
+        // The triage queue first, top row down; without one, the sessions
+        // waiting on you.
+        const queued = nextInQueue(queueOf(s).rows, sel && "Agent" in sel ? sel.Agent : null);
+        if (queued) return openQueued(queued);
         const waiting = waitingAgents(s);
         if (!waiting.length) return;
-        const sel = s.selectedSession;
         const at = sel && "Agent" in sel ? waiting.findIndex((a) => a.id === sel.Agent) : -1;
         selectAgent(waiting[(at + 1) % waiting.length]);
       }
@@ -408,6 +419,7 @@ export default function App() {
           onClose={() => setLaunch(null)}
         />
       )}
+      <ParkConfirm />
       {card && <CardDialog key={card.cardKey} target={card} onClose={() => setCard(null)} />}
       {dispatch && <DispatchDialog initialText={dispatch.text} onClose={() => setDispatch(null)} />}
       {addStep && <AddProjectDialog step={addStep} onDone={setAddStep} />}

@@ -82,7 +82,8 @@ const sessionOf = (s: State) => {
   return "Agent" in sel ? `agent:${sel.Agent}` : `terminal:${sel.Terminal}`;
 };
 
-/** The log lines between two states: the view, the open session, the
+/** The log lines between two states: the view, the open session (and
+ *  whether the triage queue opened it), how long a wait on you lasted, the
  *  preview, and a flashed notice. `ms` is how long the old view was up. */
 export function changes(prev: State, next: State, ms: number): UseEvent[] {
   const out: UseEvent[] = [];
@@ -92,6 +93,14 @@ export function changes(prev: State, next: State, ms: number): UseEvent[] {
     const agent = "Agent" in sel ? next.agents[sel.Agent] : undefined;
     out.push(event("session", { kind: agent ? "agent" : "terminal", harness: agent?.kind, status: agent?.status, unseen: agent?.unseen }));
   }
+  if (next.queueOpened && next.queueOpened !== prev.queueOpened) out.push(event("queue.open", { label: next.queueOpened.label }));
+  // How long each wait on you lasted, as it ends: whether opens act or check.
+  if (next.agents !== prev.agents)
+    for (const [id, was] of Object.entries(prev.agents)) {
+      const now = next.agents[id];
+      if (was.status === "needs_feedback" && now && now.status !== "needs_feedback")
+        out.push(event("wait", { ms: Math.max(0, (now.status_changed_at > was.status_changed_at ? now.status_changed_at : Date.now()) - was.status_changed_at), to: now.status }));
+    }
   if (!!next.preview !== !!prev.preview) out.push(event(next.preview ? "preview.open" : "preview.close"));
   if (next.notice && next.notice !== prev.notice) out.push(event("notice", { text: clip(next.notice, MESSAGE_MAX) }));
   return out;

@@ -7216,6 +7216,80 @@ button.board-main:hover .board-text {
   color: var(--faint);
 }
 
+/* ---------- triage queue (Dispatch board) ---------- */
+
+.triage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.triage-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.triage-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.triage-sub,
+.triage-empty,
+.triage-stale summary {
+  color: var(--muted);
+  font-size: 12px;
+}
+.triage-empty {
+  margin: 0;
+}
+.triage-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--st-error);
+  user-select: text;
+}
+.triage-stale summary {
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.triage-row.is-decision {
+  border-color: color-mix(in srgb, var(--st-waiting) 45%, var(--line));
+}
+.triage-row.is-stuck {
+  border-color: color-mix(in srgb, var(--st-error) 45%, var(--line));
+}
+.triage-label {
+  flex: none;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.triage-label.is-decision {
+  color: var(--st-waiting);
+  border-color: color-mix(in srgb, var(--st-waiting) 50%, var(--line));
+}
+.triage-label.is-stuck {
+  color: var(--st-error);
+  border-color: color-mix(in srgb, var(--st-error) 50%, var(--line));
+}
+.triage-label.is-review {
+  color: var(--st-running);
+  border-color: color-mix(in srgb, var(--st-running) 50%, var(--line));
+}
+.triage-label.is-checked {
+  color: var(--st-done);
+  border-color: color-mix(in srgb, var(--st-done) 50%, var(--line));
+}
+.triage-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
 /* ---------- uncommitted work, by thread ---------- */
 
 .uc-branch {
@@ -9194,4 +9268,51 @@ button.board-main:hover .board-text {
   .pet-tube {
     transition: none;
   }
+}
+
+/* Parking (Park.tsx): the first list of idle threads to confirm, and the
+   sidebar's line after a park with its Undo. */
+.park-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.park-list .field-check {
+  margin-top: 6px;
+  align-items: baseline;
+  color: var(--text);
+}
+.park-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.park-meta {
+  margin-left: auto;
+  flex: none;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.park-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 10px 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--raised);
+  font-size: 12px;
+}
+.park-notice-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* The New task box when every slot is taken. */
+.launch-cap {
+  margin-top: 12px;
 }
