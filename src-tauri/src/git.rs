@@ -52,12 +52,23 @@ pub struct LastCommit {
 const MISSING: &str = "missing";
 
 pub(crate) fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
+    run_git(dir, args, GIT_TIMEOUT, &[])
+}
+
+/// `git -C dir args…`, killed after `timeout`, with `env` set on top.
+fn run_git(
+    dir: &Path,
+    args: &[&str],
+    timeout: Duration,
+    env: &[(&str, &str)],
+) -> Result<String, String> {
     let mut child = Command::new("git")
         .arg("-C")
         .arg(dir)
         // Read-only status must never take the index lock from an agent
         // that is committing in the same checkout.
         .env("GIT_OPTIONAL_LOCKS", "0")
+        .envs(env.iter().copied())
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -75,7 +86,7 @@ pub(crate) fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
     };
     let out = drain(Box::new(child.stdout.take().expect("piped")));
     let err = drain(Box::new(child.stderr.take().expect("piped")));
-    let deadline = Instant::now() + GIT_TIMEOUT;
+    let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait().map_err(|e| e.to_string())? {
             Some(status) => break status,
@@ -386,6 +397,115 @@ pub async fn delete_branch(repo: PathBuf, branch: String, force: bool) -> Result
         .map_err(|e| e.to_string())?
 }
 
+/// A push can wait on the network and the remote's hooks for longer than a
+/// status read, but not forever.
+const PUSH_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// What `git_push_ff` fails with when the remote has commits the branch
+/// lacks. The push is left at that: no retry, no rebase, never a force.
+const NOT_FAST_FORWARD: &str = "not a fast-forward";
+
+/// Where a branch pushes to: its upstream's remote and branch, or none yet.
+struct Upstream {
+    remote: String,
+    merge: String,
+}
+
+/// The arguments for pushing `branch`: always `HEAD` to the remote branch
+/// of the same name. With its own upstream (that same-named branch), on the
+/// upstream's remote; otherwise on `origin` with `-u`, which points the
+/// upstream there. Never to whatever `branch.<b>.merge` names: a branch made
+/// from `origin/main` tracks main, and would otherwise land on it. The
+/// refspec names the remote side in full and carries no `+`, and no force
+/// flag is ever added, so the remote only takes a fast-forward.
+fn push_args(branch: &str, upstream: Option<&Upstream>) -> Vec<String> {
+    let refspec = format!("HEAD:refs/heads/{branch}");
+    match upstream {
+        Some(u) => vec!["push".into(), u.remote.clone(), refspec],
+        None => vec!["push".into(), "-u".into(), "origin".into(), refspec],
+    }
+}
+
+/// The branch's upstream when it's the remote branch of the same name. One
+/// of another name (a branch made from `origin/main` tracks main) counts as
+/// none: the push goes to `origin/<branch>` and re-points it there.
+fn own_upstream(branch: &str, upstream: Option<Upstream>) -> Option<Upstream> {
+    upstream.filter(|u| u.merge.strip_prefix("refs/heads/") == Some(branch))
+}
+
+fn upstream_of(dir: &Path, branch: &str) -> Option<Upstream> {
+    let get = |key: &str| {
+        git(dir, &["config", "--get", &format!("branch.{branch}.{key}")])
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    Some(Upstream {
+        remote: get("remote")?,
+        merge: get("merge")?,
+    })
+}
+
+fn push_ff(dir: &Path, main: Option<&str>) -> Result<(), String> {
+    if !dir.exists() {
+        return Err(MISSING.to_string());
+    }
+    let branch = git(dir, &["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .map(|s| s.trim().to_string())
+        .map_err(|_| "HEAD is detached, so there's no branch to push".to_string())?;
+    // A `+` would make the refspec a forced one, and a `-` an option.
+    if branch.is_empty() || branch.starts_with(['+', '-']) {
+        return Err(format!("refusing to push a branch named {branch}"));
+    }
+    let upstream = own_upstream(&branch, upstream_of(dir, &branch));
+    let remote = upstream.as_ref().map_or("origin", |u| u.remote.as_str());
+    // The main branch gets there by merging PRs, never from here.
+    let remote_default = git(
+        dir,
+        &[
+            "symbolic-ref",
+            "--quiet",
+            "--short",
+            &format!("refs/remotes/{remote}/HEAD"),
+        ],
+    )
+    .ok()
+    .and_then(|s| s.trim().split_once('/').map(|(_, b)| b.to_string()));
+    let mains: Vec<&str> = ["main", "master"]
+        .into_iter()
+        .chain(main)
+        .chain(remote_default.as_deref())
+        .collect();
+    if mains.contains(&branch.as_str()) {
+        return Err(format!("refusing to push the main branch, {branch}"));
+    }
+    let args = push_args(&branch, upstream.as_ref());
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_git(dir, &args, PUSH_TIMEOUT, &[("GIT_TERMINAL_PROMPT", "0")])
+        .map(|_| ())
+        .map_err(|e| {
+            if e.contains("[rejected]")
+                && (e.contains("non-fast-forward") || e.contains("fetch first"))
+            {
+                NOT_FAST_FORWARD.to_string()
+            } else {
+                e
+            }
+        })
+}
+
+/// Push the checkout's branch after an agent's turn, fast-forward only, to
+/// the remote branch of the same name: on its upstream's remote, or on
+/// `origin` with `-u` when it was never pushed. Detached HEADs, the main
+/// branch (`main`, or the remote's default) and a branch whose upstream is
+/// another branch (one made from `origin/main`) are refused, and only commits go; uncommitted changes stay where they are.
+#[tauri::command]
+pub async fn git_push_ff(path: PathBuf, main: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || push_ff(&path, main.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -530,5 +650,179 @@ mod tests {
         assert!(d.patch.contains("+a"));
         assert!(d.untracked.iter().any(|u| u.path == "new.txt"));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A repo on branch `feat` with one commit of its own, and a bare remote
+    /// as its `origin` that has `main`.
+    fn repo_with_remote(name: &str) -> (PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!("nebula-push-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (dir, remote) = (root.join("work"), root.join("remote.git"));
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&root, &["init", "-q", "--bare", "-b", "main", "remote.git"]).unwrap();
+        let run = |args: &[&str]| git(&dir, args).unwrap();
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "t@example.com"]);
+        run(&["config", "user.name", "t"]);
+        run(&["remote", "add", "origin", remote.to_str().unwrap()]);
+        std::fs::write(dir.join("a.txt"), "one\n").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-qm", "start"]);
+        run(&["push", "-q", "origin", "main"]);
+        run(&["checkout", "-qb", "feat"]);
+        std::fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
+        run(&["commit", "-qam", "feat work"]);
+        (dir, remote)
+    }
+
+    fn rev(dir: &Path, r: &str) -> String {
+        git(dir, &["rev-parse", r]).unwrap().trim().to_string()
+    }
+
+    #[test]
+    fn a_branch_with_no_upstream_is_pushed_and_gets_one() {
+        let (dir, remote) = repo_with_remote("new");
+        push_ff(&dir, Some("main")).unwrap();
+        assert_eq!(rev(&remote, "refs/heads/feat"), rev(&dir, "HEAD"));
+        let up = git(&dir, &["rev-parse", "--abbrev-ref", "feat@{u}"]).unwrap();
+        assert_eq!(up.trim(), "origin/feat");
+
+        // The next commit goes to the same upstream.
+        std::fs::write(dir.join("b.txt"), "b\n").unwrap();
+        git(&dir, &["add", "b.txt"]).unwrap();
+        git(&dir, &["commit", "-qm", "more"]).unwrap();
+        push_ff(&dir, Some("main")).unwrap();
+        assert_eq!(rev(&remote, "refs/heads/feat"), rev(&dir, "HEAD"));
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn a_remote_with_newer_commits_is_not_a_fast_forward_and_is_left_alone() {
+        let (dir, remote) = repo_with_remote("behind");
+        push_ff(&dir, None).unwrap();
+        // Someone else pushes to feat; this checkout commits without pulling.
+        let other = dir.parent().unwrap().join("other");
+        git(
+            dir.parent().unwrap(),
+            &[
+                "clone",
+                "-q",
+                "-b",
+                "feat",
+                remote.to_str().unwrap(),
+                "other",
+            ],
+        )
+        .unwrap();
+        git(&other, &["config", "user.email", "t@example.com"]).unwrap();
+        git(&other, &["config", "user.name", "t"]).unwrap();
+        std::fs::write(other.join("c.txt"), "theirs\n").unwrap();
+        git(&other, &["add", "."]).unwrap();
+        git(&other, &["commit", "-qm", "theirs"]).unwrap();
+        git(&other, &["push", "-q"]).unwrap();
+        let theirs = rev(&remote, "refs/heads/feat");
+
+        std::fs::write(dir.join("d.txt"), "mine\n").unwrap();
+        git(&dir, &["add", "."]).unwrap();
+        git(&dir, &["commit", "-qm", "mine"]).unwrap();
+        assert_eq!(push_ff(&dir, None).err().as_deref(), Some(NOT_FAST_FORWARD));
+        assert_eq!(rev(&remote, "refs/heads/feat"), theirs);
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn push_arguments_never_force() {
+        let up = Upstream {
+            remote: "origin".into(),
+            merge: "refs/heads/feat".into(),
+        };
+        for args in [push_args("feat", None), push_args("feat", Some(&up))] {
+            assert_eq!(args[0], "push");
+            for a in &args {
+                assert!(!a.starts_with("--force"), "{a}");
+                assert_ne!(a, "-f");
+                assert!(!a.starts_with('+') && !a.contains(":+"), "{a}");
+            }
+        }
+        assert_eq!(
+            push_args("feat", None),
+            ["push", "-u", "origin", "HEAD:refs/heads/feat"]
+        );
+        // Even an upstream of another name gets the same-named branch.
+        let main = Upstream {
+            remote: "origin".into(),
+            merge: "refs/heads/main".into(),
+        };
+        assert_eq!(
+            push_args("feat", Some(&main)),
+            ["push", "origin", "HEAD:refs/heads/feat"]
+        );
+        assert!(own_upstream("feat", Some(main)).is_none());
+        assert!(own_upstream("feat", Some(up)).is_some());
+        // And the source has no other way to build one.
+        let src = include_str!("git.rs");
+        let code = &src[..src.find("#[cfg(test)]").unwrap()];
+        assert!(!code.contains(concat!("--", "force")));
+        assert!(!code.contains(concat!("\"+", "{")));
+    }
+
+    #[test]
+    fn uncommitted_changes_stay_uncommitted_and_only_commits_go() {
+        let (dir, remote) = repo_with_remote("dirty");
+        std::fs::write(dir.join("a.txt"), "one\ntwo\nwip\n").unwrap();
+        std::fs::write(dir.join("new.txt"), "untracked\n").unwrap();
+        push_ff(&dir, None).unwrap();
+        assert_eq!(rev(&remote, "refs/heads/feat"), rev(&dir, "HEAD"));
+        let status = git(&dir, &["status", "--porcelain"]).unwrap();
+        assert!(
+            status.contains(" M a.txt") && status.contains("?? new.txt"),
+            "{status}"
+        );
+        let pushed = git(&remote, &["show", "refs/heads/feat:a.txt"]).unwrap();
+        assert_eq!(pushed, "one\ntwo\n");
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn detached_heads_and_main_branches_are_refused() {
+        let (dir, remote) = repo_with_remote("refused");
+        let before = rev(&remote, "refs/heads/main");
+        git(&dir, &["checkout", "-q", "main"]).unwrap();
+        std::fs::write(dir.join("m.txt"), "m\n").unwrap();
+        git(&dir, &["add", "."]).unwrap();
+        git(&dir, &["commit", "-qm", "on main"]).unwrap();
+        assert!(push_ff(&dir, None).is_err());
+        git(&dir, &["checkout", "-qb", "trunk"]).unwrap();
+        assert!(push_ff(&dir, Some("trunk")).is_err());
+        git(&dir, &["checkout", "-q", "--detach"]).unwrap();
+        assert!(push_ff(&dir, None).unwrap_err().contains("detached"));
+        assert_eq!(rev(&remote, "refs/heads/main"), before);
+        assert!(git(
+            &remote,
+            &["rev-parse", "--verify", "-q", "refs/heads/trunk"]
+        )
+        .is_err());
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn a_branch_made_from_origin_main_is_pushed_to_its_own_name_not_main() {
+        let (dir, remote) = repo_with_remote("tracks-main");
+        let main_before = rev(&remote, "refs/heads/main");
+        // How builders make branches: `git worktree add -b x origin/main`.
+        git(&dir, &["fetch", "-q", "origin"]).unwrap();
+        git(&dir, &["checkout", "-q", "-b", "x", "origin/main"]).unwrap();
+        let up = git(&dir, &["rev-parse", "--abbrev-ref", "x@{u}"]).unwrap();
+        assert_eq!(up.trim(), "origin/main");
+        std::fs::write(dir.join("x.txt"), "x\n").unwrap();
+        git(&dir, &["add", "."]).unwrap();
+        git(&dir, &["commit", "-qm", "x work"]).unwrap();
+
+        push_ff(&dir, Some("main")).unwrap();
+        assert_eq!(rev(&remote, "refs/heads/x"), rev(&dir, "HEAD"));
+        assert_eq!(rev(&remote, "refs/heads/main"), main_before);
+        let up = git(&dir, &["rev-parse", "--abbrev-ref", "x@{u}"]).unwrap();
+        assert_eq!(up.trim(), "origin/x");
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
 }

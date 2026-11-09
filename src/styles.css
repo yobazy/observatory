@@ -4599,6 +4599,19 @@ td.task-last {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+/* What an earlier reply said about a decision asked again: quieter than
+   the question, so it reads as background. */
+.rd-q-before {
+  margin: -2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.rd-q-before > span:first-child {
+  color: var(--faint);
+  margin-right: 2px;
+}
 .rd-opts {
   display: flex;
   flex-wrap: wrap;
@@ -5263,8 +5276,13 @@ td.task-last {
   margin: 0;
 }
 .task-box.card-desc,
-.task-box.card-sched {
+.task-box.card-sched,
+.task-box.card-checks {
   min-height: 0;
+}
+.task-box.card-checks {
+  font-family: var(--mono);
+  font-size: 12px;
 }
 .card-row {
   display: flex;
@@ -7061,6 +7079,14 @@ th:last-child > .col-grip {
 }
 .route-unsure {
   color: var(--st-waiting);
+}
+.route-past {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.route-past.is-archived {
+  color: var(--text);
 }
 
 /* ---------- dispatch board ---------- */

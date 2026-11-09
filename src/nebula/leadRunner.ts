@@ -14,6 +14,7 @@ import {
   eventLine,
   eventNeed,
   leadEvents,
+  reviewMark,
   leadState,
   runningLeads,
   startLead,
@@ -24,13 +25,14 @@ import { editQueued, enqueue } from "./queue";
 import { flash, getState, subscribe, type State } from "./store";
 import { loadStuck, type StuckEntries } from "./stuck";
 import { loadTriage } from "./triage";
+import { failedCount, loadReviews, type ReviewRecords } from "./review";
 import { summarize, type Turn } from "./turnsummary";
 import type { Agent } from "./types";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Each thread as the leads watch it. */
-export function snapshot(s: Pick<State, "agents" | "worktrees" | "prs">, stuck: StuckEntries): Snapshot {
+export function snapshot(s: Pick<State, "agents" | "worktrees" | "prs">, stuck: StuckEntries, reviews: ReviewRecords = {}): Snapshot {
   const out: Snapshot = {};
   for (const a of Object.values(s.agents)) {
     const pr = s.prs[a.worktree_id];
@@ -41,6 +43,7 @@ export function snapshot(s: Pick<State, "agents" | "worktrees" | "prs">, stuck: 
       status: a.status,
       archived: a.archived,
       failed: raised ? `${raised.kind}:${raised.mark}` : null,
+      review: reviewMark(reviews[a.id]),
       pr: pr?.kind === "found" && (pr.pr.state === "open" || pr.pr.state === "draft") ? pr.pr.number : null,
     };
   }
@@ -66,7 +69,10 @@ async function lineFor(e: LeadEvent): Promise<string | null> {
   const raised = loadStuck()[a.id]?.raised;
   const record = loadTriage()[a.id];
   const fresh = record?.key.startsWith(`${a.status}|${a.status_changed_at}|`);
-  const failed = raised?.reason ?? null;
+  const rev = loadReviews()[a.id];
+  const failed =
+    raised?.reason ??
+    (rev?.state === "failed" ? [failedCount(rev.failures.length), rev.failures[0]].filter(Boolean).join(": ") : null);
   const summary = fresh || (e.kind === "failed" && failed) ? "" : await turnSummary(a).catch(() => "");
   return eventLine({
     kind: e.kind,
@@ -149,14 +155,15 @@ export function setLeadModel(projectId: string, lead: CardLead, model: string) {
 export function useLeadRunner() {
   useEffect(() => {
     let before: Snapshot | null = null;
-    let seen: { agents: State["agents"]; prs: State["prs"]; stuck: StuckEntries } | null = null;
+    let seen: { agents: State["agents"]; prs: State["prs"]; stuck: StuckEntries; reviews: ReviewRecords } | null = null;
     const tick = () => {
       const s = getState();
       if (!s.loaded || s.link.state !== "connected") return;
       const stuck = loadStuck();
-      if (seen && seen.agents === s.agents && seen.prs === s.prs && seen.stuck === stuck) return;
-      seen = { agents: s.agents, prs: s.prs, stuck };
-      const after = snapshot(s, stuck);
+      const reviews = loadReviews();
+      if (seen && seen.agents === s.agents && seen.prs === s.prs && seen.stuck === stuck && seen.reviews === reviews) return;
+      seen = { agents: s.agents, prs: s.prs, stuck, reviews };
+      const after = snapshot(s, stuck, reviews);
       const events = before ? leadEvents(before, after, runningLeads(allCards(), s.agents, s.projects)) : [];
       before = after;
       const byLead = new Map<string, LeadEvent[]>();
@@ -164,7 +171,7 @@ export function useLeadRunner() {
       for (const [leadId, list] of byLead) void inTurn(leadId, () => send(leadId, list));
     };
     const off = subscribe(tick);
-    // Stuck flags are kept outside the store: look for new ones now and then.
+    // Stuck flags and reviews are kept outside the store: look now and then.
     const timer = setInterval(tick, 5_000);
     return () => {
       off();

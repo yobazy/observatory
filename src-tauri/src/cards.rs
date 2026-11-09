@@ -1,7 +1,7 @@
 //! What a project card is drafted from: the notes a project keeps for its
-//! agents (CLAUDE.md, AGENTS.md, skills) and its README. Read-only, from the
-//! project's root only, each file cut short past a size cap; the webview
-//! does the drafting.
+//! agents (CLAUDE.md, AGENTS.md, skills), its README, and package.json for
+//! the checks. Read-only, from the project's root only, each file cut short
+//! past a size cap; the webview does the drafting.
 
 use serde::Serialize;
 use std::io::Read;
@@ -46,6 +46,8 @@ fn sources(root: &Path) -> CardSources {
     };
     push("CLAUDE.md".into());
     push("AGENTS.md".into());
+    // Its test and lint scripts are the checks a card falls back on.
+    push("package.json".into());
 
     let mut readmes: Vec<String> = std::fs::read_dir(root)
         .into_iter()
@@ -98,6 +100,7 @@ mod tests {
         std::fs::create_dir_all(dir.join(".claude/skills/empty")).unwrap();
         std::fs::write(dir.join("CLAUDE.md"), "# Notes\n\nJob search.\n").unwrap();
         std::fs::write(dir.join("README.md"), "Readme").unwrap();
+        std::fs::write(dir.join("package.json"), "{}").unwrap();
         std::fs::write(
             dir.join(".claude/skills/apply/SKILL.md"),
             "---\ndescription: Apply\n---\n",
@@ -113,6 +116,7 @@ mod tests {
             [
                 "CLAUDE.md",
                 "AGENTS.md",
+                "package.json",
                 "README.md",
                 ".claude/skills/apply/SKILL.md"
             ]

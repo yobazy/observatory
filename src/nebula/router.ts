@@ -4,6 +4,7 @@
 // plan for clashes. It takes plain data (items, cards, open sessions) rather
 // than reading store.ts, so all of it can be tested without the app.
 import type { ProjectCard, RunPolicy } from "./cards";
+import type { IndexEntry } from "./threadIndex";
 
 export type Target = "project" | "home" | "you";
 /** How a project task runs: a fresh worktree, a new session in a checkout
@@ -74,12 +75,23 @@ export interface PlanTask {
   sessionId?: string;
   /** A skill on the project's card the prompt should invoke. */
   skill?: string;
+  /** Set when `sessionId` is a past thread (threadIndex.ts) rather than an
+   *  open session: what the review says of it, and what launching needs to
+   *  know (unarchive it first; start fresh if it's been deleted). */
+  past?: PastRef;
   confidence: number;
   question?: string;
   planCheckpoint: boolean;
   /** The router wasn't sure, or named something that doesn't exist: the
    *  user picks. Cleared once they do. */
   needsChoice: boolean;
+}
+
+/** A past thread as a task refers to it. */
+export interface PastRef {
+  title: string;
+  archived: boolean;
+  archivedAt?: number;
 }
 
 export interface Plan {
@@ -92,6 +104,9 @@ export interface RouteContext {
   cards: RouterCard[];
   worktrees: RouterWorktree[];
   sessions: OpenSession[];
+  /** Past threads (threadIndex.ts) sent to the router beside the open
+   *  sessions: a follow-up may go to one of these too. */
+  pastThreads?: IndexEntry[];
 }
 
 export type ParseResult = { ok: true; plan: Plan } | { ok: false; error: string };
@@ -133,8 +148,15 @@ export function routerCards(
 }
 
 /** The prompt for the router: what each target means, the items, the
- *  cards, and the sessions a task could follow up in. JSON out, only. */
-export function buildRouterPrompt(items: RouterItem[], cards: RouterCard[], openSessions: OpenSession[]): string {
+ *  cards, and the sessions a task could follow up in: the open ones, and
+ *  past threads that match the items (threadIndex.ts's `pastThreadsFor`).
+ *  JSON out, only. */
+export function buildRouterPrompt(
+  items: RouterItem[],
+  cards: RouterCard[],
+  openSessions: OpenSession[],
+  pastThreads: IndexEntry[] = [],
+): string {
   const home = cards.find((c) => c.isHome);
   const projects = cards.filter((c) => !c.projectId.startsWith("folder:"));
   const L: string[] = [];
@@ -145,7 +167,7 @@ export function buildRouterPrompt(items: RouterItem[], cards: RouterCard[], open
     '- "project": an agent session in one of the projects below. Set projectId and mode:',
     '  - "new_worktree": a fresh branch in its own worktree. The usual mode for an Isolated project.',
     '  - "existing_worktree": a new session in a checkout that exists, given by worktreeId. A Shared project runs every task in its main checkout.',
-    '  - "existing_chat": a follow-up in an open session, given by sessionId, when that session already holds the context the task needs.',
+    '  - "existing_chat": a follow-up in an open session or a past thread, given by sessionId, when that thread already holds the context the task needs. A past thread that is archived is reopened for it.',
     `- "home": errands and scheduling, done by the Home agent${home ? ` (${oneLine(home.name)})` : ""}.`,
     '- "you": things only the user can do. Home books time for them when it can schedule; otherwise they stay on the list.',
     "",
@@ -200,7 +222,28 @@ export function buildRouterPrompt(items: RouterItem[], cards: RouterCard[], open
     const recent = s.recentPrompts.slice(-MAX_PROMPTS).map((p) => JSON.stringify(clip(oneLine(p), MAX_PROMPT_CHARS)));
     if (recent.length) L.push(`  recent prompts: ${recent.join(" | ")}`);
   }
+
+  L.push("", "Past threads (finished or archived, matching the items):");
+  if (!pastThreads.length) L.push("(none)");
+  for (const p of pastThreadsSection(pastThreads)) L.push(p);
   return L.join("\n");
+}
+
+/** The past threads' lines: each once, with what the index has of it. */
+export function pastThreadsSection(pastThreads: IndexEntry[]): string[] {
+  const L: string[] = [];
+  const seen = new Set<string>();
+  for (const p of pastThreads) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    const pr = p.pr ? `, PR #${p.pr.number} "${oneLine(p.pr.title)}"` : ", no PR";
+    const tags = p.tags.length ? `, tags: ${p.tags.join(", ")}` : "";
+    L.push(
+      `- [${p.id}] "${oneLine(p.title)}" in project ${p.projectId} (branch ${oneLine(p.branch) || "unknown"}${pr}${tags}), ${p.archived ? "archived" : "finished"}`,
+    );
+    if (p.summary) L.push(`  summary: ${oneLine(p.summary)}`);
+  }
+  return L;
 }
 
 // ---- the reply ----
@@ -227,8 +270,25 @@ function confidenceOf(x: unknown): number {
 
 /** Clear the router's project pick for the user to make. */
 function flagged(t: PlanTask): PlanTask {
-  const { projectId: _p, worktreeId: _w, sessionId: _s, mode: _m, skill: _k, ...rest } = t;
+  const { projectId: _p, worktreeId: _w, sessionId: _s, mode: _m, skill: _k, past: _x, ...rest } = t;
   return { ...rest, needsChoice: true };
+}
+
+/** Whether a chat id is one the router was given in that project: an open
+ *  session, or a past thread. */
+function knownChat(id: string, projectId: string | undefined, ctx: RouteContext): boolean {
+  return (
+    ctx.sessions.some((s) => s.id === id && s.projectId === projectId) ||
+    (ctx.pastThreads ?? []).some((p) => p.id === id && p.projectId === projectId)
+  );
+}
+
+/** The past thread a chat id names, when it isn't an open session. */
+export function pastRef(id: string | undefined, ctx: RouteContext): PastRef | undefined {
+  if (!id || ctx.sessions.some((s) => s.id === id)) return undefined;
+  const p = (ctx.pastThreads ?? []).find((x) => x.id === id);
+  if (!p) return undefined;
+  return { title: p.title, archived: p.archived, ...(p.archived && p.archivedAt ? { archivedAt: p.archivedAt } : {}) };
 }
 
 /** A task's references checked against what exists: a project with a card,
@@ -237,7 +297,7 @@ function refsOk(t: PlanTask, ctx: RouteContext): boolean {
   if (t.target !== "project") return true;
   if (!t.projectId || !ctx.cards.some((c) => c.projectId === t.projectId)) return false;
   if (t.worktreeId && !ctx.worktrees.some((w) => w.id === t.worktreeId && w.projectId === t.projectId)) return false;
-  if (t.sessionId && !ctx.sessions.some((s) => s.id === t.sessionId && s.projectId === t.projectId)) return false;
+  if (t.sessionId && !knownChat(t.sessionId, t.projectId, ctx)) return false;
   if (t.mode === "existing_worktree" && !t.worktreeId) return false;
   if (t.mode === "existing_chat" && !t.sessionId) return false;
   return true;
@@ -288,10 +348,12 @@ export function parsePlan(text: string, ctx?: RouteContext): ParseResult {
       task.mode = MODES.includes(r.mode as Mode) ? (r.mode as Mode) : undefined;
       if (task.mode === "existing_worktree") task.worktreeId = str(r.worktreeId);
       if (task.mode === "existing_chat") task.sessionId = str(r.sessionId);
+      const past = ctx && pastRef(task.sessionId, ctx);
+      if (past) task.past = past;
       task.skill = str(r.skill);
     }
     if (!task.question) delete task.question;
-    for (const k of ["projectId", "mode", "worktreeId", "sessionId", "skill"] as const) {
+    for (const k of ["projectId", "mode", "worktreeId", "sessionId", "skill", "past"] as const) {
       if (task[k] === undefined) delete task[k];
     }
     if (!target || task.confidence < CONFIDENCE_THRESHOLD || (ctx && !refsOk(task, ctx))) task = flagged(task);
@@ -336,7 +398,9 @@ export function validatePlan(plan: Plan, ctx: RouteContext): Validation {
               ? "needs a worktree"
               : t.mode === "existing_chat" && !t.sessionId
                 ? "needs a chat"
-                : null;
+                : t.mode === "existing_chat" && t.sessionId && !knownChat(t.sessionId, t.projectId, ctx)
+                  ? "follows up in a chat that isn't an open session or a past thread here"
+                  : null;
     if (missing) issues.push({ kind: "unassigned", taskIds: [t.id], message: `${label(t)} ${missing}.` });
   }
 
@@ -360,11 +424,12 @@ export function validatePlan(plan: Plan, ctx: RouteContext): Validation {
     });
   }
   for (const [id, ts] of group((t) => (t.mode === "existing_chat" ? t.sessionId : undefined))) {
-    const s = ctx.sessions.find((x) => x.id === id);
+    const s = ctx.sessions.find((x) => x.id === id) ?? ctx.pastThreads?.find((x) => x.id === id);
+    const name = s && ("name" in s ? s.name : s.title);
     issues.push({
       kind: "conflict",
       taskIds: ts.map((t) => t.id),
-      message: `${ts.length} tasks would follow up in the same chat${s ? `, ${s.name}` : ""}. Merge them or move one.`,
+      message: `${ts.length} tasks would follow up in the same chat${name ? `, ${name}` : ""}. Merge them or move one.`,
     });
   }
 
@@ -389,7 +454,7 @@ export function defaultMode(projectId: string, ctx: RouteContext): Pick<PlanTask
 
 /** A task moved to another target or project by the user. */
 export function retarget(task: PlanTask, target: Target, projectId: string | undefined, ctx: RouteContext): PlanTask {
-  const { projectId: _p, mode: _m, worktreeId: _w, sessionId: _s, skill, ...rest } = task;
+  const { projectId: _p, mode: _m, worktreeId: _w, sessionId: _s, past: _x, skill, ...rest } = task;
   const next: PlanTask = { ...rest, target, needsChoice: false };
   if (target !== "project" || !projectId) return next;
   const keepSkill = skill && ctx.cards.find((c) => c.projectId === projectId)?.skills.includes(skill);
@@ -398,13 +463,20 @@ export function retarget(task: PlanTask, target: Target, projectId: string | und
 
 /** A task's mode changed: the worktree or chat it named goes with the old mode. */
 export function withMode(task: PlanTask, mode: Mode, ctx: RouteContext): PlanTask {
-  const { worktreeId: _w, sessionId: _s, ...rest } = task;
+  const { worktreeId: _w, sessionId: _s, past: _x, ...rest } = task;
   const next: PlanTask = { ...rest, mode };
   if (mode === "existing_worktree" && task.projectId) {
     const d = defaultMode(task.projectId, ctx);
     if (d.worktreeId) next.worktreeId = d.worktreeId;
   }
   return next;
+}
+
+/** A task's chat picked by the user: an open session, or a past thread. */
+export function withChat(task: PlanTask, sessionId: string | undefined, ctx: RouteContext): PlanTask {
+  const { sessionId: _s, past: _x, ...rest } = task;
+  const past = pastRef(sessionId, ctx);
+  return { ...rest, ...(sessionId ? { sessionId } : {}), ...(past ? { past } : {}) };
 }
 
 // ---- handing off ----
@@ -452,7 +524,7 @@ export function clearRoutedPlan() {
  *  run: the items spread over targets, the first two merged, one left
  *  unsure, wrapped in prose and a fence the way models often answer. An item
  *  saying "router error" makes the reply unreadable, to try Retry with. */
-export function previewReply(items: RouterItem[], cards: RouterCard[], sessions: OpenSession[]): string {
+export function previewReply(items: RouterItem[], cards: RouterCard[], sessions: OpenSession[], past: IndexEntry[] = []): string {
   if (items.some((i) => /router error/i.test(i.text))) return "Sorry, I can't help with that.";
   const projects = cards.filter((c) => !c.projectId.startsWith("folder:"));
   const tasks = [];
@@ -474,7 +546,10 @@ export function previewReply(items: RouterItem[], cards: RouterCard[], sessions:
   rest.forEach((i, n) => {
     const s = sessions[n % Math.max(sessions.length, 1)];
     const pick = n % 4;
-    if (pick === 0 && s) {
+    const p = past[n];
+    if (pick === 0 && p) {
+      tasks.push({ sourceItemIds: [i.id], text: i.text, target: "project", projectId: p.projectId, mode: "existing_chat", sessionId: p.id, confidence: 0.8 });
+    } else if (pick === 0 && s) {
       tasks.push({ sourceItemIds: [i.id], text: i.text, target: "project", projectId: s.projectId, mode: "existing_chat", sessionId: s.id, confidence: 0.7, question: `Follow up in “${s.name}”, or start fresh?` });
     } else if (pick === 1) {
       tasks.push({ sourceItemIds: [i.id], text: i.text, target: "project", projectId: projects[1]?.projectId, mode: "new_worktree", confidence: 0.3 });
