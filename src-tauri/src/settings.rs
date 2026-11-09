@@ -10,7 +10,7 @@
 use nebula_core::{paths, settings};
 use serde_json::{Map, Value};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 fn object_at(path: &std::path::Path) -> Result<Map<String, Value>, String> {
     // An unreadable file is refused rather than overwritten from a blank
@@ -94,10 +94,26 @@ pub fn write_project_setting(repo: String, field: String, value: String) -> Resu
 }
 
 fn desktop_path(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_config_dir()
-        .map(|d| d.join("desktop.json"))
-        .map_err(|e| e.to_string())
+    crate::app_dirs::config_dir(app).map(|d| d.join("desktop.json"))
+}
+
+/// The prefs to save: the file's, with `prefs` laid over them and `removed`
+/// taken out. A key the webview didn't send stays as the file has it, so a
+/// save made before the prefs loaded, or by a build that doesn't know a
+/// key, can't drop it.
+fn merged_prefs(
+    mut file: Map<String, Value>,
+    prefs: Value,
+    removed: &[String],
+) -> Result<Map<String, Value>, String> {
+    let Value::Object(prefs) = prefs else {
+        return Err("prefs must be a JSON object".into());
+    };
+    for key in removed {
+        file.remove(key);
+    }
+    file.extend(prefs);
+    Ok(file)
 }
 
 #[tauri::command]
@@ -109,9 +125,17 @@ pub fn read_desktop_prefs(app: AppHandle) -> Value {
         .unwrap_or_else(|| Value::Object(Map::new()))
 }
 
+/// Save `prefs` into desktop.json, removing the keys in `removed` (ones the
+/// webview cleared) and keeping every other key the file holds.
 #[tauri::command]
-pub fn write_desktop_prefs(app: AppHandle, prefs: Value) -> Result<(), String> {
-    settings::write_json(&desktop_path(&app)?, &prefs).map_err(|e| e.to_string())
+pub fn write_desktop_prefs(
+    app: AppHandle,
+    prefs: Value,
+    removed: Option<Vec<String>>,
+) -> Result<(), String> {
+    let path = desktop_path(&app)?;
+    let merged = merged_prefs(object_at(&path)?, prefs, &removed.unwrap_or_default())?;
+    settings::write_json(&path, &Value::Object(merged)).map_err(|e| e.to_string())
 }
 
 /// A worktree's **Open**, resolved as the TUI's is: the project's
@@ -156,4 +180,39 @@ pub fn open_worktree(path: PathBuf, repo: String) -> Result<bool, String> {
         .spawn()
         .map_err(|e| format!("couldn't run {command}: {e}"))?;
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn obj(v: Value) -> Map<String, Value> {
+        match v {
+            Value::Object(m) => m,
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn saving_prefs_keeps_keys_it_was_not_sent() {
+        let file = obj(json!({"keepUseLog": true, "mode": "dark", "pet": false}));
+        let saved = merged_prefs(file, json!({"mode": "light"}), &[]).unwrap();
+        assert_eq!(
+            Value::Object(saved),
+            json!({"keepUseLog": true, "mode": "light", "pet": false})
+        );
+    }
+
+    #[test]
+    fn saving_prefs_removes_cleared_keys() {
+        let file = obj(json!({"notesFolder": "/n", "mode": "dark"}));
+        let saved = merged_prefs(file, json!({"mode": "dark"}), &["notesFolder".into()]).unwrap();
+        assert_eq!(Value::Object(saved), json!({"mode": "dark"}));
+    }
+
+    #[test]
+    fn saving_prefs_refuses_a_non_object() {
+        assert!(merged_prefs(Map::new(), json!([1]), &[]).is_err());
+    }
 }

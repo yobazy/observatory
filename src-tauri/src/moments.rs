@@ -13,7 +13,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, WebviewWindow};
 
 /// The oldest moments past this many are deleted as new ones are saved.
 const KEEP: usize = 100;
@@ -27,10 +27,7 @@ pub struct Saved {
 }
 
 fn root(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|d| d.join("moments"))
-        .map_err(|e| e.to_string())
+    crate::app_dirs::data_dir(app).map(|d| d.join("moments"))
 }
 
 /// A folder name from the webview's timestamp: only characters safe in a

@@ -228,7 +228,9 @@ size it from anywhere.
 **Usage log** (Settings › General, off unless you turn it on): notes what you click, the views
 and dialogs you open and how long they stay up, the ⌘ shortcuts you press and the errors you hit,
 one JSON line each in `~/Library/Application Support/dev.bazil.observatory/usage-log.jsonl`. Never what you
-type, and nothing is sent anywhere. It's there to show where the app gets in your way.
+type, and nothing is sent anywhere. It's there to show where the app gets in your way. A dev build
+(`npm run tauri dev`, the sandbox) keeps its prefs, log and moments in a `dev` folder inside that
+one, apart from the installed app's.
 
 **Mark this moment** (`⇧⌘M`): noticed something off? This saves the last minute of those events,
 what's on screen (the view, project, session and its status) and a screenshot of the window to a

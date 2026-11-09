@@ -137,7 +137,13 @@ export async function loadPrefs(): Promise<DesktopPrefs> {
   return invoke<DesktopPrefs>("read_desktop_prefs").catch(() => ({}));
 }
 
+/** Save the prefs. desktop.json keeps any key not sent (one this build
+ *  doesn't know, or that hadn't loaded yet); a key cleared here, set to
+ *  undefined or left out where the last prefs had it, is named so it goes. */
 export async function savePrefs(prefs: DesktopPrefs): Promise<void> {
+  const last = getState().prefs as Record<string, unknown>;
+  const next = prefs as Record<string, unknown>;
+  const removed = Object.keys({ ...last, ...next }).filter((k) => next[k] === undefined);
   setState({ prefs });
   if (isPreview()) {
     try {
@@ -147,7 +153,7 @@ export async function savePrefs(prefs: DesktopPrefs): Promise<void> {
     }
     return;
   }
-  await invoke("write_desktop_prefs", { prefs });
+  await invoke("write_desktop_prefs", { prefs, removed });
 }
 
 const media = () => window.matchMedia("(prefers-color-scheme: light)");
