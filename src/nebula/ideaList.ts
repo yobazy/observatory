@@ -16,8 +16,12 @@ export interface Idea {
   deadline?: string | null;
   /** When it was written down, ms. */
   createdAt: number;
-  /** Where it came from: quick capture, a thread (its agent id), Dispatch, the Ideas view. */
-  source?: { kind: "capture" | "thread" | "dispatch" | "ideas"; agent?: string };
+  /** Where it came from: quick capture, a thread (its agent id), Dispatch,
+   *  the Ideas view, or a thread parked here after sitting idle (park.ts). */
+  source?: { kind: "capture" | "thread" | "dispatch" | "ideas" | "parked"; agent?: string };
+  /** A parked thread's brief (moveBrief), for Start fresh: what was asked,
+   *  where it got to, what it changed. */
+  brief?: string;
   /** Done by hand, ms. */
   doneAt?: number | null;
   /** Started as a task: the agent's id, or "dispatch" when sent there. */

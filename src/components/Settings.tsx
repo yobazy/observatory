@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { flash, getState, setState, useAppState } from "../nebula/store";
 import { DEFAULT_STALE_DAYS, DEFAULT_TRIAGE_COMMAND } from "../nebula/triage";
+import { DEFAULT_PARK_DAYS } from "../nebula/park";
 import {
   AGENTS_HEAD,
   EXPERIMENTAL,
@@ -436,6 +437,48 @@ function DispatchSettings() {
       </div>
       <div className="setting">
         <div className="setting-text">
+          <label className="setting-label" htmlFor="set-park-on">
+            Park idle threads in Ideas
+          </label>
+          <span className="setting-hint">
+            A thread that finished and sat unchanged past the time below becomes an idea in its project, with a brief
+            of what was asked and where it got to, and its session is archived. Never one that's running, waiting on
+            you, dragged into place, or in a Dispatch batch still going. Resume in Ideas brings a thread back as it
+            was; Undo in the sidebar brings back a whole park. The first time, you confirm the list. No model call.
+          </span>
+        </div>
+        <Switch
+          id="set-park-on"
+          on={prefs.parkOn === true}
+          onChange={(on) => void savePrefs({ ...prefs, parkOn: on || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-park-days">
+            Park after
+          </label>
+          <span className="setting-hint">How long a thread sits unchanged before it's parked. Separate from Stale after.</span>
+        </div>
+        <select
+          id="set-park-days"
+          className="setting-input"
+          value={String(prefs.parkDays ?? DEFAULT_PARK_DAYS)}
+          onChange={(e) => {
+            const days = Number(e.target.value);
+            void savePrefs({ ...prefs, parkDays: days === DEFAULT_PARK_DAYS ? undefined : days });
+          }}
+        >
+          {[1, 2, 3, 5, 7, 14, 30].map((n) => (
+            <option key={n} value={n}>
+              {n} {n === 1 ? "day" : "days"}
+              {n === DEFAULT_PARK_DAYS ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
           <label className="setting-label" htmlFor="set-suggest-on">
             Next-prompt suggestions
           </label>
@@ -473,8 +516,8 @@ function DispatchSettings() {
             Sessions at once
           </label>
           <span className="setting-hint">
-            How many dispatched tasks run at the same time. The rest wait and start as these finish. A Shared
-            project's own limit applies too.
+            How many sessions work at the same time, however they were started. Past it, dispatched tasks wait and
+            start as others finish, and New task offers to wait too. A Shared project's own limit applies as well.
           </span>
         </div>
         <select
