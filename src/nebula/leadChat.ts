@@ -7,6 +7,7 @@
 // under plain Node.
 import { COATS, coatFor, type CritterKind } from "../vendor/pixel-pets/frames.ts";
 import { ASK_USER } from "./leadAsk.ts";
+import { askLines } from "./leadActions.ts";
 import type { Entry } from "./transcript";
 
 // ---- pets ----
@@ -221,9 +222,11 @@ export function lastReply(entries: readonly Pick<Entry, "n" | "kind" | "text" | 
   return null;
 }
 
-/** How many questions a reply passes to you: its `ASK_USER:` lines. */
-export function askCount(text: string): number {
-  return text.split("\n").filter((l) => l.includes(ASK_USER)).length;
+/** How many questions a reply passes to you: its `ASK_USER:` lines, and
+ *  (S28, when the lead's actions are on) its `ASK merge` and `ASK archive`
+ *  lines. */
+export function askCount(text: string, actions = false): number {
+  return text.split("\n").filter((l) => l.includes(ASK_USER)).length + (actions ? askLines(text) : 0);
 }
 
 export interface Call {
@@ -238,11 +241,11 @@ export const QUIET: Call = { calling: false, count: 0, why: null };
 /** Whether a lead has something for you: its latest reply asks you
  *  (`ASK_USER:`), or it's unread, since you last opened it here or in the
  *  Read view (`seen`, the last entry you saw). */
-export function callState(o: { reply: LeadReply | null; unseen: boolean; seen: number | null }): Call {
+export function callState(o: { reply: LeadReply | null; unseen: boolean; seen: number | null; actions?: boolean }): Call {
   const { reply } = o;
   if (!reply) return QUIET;
   if (o.seen !== null && reply.n <= o.seen) return QUIET;
-  const asks = askCount(reply.text);
+  const asks = askCount(reply.text, o.actions);
   if (asks > 0) return { calling: true, count: asks, why: "ask" };
   if (o.unseen) return { calling: true, count: 1, why: "unread" };
   return QUIET;
@@ -259,18 +262,20 @@ export interface LeadEntry {
   title: string;
   model: string;
   pet: LeadPet;
+  /** Its action lines are carried out (S28): a project lead with them on. */
+  acts: boolean;
 }
 
 /** Every running lead, the top lead first, then projects by name. */
 export function leadsOf(
-  cards: Record<string, { lead?: { agentId: string; model: string; pet?: unknown } }>,
+  cards: Record<string, { lead?: { agentId: string; model: string; pet?: unknown; acts?: boolean } }>,
   top: { agentId: string; model: string; pet?: unknown } | undefined | null,
   agents: Record<string, { archived: boolean }>,
   projects: Record<string, { name: string } | undefined>,
 ): LeadEntry[] {
   const live = (id: string) => !!agents[id] && !agents[id].archived;
   const out: LeadEntry[] = [];
-  if (top && live(top.agentId)) out.push({ agentId: top.agentId, projectId: null, title: "Top lead", model: top.model, pet: petOf(top, null) });
+  if (top && live(top.agentId)) out.push({ agentId: top.agentId, projectId: null, title: "Top lead", model: top.model, pet: petOf(top, null), acts: false });
   const rows = Object.entries(cards)
     .flatMap(([key, c]) => {
       const p = projects[key];
@@ -278,7 +283,14 @@ export function leadsOf(
     })
     .sort((a, b) => a.name.localeCompare(b.name));
   for (const r of rows)
-    out.push({ agentId: r.lead.agentId, projectId: r.key, title: `${r.name} lead`, model: r.lead.model, pet: petOf(r.lead, r.name) });
+    out.push({
+      agentId: r.lead.agentId,
+      projectId: r.key,
+      title: `${r.name} lead`,
+      model: r.lead.model,
+      pet: petOf(r.lead, r.name),
+      acts: r.lead.acts === true,
+    });
   return out;
 }
 

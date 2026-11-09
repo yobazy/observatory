@@ -353,7 +353,7 @@ Acceptance criteria:
 - Given `leadPrompt()` with actions on, then it describes START, NUDGE and ASK and says never to act on a `nebula ask` question; off, then it has no action lines (unit test).
 - Given the sandbox with a lead on a project, when I tell it in the dialogue to make a small change, then a new thread starts on the branch it names with its brief, the card lists it as running, a failing check makes the lead nudge it, and once its PR is green the lead asks to merge and Yes merges it (manual check against the sandbox `scripts/sandbox.sh app`).
 
-Status: todo
+Status: in review
 
 ### S18: Follow-ups reach finished and archived threads
 As a user, I want the router to find the past thread a new item follows up on, even a finished or archived one, and to send the follow-up there, so that work from last week keeps its context instead of starting over in a new thread.

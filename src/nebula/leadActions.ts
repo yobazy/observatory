@@ -1,0 +1,413 @@
+// A lead starts tasks and looks after them (S28): a project's lead writes
+// action lines in its reply (START, NUDGE, ASK merge, ASK archive) and the
+// app carries them out, so the caps, budget holds and the off switch all
+// live here, not in the lead's prompt. The lead never spawns threads or
+// sends to them itself. This file is the pure part: reading the lines out of
+// a reply, deciding each one, the [observatory] line that reports it back,
+// which lead turn to act on, and what's kept of it all. leadRunner.ts wires
+// it to the app. Kept free of the app so its tests run under plain Node.
+// Value imports name their .ts files: the tests load this module in Node.
+import { useSyncExternalStore } from "react";
+import { LINE_PREFIX, MAX_LINE } from "./lead.ts";
+import type { AgentStatus } from "./types";
+
+export type LeadAction =
+  | { kind: "start"; branch: string; brief: string }
+  | { kind: "nudge"; agentId: string; message: string }
+  | { kind: "ask"; what: "merge"; pr: number; why: string }
+  | { kind: "ask"; what: "archive"; agentId: string; why: string };
+
+export type AskAction = Extract<LeadAction, { kind: "ask" }>;
+
+/** A lead may start this many of its tasks at once, unless its card says. */
+export const DEFAULT_MAX_TASKS = 2;
+/** Nudges to one thread within NUDGE_WINDOW_MS. */
+export const MAX_NUDGES = 3;
+export const NUDGE_WINDOW_MS = 60 * 60_000;
+
+// ---- reading the lines ----
+
+const FENCE = /^\s*(```|~~~)/;
+// A line may sit in a list ("- START …"); the keywords are case-sensitive.
+const LEAD_IN = /^\s*(?:[-*•]\s+)?/;
+const START = /^START (\S+): (\S.*)$/;
+const NUDGE = /^NUDGE ([\w-]+): (\S.*)$/;
+const ASK_MERGE = /^ASK merge #(\d+): (\S.*)$/;
+const ASK_ARCHIVE = /^ASK archive ([\w-]+): (\S.*)$/;
+
+/** A branch name git takes, more or less: no spaces, no `..`, not starting
+ *  with `-` or `/`, not ending with `/`, `.` or `.lock`. */
+export function validBranch(b: string): boolean {
+  return (
+    /^[\w./-]+$/.test(b) && !b.startsWith("-") && !b.startsWith("/") && !b.includes("..") && !/(\/|\.|\.lock)$/.test(b) && !b.includes("//")
+  );
+}
+
+/** Every action line in a reply, in order: anywhere in it, outside code
+ *  fences. A line missing its branch, id or number, or with a bad one, is
+ *  dropped. */
+export function parseActions(text: string): LeadAction[] {
+  const out: LeadAction[] = [];
+  let fenced = false;
+  for (const raw of text.replace(/\r\n?/g, "\n").split("\n")) {
+    if (FENCE.test(raw)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+    const line = raw.replace(LEAD_IN, "").trimEnd();
+    let m: RegExpMatchArray | null;
+    if ((m = line.match(START))) {
+      if (validBranch(m[1])) out.push({ kind: "start", branch: m[1], brief: m[2].trim() });
+    } else if ((m = line.match(NUDGE))) out.push({ kind: "nudge", agentId: m[1], message: m[2].trim() });
+    else if ((m = line.match(ASK_MERGE))) {
+      const pr = Number(m[1]);
+      if (pr > 0) out.push({ kind: "ask", what: "merge", pr, why: m[2].trim() });
+    } else if ((m = line.match(ASK_ARCHIVE))) out.push({ kind: "ask", what: "archive", agentId: m[1], why: m[2].trim() });
+  }
+  return out;
+}
+
+/** How many of a reply's lines ask you something (for the pet's call). */
+export const askLines = (text: string) => parseActions(text).filter((a) => a.kind === "ask").length;
+
+// ---- deciding ----
+
+export interface DecideContext {
+  /** The card's "Let the lead start and nudge threads". */
+  acts: boolean;
+  /** The top lead: it acts only through project leads. */
+  top: boolean;
+  leadId: string;
+  projectId: string;
+  /** The lead's started tasks still queued or running. */
+  running: number;
+  maxTasks: number;
+  /** Why launches are held now (a budget), or null. */
+  hold: string | null;
+  /** Branches already a worktree in the project, or a START still waiting. */
+  branches: ReadonlySet<string>;
+  /** Every thread Observatory knows, with its project. */
+  threads: Record<string, { projectId: string | null; archived?: boolean }>;
+  /** Nudges sent to a thread within the last hour. */
+  nudges: (agentId: string) => number;
+  /** The open PRs in the project, by number. */
+  prs: ReadonlySet<number>;
+}
+
+export type Decision = { ok: true } | { ok: false; reason: string };
+
+const no = (reason: string): Decision => ({ ok: false, reason });
+
+/** Whether the app carries out an action line, or why not. */
+export function decide(a: LeadAction, c: DecideContext): Decision {
+  if (c.top) return no("the top lead acts only through project leads");
+  if (!c.acts) return no("actions are off");
+  if (a.kind === "start") {
+    if (c.hold) return no(c.hold);
+    if (c.running >= c.maxTasks) return no(`${c.running} of your tasks are running, at most ${c.maxTasks}`);
+    if (c.branches.has(a.branch)) return no(`${a.branch} is already a worktree in this project`);
+    return { ok: true };
+  }
+  const id = a.kind === "nudge" || a.what === "archive" ? (a as { agentId: string }).agentId : null;
+  if (id !== null) {
+    const t = c.threads[id];
+    if (id === c.leadId) return no("that's your own thread");
+    if (!t) return no("no thread has that id");
+    if (t.projectId !== c.projectId) return no("that thread is in another project");
+    if (t.archived) return no("that thread is archived");
+    if (a.kind === "nudge" && c.nudges(id) >= MAX_NUDGES) return no(`it was nudged ${MAX_NUDGES} times in the last hour`);
+    return { ok: true };
+  }
+  const pr = (a as { pr: number }).pr;
+  return c.prs.has(pr) ? { ok: true } : no(`no open PR #${pr} in this project`);
+}
+
+/** Nudges to `agentId` in the window before `now`. */
+export function nudgesWithin(log: readonly Nudge[], agentId: string, now = Date.now(), windowMs = NUDGE_WINDOW_MS): number {
+  return log.filter((n) => n.agentId === agentId && now - n.at < windowMs).length;
+}
+
+// ---- reporting back ----
+
+export type Report =
+  | { kind: "started"; branch: string; agentId: string }
+  | { kind: "queued"; branch: string; running: number }
+  | { kind: "refused"; action: LeadAction; reason: string }
+  | { kind: "nudged"; agentId: string }
+  | { kind: "answered"; ask: AskAction; yes: boolean; error?: string }
+  | { kind: "off" };
+
+const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+
+/** An action as its line names it: `START fix-clipping`, `NUDGE a1`, `ASK merge #12`. */
+export function actionName(a: LeadAction): string {
+  if (a.kind === "start") return `START ${a.branch}`;
+  if (a.kind === "nudge") return `NUDGE ${a.agentId}`;
+  return a.what === "merge" ? `ASK merge #${a.pr}` : `ASK archive ${a.agentId}`;
+}
+
+/** The [observatory] line a decision goes back to the lead as. */
+export function reportLine(r: Report): string {
+  const body = (() => {
+    switch (r.kind) {
+      case "started":
+        return `started ${r.branch} (agent ${r.agentId})`;
+      case "queued":
+        return `queued ${r.branch}: ${r.running} running, waiting for a slot`;
+      case "refused":
+        return `refused ${actionName(r.action)}: ${oneLine(r.reason)}`;
+      case "nudged":
+        return `nudged ${r.agentId}`;
+      case "off":
+        return "actions are off";
+      case "answered": {
+        const a = r.ask;
+        const what = a.what === "merge" ? `#${a.pr}` : a.agentId;
+        if (r.error) return `couldn't ${a.what === "merge" ? "merge" : "archive"} ${what}: ${oneLine(r.error)}`;
+        if (a.what === "merge") return r.yes ? `you merged ${what}` : `you said no to merging ${what}`;
+        return r.yes ? `you archived ${what}` : `you said no to archiving ${what}`;
+      }
+    }
+  })();
+  const line = `${LINE_PREFIX}${body}`;
+  return line.length <= MAX_LINE ? line : `${line.slice(0, MAX_LINE - 1)}…`;
+}
+
+// ---- which turn to act on ----
+
+/** The reply to act on: a lead's turn that's ended (its thread at rest),
+ *  whose last reply comes after the one acted on last. Null when there's
+ *  nothing new, so the same turn seen on two polls acts once. */
+export function replyToAct(
+  lead: { status: AgentStatus; archived: boolean } | undefined,
+  reply: { n: number; text: string } | null | undefined,
+  acted: number | undefined,
+): { n: number; text: string } | null {
+  if (!lead || lead.archived || !reply) return null;
+  if (lead.status === "running" || lead.status === "fresh") return null;
+  return acted === undefined || reply.n > acted ? reply : null;
+}
+
+// ---- carrying them out ----
+
+/** What carrying out a reply's actions needs from the app. */
+export interface RunDeps {
+  /** The context to decide the next action in, looked at afresh for each
+   *  (an earlier START in the same reply counts against the cap). */
+  context: () => DecideContext;
+  /** Queue a new task (queueNewTask()) and record it as the lead's; how
+   *  many are running when every Dispatch slot is taken, else null. */
+  start: (branch: string, brief: string) => { full: number | null };
+  /** Send a follow-up through enqueue() (queue.ts) and count it. */
+  nudge: (agentId: string, message: string) => Promise<unknown>;
+  /** A thread's title, for the dialogue's line. */
+  name: (agentId: string) => string;
+}
+
+export interface RunResult {
+  reports: Report[];
+  /** The dialogue's lines under the reply: "Started fix-clipping". */
+  lines: string[];
+  /** The asks to show with Yes and No. */
+  asks: AskAction[];
+}
+
+/** Decide each action in order and carry out the ones that may run. */
+export async function runActions(actions: LeadAction[], deps: RunDeps): Promise<RunResult> {
+  const out: RunResult = { reports: [], lines: [], asks: [] };
+  for (const a of actions) {
+    const d = decide(a, deps.context());
+    if (!d.ok) {
+      out.reports.push({ kind: "refused", action: a, reason: d.reason });
+      continue;
+    }
+    if (a.kind === "start") {
+      const { full } = deps.start(a.branch, a.brief);
+      if (full !== null) {
+        out.reports.push({ kind: "queued", branch: a.branch, running: full });
+        out.lines.push(`Queued ${a.branch}`);
+      } else out.lines.push(`Started ${a.branch}`);
+    } else if (a.kind === "nudge") {
+      try {
+        await deps.nudge(a.agentId, a.message);
+        out.reports.push({ kind: "nudged", agentId: a.agentId });
+        out.lines.push(`Nudged ${deps.name(a.agentId)}`);
+      } catch (e) {
+        out.reports.push({ kind: "refused", action: a, reason: e instanceof Error ? e.message : String(e) });
+      }
+    } else out.asks.push(a);
+  }
+  return out;
+}
+
+// ---- answering an ASK ----
+
+/** What Yes and No on an ASK row need. */
+export interface AnswerDeps {
+  merge: (pr: number) => Promise<unknown>;
+  archive: (agentId: string) => Promise<unknown> | void;
+  /** The line goes to the lead (deliver(), batched with its other lines). */
+  tell: (line: string) => Promise<unknown> | void;
+}
+
+/** Yes or No on an ASK row: Yes merges or archives, No does nothing, and
+ *  the lead hears which. Each ask is answered once (by `key`); a second
+ *  press does nothing and resolves null. */
+export async function answerAsk(key: string, ask: AskAction, yes: boolean, deps: AnswerDeps): Promise<string | null> {
+  if (isAnswered(key)) return null;
+  markAnswered(key);
+  let error: string | undefined;
+  if (yes) {
+    try {
+      if (ask.what === "merge") await deps.merge(ask.pr);
+      else await deps.archive(ask.agentId);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+  const line = reportLine({ kind: "answered", ask, yes, ...(error ? { error } : {}) });
+  await deps.tell(line);
+  if (error) throw new Error(error);
+  return line;
+}
+
+/** An ask's key: the lead, the reply and the line, so a later reply asking
+ *  the same thing is a new ask. */
+export const askKey = (leadId: string, n: number, a: AskAction) => `${leadId}|${n}|${actionName(a)}`;
+
+// ---- lead-started tasks ----
+
+/** A task a lead started, kept so its cap and the card can count it. */
+export interface LeadTask {
+  leadId: string;
+  projectId: string;
+  batchId: string;
+  taskId: string;
+  branch: string;
+  at: number;
+  agentId?: string;
+  /** Its START has been reported back (started, or refused once its
+   *  launch failed). */
+  told?: boolean;
+}
+
+export type StartedState = "queued" | "running" | "finished" | `PR #${number}` | "merged" | "closed" | "failed";
+
+/** Where a lead-started task is now, for the card, and whether it holds
+ *  one of the lead's slots (queued, or its thread working). */
+export function startedState(
+  task: { state: string; agentId?: string } | undefined,
+  agent: { status: AgentStatus; archived: boolean } | undefined,
+  pr: { number: number; state: string } | null | undefined,
+): { label: StartedState; busy: boolean } {
+  if (!task || task.state === "failed") return { label: "failed", busy: false };
+  if (task.state !== "launched") return { label: "queued", busy: true };
+  const working = !!agent && !agent.archived && ["fresh", "running", "needs_feedback", "disconnected"].includes(agent.status);
+  if (pr?.state === "merged") return { label: "merged", busy: false };
+  if (pr && (pr.state === "open" || pr.state === "draft")) return { label: `PR #${pr.number}`, busy: working };
+  if (!agent || agent.archived) return { label: agent ? "closed" : "running", busy: !agent };
+  return { label: working ? "running" : "finished", busy: working };
+}
+
+// ---- what's kept ----
+
+export interface Nudge {
+  leadId: string;
+  agentId: string;
+  at: number;
+}
+
+/** What a reply made happen, shown under it in the dialogue: lines like
+ *  "Started fix-clipping", and the asks still to answer. */
+export interface Outcome {
+  n: number;
+  lines: string[];
+  asks: AskAction[];
+}
+
+export interface LeadActs {
+  /** The last reply acted on, by lead. */
+  acted: Record<string, number>;
+  nudges: Nudge[];
+  /** Asks answered, by askKey(). */
+  answered: string[];
+  outcomes: Record<string, Outcome>;
+  /** Leads told their actions are off, since they were last turned on. */
+  toldOff: string[];
+  tasks: LeadTask[];
+}
+
+const KEY = "observatory.leadActions";
+const EMPTY: LeadActs = { acted: {}, nudges: [], answered: [], outcomes: {}, toldOff: [], tasks: [] };
+/** Asks and nudges kept: enough for the hour and for the dialogue. */
+const KEEP = 200;
+
+const arr = <T>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : []);
+
+function load(): LeadActs {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    if (!raw || typeof raw !== "object") return { ...EMPTY };
+    return {
+      acted: raw.acted && typeof raw.acted === "object" ? raw.acted : {},
+      nudges: arr<Nudge>(raw.nudges).filter((n) => n && typeof n.agentId === "string" && typeof n.at === "number"),
+      answered: arr<string>(raw.answered).filter((s) => typeof s === "string"),
+      outcomes: raw.outcomes && typeof raw.outcomes === "object" ? raw.outcomes : {},
+      toldOff: arr<string>(raw.toldOff).filter((s) => typeof s === "string"),
+      tasks: arr<LeadTask>(raw.tasks).filter((t) => t && typeof t.taskId === "string" && typeof t.leadId === "string"),
+    };
+  } catch {
+    return { ...EMPTY };
+  }
+}
+
+let state: LeadActs | null = null;
+const listeners = new Set<() => void>();
+
+export function leadActs(): LeadActs {
+  return (state ??= load());
+}
+
+/** Drop what's in memory and read it from storage again (tests). */
+export function reloadLeadActs() {
+  state = load();
+  listeners.forEach((l) => l());
+}
+
+export function updateLeadActs(f: (s: LeadActs) => Partial<LeadActs>) {
+  const now = leadActs();
+  const next = { ...now, ...f(now) };
+  next.nudges = next.nudges.slice(-KEEP);
+  next.answered = next.answered.slice(-KEEP);
+  next.tasks = next.tasks.slice(-KEEP);
+  state = next;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(next));
+  } catch {
+    // Without storage it lasts until the app quits.
+  }
+  listeners.forEach((l) => l());
+}
+
+export function useLeadActs(): LeadActs {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    leadActs,
+  );
+}
+
+export const isAnswered = (key: string) => leadActs().answered.includes(key);
+const markAnswered = (key: string) => updateLeadActs((s) => ({ answered: [...s.answered, key] }));
+
+/** A reply acted on: nothing in it runs again. */
+export const markActed = (leadId: string, n: number) => updateLeadActs((s) => ({ acted: { ...s.acted, [leadId]: n } }));
+
+/** The lead's tasks, newest first. Counted by project, so a restarted lead
+ *  keeps its cap and its list. */
+export function tasksOf(projectId: string, s: LeadActs = leadActs()): LeadTask[] {
+  return s.tasks.filter((t) => t.projectId === projectId).sort((a, b) => b.at - a.at);
+}

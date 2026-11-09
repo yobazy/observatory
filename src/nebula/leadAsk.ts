@@ -166,6 +166,7 @@ Take it as the new list.`,
     `Every project:
 ${projects}`,
     `Answer from your notes, the projects' CLAUDE.md and README files, the memory folder (~/.claude/projects/*/memory) and ${vault}. A question about one project that has a lead goes to that lead: run \`nebula ask "Lead <project>" "<question>" --timeout ${PASS_TIMEOUT}\` and reply with its answer and its source. If it answers ${ASK_USER}, reply with that line as it is.`,
+    `You don't start or nudge threads yourself, and Observatory ignores any START, NUDGE or ASK lines you write: you act only through project leads. When I ask you for work in a project, pass it on to that project's lead with \`nebula ask "Lead <project>" "<the work, as a brief that stands alone>" --timeout ${PASS_TIMEOUT}\`, and tell me what it said.`,
     ...answerRules({ name: TOP_LEAD_NAME, notes: p.notes, passOn: true }),
   ];
   return sections.map((s) => s.trim()).join("\n\n");

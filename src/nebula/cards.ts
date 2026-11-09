@@ -59,6 +59,11 @@ export interface CardLead {
   /** The pixel-pets animal it is in the sidebar and the dialogue (S27,
    *  leadChat.ts); unset is one picked from the project's name. */
   pet?: { kind: string; coat: string };
+  /** "Let the lead start and nudge threads" (S28, leadActions.ts): on for
+   *  a lead started since, off for one saved before until turned on. */
+  acts?: boolean;
+  /** Its started tasks that may run at once; unset is DEFAULT_MAX_TASKS. */
+  maxTasks?: number;
 }
 
 /** A file a card is drafted from, its path relative to the project root. */
@@ -292,6 +297,8 @@ function leadOf(x: unknown): CardLead | null {
     model: typeof l.model === "string" ? l.model : "",
     notes: typeof l.notes === "string" ? l.notes : "",
     ...(l.pet && typeof l.pet.kind === "string" && typeof l.pet.coat === "string" ? { pet: { kind: l.pet.kind, coat: l.pet.coat } } : {}),
+    ...(l.acts === true ? { acts: true } : {}),
+    ...(typeof l.maxTasks === "number" && Number.isFinite(l.maxTasks) && l.maxTasks >= 1 ? { maxTasks: Math.floor(l.maxTasks) } : {}),
   };
 }
 

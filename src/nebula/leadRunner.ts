@@ -2,15 +2,23 @@
 // thread's status, its stuck flag and the PR on its branch, and sends the
 // events to its project's lead through enqueue() (queue.ts), so a busy lead
 // gets them, batched, when its turn ends. Nothing is watched for a project
-// without a running lead, and nothing is sent while a lead is stopped.
+// without a running lead, and nothing is sent while a lead is stopped. It
+// also carries out the action lines in each finished lead turn (S28,
+// leadActions.ts): starting tasks through Dispatch's queue, nudging threads,
+// and keeping the asks for the dialogue's Yes and No.
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { createAgent, defaultKind } from "./actions";
 import { allCards, homeCard, isFolderKey, saveLead, type CardLead, type ProjectCard } from "./cards";
+import { allBatches, globalCap, queueNewTask, workingNow } from "./batch";
+import { holdOn, holds, holdText } from "./budgetHold";
 import { isPreview, readSettings, request } from "./client";
 import {
+  actionRules,
+  ciOf,
   changeLeadModel,
   deliver,
+  LINE_PREFIX,
   eventLine,
   eventNeed,
   carryUnknown,
@@ -40,6 +48,27 @@ import {
   type LogCounts,
   type RosterEntry,
 } from "./leadAsk";
+import {
+  answerAsk,
+  askKey,
+  DEFAULT_MAX_TASKS,
+  leadActs,
+  markActed,
+  nudgesWithin,
+  parseActions,
+  replyToAct,
+  reportLine,
+  runActions,
+  startedState,
+  tasksOf,
+  updateLeadActs,
+  type AskAction,
+  type DecideContext,
+  type LeadTask,
+} from "./leadActions";
+import { latestReply, watchLeadCalls } from "./leadCalls";
+import { mergePr } from "./prs";
+import { checkVerdict, closeThread, onVerdicts, verdictKnown } from "./verdicts";
 import { openPreview } from "./preview";
 import { editQueued, enqueue } from "./queue";
 import { savePrefs, type TopLead } from "./theme";
@@ -66,9 +95,19 @@ export function snapshot(s: Pick<State, "agents" | "worktrees" | "prs">, stuck: 
       failed: raised ? `${raised.kind}:${raised.mark}` : null,
       review: reviewMark(reviews[a.id]),
       pr: prOf(pr),
+      ...ciOf(pr),
+      safe: safeMark(a),
     };
   }
   return out;
+}
+
+/** The turn a thread said ✅ Safe to close in, as a mark; null when it's
+ *  not at rest saying so, undefined while its reply is unread. */
+function safeMark(a: Agent): string | null | undefined {
+  const v = verdictKnown(a);
+  if (v === undefined) return undefined;
+  return v?.tone === "done" ? `${a.status_changed_at}` : null;
 }
 
 async function turnSummary(a: Agent): Promise<string> {
@@ -94,14 +133,17 @@ async function lineFor(e: LeadEvent): Promise<string | null> {
   const failed =
     raised?.reason ??
     (rev?.state === "failed" ? [failedCount(rev.failures.length), rev.failures[0]].filter(Boolean).join(": ") : null);
-  const summary = fresh || (e.kind === "failed" && failed) ? "" : await turnSummary(a).catch(() => "");
+  const summary = fresh || (e.kind === "failed" && failed) || e.kind === "CI failed" ? "" : await turnSummary(a).catch(() => "");
+  const found = s.prs[a.worktree_id];
+  const url = found?.kind === "found" && found.pr.number === e.pr ? found.pr.url : undefined;
   return eventLine({
     kind: e.kind,
     title: a.name,
     branch: s.worktrees[a.worktree_id]?.branch ?? "?",
     agentId: a.id,
-    need: eventNeed(e.kind, a, record, failed, summary),
-    pr: e.kind === "PR opened" ? openPr(s.prs[a.worktree_id]) : null,
+    // A CI failure is about its checks, by name.
+    need: e.kind === "CI failed" ? (e.failing ?? []).join(", ") || "a check" : eventNeed(e.kind, a, record, failed, summary),
+    pr: e.kind === "PR opened" ? openPr(found) : e.pr !== undefined ? { number: e.pr, url } : null,
   });
 }
 
@@ -156,14 +198,19 @@ export async function startProjectLead(projectId: string, opts: { model: string;
   const kind = defaultKind(settings);
   const before = allCards()[projectId]?.lead;
   await retire(before);
-  // A restarted lead stays the same animal.
-  const pet = before?.pet ? { pet: before.pet } : {};
+  // A restarted lead stays the same animal, and keeps its actions switch:
+  // on for a new lead, off for one saved before S28 until it's turned on.
+  const keep = {
+    ...(before?.pet ? { pet: before.pet } : {}),
+    ...((before ? before.acts === true : true) ? { acts: true } : {}),
+    ...(before?.maxTasks ? { maxTasks: before.maxTasks } : {}),
+  };
   return startLead(
-    { project: project.name, path: main.path, notes: opts.notes, model: opts.model },
+    { project: project.name, path: main.path, notes: opts.notes, model: opts.model, acts: !!keep.acts, maxTasks: keep.maxTasks ?? DEFAULT_MAX_TASKS },
     {
       create: (prompt, model) =>
         createAgent({ worktree: main.id, kind, settings, prompt, preset: { name: "Lead", kind, model }, select: false }),
-      save: (lead) => saveLead(projectId, { ...lead, ...pet }, opts.base),
+      save: (lead) => saveLead(projectId, { ...lead, ...keep }, opts.base),
     },
     answerRules({ name: leadName(project.name), notes: opts.notes }),
   );
@@ -319,11 +366,209 @@ export function setLeadModel(projectId: string, lead: CardLead, model: string) {
   });
 }
 
+// ---- action lines (S28) ----
+
+/** Send report lines to a lead, batched with its other [observatory] lines. */
+function tell(leadId: string, lines: string[]) {
+  if (!lines.length) return Promise.resolve();
+  return inTurn(leadId, async () => {
+    const lead = getState().agents[leadId];
+    if (lead && !lead.archived) await deliver(lines, leadQueue(leadId, lead));
+  });
+}
+
+/** The project a lead runs for, and its card's lead, or null for the top
+ *  lead and anything else. */
+function projectLead(leadId: string): { projectId: string; lead: CardLead } | null {
+  for (const [projectId, card] of Object.entries(allCards())) if (card.lead?.agentId === leadId) return { projectId, lead: card.lead };
+  return null;
+}
+
+/** The lead's started tasks with where each is now. */
+export function startedTasks(projectId: string, s: Pick<State, "agents" | "worktrees" | "prs"> = getState()) {
+  const batches = allBatches();
+  return tasksOf(projectId).map((rec) => {
+    const task = batches.find((b) => b.id === rec.batchId)?.tasks.find((t) => t.id === rec.taskId);
+    const agentId = rec.agentId ?? task?.agentId;
+    const agent = agentId ? s.agents[agentId] : undefined;
+    const p = agent ? s.prs[agent.worktree_id] : undefined;
+    return { rec, agent, ...startedState(task, agent, p?.kind === "found" ? p.pr : null) };
+  });
+}
+
+/** Launches are held now, and why (budgetHold.ts), for a task in `projectId`. */
+function holdNow(projectId: string): string | null {
+  const hold = holdOn(
+    { state: "pending", target: "project", projectId } as Parameters<typeof holdOn>[0],
+    holds(getState(), allCards()),
+  );
+  return hold ? holdText(hold) : null;
+}
+
+/** Carry out the action lines in a lead's reply `n`. */
+async function act(leadId: string, projectId: string, lead: CardLead, n: number, text: string) {
+  const actions = parseActions(text);
+  if (!actions.length) return;
+  if (lead.acts !== true) {
+    // Off: the lines are ignored, and the lead is told so once.
+    if (leadActs().toldOff.includes(leadId)) return;
+    updateLeadActs((x) => ({ toldOff: [...x.toldOff, leadId] }));
+    await tell(leadId, [reportLine({ kind: "off" })]);
+    return;
+  }
+  const context = (): DecideContext => {
+    const s = getState();
+    const waiting = tasksOf(projectId).filter((t) => !t.told).map((t) => t.branch);
+    const branches = new Set([
+      ...Object.values(s.worktrees)
+        .filter((w) => w.project_id === projectId)
+        .map((w) => w.branch),
+      ...waiting,
+    ]);
+    const prs = new Set(
+      Object.values(s.worktrees).flatMap((w) => {
+        const p = w.project_id === projectId ? s.prs[w.id] : undefined;
+        return p?.kind === "found" && (p.pr.state === "open" || p.pr.state === "draft") ? [p.pr.number] : [];
+      }),
+    );
+    const threads: DecideContext["threads"] = {};
+    for (const x of Object.values(s.agents)) threads[x.id] = { projectId: s.worktrees[x.worktree_id]?.project_id ?? null, archived: x.archived };
+    return {
+      acts: true,
+      top: false,
+      leadId,
+      projectId,
+      running: startedTasks(projectId, s).filter((t) => t.busy).length,
+      maxTasks: lead.maxTasks ?? DEFAULT_MAX_TASKS,
+      hold: actions.some((a) => a.kind === "start") ? holdNow(projectId) : null,
+      branches,
+      threads,
+      nudges: (id) => nudgesWithin(leadActs().nudges, id),
+      prs,
+    };
+  };
+  const done = await runActions(actions, {
+    context,
+    start: (branch, brief) => {
+      const batch = queueNewTask({ text: brief, projectId, branch }, allCards());
+      const rec: LeadTask = { leadId, projectId, batchId: batch.id, taskId: batch.tasks[0].id, branch, at: Date.now() };
+      updateLeadActs((x) => ({ tasks: [...x.tasks, rec] }));
+      void import("./batchRunner").then((m) => m.kickBatches());
+      const s = getState();
+      const working = workingNow(
+        allBatches().flatMap((b) => b.tasks),
+        s.agents,
+      );
+      return { full: working >= globalCap(s.prefs.dispatchCap) ? working : null };
+    },
+    nudge: async (agentId, message) => {
+      await enqueue(getState().agents[agentId], message, { stay: true });
+      updateLeadActs((x) => ({ nudges: [...x.nudges, { leadId, agentId, at: Date.now() }] }));
+    },
+    name: (agentId) => getState().agents[agentId]?.name ?? agentId,
+  });
+  updateLeadActs((x) => ({ outcomes: { ...x.outcomes, [leadId]: { n, lines: done.lines, asks: done.asks } } }));
+  await tell(leadId, done.reports.map(reportLine));
+}
+
+/** Lead-started tasks that have launched (or failed to) since last told. */
+function followStarts() {
+  const batches = allBatches();
+  const s = getState();
+  for (const rec of leadActs().tasks) {
+    if (rec.told) continue;
+    const task = batches.find((b) => b.id === rec.batchId)?.tasks.find((t) => t.id === rec.taskId);
+    const mark = (patch: Partial<LeadTask>) =>
+      updateLeadActs((x) => ({ tasks: x.tasks.map((t) => (t.taskId === rec.taskId ? { ...t, ...patch, told: true } : t)) }));
+    if (!task) {
+      mark({});
+      void tell(rec.leadId, [reportLine({ kind: "refused", action: { kind: "start", branch: rec.branch, brief: "" }, reason: "it was taken off the Dispatch board" })]);
+    } else if (task.state === "failed") {
+      mark({});
+      void tell(rec.leadId, [reportLine({ kind: "refused", action: { kind: "start", branch: rec.branch, brief: "" }, reason: task.note ?? "its launch failed" })]);
+    } else if (task.state === "launched" && task.agentId) {
+      const agent = s.agents[task.agentId];
+      // The branch it got: a name already taken gets a suffix.
+      const branch = (agent && s.worktrees[agent.worktree_id]?.branch) || rec.branch;
+      mark({ agentId: task.agentId, branch });
+      void tell(rec.leadId, [reportLine({ kind: "started", branch, agentId: task.agentId })]);
+    }
+  }
+}
+
+/** Each running lead's finished turn, acted on once. The top lead's action
+ *  lines are ignored: it acts only through project leads. */
+function actOnTurns() {
+  const s = getState();
+  const acted = leadActs().acted;
+  const top = s.prefs.topLead?.agentId;
+  const ids = [...Object.values(runningLeads(allCards(), s.agents, s.projects)), ...(top ? [top] : [])];
+  for (const leadId of ids) {
+    const reply = replyToAct(s.agents[leadId], latestReply(leadId), acted[leadId]);
+    if (!reply) continue;
+    markActed(leadId, reply.n);
+    const mine = projectLead(leadId);
+    if (!mine || leadId === top) continue;
+    void act(leadId, mine.projectId, mine.lead, reply.n, reply.text).catch((e) => flash(`The lead's actions didn't go: ${errText(e)}`));
+  }
+}
+
+/** Yes or No on a lead's ASK row in the dialogue. */
+export function answerLeadAsk(leadId: string, n: number, ask: AskAction, yes: boolean) {
+  const mine = projectLead(leadId);
+  return answerAsk(askKey(leadId, n, ask), ask, yes, {
+    merge: async (number) => {
+      const s = getState();
+      const wt = Object.values(s.worktrees).find((w) => {
+        const p = w.project_id === mine?.projectId ? s.prs[w.id] : undefined;
+        return p?.kind === "found" && p.pr.number === number;
+      });
+      const p = wt ? s.prs[wt.id] : undefined;
+      if (!wt || p?.kind !== "found") throw new Error(`no PR #${number} in this project`);
+      await mergePr(wt, p.pr);
+    },
+    archive: (agentId) => {
+      const a = getState().agents[agentId];
+      if (!a) throw new Error("that thread is gone");
+      closeThread(a);
+    },
+    tell: (line) => tell(leadId, [line]),
+  });
+}
+
+/** The card's "Let the lead start and nudge threads". A running lead hears
+ *  of it: turned on, with what the action lines are (its prompt may not
+ *  have had them), and from its next reply on; off, once. */
+export function setLeadActs(projectId: string, lead: CardLead, on: boolean) {
+  const { acts: _was, ...rest } = lead;
+  saveLead(projectId, on ? { ...rest, acts: true } : rest);
+  if (leadState(lead, getState().agents) !== "running") return;
+  const id = lead.agentId;
+  // What it said before now isn't acted on.
+  const n = latestReply(id)?.n;
+  if (n !== undefined) markActed(id, n);
+  if (on) {
+    updateLeadActs((x) => ({ toldOff: x.toldOff.filter((t) => t !== id) }));
+    void tell(id, [`${LINE_PREFIX}actions are on. ${actionRules(lead.maxTasks ?? DEFAULT_MAX_TASKS)}`]);
+  } else {
+    updateLeadActs((x) => ({ toldOff: [...x.toldOff.filter((t) => t !== id), id] }));
+    void tell(id, [reportLine({ kind: "off" })]);
+  }
+}
+
+/** How many of the lead's tasks may run at once. */
+export function setLeadMaxTasks(projectId: string, lead: CardLead, max: number) {
+  if (!Number.isFinite(max) || max < 1) return;
+  saveLead(projectId, { ...lead, maxTasks: Math.floor(max) });
+}
+
 /** Mount once. */
 export function useLeadRunner() {
   useEffect(() => {
     let before: Snapshot | null = null;
-    let seen: { agents: State["agents"]; prs: State["prs"]; stuck: StuckEntries; reviews: ReviewRecords } | null = null;
+    let seen: { agents: State["agents"]; prs: State["prs"]; stuck: StuckEntries; reviews: ReviewRecords; verdicts: number } | null = null;
+    // Bumped when a verdict is read, which the store doesn't signal.
+    let verdicts = 0;
     let leadsBefore: RosterEntry[] | null = null;
     const tick = () => {
       const s = getState();
@@ -336,10 +581,20 @@ export function useLeadRunner() {
       if (topAgent && !topAgent.archived && was && rosterLine(was) !== rosterLine(leadsNow))
         void inTurn(topAgent.id, () => tellRoster(was, leadsNow, leadQueue(topAgent.id, topAgent)));
       leadsBefore = leadsNow;
+      // S28: what each finished lead turn says to do, and how the tasks
+      // leads started are getting on.
+      actOnTurns();
+      followStarts();
       const stuck = loadStuck();
       const reviews = loadReviews();
-      if (seen && seen.agents === s.agents && seen.prs === s.prs && seen.stuck === stuck && seen.reviews === reviews) return;
-      seen = { agents: s.agents, prs: s.prs, stuck, reviews };
+      // A lead hears when a thread says ✅ Safe to close: read the verdicts
+      // of the threads it's watching as they come to rest.
+      const watched = runningLeads(allCards(), s.agents, s.projects);
+      for (const a of Object.values(s.agents))
+        if (a.status === "finished" && !a.archived && watched[s.worktrees[a.worktree_id]?.project_id ?? ""]) checkVerdict(a);
+      if (seen && seen.agents === s.agents && seen.prs === s.prs && seen.stuck === stuck && seen.reviews === reviews && seen.verdicts === verdicts)
+        return;
+      seen = { agents: s.agents, prs: s.prs, stuck, reviews, verdicts };
       const after = snapshot(s, stuck, reviews);
       // The top lead is in some project's folder, but it isn't one of its tasks.
       if (top) delete after[top.agentId];
@@ -350,10 +605,17 @@ export function useLeadRunner() {
       for (const [leadId, list] of byLead) void inTurn(leadId, () => send(leadId, list));
     };
     const off = subscribe(tick);
+    const offCalls = watchLeadCalls(tick);
+    const offVerdicts = onVerdicts(() => {
+      verdicts++;
+      tick();
+    });
     // Stuck flags and reviews are kept outside the store: look now and then.
     const timer = setInterval(tick, 5_000);
     return () => {
       off();
+      offCalls();
+      offVerdicts();
       clearInterval(timer);
     };
   }, []);
