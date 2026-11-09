@@ -56,6 +56,9 @@ export interface CardLead {
   agentId: string;
   model: string;
   notes: string;
+  /** The pixel-pets animal it is in the sidebar and the dialogue (S27,
+   *  leadChat.ts); unset is one picked from the project's name. */
+  pet?: { kind: string; coat: string };
 }
 
 /** A file a card is drafted from, its path relative to the project root. */
@@ -288,6 +291,7 @@ function leadOf(x: unknown): CardLead | null {
     agentId: l.agentId,
     model: typeof l.model === "string" ? l.model : "",
     notes: typeof l.notes === "string" ? l.notes : "",
+    ...(l.pet && typeof l.pet.kind === "string" && typeof l.pet.coat === "string" ? { pet: { kind: l.pet.kind, coat: l.pet.coat } } : {}),
   };
 }
 

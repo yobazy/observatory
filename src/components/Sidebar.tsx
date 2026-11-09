@@ -34,8 +34,9 @@ import { ContextMenu, type MenuItem } from "./Menu";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
 import { reorderKey, useReorder, type DropInto } from "./useReorder";
 import { useBatches } from "../nebula/batch";
-import { useCards } from "../nebula/cards";
-import { leadState } from "../nebula/lead";
+import { openLeadChat, useLeadCalls, useLeads } from "../nebula/leadCalls";
+import { petLabel, QUIET, type Call, type LeadEntry } from "../nebula/leadChat";
+import { PetSprite } from "./Pet";
 import { useRecentCount, useVisits } from "../nebula/recent";
 import { RECENT_COUNTS, recentProjects, type RecentCount } from "../nebula/recentList";
 
@@ -312,6 +313,8 @@ export function Sidebar({
             +
           </button>
         </div>
+
+        <TopLeadRow />
 
         <div className="project-search has-toggle">
           <input
@@ -762,15 +765,64 @@ function ProjectRow({
   );
 }
 
-/** "Lead" after a project's name while its lead (lead.ts) is running. */
+/** The pet a project's running lead is (S27), after its name: it hops
+ *  with a count when the lead has something for you, and a click talks to
+ *  it. Inside the row's button, so it's a span; ⌘L reaches it by keyboard. */
 function LeadMark({ projectId }: { projectId: string }) {
-  const lead = useCards()[projectId]?.lead;
-  const { agents } = useAppState();
-  if (leadState(lead, agents) !== "running") return null;
+  const leads = useLeads();
+  const lead = leads.find((l) => l.projectId === projectId);
+  const mine = useMemo(() => (lead ? [lead] : []), [lead]);
+  const calls = useLeadCalls(mine);
+  if (!lead) return null;
+  const call = calls[lead.agentId] ?? QUIET;
   return (
-    <span className="lead-mark is-small" title="This project has a lead: a thread told of each task as it finishes, fails, needs you or opens a PR.">
-      Lead
+    <span
+      className={`lead-pet${call.calling ? " is-calling" : ""}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        openLeadChat(lead.agentId);
+      }}
+      title={`${leadTitle(lead, call)}\nClick to talk to it.`}
+      aria-label={leadTitle(lead, call)}
+      role="img"
+    >
+      <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={27} />
+      {call.calling && <span className="lead-badge">{call.count}</span>}
     </span>
+  );
+}
+
+const leadTitle = (lead: LeadEntry, call: Call) =>
+  `${lead.title}${lead.model ? ` (${lead.model})` : ""}: ${petLabel(lead.pet).toLowerCase()}. ${
+    call.why === "ask" ? `It has ${call.count === 1 ? "a question" : `${call.count} questions`} for you (⌘L).` : call.why === "unread" ? "It has an unread reply (⌘L)." : "Nothing new."
+  }`;
+
+/** The top lead's pet, at the top of the projects list. */
+function TopLeadRow() {
+  const leads = useLeads();
+  const top = leads.find((l) => l.projectId === null);
+  const mine = useMemo(() => (top ? [top] : []), [top]);
+  const calls = useLeadCalls(mine);
+  if (!top) return null;
+  const call = calls[top.agentId] ?? QUIET;
+  return (
+    <button
+      className={`top-lead-row${call.calling ? " is-calling" : ""}`}
+      onClick={() => openLeadChat(top.agentId)}
+      title={`${leadTitle(top, call)}\nClick to talk to it, or press ⌘L.`}
+    >
+      <span className="lead-pet" aria-hidden>
+        <PetSprite kind={top.pet.kind} coat={top.pet.coat} width={34} />
+      </span>
+      <span className="top-lead-name">
+        Top lead
+        <span className="top-lead-sub">
+          {petLabel(top.pet)}
+          {top.model ? ` · ${top.model}` : ""}
+        </span>
+      </span>
+      {call.calling && <span className="lead-badge">{call.count}</span>}
+    </button>
   );
 }
 
