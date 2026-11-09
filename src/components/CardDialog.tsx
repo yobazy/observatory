@@ -49,6 +49,7 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
   const [kinds, setKinds] = useState(saved?.taskKinds.join(", ") ?? "");
   // As typed, so the field can be cleared on the way to a new number.
   const [cap, setCap] = useState(String(saved?.concurrency ?? 1));
+  const [budget, setBudget] = useState(saved?.dailyBudget ? String(saved.dailyBudget) : "");
   const [sources, setSources] = useState<CardSources | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const first = useRef<HTMLTextAreaElement>(null);
@@ -109,6 +110,7 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
       skillNotes: Object.fromEntries(Object.entries(card.skillNotes).filter(([k]) => names.includes(k))),
       taskKinds: splitList(kinds),
       homeFolder: card.isHome ? folder : null,
+      dailyBudget: Number(budget) > 0 ? Number(budget) : undefined,
     };
     saveCard(cardKey, next);
     flash(next.isHome ? `${target.name} is Home` : `Saved ${target.name}'s card`);
@@ -241,6 +243,29 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
               )}
             </div>
             {takingHome && <p className="dialog-note card-indent">Home moves here from {homeName ?? "another project"}.</p>}
+
+            {!folderHome && (
+              <div className="field">
+                <label htmlFor="card-budget">Daily budget</label>
+                <div className="card-row">
+                  <span className="budget-input">
+                    $
+                    <input
+                      id="card-budget"
+                      type="number"
+                      min={0}
+                      step={5}
+                      inputMode="decimal"
+                      value={budget}
+                      onChange={(e) => setBudget(e.target.value)}
+                      placeholder="none"
+                      aria-label="Daily budget in dollars"
+                    />
+                  </span>
+                  <span className="dialog-note card-flat">Past this today, its Dispatch tasks wait. Running ones carry on.</span>
+                </div>
+              </div>
+            )}
 
             {card.isHome && (
               <div className="field field-top">

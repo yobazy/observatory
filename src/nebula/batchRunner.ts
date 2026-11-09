@@ -1,7 +1,8 @@
 // Launches Dispatch's batches (batch.ts) as slots free: watches the agents in
 // the store and starts the next pending task whenever one finishes, within
-// the global cap and each Shared project's own. Sent only while the app is
-// open; pending tasks wait in localStorage across launches.
+// the global cap and each Shared project's own, and not while spend is over
+// a budget (budgetHold.ts). Sent only while the app is open; pending tasks
+// wait in localStorage across launches.
 import { useEffect } from "react";
 import { createAgent, defaultKind, followUp } from "./actions";
 import { readSettings, request } from "./client";
@@ -20,7 +21,6 @@ import {
   homeSignature,
   laneCapper,
   launchTask,
-  nextLaunchable,
   reconcile,
   shouldRetry,
   updateBatch,
@@ -29,6 +29,7 @@ import {
   type LaunchDeps,
   type Outcome,
 } from "./batch";
+import { holds, launchPick, NO_HOLDS } from "./budgetHold";
 
 /** Tasks whose launch request is out from this run of the app. A task left
  *  `launching` and not in here was cut short by a quit: `reconcile` settles it. */
@@ -141,7 +142,8 @@ function summarize(now: number) {
 }
 
 /** One pass: settle launches cut short, retry what Home blocked, start
- *  what the caps have room for, and report batches that have settled. */
+ *  what the caps and budgets have room for, and report batches that have
+ *  settled. */
 function tick() {
   const s = getState();
   if (!s.loaded || s.link.state !== "connected" || !prefsLoaded) return;
@@ -164,10 +166,14 @@ function tick() {
 
   const all = allBatches().flatMap((b) => b.tasks.map((t) => ({ batchId: b.id, t })));
   const cap = globalCap(s.prefs.dispatchCap ?? prefsLoaded.dispatchCap);
-  const next = nextLaunchable(
+  // Over a budget, pending tasks wait; what's running carries on. Worked
+  // out only when something is pending: it sums the usage report.
+  const held = all.some((x) => x.t.state === "pending") ? holds(s, cards) : NO_HOLDS;
+  const next = launchPick(
     all.map((x) => x.t),
     s.agents,
     { globalCap: cap, laneCap: laneCapper(cards) },
+    held,
     now,
   );
   for (const t of next) {
