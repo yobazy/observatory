@@ -191,6 +191,17 @@ export function pages(md: string, box: BoxSize): string[] {
 /** Whether a reply has a block only the Read view shows. */
 export const hasStandIn = (md: string) => paragraphs(md).some((p) => /^\((code|table|list), see Read view\)$/.test(p));
 
+// ---- the dialogue on screen ----
+
+/** Where the dialogue is: nothing on screen ("closed", so it renders
+ *  nothing and takes no layout), sliding in or away, or up. `open` is the
+ *  lead asked for, `shown` the one still drawn while it slides away, `up`
+ *  whether the slide up has started. */
+export function talkPhase(open: string | null, shown: string | null, up: boolean): "closed" | "sliding" | "open" {
+  if (shown === null) return "closed";
+  return open === shown && up ? "open" : "sliding";
+}
+
 // ---- calling you ----
 
 export interface LeadReply {

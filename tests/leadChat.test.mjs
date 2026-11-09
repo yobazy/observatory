@@ -24,6 +24,7 @@ const {
   readViewLine,
   seenInChat,
   shortcutTarget,
+  talkPhase,
   validPet,
   wrap,
   TOP_PET,
@@ -215,4 +216,16 @@ test("⌘L's target picks the calling lead first, otherwise the top lead", () =>
   assert.equal(shortcutTarget(leads, {}), 'top');
   // No top lead and nobody calling: nothing to open.
   assert.equal(shortcutTarget(leadsOf(cards, null, agents, projects), {}), null);
+});
+
+test('the closed dialogue renders nothing; it is only drawn while open or sliding', () => {
+  // Never opened, and after the slide away ends: nothing to draw.
+  assert.equal(talkPhase(null, null, false), 'closed');
+  assert.equal(talkPhase(null, null, true), 'closed');
+  // Asked for, before the first frame up: sliding in.
+  assert.equal(talkPhase('la', 'la', false), 'sliding');
+  assert.equal(talkPhase('la', 'la', true), 'open');
+  // Closed but still sliding away; or another lead asked for meanwhile.
+  assert.equal(talkPhase(null, 'la', false), 'sliding');
+  assert.equal(talkPhase('lb', 'la', true), 'sliding');
 });

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { closeLeadChat, markLeadSeen, noteReply, useLeads, useOpenLead } from "../nebula/leadCalls";
 import { ASK_USER } from "../nebula/leadAsk";
-import { hasStandIn, lastReply, pages, type BoxSize, type LeadEntry } from "../nebula/leadChat";
+import { hasStandIn, lastReply, pages, talkPhase, type BoxSize, type LeadEntry } from "../nebula/leadChat";
 import { enqueue } from "../nebula/queue";
 import { setPaneMode } from "../nebula/pane";
 import { flash, getState, projectOfWorktree, setState, useAppState } from "../nebula/store";
@@ -48,8 +48,10 @@ export function LeadChat() {
   useEffect(() => {
     if (openId && !leads.some((l) => l.agentId === openId)) closeLeadChat();
   }, [openId, leads]);
-  if (!lead || !agent) return null;
-  return <Dialogue key={lead.agentId} lead={lead} agent={agent} up={up && openId === lead.agentId} />;
+  // Closed is unmounted: the slid-down pet and box take no layout.
+  const phase = talkPhase(openId, shown, up);
+  if (phase === "closed" || !lead || !agent) return null;
+  return <Dialogue key={lead.agentId} lead={lead} agent={agent} up={phase === "open"} />;
 }
 
 function Dialogue({ lead, agent, up }: { lead: LeadEntry; agent: Agent; up: boolean }) {

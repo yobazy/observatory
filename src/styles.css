@@ -108,6 +108,13 @@ body,
   height: 100%;
   margin: 0;
 }
+/* Nothing scrolls the window itself: screen-reader-only text and the
+   terminal's hidden input can sit past the bottom edge, and focusing
+   something then scrolled the whole app up and left a strip below it. */
+#root {
+  position: relative;
+  overflow: clip;
+}
 
 body {
   background: var(--night);
@@ -9451,6 +9458,9 @@ button.board-main:hover .board-text {
   align-items: flex-end;
   padding: 0 18px 16px;
   pointer-events: none;
+  /* The pet and box slide up from below the window: clipped here, so the
+     slide never adds scroll area to the page. */
+  overflow: clip;
 }
 .talk::before {
   content: "";
