@@ -256,9 +256,7 @@ impl Reading {
                 if let Some(step) = self.turn.as_mut().and_then(|t| t.steps.get_mut(i)) {
                     let failed = b.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
                     step.ok = Some(!failed);
-                    step.error = failed
-                        .then(|| result_text(b.get("content")))
-                        .flatten();
+                    step.error = failed.then(|| result_text(b.get("content"))).flatten();
                 }
             }
         }
