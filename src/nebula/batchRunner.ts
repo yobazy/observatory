@@ -53,8 +53,8 @@ async function deps(batchId: string, taskId: string): Promise<LaunchDeps> {
     queuedFor: (id) => getState().queue[id]?.length ?? 0,
     followUp: (a, text) => followUp(a, text, { select: false }),
     enqueue: (a, text) => enqueue(a, text),
-    createAgent: (worktree, prompt) =>
-      createAgent({ worktree, kind: defaultKind(settings), settings, prompt, select: false }),
+    createAgent: (worktree, prompt, kind) =>
+      createAgent({ worktree, kind: kind ?? defaultKind(settings), settings, prompt, select: false }),
     createWorktree: async (project, branch) => {
       reserved.add(`${project}/${branch}`);
       const created = await request("CreateWorktree", {

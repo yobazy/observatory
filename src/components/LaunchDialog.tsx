@@ -4,6 +4,9 @@ import { createAgent, defaultKind, HARNESSES } from "../nebula/actions";
 import { flash, projectWorktrees, setState, sortedProjects, useAppState } from "../nebula/store";
 import { attemptBranches, fanOut, openCompare } from "../nebula/fanout";
 import { suggestBranch } from "../nebula/branches";
+import { capNote, globalCap, queueNewTask, useBatches, workingNow } from "../nebula/batch";
+import { kickBatches } from "../nebula/batchRunner";
+import { allCards } from "../nebula/cards";
 import { KIND_LABEL, settingsStem } from "../nebula/status";
 import type { AgentKind, AgentPreset } from "../nebula/types";
 
@@ -107,6 +110,28 @@ export function LaunchDialog({
   const effectiveBranch = branchTouched ? branch : suggestBranch(task);
   const fanning = where === FAN_OUT;
   const attempts = fanning ? attemptBranches(effectiveBranch.trim() || "attempt", kinds, copies) : [];
+  // Every slot taken: a plain task can wait in Dispatch's line instead, and
+  // start when one frees. Fan-outs, presets and moves only start now.
+  const batches = useBatches();
+  const working = workingNow(batches.flatMap((b) => b.tasks), state.agents);
+  const full = capNote(working, globalCap(state.prefs.dispatchCap));
+  const canWait = !!full && !fanning && !chosenPreset && !moving && !!task.trim();
+
+  function wait() {
+    if (!projectId || busy || unpicked) return;
+    if (where === NEW_WORKTREE && !effectiveBranch.trim()) {
+      setError("Name the new branch, or pick an existing one.");
+      return;
+    }
+    queueNewTask(
+      { text: task, projectId, worktreeId: where === NEW_WORKTREE ? null : where, branch: effectiveBranch, kind },
+      allCards(),
+    );
+    onStarted?.("dispatch");
+    kickBatches();
+    flash(`Queued in ${project?.name}: it starts when a slot frees. It's on the Dispatch board meanwhile.`, 5000);
+    onClose();
+  }
 
   async function launch() {
     if (!projectId || busy) return;
@@ -190,7 +215,8 @@ export function LaunchDialog({
         aria-labelledby="launch-title"
         onSubmit={(e) => {
           e.preventDefault();
-          void launch();
+          if (canWait) wait();
+          else void launch();
         }}
       >
         {handoff && (
@@ -230,7 +256,8 @@ export function LaunchDialog({
           onKeyDown={(e) => {
             if (e.key === "Enter" && e.metaKey) {
               e.preventDefault();
-              void launch();
+              if (canWait) wait();
+              else void launch();
             }
           }}
           placeholder={
@@ -395,6 +422,12 @@ export function LaunchDialog({
           </label>
         )}
 
+        {full && (
+          <p className="dialog-note launch-cap" role="status">
+            {canWait ? full : `${working} running, past the cap; this starts now.`}
+          </p>
+        )}
+
         {error && (
           <p className="dialog-error" role="alert">
             {error}
@@ -404,7 +437,7 @@ export function LaunchDialog({
         <footer className="dialog-foot">
           <span className="hint">
             <kbd>⌘</kbd>
-            <kbd>↵</kbd> to start
+            <kbd>↵</kbd> {canWait ? "to wait" : "to start"}
           </span>
           <button type="button" className="btn" onClick={onClose} disabled={busy}>
             Cancel
@@ -427,13 +460,25 @@ export function LaunchDialog({
               {pickedProject ? `Save as idea for ${project.name}` : "Save as idea (Unsorted)"}
             </button>
           )}
+          {canWait && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={wait}
+              disabled={busy || unpicked}
+              title="Wait in Dispatch's queue and start when a running session finishes (⌘↵)"
+            >
+              Wait for a slot
+            </button>
+          )}
           <button
-            type="submit"
-            className="btn btn-primary"
+            type={canWait ? "button" : "submit"}
+            className={canWait ? "btn" : "btn btn-primary"}
+            onClick={canWait ? () => void launch() : undefined}
             disabled={busy || unpicked || (fanning && (!attempts.length || attempts.length > MAX_ATTEMPTS))}
-            title={unpicked ? "Pick the project first" : undefined}
+            title={unpicked ? "Pick the project first" : canWait ? "Start it now, past the cap" : undefined}
           >
-            {busy ? "Starting…" : fanning ? `Start ${attempts.length} attempts` : "Start task"}
+            {busy ? "Starting…" : fanning ? `Start ${attempts.length} attempts` : canWait ? "Start anyway" : "Start task"}
           </button>
         </footer>
       </form>

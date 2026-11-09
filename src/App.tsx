@@ -44,6 +44,8 @@ import { useQueueRunner } from "./nebula/queue";
 import { useBatchRunner } from "./nebula/batchRunner";
 import { useTaggingRunner } from "./nebula/taggingRunner";
 import { queueOf, useTriageRunner } from "./nebula/triageRunner";
+import { useParkRunner } from "./nebula/parkRunner";
+import { ParkConfirm } from "./components/Park";
 import { nextInQueue } from "./nebula/triage";
 import { openQueued } from "./components/TriageQueue";
 import { ReviewView } from "./components/Review";
@@ -186,6 +188,7 @@ export default function App() {
   useBatchRunner();
   useTaggingRunner();
   useTriageRunner();
+  useParkRunner();
   useUsagePolling();
   useAutomationsPolling();
   useActivityPolling();
@@ -414,6 +417,7 @@ export default function App() {
           onClose={() => setLaunch(null)}
         />
       )}
+      <ParkConfirm />
       {card && <CardDialog key={card.cardKey} target={card} onClose={() => setCard(null)} />}
       {dispatch && <DispatchDialog initialText={dispatch.text} onClose={() => setDispatch(null)} />}
       {addStep && <AddProjectDialog step={addStep} onDone={setAddStep} />}

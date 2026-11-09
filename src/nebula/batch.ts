@@ -53,6 +53,10 @@ export interface BatchTask extends Omit<PlanTask, "needsChoice"> {
   cancelled?: boolean;
   /** Checked off on the board; its source items are checked too. */
   done?: boolean;
+  /** Queued from the New task box (queueNewTask): the harness and branch
+   *  picked there, used in place of the default kind and a suggested name. */
+  kind?: AgentKind;
+  branch?: string;
 }
 
 export interface Batch {
@@ -74,6 +78,10 @@ export const DEFAULT_CAP = 4;
  *  terminated; one waiting on you still holds it, and so does one that's
  *  only disconnected (the link dropped, not the session). */
 const WORKING: AgentStatus[] = ["fresh", "running", "needs_feedback", "disconnected"];
+/** A session Dispatch didn't start holds a slot only while its turn is
+ *  under way: a thread left waiting on you, or finished, isn't working, and
+ *  counting the dozens of those would hold every launch back. */
+const OUTSIDE_WORKING: AgentStatus[] = ["running"];
 /** How long a session just created may be missing from the store (its
  *  entity can land after the Ack) and still hold its slot. */
 const ARRIVAL_MS = 30_000;
@@ -170,8 +178,21 @@ export interface Limits {
   laneCap: (lane: string) => number;
 }
 
+/** Sessions working that no task here started: from New task, a fan-out,
+ *  a terminal. They count against the global cap too, not a lane's. */
+export function outsideWorking(tasks: BatchTask[], agents: Record<string, Agent>): number {
+  const ours = new Set(tasks.map((t) => t.agentId).filter((x): x is string => !!x));
+  return Object.values(agents).filter((a) => !ours.has(a.id) && !a.archived && OUTSIDE_WORKING.includes(a.status)).length;
+}
+
+/** Everything holding a global slot: the tasks', and every other running session. */
+export function workingNow(tasks: BatchTask[], agents: Record<string, Agent>, now = Date.now()): number {
+  return tasks.filter((t) => occupies(t, agents, now)).length + outsideWorking(tasks, agents);
+}
+
 /** The pending tasks to launch now, in plan order: as many as the global
- *  cap has room for, skipping any whose lane is full. */
+ *  cap has room for, counting every working session however it started,
+ *  and skipping any whose lane is full. */
 export function nextLaunchable(
   tasks: BatchTask[],
   agents: Record<string, Agent>,
@@ -179,7 +200,7 @@ export function nextLaunchable(
   now = Date.now(),
 ): BatchTask[] {
   const busy = tasks.filter((t) => occupies(t, agents, now));
-  let free = limits.globalCap - busy.length;
+  let free = limits.globalCap - busy.length - outsideWorking(tasks, agents);
   const inLane = new Map<string, number>();
   for (const t of busy) if (t.lane) inLane.set(t.lane, (inLane.get(t.lane) ?? 0) + 1);
   const out: BatchTask[] = [];
@@ -334,8 +355,9 @@ export interface LaunchDeps {
   queuedFor(agentId: string): number;
   followUp(a: Agent, text: string): Promise<void>;
   enqueue(a: Agent, text: string): Promise<unknown>;
-  /** Start a session without selecting it; resolves with its id. */
-  createAgent(worktreeId: string, prompt: string): Promise<string | null>;
+  /** Start a session without selecting it; resolves with its id. `kind`
+   *  is the task's own harness, when it was picked (New task). */
+  createAgent(worktreeId: string, prompt: string, kind?: AgentKind): Promise<string | null>;
   createWorktree(projectId: string, branch: string): Promise<string>;
   takenBranches(projectId: string): Promise<Set<string>>;
   /** Add a folder as a nebula project; resolves with its id. */
@@ -401,16 +423,16 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
     }
     case "agent":
     case "new_worktree": {
-      const prompt = promptFor(deps.kind);
+      const prompt = promptFor(t.kind ?? deps.kind);
       let worktreeId: string;
       if (where.how === "agent") worktreeId = where.worktreeId;
       else {
-        const branch = freeName(suggestBranch(t.text) || "task", await deps.takenBranches(where.projectId));
+        const branch = freeName(t.branch?.trim() || suggestBranch(t.text) || "task", await deps.takenBranches(where.projectId));
         worktreeId = await deps.createWorktree(where.projectId, branch);
         deps.progress({ createdWorktreeId: worktreeId });
       }
       deps.progress({ prompt });
-      const id = await deps.createAgent(worktreeId, prompt);
+      const id = await deps.createAgent(worktreeId, prompt, t.kind);
       if (!id) return { state: "failed", note: "The daemon didn't return the new session." };
       return { state: "launched", agentId: id };
     }
@@ -559,5 +581,52 @@ export function dispatchPlan(routed: RoutedPlan, items: { id: string; context: s
   write([...allBatches(), batch]);
   linkItems([...new Set(batch.tasks.flatMap((t) => t.sourceItemIds))], batch.id);
   clearRoutedPlan();
+  return batch;
+}
+
+/** What the New task box queues when the cap is full: the task as typed,
+ *  in the checkout picked (or a new worktree on the branch named). */
+export interface NewTask {
+  text: string;
+  projectId: string;
+  /** An existing checkout; none is a new worktree on `branch`. */
+  worktreeId?: string | null;
+  branch?: string;
+  kind?: AgentKind;
+}
+
+/** A task from the New task box as a batch of one, waiting for a slot. The
+ *  runner launches it as a slot frees, the same as a dispatched task; it
+ *  has no list items behind it. Its prompt is what was typed, as is. */
+export function newTaskBatch(task: NewTask, cards: Cards, id = `b${Date.now().toString(36)}n`): Batch {
+  const shared = cards[task.projectId]?.policy === "shared";
+  const t: BatchTask = {
+    id: `${id}-t1`,
+    sourceItemIds: [],
+    text: task.text,
+    target: "project",
+    projectId: task.projectId,
+    mode: task.worktreeId ? "existing_worktree" : "new_worktree",
+    ...(task.worktreeId ? { worktreeId: task.worktreeId } : {}),
+    ...(task.branch?.trim() ? { branch: task.branch.trim() } : {}),
+    ...(task.kind ? { kind: task.kind } : {}),
+    confidence: 1,
+    planCheckpoint: false,
+    context: [],
+    state: "pending",
+    lane: shared ? task.projectId : null,
+  };
+  return { id, at: Date.now(), tasks: [t] };
+}
+
+/** The New task box's line when every slot is taken; null while there's room. */
+export function capNote(working: number, cap: number): string | null {
+  return working >= cap ? `${working} running, this will wait in Dispatch's queue` : null;
+}
+
+/** Queue a New task in Dispatch's line; the runner starts it when there's room. */
+export function queueNewTask(task: NewTask, cards: Cards): Batch {
+  const batch = newTaskBatch(task, cards);
+  write([...allBatches(), batch]);
   return batch;
 }
