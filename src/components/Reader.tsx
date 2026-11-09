@@ -11,7 +11,7 @@ import { enqueue, isIdle, sendQueued, unqueue, queuedSentAt, type Queued } from 
 import { actOf, clock, doingLine, heldAtPrompt, liveStep, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
 import { useLanded } from "../nebula/prwatch";
-import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
+import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, withBefore, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { useStandIn } from "../nebula/pane";
 import { shipKind } from "../nebula/git";
@@ -489,6 +489,11 @@ export function CardReply({
           {card.asks.map((a) => (
             <div key={a.n} className="rd-q">
               <AskText n={a.n} text={a.text} />
+              {a.before && (
+                <p className="rd-q-before">
+                  <span>When first asked:</span> <span dangerouslySetInnerHTML={{ __html: toHtml(a.before, true) }} />
+                </p>
+              )}
               {a.options.length > 0 && (
                 <span className="rd-opts">
                   {a.options.map((o) => (
@@ -570,10 +575,17 @@ function Reply(props: {
   onPick: (n: number, letter: string) => void;
   onClose?: () => void;
   landed?: string | null;
+  /** The thread up to it, for what earlier replies said about the
+   *  decisions it asks again. */
+  thread?: { n: number; entries: Entry[] };
 }) {
-  const card = useMemo(() => readCard(props.text), [props.text]);
+  const { thread, ...rest } = props;
+  const card = useMemo(
+    () => (thread ? withBefore(readCard(props.text), thread.entries, thread.n) : readCard(props.text)),
+    [props.text, thread],
+  );
   const pair = useMemo(() => beforeAfter(card.images, props.text), [card.images, props.text]);
-  return isCard(card) ? <CardReply card={card} pair={pair} {...props} /> : <Md text={props.text} />;
+  return isCard(card) ? <CardReply card={card} pair={pair} {...rest} /> : <Md text={props.text} />;
 }
 
 /** What a step changed, or how it failed: a failure shows at once, a
@@ -840,6 +852,7 @@ export function Reader({
     const e = t?.entries.find((x) => x.n === latest);
     return e ? readCard(e.text) : null;
   }, [t?.entries, latest]);
+  const latestThread = useMemo(() => (t && latest >= 0 ? { n: latest, entries: t.entries } : undefined), [t?.entries, latest]);
   // The PRs the latest reply's verdict waits on, once they've all landed.
   const prsLanded = useLanded(state.worktrees[agent.worktree_id]?.path, latestCard?.verdict ?? null);
   // Answers typed or dictated into the box ("2 a, 3 b") light up as taps.
@@ -1235,6 +1248,7 @@ export function Reader({
                         onPick={pick}
                         onClose={e.n === latest && agent.status === "finished" && !agent.archived ? () => closeThread(agent) : undefined}
                         landed={e.n === latest ? prsLanded : null}
+                        thread={e.n === latest ? latestThread : undefined}
                       />
                       <div className="rd-tools">
                         <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">

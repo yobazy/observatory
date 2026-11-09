@@ -4599,6 +4599,19 @@ td.task-last {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+/* What an earlier reply said about a decision asked again: quieter than
+   the question, so it reads as background. */
+.rd-q-before {
+  margin: -2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.rd-q-before > span:first-child {
+  color: var(--faint);
+  margin-right: 2px;
+}
 .rd-opts {
   display: flex;
   flex-wrap: wrap;
