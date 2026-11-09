@@ -106,3 +106,22 @@ export function sandFill(turns: number, small: boolean): number {
   const floor = small ? 0.3 : 0.05;
   return floor + (1 - floor) * (1 - Math.exp(-Math.max(0, turns) / 60));
 }
+
+/** Each grain's brightness, 0 to 1, the same way every time for a seed. Like
+ *  a real sky it's mostly faint dust with a few bright stars: `u^46` leaves
+ *  about 1 grain in 70 above STAR. */
+export function starLight(count: number, seed: string): Float32Array {
+  let s = (hash(seed) ^ 0x9e3779b9) >>> 0 || 1;
+  const light = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    const u = (s >>> 0) / 4294967296;
+    light[i] = u ** 46;
+  }
+  return light;
+}
+
+/** Grains at least this bright are drawn as stars with a glow, not dust. */
+export const STAR = 0.5;

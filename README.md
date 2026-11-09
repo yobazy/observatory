@@ -14,7 +14,7 @@
 </p>
 
 Run Claude Code, Codex and other agent CLIs in as many projects and branches as you like, and see
-only the ones that need you. Each thread gets a sand plate: a Chladni figure its work moves, so you
+only the ones that need you. Each thread gets a constellation: stardust its work moves into a figure, so you
 can tell at a glance which agents are busy, which are waiting on you and which have settled. Observatory talks to the same daemon as the `nebula` TUI, so both can
 be open at once on the same sessions. Close either one and your agents keep running.
 
@@ -52,7 +52,7 @@ it would do without changing anything, and `--help` lists the other options.
 
 **Sessions**
 
-![Sessions in the night-blue look: projects on the left with what's waiting on you and what finished while you were away, a project's branches and threads in the middle, and on the right the selected thread's terminal under the Live strip of sand plates, with its permission prompt as buttons](docs/screenshots/sessions.jpg)
+![Sessions in the night-blue look: projects on the left with what's waiting on you and what finished while you were away, a project's branches and threads in the middle, and on the right the selected thread's terminal under the Live strip of constellations, with its permission prompt as buttons](docs/screenshots/sessions.jpg)
 
 - **Projects sidebar**: filter it with `⌘P` and jump with `⌘1`–`⌘9`. Each project shows one bar
   segment per session, a spinner with the number of tasks in progress, and badges for tasks waiting
@@ -66,10 +66,11 @@ it would do without changing anything, and `--help` lists the other options.
 - **While you were away**: turns that finished while you weren't looking, with a line on what
   each did (tests passed, files edited). A finished task stays under Follow up until you reply,
   archive it or tick it off.
-- **Sand plates**: each thread's status dot is a Chladni plate. Every prompt or tool step moves
-  the sand to a new figure, so working threads keep shifting, waiting ones hold and pulse, and
-  finished ones settle. A project's plate is its emblem in the header.
-- **Live strip**: a row of plates under the pane header, one per working, waiting or unread
+- **Constellations**: each thread's status dot is a patch of night sky. Every prompt or tool step
+  moves its stardust to a new figure (the way sand finds a Chladni plate's still lines), so working
+  threads keep shifting, waiting ones hold and twinkle, and finished ones settle. A project's
+  constellation is its emblem in the header.
+- **Live strip**: a row of constellations under the pane header, one per working, waiting or unread
   thread across all projects. Click one to open it.
 - **Worktree bands**: sessions grouped by branch, with the ones that need you first. Switching
   projects brings back the session you last had open there.
