@@ -7062,6 +7062,14 @@ th:last-child > .col-grip {
 .route-unsure {
   color: var(--st-waiting);
 }
+.route-past {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.route-past.is-archived {
+  color: var(--text);
+}
 
 /* ---------- dispatch board ---------- */
 

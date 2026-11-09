@@ -44,6 +44,7 @@ import { useQueueRunner } from "./nebula/queue";
 import { useBatchRunner } from "./nebula/batchRunner";
 import { useTaggingRunner } from "./nebula/taggingRunner";
 import { queueOf, useTriageRunner } from "./nebula/triageRunner";
+import { useThreadIndexRunner } from "./nebula/threadIndexRunner";
 import { useParkRunner } from "./nebula/parkRunner";
 import { ParkConfirm } from "./components/Park";
 import { nextInQueue } from "./nebula/triage";
@@ -188,6 +189,7 @@ export default function App() {
   useBatchRunner();
   useTaggingRunner();
   useTriageRunner();
+  useThreadIndexRunner();
   useParkRunner();
   useUsagePolling();
   useAutomationsPolling();
