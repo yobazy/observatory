@@ -330,7 +330,11 @@ export function readCard(text: string): Card {
       lined.set(open, [...(lined.get(open) ?? []), line]);
       listed.get(open)?.lines.push(line);
     } else if (open && /^\s{2,}\S/.test(line)) {
-      open.text += ` ${line.trim()}`;
+      // The options can sit together on the indented line under the
+      // question: "   A x (recommended) · B y · C z".
+      const joined = open.options.length ? null : readAsk(open.n, `${open.text}  ${line.trim()}`);
+      if (joined?.options.length) Object.assign(open, joined);
+      else open.text += ` ${line.trim()}`;
       listed.get(open)?.lines.push(line);
     } else {
       if (line.trim()) {
