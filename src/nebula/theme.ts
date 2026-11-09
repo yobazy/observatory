@@ -123,6 +123,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   triageCommand?: string;
   /** Days a thread sits unchanged before it's labelled stale; 3 when unset. */
   triageStaleDays?: number;
+  /** Dollars one session may spend before the queue flags it stuck, at 85%
+   *  (stuck.ts); $10 when unset. A Dispatch task can set its own. */
+  taskBudget?: number;
   /** The check before "done" (review.ts): a finished turn's changes are
    *  checked by a read-only reviewer; off unless true, since each review is
    *  a model call and runs the project's checks. */

@@ -12,6 +12,7 @@ import { summarize, type Turn } from "./turnsummary";
 import { loadReviews, withReviews } from "./review";
 import {
   ackState,
+  keepStuck,
   loadAcks,
   loadTriage,
   previewTriageReply,
@@ -26,6 +27,8 @@ import {
   type TriageResult,
   type TriageSource,
 } from "./triage";
+import { loadStuck, stuckNeed, type StuckEntries } from "./stuck";
+import { runStuckCheck } from "./stuckRunner";
 import type { Agent } from "./types";
 
 const EVERY = 5 * 60_000;
@@ -117,15 +120,22 @@ let running: Promise<TriageResult> | null = null;
 function pass(): Promise<TriageResult> {
   if (running) return running;
   const s = getState();
+  const list = sources(s);
+  const byId = new Map(list.map((x) => [x.id, x]));
   setStatus({ running: true });
   running = triagePass({
     on: s.prefs.triageOn === true,
-    sessions: sources(s),
+    sessions: list,
     records: loadTriage,
     save: (next: TriageRecords) => saveTriage(next),
     length,
     context,
     run: (prompt, parts) => runTriage(prompt, () => previewTriageReply(parts)),
+    stuck: (stale) =>
+      runStuckCheck((a) => {
+        const x = byId.get(a.id);
+        return !!x && stale(x);
+      }),
     staleMs: staleMs(s.prefs.triageStaleDays),
   })
     .then((result) => {
@@ -152,16 +162,20 @@ export function triageNow(): Promise<TriageResult> {
   return pass();
 }
 
-/** The queue as it stands: every open session with a label, ranked. */
+/** The queue as it stands: every open session with a label, ranked. The
+ *  check before "done" (review.ts) has the last word on `checked`; a stuck
+ *  flag (stuck.ts) has it over both the model and the review. */
 export function queueOf(
   s: Pick<State, "agents" | "limits" | "git">,
   records = loadTriage(),
   acks = loadAcks(),
   reviews = loadReviews(),
+  stuck: StuckEntries = loadStuck(),
 ): { rows: QueueRow[]; stale: QueueRow[] } {
-  const queue = queueRows(Object.values(s.agents), records, acks, (id) => !!s.limits[id]);
-  // The check before "done" (review.ts) has the last word on `checked`.
-  return withReviews(queue, s, reviews, (a) => acks[a.id] === ackState(a));
+  const why = (id: string) => stuckNeed(stuck, id);
+  const queue = queueRows(Object.values(s.agents), records, acks, (id) => !!s.limits[id], why);
+  const reviewed = withReviews(queue, s, reviews, (a) => acks[a.id] === ackState(a));
+  return keepStuck(reviewed, why);
 }
 
 const ready = (s: State) => s.loaded && s.link.state === "connected" && s.prefs !== unloaded && s.prefs.triageOn === true;

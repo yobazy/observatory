@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { QuickAnswer } from "./QuickAnswer";
 import { TriageQueue } from "./TriageQueue";
+import { TaskBudget } from "./TaskBudget";
 import { selectAgent } from "./Sidebar";
 import { openLink } from "./Run";
 import { followUp } from "../nebula/actions";
@@ -205,6 +206,7 @@ function BoardRow({ row, state, holds }: { row: Row; state: State; holds: Holds 
       )}
       <RowDetail row={row} state={state} holds={holds} />
       {agent && <ReviewLine agentId={agent.id} />}
+      {agent && !agent.archived && <TaskBudget batchId={batchId} task={t} agent={agent} />}
     </li>
   );
 }
