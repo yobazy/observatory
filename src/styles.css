@@ -4625,7 +4625,9 @@ td.task-last {
   padding: 4px 13px 4px 11px;
   text-align: left;
   border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
-  border-radius: var(--r-pill);
+  /* Half the one-line height: a pill on one line, and a long option that
+     wraps becomes a rounded box instead of a stretched lozenge. */
+  border-radius: 15px;
   background: transparent;
   color: var(--text);
   font: inherit;

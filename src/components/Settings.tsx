@@ -652,7 +652,7 @@ function LeadsSettings() {
   const applyModel = () => {
     if (!top || !model.trim() || model.trim() === top.model) return;
     setTopLeadModel(top, model)
-      .then(() => flash(state === "running" ? `Switching the top lead to ${model.trim()}` : `The top lead will use ${model.trim()}`))
+      .then(() => flash(state === "running" ? `Restarted the top lead on ${model.trim()}` : `The top lead will use ${model.trim()}`))
       .catch((e) => flash(`Couldn't switch the top lead's model: ${errText(e)}`));
   };
 

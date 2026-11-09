@@ -220,7 +220,7 @@ test('Given Start a lead or Start the top lead, the thread is renamed Lead <proj
   assert.match(top, /\[observatory\] leads: <name> \(<path>\)/);
   assert.equal(TOP_NOTES, '~/.config/observatory/leads/top.md');
 
-  // The top lead starts on its own model, then the prompt and /model as for a project lead.
+  // The top lead starts on its own model, passed at launch: nothing is typed as /model.
   const calls = [];
   const saved = await startLeadThread(
     top,
@@ -233,9 +233,9 @@ test('Given Start a lead or Start the top lead, the thread is renamed Lead <proj
     DEFAULT_TOP_MODEL,
   );
   assert.equal(DEFAULT_TOP_MODEL, 'sonnet');
-  assert.deepEqual(calls.map((c) => c[0]), ['create', 'save', 'send']);
+  assert.deepEqual(calls.map((c) => c[0]), ['create', 'save']);
   assert.equal(calls[0][1], top);
-  assert.deepEqual(calls[2], ['send', 'top-1', '/model sonnet']);
+  assert.equal(calls[0][2], 'sonnet');
   assert.deepEqual(saved, { agentId: 'top-1', model: 'sonnet', notes: TOP_NOTES });
 });
 

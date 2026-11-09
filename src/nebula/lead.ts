@@ -98,10 +98,27 @@ const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 /** One event as the lead reads it:
  *  `[observatory] finished: Fix login on fix-login (agent a1): Needs review of the redirect`,
  *  at most MAX_LINE characters. */
-export function eventLine(e: { kind: LeadEventKind; title: string; branch: string; agentId: string; need: string }): string {
+export function eventLine(e: {
+  kind: LeadEventKind;
+  title: string;
+  branch: string;
+  agentId: string;
+  need: string;
+  /** The PR a `PR opened` line is about, so the lead needn't look it up. */
+  pr?: { number: number; url?: string } | null;
+}): string {
+  const head = `${LINE_PREFIX}${e.kind}${e.pr ? ` #${e.pr.number}` : ""}: `;
+  const tail = ` on ${oneLine(e.branch)} (agent ${e.agentId})${e.pr?.url ? ` ${oneLine(e.pr.url)}` : ""}`;
+  const title = oneLine(e.title);
   const need = oneLine(e.need);
-  const line = `${LINE_PREFIX}${e.kind}: ${oneLine(e.title)} on ${oneLine(e.branch)} (agent ${e.agentId})${need ? `: ${need}` : ""}`;
-  return line.length > MAX_LINE ? `${line.slice(0, MAX_LINE - 1)}…` : line;
+  const line = `${head}${title}${tail}${need ? `: ${need}` : ""}`;
+  if (line.length <= MAX_LINE) return line;
+  // Over the limit: the need gives way first, then the title, so the PR's
+  // number and link, the branch and the agent id always fit.
+  const fixed = `${head}${title}${tail}`;
+  if (fixed.length + 3 <= MAX_LINE) return `${fixed}: ${need.slice(0, MAX_LINE - fixed.length - 3)}…`;
+  const room = Math.max(1, MAX_LINE - head.length - tail.length - 1);
+  return `${head}${title.slice(0, room)}…${tail}`.slice(0, MAX_LINE);
 }
 
 /** What the line says the thread needs: S7's need line when it was read in
@@ -156,7 +173,6 @@ export function defaultNotes(project: string): string {
  *  `nebula ask` it). */
 export const leadName = (project: string) => `Lead ${oneLine(project)}`;
 
-export const modelCommand = (model: string) => `/model ${oneLine(model)}`;
 
 export type LeadState = "none" | "running" | "stopped";
 
@@ -202,7 +218,7 @@ export function leadPrompt(p: LeadPromptInput, extra: string[] = []): string {
     `Your notes live in ${p.notes}, outside the repo. Create the file (and its folder) if it isn't there, and read it now. Keep it current: what each task is for, what finished, what failed and why, open PRs, decisions I made, and what should happen next. Keep it short enough to reread.`,
     `Observatory sends you one line per event, several at once when they piled up while you were busy:
 [observatory] <event>: <thread title> on <branch> (agent <id>): <what it needs, or its turn summary>
-The events are: finished (its turn ended), failed (it's stuck on the same error, near its budget, or failed review), needs you (it's waiting on me), and PR opened. For each line, update your notes. Reply in a sentence or two; don't wait for me.`,
+The events are: finished (its turn ended), failed (it's stuck on the same error, near its budget, or failed review), needs you (it's waiting on me), and PR opened (written "PR opened #<number>:", with the PR's link after the agent id). For each line, update your notes. Reply in a sentence or two; don't wait for me.`,
     `You can suggest work. Nothing you open starts or sends on its own: I see it prefilled and decide. URL-encode the text.
 - To start a new task in a project: open "observatory://new-task?project=<project name or path>&prompt=<brief>&from=$NEBULA_AGENT_ID"
 - To follow up on one of this project's threads: open "observatory://follow-up?agent=<its agent id>&prompt=<text>&from=$NEBULA_AGENT_ID"
@@ -213,16 +229,20 @@ Do this when a task clearly needs a next step, not after every line. Don't edit 
 }
 
 export interface StartDeps {
-  /** Start a thread in the project's main worktree with `prompt`; its id. */
+  /** Start a thread in the project's main worktree with `prompt`, launched
+   *  on `model` (CreateAgent's `model`); its id. */
   create: (prompt: string, model: string) => Promise<string | null>;
-  /** Type `text` into the thread (queued while it's mid-turn). */
-  send: (agentId: string, text: string) => Promise<unknown>;
+  /** Type `text` into the thread (queued while it's mid-turn). Not used to
+   *  start one: nothing is typed into a lead as it starts. */
+  send?: (agentId: string, text: string) => Promise<unknown>;
   save: (lead: CardLead) => void;
 }
 
-/** Start a lead: the thread with its prompt, the card told its id (before
- *  anything else, so it's left out of triage from the start), then
- *  `/model <model>` as its first input. Also how Restart starts afresh. */
+/** Start a lead: the thread with its prompt, launched on its model, and the
+ *  card told its id (before anything else, so it's left out of triage from
+ *  the start). Also how Restart starts afresh. The model goes in at launch
+ *  (CreateAgent's `model`), never as a typed `/model`: Claude Code saves
+ *  that as your default for every new session. */
 export async function startLead(p: LeadPromptInput & { model: string }, deps: StartDeps, extra: string[] = []): Promise<CardLead> {
   return startLeadThread(leadPrompt(p, extra), { model: p.model, notes: p.notes }, deps);
 }
@@ -240,23 +260,24 @@ export async function startLeadThread(
   if (!agentId) throw new Error("nebula didn't start the lead's thread");
   const lead: CardLead = { agentId, model, notes: p.notes };
   deps.save(lead);
-  await deps.send(agentId, modelCommand(model));
   return lead;
 }
 
-/** A new model on the card: saved, and sent as `/model <name>` when the lead
- *  is running. The same model again does nothing. */
+/** A new model on the card. A running lead is restarted on it (its old
+ *  thread archived, as Restart does), since a model is only set at launch;
+ *  a stopped one just has it saved for its next start. The same model again
+ *  does nothing. */
 export async function changeLeadModel(
   lead: CardLead,
   model: string,
   running: boolean,
-  deps: Pick<StartDeps, "send" | "save">,
+  deps: { save: (lead: CardLead) => void; restart: (model: string) => Promise<CardLead> },
 ): Promise<CardLead> {
   const next = oneLine(model);
   if (!next || next === lead.model) return lead;
+  if (running) return deps.restart(next);
   const changed = { ...lead, model: next };
   deps.save(changed);
-  if (running) await deps.send(lead.agentId, modelCommand(next));
   return changed;
 }
 

@@ -101,23 +101,13 @@ async function lineFor(e: LeadEvent): Promise<string | null> {
     branch: s.worktrees[a.worktree_id]?.branch ?? "?",
     agentId: a.id,
     need: eventNeed(e.kind, a, record, failed, summary),
+    pr: e.kind === "PR opened" ? openPr(s.prs[a.worktree_id]) : null,
   });
 }
 
-/** Wait for a thread nebula just made to show up in the store. */
-async function arrived(agentId: string, ms = 15_000): Promise<Agent> {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    const a = getState().agents[agentId];
-    if (a) return a;
-    if (Date.now() > deadline) throw new Error("the lead's thread didn't show up");
-    await new Promise((r) => setTimeout(r, 250));
-  }
-}
-
-/** Type `text` into a lead, queued behind its turn, without leaving the view. */
-async function sendToLead(agentId: string, text: string) {
-  return enqueue(await arrived(agentId), text, { stay: true });
+/** The PR a worktree's lookup found, for its `PR opened` line. */
+function openPr(p: State["prs"][string] | undefined): { number: number; url: string } | null {
+  return p?.kind === "found" ? { number: p.pr.number, url: p.pr.url } : null;
 }
 
 /** One send at a time per lead, so a line can't race the one before it. */
@@ -173,7 +163,6 @@ export async function startProjectLead(projectId: string, opts: { model: string;
     {
       create: (prompt, model) =>
         createAgent({ worktree: main.id, kind, settings, prompt, preset: { name: "Lead", kind, model }, select: false }),
-      send: sendToLead,
       save: (lead) => saveLead(projectId, { ...lead, ...pet }, opts.base),
     },
     answerRules({ name: leadName(project.name), notes: opts.notes }),
@@ -260,19 +249,18 @@ export async function startTopLead(opts: { path: string; model: string; notes: s
     {
       create: (text, model) =>
         createAgent({ worktree: main.id, kind, settings, prompt: text, preset: { name: "Lead", kind, model }, select: false }),
-      send: sendToLead,
       save: (lead) => void saveTopLead({ ...lead, ...pet, path: opts.path }),
     },
     DEFAULT_TOP_MODEL,
   );
 }
 
-/** The top lead's model field: saved, and sent when it runs. */
+/** The top lead's model field: saved, and a running top lead restarted on it. */
 export function setTopLeadModel(top: TopLead, model: string) {
   const running = leadState(top, getState().agents) === "running";
   return changeLeadModel(top, model, running, {
-    send: sendToLead,
     save: (next) => void saveTopLead({ ...next, path: top.path }),
+    restart: async (next) => startTopLead({ path: top.path ?? (await defaultTopFolder()), model: next, notes: top.notes }),
   });
 }
 
@@ -321,12 +309,13 @@ export async function openAnswersLog() {
   await openPreview([path]);
 }
 
-/** The model field on a card with a lead: saved, and sent when it runs. */
+/** The model field on a card with a lead: saved, and a running lead
+ *  restarted on it. */
 export function setLeadModel(projectId: string, lead: CardLead, model: string) {
   const running = leadState(lead, getState().agents) === "running";
   return changeLeadModel(lead, model, running, {
-    send: sendToLead,
     save: (next) => saveLead(projectId, next),
+    restart: (next) => startProjectLead(projectId, { model: next, notes: lead.notes }),
   });
 }
 
