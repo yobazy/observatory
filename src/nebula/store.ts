@@ -101,6 +101,9 @@ export interface State {
   /** A tag looked for across projects: the sidebar's "#tag" filter, or one
    *  picked in ⌘K. A project opened meanwhile turns its chip on. */
   tagFilter: string | null;
+  /** The session last opened from the triage queue (triage.ts), with its
+   *  label then, for the usage log's `queue.open`. */
+  queueOpened: { agent: string; label: string; at: number } | null;
 }
 
 function loadFanOuts(): Record<string, FanOut> {
@@ -154,6 +157,7 @@ let state: State = {
   fileOpened: {},
   comments: {},
   tagFilter: null,
+  queueOpened: null,
   theme: "default",
   prefs: {},
   mode: "dark",
