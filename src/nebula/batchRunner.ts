@@ -57,8 +57,8 @@ async function deps(batchId: string, taskId: string): Promise<LaunchDeps> {
     unarchive: async (id) => {
       await request("UnarchiveAgent", { id });
     },
-    createAgent: (worktree, prompt) =>
-      createAgent({ worktree, kind: defaultKind(settings), settings, prompt, select: false }),
+    createAgent: (worktree, prompt, kind) =>
+      createAgent({ worktree, kind: kind ?? defaultKind(settings), settings, prompt, select: false }),
     createWorktree: async (project, branch) => {
       reserved.add(`${project}/${branch}`);
       const created = await request("CreateWorktree", {
