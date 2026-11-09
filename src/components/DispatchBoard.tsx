@@ -34,6 +34,7 @@ import {
   type Row,
 } from "../nebula/board";
 import type { Agent } from "../nebula/types";
+import { reviewNote, useReviews } from "../nebula/review";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -203,8 +204,16 @@ function BoardRow({ row, state, holds }: { row: Row; state: State; holds: Holds 
         <p className="board-note">{row.task.note}</p>
       )}
       <RowDetail row={row} state={state} holds={holds} />
+      {agent && <ReviewLine agentId={agent.id} />}
     </li>
   );
+}
+
+/** The check before "done", on a launched task's row (review.ts). */
+function ReviewLine({ agentId }: { agentId: string }) {
+  const { records, checking } = useReviews();
+  const note = reviewNote(records[agentId], checking.has(agentId));
+  return note ? <p className="board-note board-review">{note}</p> : null;
 }
 
 function RowHead({ row, state, holds }: { row: Row; state: State; holds: Holds }) {

@@ -9,7 +9,9 @@ import { isPreview, runTriage } from "./client";
 import { getState, projectOfWorktree, subscribe, type State } from "./store";
 import { stepsLine, type Transcript } from "./transcript";
 import { summarize, type Turn } from "./turnsummary";
+import { loadReviews, withReviews } from "./review";
 import {
+  ackState,
   loadAcks,
   loadTriage,
   previewTriageReply,
@@ -151,8 +153,15 @@ export function triageNow(): Promise<TriageResult> {
 }
 
 /** The queue as it stands: every open session with a label, ranked. */
-export function queueOf(s: Pick<State, "agents" | "limits">, records = loadTriage(), acks = loadAcks()): { rows: QueueRow[]; stale: QueueRow[] } {
-  return queueRows(Object.values(s.agents), records, acks, (id) => !!s.limits[id]);
+export function queueOf(
+  s: Pick<State, "agents" | "limits" | "git">,
+  records = loadTriage(),
+  acks = loadAcks(),
+  reviews = loadReviews(),
+): { rows: QueueRow[]; stale: QueueRow[] } {
+  const queue = queueRows(Object.values(s.agents), records, acks, (id) => !!s.limits[id]);
+  // The check before "done" (review.ts) has the last word on `checked`.
+  return withReviews(queue, s, reviews, (a) => acks[a.id] === ackState(a));
 }
 
 const ready = (s: State) => s.loaded && s.link.state === "connected" && s.prefs !== unloaded && s.prefs.triageOn === true;

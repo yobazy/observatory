@@ -5263,8 +5263,13 @@ td.task-last {
   margin: 0;
 }
 .task-box.card-desc,
-.task-box.card-sched {
+.task-box.card-sched,
+.task-box.card-checks {
   min-height: 0;
+}
+.task-box.card-checks {
+  font-family: var(--mono);
+  font-size: 12px;
 }
 .card-row {
   display: flex;

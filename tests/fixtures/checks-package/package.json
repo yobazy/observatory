@@ -1,0 +1,4 @@
+{
+  "name": "checks-package",
+  "scripts": { "build": "tsc", "test": "node --test", "lint": "eslint ." }
+}

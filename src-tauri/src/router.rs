@@ -79,7 +79,7 @@ pub fn split_command(line: &str) -> Result<Vec<String>, String> {
 /// The PATH a login shell sets up: an app opened from Finder has almost
 /// none, and agent CLIs (node scripts, often) need it to find what they run.
 /// Read once; the app's own PATH when the shell can't be asked.
-fn login_path() -> &'static str {
+pub(crate) fn login_path() -> &'static str {
     static PATH: OnceLock<String> = OnceLock::new();
     PATH.get_or_init(|| {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
@@ -108,7 +108,7 @@ fn resolve(program: &str, path: &str) -> Option<PathBuf> {
 }
 
 /// A command pref from desktop.json, when it's set.
-fn configured(app: &AppHandle, key: &str) -> Option<String> {
+pub(crate) fn configured(app: &AppHandle, key: &str) -> Option<String> {
     crate::settings::read_desktop_prefs(app.clone())
         .get(key)
         .and_then(Value::as_str)
@@ -124,7 +124,7 @@ fn neutral_dir() -> PathBuf {
     dir
 }
 
-fn tail(text: &str, max: usize) -> String {
+pub(crate) fn tail(text: &str, max: usize) -> String {
     let text = text.trim();
     let start = text.len().saturating_sub(max);
     let start = (start..=text.len())
@@ -139,7 +139,7 @@ fn tail(text: &str, max: usize) -> String {
 }
 
 /// Run `words` with `input` on stdin in `cwd`: stdout, or a readable error.
-fn run(
+pub(crate) fn run(
     words: &[String],
     input: String,
     cwd: &Path,
