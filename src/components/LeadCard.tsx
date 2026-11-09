@@ -2,7 +2,7 @@ import { useState } from "react";
 import { saveLead, useCards, type ProjectCard } from "../nebula/cards";
 import { dollars } from "../nebula/budgetHold";
 import { useSessionCosts } from "../nebula/budget";
-import { DEFAULT_LEAD_MODEL, defaultNotes, leadState } from "../nebula/lead";
+import { DEFAULT_LEAD_MODEL, defaultNotes, leadName, leadState } from "../nebula/lead";
 import { setLeadModel, startProjectLead } from "../nebula/leadRunner";
 import { sessionKey } from "../nebula/usageData";
 import { flash, setState, useAppState } from "../nebula/store";
@@ -25,7 +25,7 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
   const start = () => {
     setBusy(true);
     startProjectLead(projectId, { model, notes: notes.trim() || defaultNotes(projectName), base })
-      .then(() => flash(`Started ${projectName}'s lead`))
+      .then(() => flash(`Started ${projectName}'s lead as ${leadName(projectName)}`))
       .catch((e) => flash(`Couldn't start the lead: ${errText(e)}`))
       .finally(() => setBusy(false));
   };
@@ -81,11 +81,17 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
             <button type="button" className="btn" disabled={busy} onClick={start}>
               {busy ? "Starting…" : "Start a lead"}
             </button>
-          ) : state === "stopped" ? (
-            <button type="button" className="btn" disabled={busy} onClick={start}>
+          ) : (
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={start}
+              title={state === "running" ? "Archive its thread and start a fresh one from its notes" : undefined}
+            >
               {busy ? "Starting…" : "Restart"}
             </button>
-          ) : null}
+          )}
           {state !== "none" && (
             <button
               type="button"
@@ -114,7 +120,7 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
             ? "A thread in the main checkout that hears when this project's tasks finish, fail, need you or open a PR, and keeps the project's notes. Nothing runs until you start it."
             : state === "stopped"
               ? "Its thread was archived or deleted, so it hears nothing. Restart starts a fresh one from its notes."
-              : "It hears of every task here. Anything it starts or follows up on opens for you to send."}
+              : `It hears of every task here and answers their questions about facts and past decisions as ${leadName(projectName)}. Anything it starts or follows up on opens for you to send.`}
         </span>
       </div>
     </div>

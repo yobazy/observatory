@@ -189,8 +189,11 @@ export async function taskMoment(projectId: string, note: string) {
     // Imported here so the tests, which load this file in node, don't need the daemon client.
     const { createAgent, defaultKind } = await import("./actions.ts");
     const { readSettings } = await import("./client.ts");
+    const { askLineNow } = await import("./leadRunner.ts");
+    const { withAskLine } = await import("./leadAsk.ts");
     const settings = await readSettings();
-    const id = await createAgent({ worktree: main.id, kind: defaultKind(settings), settings, prompt: momentPrompt(m.dir, note), select: false });
+    const prompt = withAskLine(momentPrompt(m.dir, note), askLineNow(projectId));
+    const id = await createAgent({ worktree: main.id, kind: defaultKind(settings), settings, prompt, select: false });
     if (!id) throw new Error("the daemon didn't start it");
     flash(`Started a task in ${project.name}`, 3000);
   } catch (e) {

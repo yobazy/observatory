@@ -177,10 +177,13 @@ export function runningLeads(cards: Cards, agents: Record<string, { archived: bo
   return out;
 }
 
-/** Every lead's thread, running or stopped: left out of triage, stuck
- *  checks, parking and review. */
-export function leadIds(cards: Cards): Set<string> {
-  return new Set(Object.values(cards).flatMap((c) => (c.lead ? [c.lead.agentId] : [])));
+/** Every lead's thread, running or stopped, and the top lead's (S26,
+ *  leadAsk.ts) when there is one: left out of triage, stuck checks, parking
+ *  and review. */
+export function leadIds(cards: Cards, top?: { agentId: string } | null): Set<string> {
+  const ids = new Set(Object.values(cards).flatMap((c) => (c.lead ? [c.lead.agentId] : [])));
+  if (top?.agentId) ids.add(top.agentId);
+  return ids;
 }
 
 export interface LeadPromptInput {
@@ -221,8 +224,19 @@ export interface StartDeps {
  *  anything else, so it's left out of triage from the start), then
  *  `/model <model>` as its first input. Also how Restart starts afresh. */
 export async function startLead(p: LeadPromptInput & { model: string }, deps: StartDeps, extra: string[] = []): Promise<CardLead> {
-  const model = oneLine(p.model) || DEFAULT_LEAD_MODEL;
-  const agentId = await deps.create(leadPrompt(p, extra), model);
+  return startLeadThread(leadPrompt(p, extra), { model: p.model, notes: p.notes }, deps);
+}
+
+/** startLead with the prompt given: also how the top lead (leadAsk.ts),
+ *  whose prompt isn't a project's, starts. */
+export async function startLeadThread(
+  prompt: string,
+  p: { model: string; notes: string },
+  deps: StartDeps,
+  fallbackModel = DEFAULT_LEAD_MODEL,
+): Promise<CardLead> {
+  const model = oneLine(p.model) || fallbackModel;
+  const agentId = await deps.create(prompt, model);
   if (!agentId) throw new Error("nebula didn't start the lead's thread");
   const lead: CardLead = { agentId, model, notes: p.notes };
   deps.save(lead);

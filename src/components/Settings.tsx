@@ -35,6 +35,9 @@ import { defaultPrefixes, parsePrefixes } from "../nebula/automations";
 import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
 import { clearUseLog, useLogPath } from "../nebula/uselog";
 import { momentsDir } from "../nebula/moments";
+import { leadState } from "../nebula/lead";
+import { ASK_LINE_TEMPLATE, countsText, DEFAULT_TOP_MODEL, TOP_LEAD_NAME, TOP_NOTES, type LogCounts } from "../nebula/leadAsk";
+import { answerCounts, defaultTopFolder, openAnswersLog, removeTopLead, setTopLeadModel, startTopLead } from "../nebula/leadRunner";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
 type Tab = (typeof TABS)[number];
@@ -103,6 +106,7 @@ export function SettingsView() {
               <Previews />
               <ReadView />
               <DispatchSettings />
+              <LeadsSettings />
               <AutomationsSettings />
               <Updates />
               <UsageLog />
@@ -602,6 +606,189 @@ function DispatchSettings() {
             </option>
           ))}
         </select>
+      </div>
+    </Group>
+  );
+}
+
+/** The top lead over every project, today's answers from the leads, and
+ *  the ask line for a CLAUDE.md (leadAsk.ts). */
+function LeadsSettings() {
+  const { prefs, agents } = useAppState();
+  const top = prefs.topLead;
+  const state = leadState(top, agents);
+  const [folder, setFolder] = useState(top?.path ?? "");
+  const [model, setModel] = useState(top?.model || DEFAULT_TOP_MODEL);
+  const [notes, setNotes] = useState(top?.notes || TOP_NOTES);
+  const [busy, setBusy] = useState(false);
+  const [counts, setCounts] = useState<LogCounts | null>(null);
+  const [copied, setCopied] = useState(false);
+  const agent = top ? agents[top.agentId] : undefined;
+  const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+  useEffect(() => {
+    if (!folder) void defaultTopFolder().then((f) => setFolder((now) => now || f)).catch(() => {});
+    let live = true;
+    const load = () => void answerCounts().then((c) => live && setCounts(c)).catch(() => live && setCounts(null));
+    load();
+    const timer = setInterval(load, 30_000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const start = () => {
+    if (!folder.trim()) return flash("Pick the folder the top lead runs in.");
+    setBusy(true);
+    startTopLead({ path: folder.trim(), model, notes: notes.trim() || TOP_NOTES })
+      .then(() => flash(`Started the top lead as ${TOP_LEAD_NAME}`))
+      .catch((e) => flash(`Couldn't start the top lead: ${errText(e)}`, 6000))
+      .finally(() => setBusy(false));
+  };
+  const applyModel = () => {
+    if (!top || !model.trim() || model.trim() === top.model) return;
+    setTopLeadModel(top, model)
+      .then(() => flash(state === "running" ? `Switching the top lead to ${model.trim()}` : `The top lead will use ${model.trim()}`))
+      .catch((e) => flash(`Couldn't switch the top lead's model: ${errText(e)}`));
+  };
+
+  return (
+    <Group title="Leads">
+      <div className="setting setting-stack">
+        <div className="setting-text">
+          <span className="setting-label">
+            Top lead{" "}
+            {state !== "none" && (
+              <span className={`lead-mark is-small${state === "stopped" ? " is-stopped" : ""}`}>
+                {state === "running" ? "Running" : "Top lead stopped"}
+              </span>
+            )}
+          </span>
+          <span className="setting-hint">
+            {state === "stopped"
+              ? "Its thread was archived or deleted, so tasks only ask their project's lead. Restart starts a fresh one from its notes."
+              : `One thread over every project, named ${TOP_LEAD_NAME}. Tasks ask it about other projects; it answers facts and past decisions with a source from its notes, the projects' CLAUDE.md and README, memory and your vault, passes a question about one project to that project's lead, and sends anything else back to you. It never acts on a question. Off until you start it; it costs nothing till then.`}
+          </span>
+        </div>
+        <div className="setting-inline top-lead-fields">
+          <label className="card-cap">
+            folder
+            <input
+              className="setting-input"
+              value={folder}
+              onChange={(e) => setFolder(e.target.value)}
+              disabled={state === "running"}
+              spellCheck={false}
+              aria-label="The folder the top lead runs in"
+            />
+          </label>
+          {state !== "running" && (
+            <button
+              className="btn btn-sm"
+              onClick={() => void pickFolder(folder || undefined, "Choose where the top lead runs").then((d) => d && setFolder(d))}
+            >
+              Choose…
+            </button>
+          )}
+        </div>
+        <div className="setting-inline top-lead-fields">
+          <label className="card-cap">
+            model
+            <input
+              className="setting-input lead-model"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              onBlur={applyModel}
+              onKeyDown={(e) => e.key === "Enter" && top && applyModel()}
+              spellCheck={false}
+              aria-label="The top lead's model"
+            />
+          </label>
+          <label className="card-cap">
+            notes
+            <input
+              className="setting-input"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              disabled={state === "running"}
+              spellCheck={false}
+              aria-label="The top lead's notes file"
+            />
+          </label>
+        </div>
+        <div className="setting-inline">
+          {state === "running" && agent && (
+            <button
+              className="link-btn"
+              onClick={() => setState({ view: "sessions", selectedSession: { Agent: agent.id } })}
+            >
+              Open {agent.name}
+            </button>
+          )}
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={start}
+            title={state === "running" ? "Archive its thread and start a fresh one from its notes" : undefined}
+          >
+            {busy ? "Starting…" : state === "none" ? "Start the top lead" : "Restart"}
+          </button>
+          {state !== "none" && (
+            <button
+              className="link-btn hint"
+              onClick={() =>
+                void removeTopLead().then(() =>
+                  flash(`The top lead is off${state === "running" ? "; its thread is still there to archive" : ""}`),
+                )
+              }
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label">Answers</span>
+          <span className="setting-hint">
+            {counts ? `${countsText(counts)}.` : "Couldn't read the answers log."} Every lead writes one line per answer to{" "}
+            <code>answers.log</code> beside its notes.
+          </span>
+        </div>
+        <button
+          className="btn"
+          onClick={() => void openAnswersLog().catch((e) => flash(`Couldn't open the log: ${errText(e)}`))}
+        >
+          Open the log
+        </button>
+      </div>
+      <div className="setting setting-stack">
+        <div className="setting-text">
+          <span className="setting-label">Ask a lead first</span>
+          <span className="setting-hint">
+            Dispatch's tasks and Start task get this line when a lead is running. For threads you start yourself, put it in a
+            project's <code>CLAUDE.md</code>, with the project's name.
+          </span>
+        </div>
+        <pre className="handoff-text">{ASK_LINE_TEMPLATE}</pre>
+        <div>
+          <button
+            className="btn btn-sm"
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(ASK_LINE_TEMPLATE)
+                .then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1800);
+                })
+                .catch(() => flash("Couldn't copy it; select the text instead."))
+            }
+          >
+            {copied ? "Copied" : "Copy the ask line"}
+          </button>
+        </div>
       </div>
     </Group>
   );

@@ -106,7 +106,7 @@ async function context(s: TriageSource): Promise<{ tail: string; summary: string
 /** Every session as the pass reads it. A project's lead (lead.ts) isn't
  *  one: it's told of the others, not triaged with them. */
 function sources(s: State): TriageSource[] {
-  const leads = leadIds(allCards());
+  const leads = leadIds(allCards(), getState().prefs.topLead);
   return Object.values(s.agents).filter((a) => !leads.has(a.id)).map((a) => ({
     id: a.id,
     status: a.status,
@@ -177,7 +177,7 @@ export function queueOf(
   stuck: StuckEntries = loadStuck(),
 ): { rows: QueueRow[]; stale: QueueRow[] } {
   const why = (id: string) => stuckNeed(stuck, id);
-  const leads = leadIds(allCards());
+  const leads = leadIds(allCards(), getState().prefs.topLead);
   const queue = queueRows(Object.values(s.agents).filter((a) => !leads.has(a.id)), records, acks, (id) => !!s.limits[id], why);
   const reviewed = withReviews(queue, s, reviews, (a) => acks[a.id] === ackState(a));
   return keepStuck(reviewed, why);

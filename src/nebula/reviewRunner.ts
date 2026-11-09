@@ -79,8 +79,8 @@ function taskText(agentId: string): string | null {
 async function review(agentId: string) {
   let s = getState();
   const a0 = s.agents[agentId];
-  // A project's lead isn't reviewed: nothing is triaged or checked for it.
-  if (!a0 || s.prefs.reviewOn !== true || leadIds(allCards()).has(agentId)) return;
+  // A project's lead, or the top lead, isn't reviewed: nothing is triaged or checked for it.
+  if (!a0 || s.prefs.reviewOn !== true || leadIds(allCards(), getState().prefs.topLead).has(agentId)) return;
   const wt = s.worktrees[a0.worktree_id];
   const project = projectOfWorktree(s, a0.worktree_id);
   if (!wt || !project) return;
@@ -103,7 +103,7 @@ async function review(agentId: string) {
   const start = starts.get(a.id);
   if (!promptedTurn(a.recent_prompts, start?.at)) return;
   const changed = hasChanges(g, start?.head);
-  const lead = leadIds(allCards()).has(a.id);
+  const lead = leadIds(allCards(), getState().prefs.topLead).has(a.id);
   if (!needsReview({ changed, label, checks, off, key, rec, fresh, lead })) return;
   setChecking(a.id, true);
   try {

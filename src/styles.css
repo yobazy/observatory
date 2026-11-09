@@ -9397,3 +9397,21 @@ button.board-main:hover .board-text {
 .launch-cap {
   margin-top: 12px;
 }
+
+/* Leads in Settings (S26): the top lead's folder, model and notes. */
+.top-lead-fields {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.top-lead-fields .card-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.top-lead-fields .setting-input {
+  width: 260px;
+  max-width: 100%;
+}
+.top-lead-fields .setting-input.lead-model {
+  width: 110px;
+}

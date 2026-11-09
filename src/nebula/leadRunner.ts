@@ -6,8 +6,8 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { createAgent, defaultKind } from "./actions";
-import { allCards, saveLead, type CardLead, type ProjectCard } from "./cards";
-import { isPreview, readSettings } from "./client";
+import { allCards, homeCard, isFolderKey, saveLead, type CardLead, type ProjectCard } from "./cards";
+import { isPreview, readSettings, request } from "./client";
 import {
   changeLeadModel,
   deliver,
@@ -16,14 +16,32 @@ import {
   carryUnknown,
   leadEvents,
   prOf,
+  leadName,
   reviewMark,
   leadState,
   runningLeads,
   startLead,
+  startLeadThread,
   type LeadEvent,
+  type LeadQueue,
   type Snapshot,
 } from "./lead";
+import {
+  ANSWERS_LOG,
+  answerRules,
+  askLineFor,
+  DEFAULT_TOP_MODEL,
+  logCounts,
+  roster,
+  rosterLine,
+  tellRoster,
+  topLeadPrompt,
+  type LogCounts,
+  type RosterEntry,
+} from "./leadAsk";
+import { openPreview } from "./preview";
 import { editQueued, enqueue } from "./queue";
+import { savePrefs, type TopLead } from "./theme";
 import { flash, getState, subscribe, type State } from "./store";
 import { loadStuck, type StuckEntries } from "./stuck";
 import { loadTriage } from "./triage";
@@ -109,19 +127,31 @@ function inTurn(leadId: string, job: () => Promise<unknown>) {
   return next;
 }
 
-async function send(leadId: string, events: LeadEvent[]) {
-  const lines = (await Promise.all(events.map((e) => lineFor(e).catch(() => null)))).filter((l): l is string => !!l);
-  const lead = getState().agents[leadId];
-  // Stopped meanwhile: nothing goes.
-  if (!lead || lead.archived) return;
-  await deliver(lines, {
+/** A lead's side of queue.ts, for deliver(). */
+function leadQueue(leadId: string, lead: Agent): LeadQueue {
+  return {
     last: () => {
       const q = getState().queue[leadId] ?? [];
       return q[q.length - 1] ?? null;
     },
     enqueue: (text) => enqueue(getState().agents[leadId] ?? lead, text, { stay: true }),
     edit: (id, text) => editQueued(leadId, id, text),
-  });
+  };
+}
+
+async function send(leadId: string, events: LeadEvent[]) {
+  const lines = (await Promise.all(events.map((e) => lineFor(e).catch(() => null)))).filter((l): l is string => !!l);
+  const lead = getState().agents[leadId];
+  // Stopped meanwhile: nothing goes.
+  if (!lead || lead.archived) return;
+  await deliver(lines, leadQueue(leadId, lead));
+}
+
+/** A running lead's old thread, archived before Restart starts a new one,
+ *  so two threads never answer to the same name. */
+async function retire(lead: CardLead | undefined) {
+  const a = lead ? getState().agents[lead.agentId] : undefined;
+  if (a && !a.archived) await request("ArchiveAgent", { id: a.id });
 }
 
 /** "Start a lead" (and Restart) on a project's card. `base` is the card as
@@ -133,6 +163,7 @@ export async function startProjectLead(projectId: string, opts: { model: string;
   if (!project || !main) throw new Error("the project has no main checkout to run its lead in");
   const settings = await readSettings();
   const kind = defaultKind(settings);
+  await retire(allCards()[projectId]?.lead);
   return startLead(
     { project: project.name, path: main.path, notes: opts.notes, model: opts.model },
     {
@@ -141,7 +172,138 @@ export async function startProjectLead(projectId: string, opts: { model: string;
       send: sendToLead,
       save: (lead) => saveLead(projectId, lead, opts.base),
     },
+    answerRules({ name: leadName(project.name), notes: opts.notes }),
   );
+}
+
+// ---- the top lead (S26) ----
+
+/** Every running project lead, by its name and main checkout. */
+function currentRoster(s: Pick<State, "agents" | "projects" | "worktrees">): RosterEntry[] {
+  const leads = runningLeads(allCards(), s.agents, s.projects);
+  const where: Record<string, { name: string; path: string }> = {};
+  for (const id of Object.keys(leads)) {
+    const main = Object.values(s.worktrees).find((w) => w.project_id === id && w.is_main);
+    if (main && s.projects[id]) where[id] = { name: s.projects[id].name, path: main.path };
+  }
+  return roster(leads, where);
+}
+
+/** Where the top lead runs when no folder was picked: Home's folder, else
+ *  your home folder. */
+export async function defaultTopFolder(): Promise<string> {
+  const s = getState();
+  const home = homeCard();
+  if (home && !isFolderKey(home.key) && s.projects[home.key]) return s.projects[home.key].repo_path;
+  if (home?.card.homeFolder) return home.card.homeFolder;
+  if (isPreview()) return "/Users/dev";
+  const { homeDir } = await import("@tauri-apps/api/path");
+  return homeDir();
+}
+
+/** The main checkout of the project at `folder`, adding the folder as a
+ *  project first when it isn't one. nebula only runs threads in projects,
+ *  which are git folders for now. */
+async function mainCheckoutAt(folder: string): Promise<{ id: string }> {
+  const path = folder.replace(/\/+$/, "");
+  const find = () => {
+    const s = getState();
+    const p = Object.values(s.projects).find((x) => x.repo_path.replace(/\/+$/, "") === path);
+    return p ? Object.values(s.worktrees).find((w) => w.project_id === p.id && w.is_main) : undefined;
+  };
+  const known = find();
+  if (known) return known;
+  try {
+    await request("AddProject", { path, name: null, create_missing: false });
+  } catch (e) {
+    const msg = errText(e);
+    throw new Error(
+      /not a git repository/i.test(msg) ? `nebula only runs threads in a git folder for now, and ${path} isn't one. Pick one.` : msg,
+    );
+  }
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    const w = find();
+    if (w) return w;
+    if (Date.now() > deadline) throw new Error(`${path}'s main checkout didn't show up`);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+const saveTopLead = (top: TopLead | undefined) => savePrefs({ ...getState().prefs, topLead: top });
+
+/** "Start the top lead" (and Restart) in Settings. */
+export async function startTopLead(opts: { path: string; model: string; notes: string }): Promise<CardLead> {
+  const main = await mainCheckoutAt(opts.path);
+  const settings = await readSettings();
+  const kind = defaultKind(settings);
+  await retire(getState().prefs.topLead);
+  const s = getState();
+  const prompt = topLeadPrompt({
+    path: opts.path,
+    notes: opts.notes,
+    leads: currentRoster(s),
+    projects: Object.values(s.projects)
+      .map((p) => ({ name: p.name, path: p.repo_path }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    vault: s.prefs.notesFolder,
+  });
+  return startLeadThread(
+    prompt,
+    { model: opts.model, notes: opts.notes },
+    {
+      create: (text, model) =>
+        createAgent({ worktree: main.id, kind, settings, prompt: text, preset: { name: "Lead", kind, model }, select: false }),
+      send: sendToLead,
+      save: (lead) => void saveTopLead({ ...lead, path: opts.path }),
+    },
+    DEFAULT_TOP_MODEL,
+  );
+}
+
+/** The top lead's model field: saved, and sent when it runs. */
+export function setTopLeadModel(top: TopLead, model: string) {
+  const running = leadState(top, getState().agents) === "running";
+  return changeLeadModel(top, model, running, {
+    send: sendToLead,
+    save: (next) => void saveTopLead({ ...next, path: top.path }),
+  });
+}
+
+/** Turn the top lead off: forgotten, its thread left to archive. */
+export function removeTopLead() {
+  return saveTopLead(undefined);
+}
+
+/** The ask line for a task starting in `projectId` now (leadAsk.ts), or
+ *  null when no lead could answer it. */
+export function askLineNow(projectId: string | null): string | null {
+  const s = getState();
+  return askLineFor(projectId, { cards: allCards(), agents: s.agents, projects: s.projects, topLead: s.prefs.topLead });
+}
+
+/** The answers log's path on disk, or null while there's none. */
+async function answersLogPath(): Promise<string | null> {
+  const [path] = await invoke<(string | null)[]>("resolve_paths", { candidates: [ANSWERS_LOG], cwd: null });
+  return path ?? null;
+}
+
+/** Today's answers, from the log every lead appends to. */
+export async function answerCounts(now = new Date()): Promise<LogCounts> {
+  if (isPreview()) return logCounts((await import("./mock")).mockAnswersLog(now), now);
+  const path = await answersLogPath();
+  if (!path) return { answered: 0, passed: 0 };
+  // Read through the preview's file commands: open_preview lets this one
+  // file be read, and nothing beside it.
+  await invoke("open_preview", { path });
+  return logCounts(await invoke<string>("read_preview_text", { path }), now);
+}
+
+/** Open the answers log in the preview. */
+export async function openAnswersLog() {
+  const path = isPreview() ? "/Users/dev/.config/observatory/leads/answers.log" : await answersLogPath();
+  if (!path) throw new Error("no lead has answered anything yet");
+  await openPreview([path]);
 }
 
 /** The model field on a card with a lead: saved, and sent when it runs. */
@@ -158,14 +320,25 @@ export function useLeadRunner() {
   useEffect(() => {
     let before: Snapshot | null = null;
     let seen: { agents: State["agents"]; prs: State["prs"]; stuck: StuckEntries; reviews: ReviewRecords } | null = null;
+    let leadsBefore: RosterEntry[] | null = null;
     const tick = () => {
       const s = getState();
       if (!s.loaded || s.link.state !== "connected") return;
+      // The top lead hears when a project's lead starts or stops.
+      const leadsNow = currentRoster(s);
+      const top = s.prefs.topLead;
+      const topAgent = top ? s.agents[top.agentId] : undefined;
+      const was = leadsBefore;
+      if (topAgent && !topAgent.archived && was && rosterLine(was) !== rosterLine(leadsNow))
+        void inTurn(topAgent.id, () => tellRoster(was, leadsNow, leadQueue(topAgent.id, topAgent)));
+      leadsBefore = leadsNow;
       const stuck = loadStuck();
       const reviews = loadReviews();
       if (seen && seen.agents === s.agents && seen.prs === s.prs && seen.stuck === stuck && seen.reviews === reviews) return;
       seen = { agents: s.agents, prs: s.prs, stuck, reviews };
       const after = snapshot(s, stuck, reviews);
+      // The top lead is in some project's folder, but it isn't one of its tasks.
+      if (top) delete after[top.agentId];
       const events = before ? leadEvents(before, after, runningLeads(allCards(), s.agents, s.projects)) : [];
       before = carryUnknown(before ?? {}, after);
       const byLead = new Map<string, LeadEvent[]>();

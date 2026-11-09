@@ -156,7 +156,7 @@ export interface ReviewTrigger {
   rec?: ReviewRecord;
   /** freshRound(). */
   fresh?: boolean;
-  /** The thread is a project's lead (lead.ts): it's told of tasks, not one. */
+  /** The thread is a lead (lead.ts), a project's or the top one (leadAsk.ts): it's told of tasks, not one. */
   lead?: boolean;
 }
 
