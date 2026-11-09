@@ -1,5 +1,5 @@
 /* Night watch: night blue stepping lighter toward what you touch, ivory
-   text, and sand plates as the lenses you watch your threads through. */
+   text, and constellations as the lenses you watch your threads through. */
 :root {
   --night: #0f1320;
   --panel: #121726;
@@ -33,11 +33,11 @@
   --display: "Bricolage Grotesque Variable", -apple-system, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 
-  /* Sand plates (Plate.tsx): the night-sky metal and the grains on it. */
+  /* Constellations (Plate.tsx): the night sky and the stardust on it. */
   --plate-hi: #1e2640;
   --plate-lo: #080b15;
   --sand: #efeadf;
-  /* Plates are night in every mode, so their sand keeps night's colors. */
+  /* Plates are night in every mode, so their stars keep night's colors. */
   --plate-waiting: #f2917b;
   --plate-running: #a0b6ff;
   --plate-done: #8fd6b4;

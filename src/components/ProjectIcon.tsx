@@ -24,7 +24,7 @@ import { CardDialog, type CardTarget } from "./CardDialog";
 import { Plate } from "./Plate";
 
 /** A project's icon: the emoji or image picked for it, its repo's logo, or
- *  else its sigil, a still sand plate drawn from its folder, the same figure
+ *  else its sigil, a still constellation drawn from its folder, the same figure
  *  every time. `onlyPicked` leaves the sigil out where the project's own
  *  plate already shows. */
 export function ProjectIcon({ project, size = 18, onlyPicked = false }: { project: Project; size?: number; onlyPicked?: boolean }) {
@@ -195,7 +195,7 @@ export function IconPicker({ project, onClose }: { project: Project; onClose: ()
 
         <footer className="dialog-foot">
           <span className="hint">
-            {logo ? "Without a pick, the repo’s own logo shows." : "Without a pick, its sand plate shows."}
+            {logo ? "Without a pick, the repo’s own logo shows." : "Without a pick, its constellation shows."}
           </span>
           <button className="btn btn-primary" onClick={onClose}>
             Done

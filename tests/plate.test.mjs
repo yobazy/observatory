@@ -50,3 +50,14 @@ test('settling gathers the sand onto the still lines and keeps it on the plate',
   assert.ok(off(g) < before / 5, `settled ${off(g)} from ${before}`);
   assert.ok(g.every((v) => v >= 0 && v <= 1));
 });
+
+test('a plate is mostly faint dust with a few bright stars, the same for a seed', async () => {
+  const { starLight, STAR } = await import('../src/nebula/plate.ts');
+  const light = starLight(20000, 'thread');
+  assert.deepEqual(light, starLight(20000, 'thread'));
+  assert.notDeepEqual(light, starLight(20000, 'other'));
+  const stars = light.filter((b) => b >= STAR).length;
+  assert.ok(stars > 150 && stars < 600, `${stars} stars`);
+  assert.ok(light.filter((b) => b < 0.1).length > 15000);
+  assert.ok(light.every((b) => b >= 0 && b <= 1));
+});

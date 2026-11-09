@@ -1,9 +1,10 @@
-// A thread's (or project's) artwork: a Chladni plate whose sand is moved by
-// its work (plate.ts). Running plates keep shifting, a plate waiting on you
-// holds and pulses, and everything else settles and stops drawing. One
-// animation loop serves every plate on screen.
+// A thread's (or project's) artwork: a patch of night sky whose stardust is
+// moved by its work into a figure, the way sand finds a Chladni plate's still
+// lines (plate.ts). Running plates keep shifting, a plate waiting on you holds
+// and twinkles, and everything else settles and stops drawing. One animation
+// loop serves every plate on screen.
 import { useEffect, useRef } from "react";
-import { sandFill, scatter, settle, workMode, type Mode } from "../nebula/plate";
+import { STAR, sandFill, scatter, settle, starLight, workMode, type Mode } from "../nebula/plate";
 import { getState, subscribe } from "../nebula/store";
 import { useTurns } from "../nebula/turnCount";
 import type { Agent, AgentStatus } from "../nebula/types";
@@ -41,6 +42,8 @@ interface Live {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   grains: Float32Array;
+  /** Each grain's brightness (starLight): mostly dust, a few stars. */
+  light: Float32Array;
   from: Mode;
   to: Mode;
   k: number;
@@ -64,6 +67,8 @@ interface Live {
   dot?: number;
   /** Passes left before a still plate's figure is done. */
   developing?: number;
+  /** Time since this plate last drew, for the ones that draw at a slower rate. */
+  since?: number;
 }
 
 const DPR = Math.min(3, Math.max(2, window.devicePixelRatio || 2));
@@ -72,6 +77,8 @@ const plates = new Set<Live>();
 let frame = 0;
 let last = 0;
 let palette: Record<string, string> | null = null;
+/** A soft star in each tone, drawn once and stamped wherever a star sits. */
+const glows = new Map<string, HTMLCanvasElement>();
 /** When the daemon's first snapshot landed: plates that mount just after
  *  arrive as loose sand and settle, the list's loading going away. */
 let landedAt = getState().loaded ? -1e9 : 0;
@@ -100,9 +107,11 @@ subscribe(() => {
   if (getState().mode === lastMode) return;
   lastMode = getState().mode;
   palette = null;
+  glows.clear();
   // The new values land after this paint.
   requestAnimationFrame(() => {
     palette = null;
+    glows.clear();
     for (const p of plates) draw(p);
   });
 });
@@ -111,6 +120,43 @@ const isBig = (p: Live) => p.size > 48;
 const moving = (p: Live) =>
   p.developing === undefined &&
   (p.drift || p.loose || p.tone === "running" || p.tone === "needs_feedback" || p.settling > 0 || p.k < 1 || p.kick > 0);
+
+/** A plate with nothing left to settle: only a waiting one's twinkle moves it. */
+const resting = (p: Live) => p.k >= 1 && p.settling <= 0 && p.kick === 0 && !p.drift && !p.loose;
+
+/** Seconds between frames for a plate that doesn't need every one: a
+ *  twinkle reads fine at 20 a second, and a small plate's few grains at 30. */
+function frameGap(p: Live) {
+  if (resting(p)) return p.tone === "needs_feedback" ? 1 / 20 : Infinity;
+  return isBig(p) ? 0 : 1 / 30;
+}
+
+/** `#rrggbb` at an opacity, for the glow's falloff. */
+function withAlpha(color: string, a: number) {
+  const m = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!m) return color;
+  const n = parseInt(m[1], 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+function glow(color: string) {
+  let g = glows.get(color);
+  if (!g) {
+    g = document.createElement("canvas");
+    g.width = g.height = 64;
+    const ctx = g.getContext("2d")!;
+    const r = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    // A near-white core in the tone's color, fading out fast: a star, not a blob.
+    r.addColorStop(0, "rgba(255, 252, 244, 1)");
+    r.addColorStop(0.08, withAlpha(color, 0.95));
+    r.addColorStop(0.25, withAlpha(color, 0.28));
+    r.addColorStop(1, withAlpha(color, 0));
+    ctx.fillStyle = r;
+    ctx.fillRect(0, 0, 64, 64);
+    glows.set(color, g);
+  }
+  return g;
+}
 
 function grainsFor(size: number) {
   return size > 110 ? 20000 : size > 70 ? 9000 : size > 48 ? 4200 : 260;
@@ -159,37 +205,55 @@ function draw(p: Live) {
 
   const big = isBig(p);
   const tone = p.tone === "sand" ? c.sand : (c[p.tone] ?? c.idle);
-  const pulse = p.tone === "needs_feedback" && !reduced() ? 0.75 + 0.25 * Math.sin(p.t * 2.4) : 1;
-  // Big plates pile light up where the sand gathers; small ones keep their
-  // status color true instead of washing out to white.
-  ctx.globalCompositeOperation = big ? "lighter" : "source-over";
-  ctx.fillStyle = tone;
-  ctx.globalAlpha = (big ? (p.size > 110 ? 0.15 : 0.22) : 0.9) * pulse;
+  const waiting = p.tone === "needs_feedback" && !reduced();
   const inset = W * (big ? (p.round ? 0.1 : 0.07) : 0.13);
   const span = W - inset * 2;
   const d = DPR * 0.42 * (p.dot ?? 1);
-  for (let i = 0; i < p.count * 2; i += 2) ctx.fillRect(inset + grains[i] * span - d, inset + grains[i + 1] * span - d, d * 2, d * 2);
+  const { light } = p;
+  const n = p.count;
+  ctx.fillStyle = tone;
+  if (big) {
+    // Dust piles light up where it gathers, a faint milky band along the
+    // figure; the brightest grains are stars on top of it, and a waiting
+    // plate's stars twinkle each in their own time.
+    ctx.globalCompositeOperation = "lighter";
+    const dust = d * 0.8;
+    ctx.globalAlpha = (p.size > 110 ? 0.06 : 0.09) * (waiting ? 0.88 + 0.12 * Math.sin(p.t * 2.4) : 1);
+    for (let i = 0; i < n; i++) {
+      if (light[i] < STAR) ctx.fillRect(inset + grains[2 * i] * span - dust, inset + grains[2 * i + 1] * span - dust, dust * 2, dust * 2);
+    }
+    const sprite = glow(tone);
+    const R = W * 0.034;
+    for (let i = 0; i < n; i++) {
+      const b = light[i];
+      if (b < STAR) continue;
+      const r = R * (0.55 + 0.9 * (b - STAR) * 2);
+      ctx.globalAlpha = (0.6 + 0.4 * b) * (waiting ? 0.55 + 0.45 * Math.sin(p.t * 2.4 + i * 2.39) : 1);
+      ctx.drawImage(sprite, inset + grains[2 * i] * span - r, inset + grains[2 * i + 1] * span - r, r * 2, r * 2);
+    }
+  } else {
+    // A small plate keeps its status color true: most grains a little
+    // dimmer, the few stars a little larger, so it reads as a cluster.
+    const pulse = waiting ? 0.75 + 0.25 * Math.sin(p.t * 2.4) : 1;
+    for (const [lo, hi, a, s] of SMALL_BANDS) {
+      ctx.globalAlpha = a * pulse;
+      const e = d * s;
+      for (let i = 0; i < n; i++) {
+        if (light[i] >= lo && light[i] < hi) ctx.fillRect(inset + grains[2 * i] * span - e, inset + grains[2 * i + 1] * span - e, e * 2, e * 2);
+      }
+    }
+  }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
-  if (big) {
-    // The post the plate is mounted on, and a soft sheen across the metal.
-    const r = W * 0.026;
-    const post = ctx.createRadialGradient(W / 2 - r / 4, W / 2 - r / 4, 0, W / 2, W / 2, r);
-    post.addColorStop(0, "#6a665e");
-    post.addColorStop(0.6, "#2a2825");
-    post.addColorStop(1, "rgba(0,0,0,.6)");
-    ctx.fillStyle = post;
-    ctx.beginPath();
-    ctx.arc(W / 2, W / 2, r, 0, Math.PI * 2);
-    ctx.fill();
-    const sheen = ctx.createLinearGradient(0, 0, W, W);
-    sheen.addColorStop(0, "rgba(255,255,255,.07)");
-    sheen.addColorStop(0.45, "rgba(255,255,255,0)");
-    ctx.fillStyle = sheen;
-    ctx.fillRect(0, 0, W, W);
-  }
   ctx.restore();
 }
+
+/** A small plate's brightness bands: [from, to, opacity, grain size]. */
+const SMALL_BANDS: readonly [number, number, number, number][] = [
+  [0, 0.001, 0.72, 1],
+  [0.001, STAR, 0.95, 1],
+  [STAR, 2, 1, 1.5],
+];
 
 function loop(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000);
@@ -199,7 +263,14 @@ function loop(now: number) {
     for (const p of plates) {
       if (!p.visible || !moving(p)) continue;
       any = true;
-      step(p, dt);
+      // Plates that don't need every frame skip some, and a resting one
+      // skips the physics too: only its twinkle is moving.
+      p.since = (p.since ?? 0) + dt;
+      const gap = frameGap(p);
+      if (p.since < gap) continue;
+      if (resting(p)) p.t += p.since;
+      else step(p, Math.min(0.05, p.since));
+      p.since = 0;
       draw(p);
     }
   }
@@ -273,6 +344,7 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, fil
       canvas,
       ctx: canvas.getContext("2d")!,
       grains: scatter(grainsFor(size), seed),
+      light: starLight(grainsFor(size), seed),
       from: mode,
       to: mode,
       k: 1,
@@ -421,6 +493,7 @@ export function plateIcon(seed: string, work: number, tone: PlateTone, px = 512)
     canvas: art,
     ctx: art.getContext("2d")!,
     grains: scatter(9000, seed),
+    light: starLight(9000, seed),
     from: mode,
     to: mode,
     k: 1,
