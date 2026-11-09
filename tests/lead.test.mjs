@@ -24,6 +24,8 @@ const {
   leadPrompt,
   leadState,
   reviewMark,
+  carryUnknown,
+  prOf,
   runningLeads,
   startLead,
   MAX_LINE,
@@ -283,4 +285,72 @@ test("A lead's thread is never reviewed (S10), whatever its checkout holds", asy
   const trigger = { changed: true, label: 'review', checks: ['npm test'], key: 'k' };
   assert.equal(needsReview(trigger), true);
   assert.equal(needsReview({ ...trigger, lead: true }), false);
+});
+
+/** The runner's step: events against what's kept, then what to keep. */
+function poller() {
+  let before = null;
+  return (after) => {
+    const events = before ? leadEvents(before, after, LEADS) : [];
+    before = carryUnknown(before ?? {}, after);
+    return events.map((e) => e.kind);
+  };
+}
+const found = (number, state = 'open') => ({ kind: 'found', pr: { number, state } });
+/** A finished thread whose worktree's PR lookup is `entry` (or not in yet). */
+const withPr = (entry) => snap(thread('a1', { status: 'finished', pr: prOf(entry) }));
+
+test('Given a launch with PRs already open, then no PR opened events as the lookups land, and none on a repeat poll', () => {
+  const poll = poller();
+  // First snapshot: state.prs is still empty.
+  assert.deepEqual(poll(withPr(undefined)), []);
+  // The gh lookups land.
+  assert.deepEqual(poll(withPr(found(12))), []);
+  // The next poll sees the same PR.
+  assert.deepEqual(poll(withPr(found(12))), []);
+  assert.deepEqual(poll(withPr(found(12))), []);
+});
+
+test('Given a lookup that was unavailable and then finds a PR, then no event', () => {
+  const poll = poller();
+  assert.deepEqual(poll(withPr(undefined)), []);
+  assert.deepEqual(poll(withPr({ kind: 'unavailable', reason: 'gh signed out' })), []);
+  assert.deepEqual(poll(withPr(found(12))), []);
+  // Known, then unavailable for a while (offline), then the same PR again.
+  assert.deepEqual(poll(withPr({ kind: 'unavailable', reason: 'offline' })), []);
+  assert.deepEqual(poll(withPr(found(12))), []);
+});
+
+test('Given a lookup that found no PR and then finds one, then one PR opened event; a repeat poll makes none', () => {
+  const poll = poller();
+  assert.deepEqual(poll(withPr(undefined)), []);
+  assert.deepEqual(poll(withPr({ kind: 'none' })), []);
+  assert.deepEqual(poll(withPr(found(12))), ['PR opened']);
+  assert.deepEqual(poll(withPr(found(12))), []);
+  // none, a failed lookup in between, then a PR: still news.
+  assert.deepEqual(poll(withPr({ kind: 'none' })), []);
+  assert.deepEqual(poll(withPr({ kind: 'unavailable', reason: 'offline' })), []);
+  assert.deepEqual(poll(withPr(found(13))), ['PR opened']);
+  // Another PR on the branch.
+  assert.deepEqual(poll(withPr(found(14, 'draft'))), ['PR opened']);
+  // Merged: no PR open now, and nothing to say.
+  assert.deepEqual(poll(withPr(found(14, 'merged'))), []);
+});
+
+test('prOf: unknown while missing or unavailable, null for none or a closed PR, the number for an open or draft one', () => {
+  assert.equal(prOf(undefined), undefined);
+  assert.equal(prOf({ kind: 'unavailable', reason: 'x' }), undefined);
+  assert.equal(prOf({ kind: 'none' }), null);
+  assert.equal(prOf(found(3, 'closed')), null);
+  assert.equal(prOf(found(3, 'draft')), 3);
+});
+
+test("At launch, threads, stuck flags and reviews already there are the baseline: the first poll makes no events", () => {
+  const poll = poller();
+  const loaded = snap(
+    thread('a1', { status: 'needs_feedback', pr: undefined }),
+    thread('a2', { status: 'finished', failed: 'errors:turn3', review: reviewMark(reviewRec()), pr: undefined }),
+  );
+  assert.deepEqual(poll(loaded), []);
+  assert.deepEqual(poll({ ...loaded }), []);
 });
