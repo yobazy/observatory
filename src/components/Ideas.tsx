@@ -16,7 +16,9 @@ import {
 } from "../nebula/ideaList";
 import { addIdea, deleteIdeas, openIdeas, setDone, setIdeasFocus, updateIdea, useIdeasFocus } from "../nebula/ideas";
 import { relativeTime } from "../nebula/status";
-import { setState, sortedProjects, useAppState } from "../nebula/store";
+import { getState, setState, sortedProjects, useAppState } from "../nebula/store";
+import { freshStart, isParked } from "../nebula/park";
+import { resumeIdea } from "../nebula/parkRunner";
 import { ConfirmDialog, type ConfirmDialogSpec } from "./Dialogs";
 import { useOverlayKeys } from "./Overlay";
 
@@ -29,6 +31,7 @@ function sourceLabel(i: Idea, agentName: (id: string) => string | undefined): st
     const name = i.source.agent ? agentName(i.source.agent) : undefined;
     return name ? `from ${name}` : "from a thread";
   }
+  if (i.source.kind === "parked") return "parked after sitting idle";
   return { capture: "from quick capture", dispatch: "from Dispatch", ideas: null }[i.source.kind] ?? null;
 }
 
@@ -158,6 +161,7 @@ export function IdeasView({ onStart, onDispatch }: { onStart: (idea: Idea) => vo
                   selected={selected.has(i.id)}
                   onSelect={() => toggle(i.id)}
                   onStart={() => onStart(i)}
+                  onFresh={() => onStart({ ...i, text: freshStart(i).task })}
                   source={sourceLabel(i, (id) => state.agents[id]?.name)}
                   startedName={i.startedAs && i.startedAs !== "dispatch" ? state.agents[i.startedAs]?.name : undefined}
                   onDelete={() =>
@@ -290,6 +294,7 @@ function IdeaRow({
   selected,
   onSelect,
   onStart,
+  onFresh,
   onDelete,
   source,
   startedName,
@@ -300,6 +305,8 @@ function IdeaRow({
   selected: boolean;
   onSelect: () => void;
   onStart: () => void;
+  /** A parked thread's: a new task from its brief. */
+  onFresh: () => void;
   onDelete: () => void;
   source: string | null;
   startedName: string | undefined;
@@ -421,9 +428,34 @@ function IdeaRow({
       <div className="idea-actions">
         {open ? (
           <>
-            <button className="btn btn-sm" onClick={onStart} title="Start it as a task: the new-task box opens with it written in">
-              Start
-            </button>
+            {isParked(idea) ? (
+              <>
+                <button
+                  className="btn btn-sm"
+                  onClick={() =>
+                    void resumeIdea(idea).then((id) => {
+                      const a = id ? getState().agents[id] : undefined;
+                      if (!a) return;
+                      setState((s) => ({
+                        view: "sessions",
+                        selectedProject: s.worktrees[a.worktree_id]?.project_id ?? s.selectedProject,
+                        selectedSession: { Agent: a.id },
+                      }));
+                    })
+                  }
+                  title="Bring the thread back as it was: unarchived, with its whole conversation"
+                >
+                  Resume
+                </button>
+                <button className="btn btn-sm" onClick={onFresh} title="A new task in its project, starting from the thread's brief">
+                  Start fresh
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-sm" onClick={onStart} title="Start it as a task: the new-task box opens with it written in">
+                Start
+              </button>
+            )}
             <button className="icon-btn" onClick={() => void setDone([idea.id], true)} aria-label="Mark done" title="Done, without starting it">
               ✓
             </button>

@@ -126,8 +126,19 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   /** Dollars one session may spend before the queue flags it stuck, at 85%
    *  (stuck.ts); $10 when unset. A Dispatch task can set its own. */
   taskBudget?: number;
-  /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
+  /** Sessions working at once, however they were started; Dispatch's tasks
+   *  and New task's queue wait past it (batch.ts); 4 when unset. */
   dispatchCap?: number;
+  /** Park threads idle past `parkDays` in Ideas, their sessions archived
+   *  (park.ts); off unless true. */
+  parkOn?: boolean;
+  /** Days a thread sits unchanged before it's parked; 3 when unset. */
+  parkDays?: number;
+  /** You OK'd the first list of threads to park: later ones park on their own. */
+  parkConfirmed?: boolean;
+  /** Threads kept out of parking (unticked, resumed, undone), by agent id:
+   *  their last change then. A newer change lets them park again. */
+  parkKeep?: Record<string, number>;
   /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */
   keepUseLog?: boolean;
   /** Label prefixes of the launchd agents the Automations view lists

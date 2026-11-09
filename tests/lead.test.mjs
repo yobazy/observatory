@@ -242,3 +242,13 @@ test('A card with no lead stays without one, and a bad stored lead is dropped', 
   reloadCards();
   assert.equal(cardFor('p9').lead, undefined);
 });
+
+test("A lead's thread is never parked, however long it sits idle", async () => {
+  const { toPark, parkMs } = await import('../src/nebula/park.ts');
+  const DAY = 24 * 3600_000;
+  const now = Date.now();
+  const idle = (id) => ({ id, status: 'finished', status_changed_at: now - 10 * DAY, archived: false });
+  const leads = leadIds({ p1: card({ agentId: 'lead1', model: 'haiku', notes: 'n.md' }) });
+  const due = toPark([idle('lead1'), idle('a1')], now, parkMs(3), { pinned: new Set(), inBatch: new Set(), leads });
+  assert.deepEqual(due.map((s) => s.id), ['a1']);
+});
