@@ -32,6 +32,9 @@ export interface ProjectCard {
   /** How Home books time for tasks ("check my calendar, ask, then book it").
    *  Empty: nothing is scheduled, `you` tasks just wait on the board. */
   schedulingInstruction: string;
+  /** Today's spend, in API-equivalent dollars, past which this project's
+   *  pending Dispatch tasks wait (budgetHold.ts). Unset: no budget of its own. */
+  dailyBudget?: number;
 }
 
 /** A file a card is drafted from, its path relative to the project root. */
@@ -198,6 +201,9 @@ function normalize(x: unknown): ProjectCard | null {
     isHome: c.isHome === true,
     homeFolder: typeof c.homeFolder === "string" ? c.homeFolder : null,
     schedulingInstruction: typeof c.schedulingInstruction === "string" ? c.schedulingInstruction : "",
+    ...(typeof c.dailyBudget === "number" && Number.isFinite(c.dailyBudget) && c.dailyBudget > 0
+      ? { dailyBudget: c.dailyBudget }
+      : {}),
   };
 }
 

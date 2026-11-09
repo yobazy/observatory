@@ -53,6 +53,9 @@ export interface BatchTask extends Omit<PlanTask, "needsChoice"> {
   cancelled?: boolean;
   /** Checked off on the board; its source items are checked too. */
   done?: boolean;
+  /** "Start anyway" on a row a budget held (budgetHold.ts): it launches
+   *  despite the hold. */
+  budgetOverride?: boolean;
 }
 
 export interface Batch {
@@ -168,6 +171,8 @@ export interface Limits {
   globalCap: number;
   /** A lane's own cap: a Shared project's (or Home's) concurrency. */
   laneCap: (lane: string) => number;
+  /** Pending tasks that wait anyway: a budget holds them (budgetHold.ts). */
+  held?: (t: BatchTask) => boolean;
 }
 
 /** The pending tasks to launch now, in plan order: as many as the global
@@ -185,7 +190,7 @@ export function nextLaunchable(
   const out: BatchTask[] = [];
   for (const t of tasks) {
     if (free <= 0) break;
-    if (t.state !== "pending") continue;
+    if (t.state !== "pending" || limits.held?.(t)) continue;
     if (t.lane) {
       const n = inLane.get(t.lane) ?? 0;
       if (n >= Math.max(1, limits.laneCap(t.lane))) continue;
@@ -522,6 +527,14 @@ export function retryTask(batchId: string, taskId: string): boolean {
     launchingAt: undefined,
     launchedAt: undefined,
   });
+  return true;
+}
+
+/** "Start anyway" on a task a budget holds: it launches on the next pass,
+ *  within the caps, while the rest stay held. Returns whether it will. */
+export function startAnyway(batchId: string, taskId: string): boolean {
+  if (findTask(batchId, taskId)?.state !== "pending") return false;
+  updateTask(batchId, taskId, { budgetOverride: true });
   return true;
 }
 
