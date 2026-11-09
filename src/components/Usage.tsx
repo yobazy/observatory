@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { budgetLevel, budgets } from "../nebula/budget";
+import { budgetHold, topLine } from "../nebula/budgetHold";
 import { savePrefs } from "../nebula/theme";
 import { setState, useAppState } from "../nebula/store";
 import { KIND_LABEL, relativeTime } from "../nebula/status";
@@ -262,6 +263,7 @@ function Budgets() {
               <div key={b.kind} className={`budget-bar${b.share >= 1 ? " is-over" : b.share >= 0.8 ? " is-near" : ""}`}>
                 <span className="budget-bar-label">
                   {b.kind === "daily" ? "Today" : "Last 7 days"}: {money(b.spent)} of {money(b.budget)}
+                  {b.top.length > 0 && <span className="budget-bar-top"> · {topLine(b)}</span>}
                 </span>
                 <span className="pbar-track" aria-hidden>
                   <span className="pbar-fill" style={{ width: `${Math.min(100, b.share * 100)}%` }} />
@@ -465,6 +467,7 @@ export function UsageChip() {
   );
   const level = budgetLevel(budget);
   const worst = budget.reduce<(typeof budget)[number] | null>((w, b) => (!w || b.share > w.share ? b : w), null);
+  const over = budgetHold(budget);
   return (
     <button
       className={`usage-chip${on ? " is-on" : ""}${level ? ` is-${level}` : ""}`}
@@ -482,6 +485,11 @@ export function UsageChip() {
               ? "No usage today"
               : "…"}
       </span>
+      {over && (
+        <span className="usage-chip-hold" title={`Dispatch's pending tasks wait until spend is back under budget. ${topLine(over)}`}>
+          Holding new tasks{over.top.length > 0 && ` · ${topLine(over)}`}
+        </span>
+      )}
     </button>
   );
 }
