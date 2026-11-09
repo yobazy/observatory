@@ -46,6 +46,7 @@ import { useBatchRunner } from "./nebula/batchRunner";
 import { useTaggingRunner } from "./nebula/taggingRunner";
 import { queueOf, useTriageRunner } from "./nebula/triageRunner";
 import { useStuckWatch } from "./nebula/stuckRunner";
+import { useLeadRunner } from "./nebula/leadRunner";
 import { useThreadIndexRunner } from "./nebula/threadIndexRunner";
 import { useParkRunner } from "./nebula/parkRunner";
 import { useReviewRunner } from "./nebula/reviewRunner";
@@ -194,6 +195,7 @@ export default function App() {
   useTaggingRunner();
   useTriageRunner();
   useStuckWatch();
+  useLeadRunner();
   useThreadIndexRunner();
   useParkRunner();
   useReviewRunner();

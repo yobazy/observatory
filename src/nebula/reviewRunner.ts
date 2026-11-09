@@ -7,7 +7,8 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview, readCardSources, reviewState, runChecks, runReviewer } from "./client";
 import { allBatches } from "./batch";
-import { cardFor, draftChecks } from "./cards";
+import { allCards, cardFor, draftChecks } from "./cards";
+import { leadIds } from "./lead";
 import { baseBranch, loadDiff } from "./diff";
 import { refreshGit } from "./git";
 import { enqueue } from "./queue";
@@ -78,7 +79,8 @@ function taskText(agentId: string): string | null {
 async function review(agentId: string) {
   let s = getState();
   const a0 = s.agents[agentId];
-  if (!a0 || s.prefs.reviewOn !== true) return;
+  // A project's lead isn't reviewed: nothing is triaged or checked for it.
+  if (!a0 || s.prefs.reviewOn !== true || leadIds(allCards()).has(agentId)) return;
   const wt = s.worktrees[a0.worktree_id];
   const project = projectOfWorktree(s, a0.worktree_id);
   if (!wt || !project) return;
@@ -97,7 +99,8 @@ async function review(agentId: string) {
   const start = starts.get(a.id);
   if (!promptedTurn(a.recent_prompts, start?.at)) return;
   const changed = hasChanges(g, start?.head);
-  if (!needsReview({ changed, label, checks, off, key, rec, fresh })) return;
+  const lead = leadIds(allCards()).has(a.id);
+  if (!needsReview({ changed, label, checks, off, key, rec, fresh, lead })) return;
   setChecking(a.id, true);
   try {
     await reviewPass({

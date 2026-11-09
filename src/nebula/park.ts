@@ -43,6 +43,8 @@ export interface ParkGuards {
   /** Unticked at the first confirm, resumed, or brought back by Undo: kept
    *  out while its last change is still the one it had then. */
   kept?: Record<string, number>;
+  /** Project leads' threads (lead.ts): long-lived on purpose, never parked. */
+  leads?: Set<string>;
 }
 
 /** Sessions in a Dispatch batch still on the board that hasn't settled
@@ -67,6 +69,7 @@ export function toPark<T extends ParkSession>(sessions: T[], now: number, ms: nu
         !g.pinned.has(s.id) &&
         !g.inBatch.has(s.id) &&
         !g.held?.has(s.id) &&
+        !g.leads?.has(s.id) &&
         g.kept?.[s.id] !== s.status_changed_at,
     )
     .sort((a, b) => a.status_changed_at - b.status_changed_at || a.id.localeCompare(b.id));

@@ -34,6 +34,8 @@ import {
 } from "./stuck";
 import type { Tokens } from "./usageData";
 import type { Turn } from "./turnsummary";
+import { allCards } from "./cards";
+import { leadIds } from "./lead";
 import type { Agent } from "./types";
 
 const readable = (a: Agent | undefined): a is Agent => !!a && !!a.session_id && (a.kind === "claude" || a.kind === "codex");
@@ -46,8 +48,10 @@ async function latestTurn(id: string): Promise<Turn | null> {
   return invoke<Turn | null>("thread_turn", { session: a.session_id, kind: a.kind });
 }
 
+/** Every session the checks read; a project's lead isn't checked. */
 function sessions(s: State, stale: (a: Agent) => boolean): StuckSession[] {
-  return Object.values(s.agents).map((a) => ({
+  const leads = leadIds(allCards());
+  return Object.values(s.agents).filter((a) => !leads.has(a.id)).map((a) => ({
     id: a.id,
     kind: a.kind,
     session_id: a.session_id,
@@ -173,9 +177,10 @@ export function useStuckWatch() {
         last = now;
         const st = getState();
         const budget = budgetOf(st);
+        const leads = leadIds(allCards());
         const sent = loadSent();
         const fire = budgetNudges(
-          [...now].map(([id, sp]) => ({ id, cost: sp.cost, budget: budget(id), from: sp.from })),
+          [...now].filter(([id]) => !leads.has(id)).map(([id, sp]) => ({ id, cost: sp.cost, budget: budget(id), from: sp.from })),
           sent,
           looked,
         );

@@ -9,6 +9,8 @@ import { isPreview, request } from "./client";
 import { flash, getState, projectOfWorktree, subscribe, type State } from "./store";
 import { savePrefs } from "./theme";
 import { allBatches } from "./batch";
+import { allCards } from "./cards";
+import { leadIds } from "./lead";
 import { loadTriage } from "./triage";
 import { addIdeas, deleteIdeas, markStarted } from "./ideas";
 import type { Transcript } from "./transcript";
@@ -83,6 +85,7 @@ function due(s: State): Agent[] {
     pinned,
     inBatch: unsettledAgents(allBatches(), s.agents, queued),
     held: new Set(Object.keys(s.limits).filter((id) => s.limits[id])),
+    leads: leadIds(allCards()),
     kept: s.prefs.parkKeep,
   });
 }

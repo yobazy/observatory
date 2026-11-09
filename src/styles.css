@@ -9317,6 +9317,40 @@ button.board-main:hover .board-text {
   }
 }
 
+/* A project's lead (lead.ts): a small mark on its card and its sidebar row. */
+.lead-mark {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.lead-mark.is-stopped {
+  border-color: var(--line);
+  color: var(--muted);
+}
+.lead-mark.is-small {
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+.field .card-cap input.lead-model {
+  width: 110px;
+}
+.card-cap.lead-notes {
+  display: flex;
+}
+.field .card-cap.lead-notes input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
 /* Parking (Park.tsx): the first list of idle threads to confirm, and the
    sidebar's line after a park with its Undo. */
 .park-list {

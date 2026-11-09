@@ -130,14 +130,16 @@ export interface ReviewTrigger {
   rec?: ReviewRecord;
   /** freshRound(). */
   fresh?: boolean;
+  /** The thread is a project's lead (lead.ts): it's told of tasks, not one. */
+  lead?: boolean;
 }
 
 /** Whether a turn that just ended gets a review: it left changes, it isn't
  *  waiting on a decision, the card has checks and the check isn't off, and
- *  this state wasn't already reviewed. A thread that failed twice gets no
+ *  this state wasn't already reviewed, and it isn't a project's lead. A thread that failed twice gets no
  *  more until you send it a prompt of your own. */
 export function needsReview(t: ReviewTrigger): boolean {
-  if (t.off || !t.checks.length || !t.changed || t.label === "decision") return false;
+  if (t.lead || t.off || !t.checks.length || !t.changed || t.label === "decision") return false;
   const rec = t.rec;
   if (!rec) return true;
   if (failsSoFar(rec, !!t.fresh) >= 2) return false;

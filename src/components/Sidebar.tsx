@@ -34,6 +34,8 @@ import { ContextMenu, type MenuItem } from "./Menu";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
 import { reorderKey, useReorder, type DropInto } from "./useReorder";
 import { useBatches } from "../nebula/batch";
+import { useCards } from "../nebula/cards";
+import { leadState } from "../nebula/lead";
 import { useRecentCount, useVisits } from "../nebula/recent";
 import { RECENT_COUNTS, recentProjects, type RecentCount } from "../nebula/recentList";
 
@@ -726,6 +728,7 @@ function ProjectRow({
         <ProjectIcon project={project} />
         <span className="project-name">{project.name}</span>
         <PriorityMark priority={prefs.projectPriorities?.[project.repo_path]} />
+        <LeadMark projectId={project.id} />
         {live && <span className="live-dot" title="Dev server running" aria-label="Dev server running" />}
         <span className="project-meta">
           <LoadMeter projectId={project.id} />
@@ -756,6 +759,18 @@ function ProjectRow({
         )}
       </span>
     </button>
+  );
+}
+
+/** "Lead" after a project's name while its lead (lead.ts) is running. */
+function LeadMark({ projectId }: { projectId: string }) {
+  const lead = useCards()[projectId]?.lead;
+  const { agents } = useAppState();
+  if (leadState(lead, agents) !== "running") return null;
+  return (
+    <span className="lead-mark is-small" title="This project has a lead: a thread told of each task as it finishes, fails, needs you or opens a PR.">
+      Lead
+    </span>
   );
 }
 
