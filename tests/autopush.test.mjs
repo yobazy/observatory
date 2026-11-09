@@ -7,6 +7,7 @@ import {
   pushNote,
   pushTrigger,
   shouldPush,
+  trackingRefusal,
   showsNote,
 } from '../src/nebula/autopush.ts';
 
@@ -129,4 +130,29 @@ test('a branch with no upstream counts its own commits as pushed', async () => {
   const { deps, log } = fakeDeps({ git: status({ upstream: null, ahead: 0, baseAhead: 3 }) });
   assert.equal(await pushAfterTurn(agent('finished'), 'running', deps), true);
   assert.deepEqual(log.records, [['w1', { ok: true, commits: 3, at: 1000 }]]);
+});
+
+test('a branch tracking origin/main (made with -b x origin/main) is never pushed', () => {
+  const tracksMain = status({ branch: 'x', upstream: 'origin/main', ahead: 1, behind: 0 });
+  assert.equal(trackingRefusal(tracksMain, 'main'), 'origin/main');
+  assert.equal(shouldPush(tracksMain, wt({ branch: 'x' }), on, 'main'), false);
+  assert.equal(shouldPush(tracksMain, wt({ branch: 'x' }), on, null), false);
+  // Any upstream of another name, or the project's own main branch.
+  assert.equal(shouldPush(status({ branch: 'x', upstream: 'origin/other' }), wt({ branch: 'x' }), on, 'main'), false);
+  assert.equal(shouldPush(status({ branch: 'x', upstream: 'origin/trunk' }), wt({ branch: 'x' }), on, 'trunk'), false);
+  // Its own same-named upstream is fine.
+  assert.equal(trackingRefusal(status(), 'main'), null);
+  assert.equal(shouldPush(status(), wt(), on, 'main'), true);
+});
+
+test('a branch tracking origin/main says so on its row and is not pushed', async () => {
+  const { deps, log } = fakeDeps({ git: status({ branch: 'x', upstream: 'origin/main', ahead: 1 }) });
+  assert.equal(await pushAfterTurn(agent('finished'), 'running', deps), false);
+  assert.deepEqual(log.pushes, []);
+  assert.equal(log.records.length, 1);
+  assert.equal(pushNote(log.records[0][1]), 'Not pushed: this branch tracks origin/main');
+  // With the setting off, nothing is said.
+  const quiet = fakeDeps({ card: off, git: status({ branch: 'x', upstream: 'origin/main', ahead: 1 }) });
+  await pushAfterTurn(agent('finished'), 'running', quiet.deps);
+  assert.deepEqual(quiet.log.records, []);
 });

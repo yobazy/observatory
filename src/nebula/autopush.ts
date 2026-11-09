@@ -13,10 +13,23 @@ export const NOT_FAST_FORWARD = "not a fast-forward";
 
 const MAIN_NAMES = ["main", "master"];
 
+/** The upstream, when it rules out pushing: it's a remote branch of another
+ *  name than this one (a branch made from `origin/main` tracks main), or a
+ *  main branch. The push always goes to the same-named remote branch, so
+ *  such a branch isn't pushed at all. */
+export function trackingRefusal(git: GitStatus, mainBranch: string | null = null): string | null {
+  if (!git.upstream || !git.branch) return null;
+  const slash = git.upstream.indexOf("/");
+  const name = slash < 0 ? git.upstream : git.upstream.slice(slash + 1);
+  if (name === git.branch && name !== mainBranch && !MAIN_NAMES.includes(name)) return null;
+  return git.upstream;
+}
+
 /** Whether to push this checkout now: the card has it on, there are commits
  *  to push (ahead of the upstream, or no upstream yet), nothing to pull
  *  first, the upstream isn't gone (a merged PR's branch would only come
- *  back), and it's a branch other than the project's main one. Uncommitted
+ *  back), it's a branch other than the project's main one, and its upstream
+ *  (if any) is the remote branch of the same name. Uncommitted
  *  changes don't count: only commits are pushed. */
 export function shouldPush(
   git: GitStatus,
@@ -28,6 +41,7 @@ export function shouldPush(
   if (!git.branch || !git.head) return false;
   // Main is pushed by merging PRs.
   if (wt.is_main || git.branch === mainBranch || MAIN_NAMES.includes(git.branch)) return false;
+  if (trackingRefusal(git, mainBranch)) return false;
   if (git.upstreamGone || git.behind > 0) return false;
   return git.upstream ? git.ahead > 0 : (git.baseAhead ?? 1) > 0;
 }
@@ -94,6 +108,13 @@ export async function pushAfterTurn(
   try {
     git = await deps.status(wt);
   } catch {
+    return false;
+  }
+  const tracks = trackingRefusal(git, main);
+  if (tracks && git.branch && !wt.is_main && git.branch !== main && !MAIN_NAMES.includes(git.branch) && (git.baseAhead ?? 1) > 0) {
+    // A branch with work of its own that would have been pushed but for
+    // where it points: say so on the row.
+    deps.record(wt.id, { ok: false, error: `this branch tracks ${tracks}`, at: deps.now() });
     return false;
   }
   if (!shouldPush(git, wt, card, main)) return false;

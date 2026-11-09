@@ -411,25 +411,32 @@ struct Upstream {
     merge: String,
 }
 
-/// The arguments for pushing `branch`: to its upstream as it is, or to
-/// `origin` under the same name with `-u` when it has none yet. The refspec
-/// names both sides in full and carries no `+`, and no force flag is ever
-/// added, so the remote only takes a fast-forward.
+/// The arguments for pushing `branch`: always `HEAD` to the remote branch
+/// of the same name, on the upstream's remote, or on `origin` with `-u` when
+/// it has none yet. Never to whatever `branch.<b>.merge` names: a branch made
+/// from `origin/main` tracks main, and would otherwise land on it. The
+/// refspec names the remote side in full and carries no `+`, and no force
+/// flag is ever added, so the remote only takes a fast-forward.
 fn push_args(branch: &str, upstream: Option<&Upstream>) -> Vec<String> {
-    let src = format!("refs/heads/{branch}");
+    let refspec = format!("HEAD:refs/heads/{branch}");
     match upstream {
-        Some(u) => vec![
-            "push".into(),
-            u.remote.clone(),
-            format!("{src}:{}", u.merge),
-        ],
-        None => vec![
-            "push".into(),
-            "-u".into(),
-            "origin".into(),
-            format!("{src}:{src}"),
-        ],
+        Some(u) => vec!["push".into(), u.remote.clone(), refspec],
+        None => vec!["push".into(), "-u".into(), "origin".into(), refspec],
     }
+}
+
+/// Why a branch's upstream rules out pushing it, if it does: it tracks a
+/// remote branch of another name (a branch made from `origin/main` tracks
+/// main), or one of the main branches.
+fn tracking_refusal(branch: &str, upstream: &Upstream, mains: &[&str]) -> Option<String> {
+    let name = upstream
+        .merge
+        .strip_prefix("refs/heads/")
+        .unwrap_or(&upstream.merge);
+    if name == branch && !mains.contains(&name) {
+        return None;
+    }
+    Some(format!("this branch tracks {}/{name}", upstream.remote))
 }
 
 fn upstream_of(dir: &Path, branch: &str) -> Option<Upstream> {
@@ -470,14 +477,19 @@ fn push_ff(dir: &Path, main: Option<&str>) -> Result<(), String> {
     )
     .ok()
     .and_then(|s| s.trim().split_once('/').map(|(_, b)| b.to_string()));
-    let mains = [
-        Some("main"),
-        Some("master"),
-        main,
-        remote_default.as_deref(),
-    ];
-    if mains.contains(&Some(branch.as_str())) {
+    let mains: Vec<&str> = ["main", "master"]
+        .into_iter()
+        .chain(main)
+        .chain(remote_default.as_deref())
+        .collect();
+    if mains.contains(&branch.as_str()) {
         return Err(format!("refusing to push the main branch, {branch}"));
+    }
+    if let Some(why) = upstream
+        .as_ref()
+        .and_then(|u| tracking_refusal(&branch, u, &mains))
+    {
+        return Err(why);
     }
     let args = push_args(&branch, upstream.as_ref());
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -494,10 +506,11 @@ fn push_ff(dir: &Path, main: Option<&str>) -> Result<(), String> {
         })
 }
 
-/// Push the checkout's branch after an agent's turn, fast-forward only:
-/// to its upstream, or to `origin` with `-u` when it was never pushed.
-/// Detached HEADs and the main branch (`main`, or the remote's default) are
-/// refused, and only commits go; uncommitted changes stay where they are.
+/// Push the checkout's branch after an agent's turn, fast-forward only, to
+/// the remote branch of the same name: on its upstream's remote, or on
+/// `origin` with `-u` when it was never pushed. Detached HEADs, the main
+/// branch (`main`, or the remote's default) and a branch whose upstream is
+/// another branch (one made from `origin/main`) are refused, and only commits go; uncommitted changes stay where they are.
 #[tauri::command]
 pub async fn git_push_ff(path: PathBuf, main: Option<String>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || push_ff(&path, main.as_deref()))
@@ -745,8 +758,22 @@ mod tests {
         }
         assert_eq!(
             push_args("feat", None),
-            ["push", "-u", "origin", "refs/heads/feat:refs/heads/feat"]
+            ["push", "-u", "origin", "HEAD:refs/heads/feat"]
         );
+        // Even an upstream of another name gets the same-named branch.
+        let main = Upstream {
+            remote: "origin".into(),
+            merge: "refs/heads/main".into(),
+        };
+        assert_eq!(
+            push_args("feat", Some(&main)),
+            ["push", "origin", "HEAD:refs/heads/feat"]
+        );
+        assert_eq!(
+            tracking_refusal("feat", &main, &["main", "master"]).as_deref(),
+            Some("this branch tracks origin/main")
+        );
+        assert_eq!(tracking_refusal("feat", &up, &["main", "master"]), None);
         // And the source has no other way to build one.
         let src = include_str!("git.rs");
         let code = &src[..src.find("#[cfg(test)]").unwrap()];
@@ -790,6 +817,29 @@ mod tests {
             &["rev-parse", "--verify", "-q", "refs/heads/trunk"]
         )
         .is_err());
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn a_branch_made_from_origin_main_is_not_pushed_onto_main() {
+        let (dir, remote) = repo_with_remote("tracks-main");
+        let main_before = rev(&remote, "refs/heads/main");
+        // How builders make branches: `git worktree add -b x origin/main`.
+        git(&dir, &["fetch", "-q", "origin"]).unwrap();
+        git(&dir, &["checkout", "-q", "-b", "x", "origin/main"]).unwrap();
+        let up = git(&dir, &["rev-parse", "--abbrev-ref", "x@{u}"]).unwrap();
+        assert_eq!(up.trim(), "origin/main");
+        std::fs::write(dir.join("x.txt"), "x\n").unwrap();
+        git(&dir, &["add", "."]).unwrap();
+        git(&dir, &["commit", "-qm", "x work"]).unwrap();
+
+        let err = push_ff(&dir, Some("main")).unwrap_err();
+        assert_eq!(err, "this branch tracks origin/main");
+        assert_eq!(rev(&remote, "refs/heads/main"), main_before);
+        assert!(git(&remote, &["rev-parse", "--verify", "-q", "refs/heads/x"]).is_err());
+        // Without the main hint too: the upstream alone is enough to refuse.
+        assert!(push_ff(&dir, None).is_err());
+        assert_eq!(rev(&remote, "refs/heads/main"), main_before);
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
 }
