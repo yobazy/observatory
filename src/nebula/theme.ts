@@ -123,6 +123,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   triageCommand?: string;
   /** Days a thread sits unchanged before it's labelled stale; 3 when unset. */
   triageStaleDays?: number;
+  /** Dollars one session may spend before the queue flags it stuck, at 85%
+   *  (stuck.ts); $10 when unset. A Dispatch task can set its own. */
+  taskBudget?: number;
   /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
   dispatchCap?: number;
   /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */

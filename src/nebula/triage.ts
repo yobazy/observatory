@@ -98,9 +98,11 @@ export function toTriage<T extends TriageSession>(
 }
 
 /** The label that counts: a wait on you, or a stop at a usage limit, is a
- *  decision whatever the model said. */
-export function finalLabel(status: AgentStatus, held: boolean, label: TriageLabel): TriageLabel {
-  return status === "needs_feedback" || held ? "decision" : label;
+ *  decision whatever the model said; then a stuck flag (stuck.ts: the same
+ *  error over and over, or most of its budget spent) is `stuck`. */
+export function finalLabel(status: AgentStatus, held: boolean, label: TriageLabel, stuck?: string | null): TriageLabel {
+  if (status === "needs_feedback" || held) return "decision";
+  return stuck ? "stuck" : label;
 }
 
 // ---- the prompt ----
@@ -342,21 +344,26 @@ export function rankQueue(rows: QueueRow[]): { rows: QueueRow[]; stale: QueueRow
 
 /** The queue from the sessions and their records: open sessions not under
  *  way, with a label (a wait on you is always a decision, read or not), and
- *  not acknowledged since their last change. */
+ *  not acknowledged since their last change. A stuck one (`stuck` gives its
+ *  reason, stuck.ts) is in it even mid-turn, so you can step in, with the
+ *  reason as its need. */
 export function queueRows(
   sessions: TriageSession[],
   recs: TriageRecords,
   ackd: Record<string, string>,
   held: (id: string) => boolean = () => false,
+  stuck: (id: string) => string | null = () => null,
 ): { rows: QueueRow[]; stale: QueueRow[] } {
   const rows: QueueRow[] = [];
   for (const s of sessions) {
-    if (!queueable(s)) continue;
+    const why = s.archived ? null : stuck(s.id);
+    if (!queueable(s) && !(why && s.status === "running")) continue;
     if (ackd[s.id] === ackState(s)) continue;
     const rec = recs[s.id];
     const h = held(s.id);
-    if (!rec && s.status !== "needs_feedback" && !h) continue;
-    rows.push({ id: s.id, label: finalLabel(s.status, h, rec?.label ?? "decision"), need: rec?.need ?? "", since: s.status_changed_at });
+    if (!rec && s.status !== "needs_feedback" && !h && !why) continue;
+    const label = finalLabel(s.status, h, rec?.label ?? "decision", why);
+    rows.push({ id: s.id, label, need: (label === "stuck" && why) || (rec?.need ?? ""), since: s.status_changed_at });
   }
   return rankQueue(rows);
 }
@@ -390,6 +397,9 @@ export interface TriageDeps {
   context: (s: TriageSource) => Promise<{ tail: string; summary: string }>;
   /** One call of the CLI (triage_threads): the prompt in, its reply out. */
   run: (prompt: string, parts: TriagePart[]) => Promise<string>;
+  /** The stuck checks (stuck.ts), with no model call: run first, given
+   *  which sessions are stale. */
+  stuck?: (stale: (s: TriageSource) => boolean) => Promise<void>;
   now?: () => number;
   staleMs?: number;
 }
@@ -411,6 +421,7 @@ export async function triagePass(deps: TriageDeps): Promise<TriageResult> {
   if (!deps.on) return result;
   const now = (deps.now ?? Date.now)();
   const ms = deps.staleMs ?? staleMs(undefined);
+  if (deps.stuck) await deps.stuck((s) => isStale(s, now, ms, s.held)).catch((e) => result.errors.push(errText(e)));
   // Transcripts are only read for those that could be sent: a stale one's
   // key is its status alone.
   const sessions: TriageSource[] = [];

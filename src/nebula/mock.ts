@@ -700,6 +700,25 @@ export function mockTurn(s: State, agentId: string): Turn | null {
     said: "⌘K opens a menu of orders, filtered as you type. Merged as #12.",
     saidEnd: "⌘K opens a menu of orders, filtered as you type. Merged as #12.\n\n**✅ Safe to close.** Nothing left in this thread.",
   };
+  // A thread going round the same failing build, for the queue's stuck flag.
+  const fail = (ago: number, line: number) => ({
+    ...step("Bash", "npm run build", false, "Build the app", ago),
+    error: `Exit code 2\nsrc/search/facets.ts(${line},14): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Facet'.`,
+  });
+  turns.a12 = {
+    prompt: "add size and color facets to search",
+    started: now - 6 * 3600,
+    last: now - 5 * 3600,
+    steps: [
+      step("Edit", `${root}/src/search/facets.ts`),
+      fail(5.8 * 3600, 41),
+      step("Edit", `${root}/src/search/facets.ts`),
+      fail(5.5 * 3600, 42),
+      step("Edit", `${root}/src/search/facets.ts`),
+      fail(5.1 * 3600, 44),
+    ],
+    said: "The build still fails on the facet type. I'll try another approach.",
+  };
   const t = turns[agentId];
   return t ? { ...t, number: agentId === "a3" ? 3 : 1, dropped: 0, interrupted: false } : null;
 }

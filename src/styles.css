@@ -7289,6 +7289,27 @@ button.board-main:hover .board-text {
   gap: 6px;
   flex: none;
 }
+.triage-redirect {
+  margin: 0 0 0 18px;
+}
+.task-budget {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.task-budget .is-near {
+  color: var(--st-error);
+}
+.task-budget input {
+  width: 56px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  user-select: text;
+}
 
 /* ---------- uncommitted work, by thread ---------- */
 

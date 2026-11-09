@@ -5,7 +5,7 @@
 // in Node; budget.ts and batchRunner.ts wire it to the store.
 // Value imports name their .ts files: the tests load this module in Node.
 import { nextLaunchable, type BatchTask, type Limits } from "./batch.ts";
-import { summarize, type UsageReport } from "./usageData.ts";
+import { costOf, sessionKey, summarize, type UsageReport } from "./usageData.ts";
 import type { Cards } from "./cards.ts";
 import type { State } from "./store";
 import type { Agent } from "./types";
@@ -138,6 +138,18 @@ export function launchPick(
   now = Date.now(),
 ): BatchTask[] {
   return nextLaunchable(tasks, agents, { ...limits, held: (t) => !!holdOn(t, h) }, now);
+}
+
+/** Known cost per agent session over the report's range (30 days). */
+export function costBySession(report: UsageReport | null): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!report) return out;
+  for (const b of report.buckets) {
+    const cost = costOf(b, b.model);
+    const key = sessionKey(b.source, b.session);
+    if (cost !== null) out.set(key, (out.get(key) ?? 0) + cost);
+  }
+  return out;
 }
 
 /** Whole dollars from $10 up, cents below: "$52", "$4.50". */

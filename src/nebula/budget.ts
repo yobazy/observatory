@@ -5,14 +5,13 @@
 // cost, for the rows that show it. Over a budget, Dispatch holds its
 // pending tasks (budgetHold.ts).
 import { useEffect, useMemo } from "react";
-import { costOf, sessionKey, type UsageReport } from "./usage";
-import { budgets, holds, type Holds } from "./budgetHold";
+import { budgets, costBySession, holds, type Holds } from "./budgetHold";
 import { useCards } from "./cards";
 import { flash, getState, subscribe, useAppState } from "./store";
 import { notify } from "./notify";
 import { money } from "./usage";
 
-export { budgets, budgetLevel } from "./budgetHold";
+export { budgets, budgetLevel, costBySession } from "./budgetHold";
 export type { BudgetState } from "./budgetHold";
 
 /** What's holding Dispatch's pending tasks, recomputed when spend, the
@@ -80,18 +79,6 @@ export function useBudgetWatch() {
       if (changed) remember(done);
     });
   }, []);
-}
-
-/** Known cost per agent session over the report's range (30 days). */
-export function costBySession(report: UsageReport | null): Map<string, number> {
-  const out = new Map<string, number>();
-  if (!report) return out;
-  for (const b of report.buckets) {
-    const cost = costOf(b, b.model);
-    const key = sessionKey(b.source, b.session);
-    if (cost !== null) out.set(key, (out.get(key) ?? 0) + cost);
-  }
-  return out;
 }
 
 /** The session cost map, recomputed only when a new usage scan lands. */

@@ -44,6 +44,7 @@ import { useQueueRunner } from "./nebula/queue";
 import { useBatchRunner } from "./nebula/batchRunner";
 import { useTaggingRunner } from "./nebula/taggingRunner";
 import { queueOf, useTriageRunner } from "./nebula/triageRunner";
+import { useStuckWatch } from "./nebula/stuckRunner";
 import { nextInQueue } from "./nebula/triage";
 import { openQueued } from "./components/TriageQueue";
 import { ReviewView } from "./components/Review";
@@ -186,6 +187,7 @@ export default function App() {
   useBatchRunner();
   useTaggingRunner();
   useTriageRunner();
+  useStuckWatch();
   useUsagePolling();
   useAutomationsPolling();
   useActivityPolling();

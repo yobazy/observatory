@@ -56,6 +56,9 @@ export interface BatchTask extends Omit<PlanTask, "needsChoice"> {
   /** "Start anyway" on a row a budget held (budgetHold.ts): it launches
    *  despite the hold. */
   budgetOverride?: boolean;
+  /** Its own budget in dollars, over the default task budget: past 85% of
+   *  it, the queue flags its session stuck (stuck.ts). */
+  budget?: number;
 }
 
 export interface Batch {

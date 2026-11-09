@@ -24,6 +24,8 @@ import {
   type TriageResult,
   type TriageSource,
 } from "./triage";
+import { loadStuck, stuckNeed, type StuckEntries } from "./stuck";
+import { runStuckCheck } from "./stuckRunner";
 import type { Agent } from "./types";
 
 const EVERY = 5 * 60_000;
@@ -115,15 +117,22 @@ let running: Promise<TriageResult> | null = null;
 function pass(): Promise<TriageResult> {
   if (running) return running;
   const s = getState();
+  const list = sources(s);
+  const byId = new Map(list.map((x) => [x.id, x]));
   setStatus({ running: true });
   running = triagePass({
     on: s.prefs.triageOn === true,
-    sessions: sources(s),
+    sessions: list,
     records: loadTriage,
     save: (next: TriageRecords) => saveTriage(next),
     length,
     context,
     run: (prompt, parts) => runTriage(prompt, () => previewTriageReply(parts)),
+    stuck: (stale) =>
+      runStuckCheck((a) => {
+        const x = byId.get(a.id);
+        return !!x && stale(x);
+      }),
     staleMs: staleMs(s.prefs.triageStaleDays),
   })
     .then((result) => {
@@ -150,9 +159,15 @@ export function triageNow(): Promise<TriageResult> {
   return pass();
 }
 
-/** The queue as it stands: every open session with a label, ranked. */
-export function queueOf(s: Pick<State, "agents" | "limits">, records = loadTriage(), acks = loadAcks()): { rows: QueueRow[]; stale: QueueRow[] } {
-  return queueRows(Object.values(s.agents), records, acks, (id) => !!s.limits[id]);
+/** The queue as it stands: every open session with a label, ranked, a
+ *  stuck one (stuck.ts) as `stuck` with its reason. */
+export function queueOf(
+  s: Pick<State, "agents" | "limits">,
+  records = loadTriage(),
+  acks = loadAcks(),
+  stuck: StuckEntries = loadStuck(),
+): { rows: QueueRow[]; stale: QueueRow[] } {
+  return queueRows(Object.values(s.agents), records, acks, (id) => !!s.limits[id], (id) => stuckNeed(stuck, id));
 }
 
 const ready = (s: State) => s.loaded && s.link.state === "connected" && s.prefs !== unloaded && s.prefs.triageOn === true;

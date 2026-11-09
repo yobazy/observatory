@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { flash, getState, setState, useAppState } from "../nebula/store";
 import { DEFAULT_STALE_DAYS, DEFAULT_TRIAGE_COMMAND } from "../nebula/triage";
+import { DEFAULT_TASK_BUDGET } from "../nebula/stuck";
 import {
   AGENTS_HEAD,
   EXPERIMENTAL,
@@ -433,6 +434,37 @@ function DispatchSettings() {
             </option>
           ))}
         </select>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-task-budget">
+            Task budget
+          </label>
+          <span className="setting-hint">
+            What one thread may spend, in the dollars the usage view shows. At 85% the queue flags it stuck and a banner
+            says so, then again at 100%. A Dispatch task can set its own on the board. Nothing is stopped on its own.
+          </span>
+        </div>
+        <span className="budget-input">
+          $
+          <input
+            id="set-task-budget"
+            key={prefs.taskBudget ?? "default"}
+            className="setting-input"
+            type="number"
+            min={1}
+            step={1}
+            inputMode="decimal"
+            defaultValue={prefs.taskBudget ?? DEFAULT_TASK_BUDGET}
+            onBlur={(e) => {
+              const v = Number(e.target.value);
+              const next = v > 0 && v !== DEFAULT_TASK_BUDGET ? v : undefined;
+              if (next !== prefs.taskBudget) void savePrefs({ ...prefs, taskBudget: next });
+              else e.target.value = String(prefs.taskBudget ?? DEFAULT_TASK_BUDGET);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+          />
+        </span>
       </div>
       <div className="setting">
         <div className="setting-text">
