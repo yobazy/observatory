@@ -11,10 +11,13 @@ import { lastRows, readScreen } from "../nebula/screen";
 import { relativeTime, statusLabel } from "../nebula/status";
 import { flash, setState, useAppState, type State } from "../nebula/store";
 import { kickBatches } from "../nebula/batchRunner";
+import { useHolds } from "../nebula/budget";
+import { holdOn, holdSummary, holdText, type Holds } from "../nebula/budgetHold";
 import {
   checkOffTask,
   dismissBatch,
   retryTask,
+  startAnyway,
   updateTask,
   useBatches,
   type Batch,
@@ -53,7 +56,8 @@ const PHASE_LABEL: Partial<Record<Phase, string>> = {
 /** Phases a row can be checked off in: nothing more will happen on its own. */
 const CHECKABLE = new Set<Phase>(["listed", "finished", "stopped", "archived", "gone", "done"]);
 
-function statusText(r: Row, s: State): string {
+function statusText(r: Row, s: State, h: Holds): string {
+  if (holdOn(r.task, h)) return "Held by budget";
   if (r.phase === "working" && r.agent && (s.queue[r.agent.id]?.length ?? 0) > 0) return "Queued";
   if (r.phase === "working" && !r.agent) return "Starting…";
   if (r.agent && (r.phase === "waiting" || r.phase === "working" || r.phase === "finished" || r.phase === "stopped"))
@@ -87,7 +91,11 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
     () => batchSummary(live.flatMap((b) => b.tasks), state.agents, queued),
     [live, state.agents, queued],
   );
-  const working = rows.filter((r) => r.phase === "working" || r.phase === "launching" || r.phase === "pending").length;
+  const holds = useHolds();
+  const heldLine = useMemo(() => holdSummary(live.flatMap((b) => b.tasks), holds), [live, holds]);
+  const working = rows.filter(
+    (r) => r.phase === "working" || r.phase === "launching" || (r.phase === "pending" && !holdOn(r.task, holds)),
+  ).length;
 
   return (
     <section className="usage board" aria-labelledby="board-title">
@@ -96,7 +104,7 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
           <h1 id="board-title">Dispatch board</h1>
           <p className="usage-sub">
             {rows.length
-              ? [working && `${working} in progress`, all.text].filter(Boolean).join(", ")
+              ? [working && `${working} in progress`, heldLine, all.text].filter(Boolean).join(", ")
               : "Every task you dispatch shows up here until you dismiss its batch."}
           </p>
         </div>
@@ -122,7 +130,7 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
           <>
             <ul className="board-rows" aria-label="Dispatched tasks">
               {rows.map((r) => (
-                <BoardRow key={r.task.id} row={r} state={state} />
+                <BoardRow key={r.task.id} row={r} state={state} holds={holds} />
               ))}
             </ul>
             <Batches batches={live} />
@@ -160,7 +168,7 @@ function Batches({ batches }: { batches: Batch[] }) {
   );
 }
 
-function BoardRow({ row, state }: { row: Row; state: State }) {
+function BoardRow({ row, state, holds }: { row: Row; state: State; holds: Holds }) {
   const { task: t, agent, phase, batchId } = row;
   const open = agent ? () => selectAgent(agent) : undefined;
   const checkable = CHECKABLE.has(phase) || (t.target === "you" && phase === "blocked" && !agent);
@@ -181,31 +189,47 @@ function BoardRow({ row, state }: { row: Row; state: State }) {
         )}
         {open ? (
           <button className="board-main" onClick={open} title={`Open ${agent!.name}`}>
-            <RowHead row={row} state={state} />
+            <RowHead row={row} state={state} holds={holds} />
           </button>
         ) : (
           <div className="board-main">
-            <RowHead row={row} state={state} />
+            <RowHead row={row} state={state} holds={holds} />
           </div>
         )}
       </div>
-      <RowDetail row={row} state={state} />
+      <RowDetail row={row} state={state} holds={holds} />
     </li>
   );
 }
 
-function RowHead({ row, state }: { row: Row; state: State }) {
+function RowHead({ row, state, holds }: { row: Row; state: State; holds: Holds }) {
   return (
     <>
       <span className="board-text">{row.task.text}</span>
       <span className="board-target">{targetText(row.task, row.agent, state)}</span>
-      <span className={`board-status is-${row.phase}`}>{statusText(row, state)}</span>
+      <span className={`board-status is-${row.phase}`}>{statusText(row, state, holds)}</span>
     </>
   );
 }
 
-function RowDetail({ row, state }: { row: Row; state: State }) {
+function RowDetail({ row, state, holds }: { row: Row; state: State; holds: Holds }) {
   const { task: t, agent, phase, batchId } = row;
+  const hold = holdOn(t, holds);
+  if (hold)
+    return (
+      <div className="board-note">
+        <span>{holdText(hold)} </span>
+        <button
+          className="btn btn-sm"
+          onClick={() => {
+            if (startAnyway(batchId, t.id)) kickBatches();
+          }}
+          title="Launch this task despite the budget; the others stay held"
+        >
+          Start anyway
+        </button>
+      </div>
+    );
   if (phase === "blocked" && t.note) return <p className="board-note">{t.note}</p>;
   if (phase === "failed") {
     const unsure = /cut short/i.test(t.note ?? "");
