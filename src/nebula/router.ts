@@ -85,6 +85,9 @@ export interface PlanTask {
   /** The router wasn't sure, or named something that doesn't exist: the
    *  user picks. Cleared once they do. */
   needsChoice: boolean;
+  /** Why the router's pick was cleared, when it named something that isn't
+   *  there (rather than being unsure). */
+  choiceNote?: string;
 }
 
 /** A past thread as a task refers to it. */
@@ -98,12 +101,24 @@ export interface Plan {
   tasks: PlanTask[];
 }
 
+/** A project as the daemon has it, card or not. */
+export interface RouterProject {
+  id: string;
+  name: string;
+  path?: string;
+}
+
+/** Most projects the router prompt lists, cards and all. */
+export const MAX_PROJECTS = 30;
+
 /** What a plan is checked against. */
 export interface RouteContext {
   items: RouterItem[];
   cards: RouterCard[];
   worktrees: RouterWorktree[];
   sessions: OpenSession[];
+  /** Every project the daemon has, card or not: a task may go to any of them. */
+  projects?: RouterProject[];
   /** Past threads (threadIndex.ts) sent to the router beside the open
    *  sessions: a follow-up may go to one of these too. */
   pastThreads?: IndexEntry[];
@@ -147,15 +162,38 @@ export function routerCards(
   return out;
 }
 
+/** The daemon's projects with no card that the router prompt lists after
+ *  the carded ones, so it can start new work there too. Together with the
+ *  carded ones at most `max`; when they don't all fit, those with open
+ *  sessions or past threads in the prompt go first. Then by name. Also says
+ *  how many were left out. */
+export function cardlessProjects(
+  projects: RouterProject[],
+  cards: RouterCard[],
+  openSessions: { projectId: string }[] = [],
+  pastThreads: { projectId: string }[] = [],
+  max = MAX_PROJECTS,
+): { list: RouterProject[]; left: number } {
+  const carded = new Set(cards.map((c) => c.projectId));
+  const active = new Set([...openSessions, ...pastThreads].map((x) => x.projectId));
+  const bare = projects
+    .filter((p) => !carded.has(p.id))
+    .sort((a, b) => Number(active.has(b.id)) - Number(active.has(a.id)) || a.name.localeCompare(b.name));
+  const room = Math.max(0, max - cards.filter((c) => !c.projectId.startsWith("folder:")).length);
+  return { list: bare.slice(0, room), left: Math.max(0, bare.length - room) };
+}
+
 /** The prompt for the router: what each target means, the items, the
- *  cards, and the sessions a task could follow up in: the open ones, and
- *  past threads that match the items (threadIndex.ts's `pastThreadsFor`).
- *  JSON out, only. */
+ *  projects (with a card, then the daemon's others: `cardlessProjects`),
+ *  and the sessions a task could follow up in: the open ones, and past
+ *  threads that match the items (threadIndex.ts's `pastThreadsFor`). JSON
+ *  out, only. */
 export function buildRouterPrompt(
   items: RouterItem[],
   cards: RouterCard[],
   openSessions: OpenSession[],
   pastThreads: IndexEntry[] = [],
+  allProjects: RouterProject[] = [],
 ): string {
   const home = cards.find((c) => c.isHome);
   const projects = cards.filter((c) => !c.projectId.startsWith("folder:"));
@@ -189,7 +227,8 @@ export function buildRouterPrompt(
   }
 
   L.push("", "Projects:");
-  if (!projects.length) L.push("(none have a card yet)");
+  const bare = cardlessProjects(allProjects, cards, openSessions, pastThreads);
+  if (!projects.length && !bare.list.length) L.push("(none yet)");
   for (const c of projects) {
     const run =
       c.policy === "shared"
@@ -203,6 +242,10 @@ export function buildRouterPrompt(
     }
     if (c.taskKinds.length) L.push(`  task kinds: ${c.taskKinds.map(oneLine).join(", ")}`);
   }
+  for (const p of bare.list) {
+    L.push(`- [${p.id}] ${oneLine(p.name)}${p.path ? ` (${p.path})` : ""}: no card yet, so nothing is known of it beyond its name and path. Isolated.`);
+  }
+  if (bare.left) L.push(`(${bare.left} more projects without a card aren't listed.)`);
 
   L.push("");
   if (!home) L.push('Home: none set. Don\'t use target "home"; "you" tasks stay on the list.');
@@ -268,10 +311,17 @@ function confidenceOf(x: unknown): number {
   return n > 1 ? Math.min(n / 100, 1) : n;
 }
 
-/** Clear the router's project pick for the user to make. */
-function flagged(t: PlanTask): PlanTask {
-  const { projectId: _p, worktreeId: _w, sessionId: _s, mode: _m, skill: _k, past: _x, ...rest } = t;
-  return { ...rest, needsChoice: true };
+/** Clear the router's project pick for the user to make, saying why when
+ *  it named something that isn't there. */
+function flagged(t: PlanTask, note?: string | null): PlanTask {
+  const { projectId: _p, worktreeId: _w, sessionId: _s, mode: _m, skill: _k, past: _x, choiceNote: _n, ...rest } = t;
+  return { ...rest, needsChoice: true, ...(note ? { choiceNote: note } : {}) };
+}
+
+/** A project the daemon has, or one with a card. A project needs no card
+ *  to take tasks: a fresh setup has none. */
+function knownProject(id: string, ctx: RouteContext): boolean {
+  return (ctx.projects ?? []).some((p) => p.id === id) || ctx.cards.some((c) => c.projectId === id);
 }
 
 /** Whether a chat id is one the router was given in that project: an open
@@ -291,16 +341,23 @@ export function pastRef(id: string | undefined, ctx: RouteContext): PastRef | un
   return { title: p.title, archived: p.archived, ...(p.archived && p.archivedAt ? { archivedAt: p.archivedAt } : {}) };
 }
 
-/** A task's references checked against what exists: a project with a card,
- *  a worktree and a session in that project. */
-function refsOk(t: PlanTask, ctx: RouteContext): boolean {
-  if (t.target !== "project") return true;
-  if (!t.projectId || !ctx.cards.some((c) => c.projectId === t.projectId)) return false;
-  if (t.worktreeId && !ctx.worktrees.some((w) => w.id === t.worktreeId && w.projectId === t.projectId)) return false;
-  if (t.sessionId && !knownChat(t.sessionId, t.projectId, ctx)) return false;
-  if (t.mode === "existing_worktree" && !t.worktreeId) return false;
-  if (t.mode === "existing_chat" && !t.sessionId) return false;
-  return true;
+/** What's wrong with a task's references, checked against what exists: a
+ *  project the daemon knows (with a card or not), a worktree and a session in
+ *  that project. Null when they hold; "" when something is missing rather
+ *  than wrong. */
+function refsProblem(t: PlanTask, ctx: RouteContext): string | null {
+  if (t.target !== "project") return null;
+  if (!t.projectId) return "";
+  if (!knownProject(t.projectId, ctx)) return "The router picked a project Observatory doesn't know.";
+  if (t.worktreeId && !ctx.worktrees.some((w) => w.id === t.worktreeId && w.projectId === t.projectId)) {
+    return "The router picked a worktree that isn't in that project.";
+  }
+  if (t.sessionId && !knownChat(t.sessionId, t.projectId, ctx)) {
+    return "The router picked a chat that isn't open or a past thread in that project.";
+  }
+  if (t.mode === "existing_worktree" && !t.worktreeId) return "";
+  if (t.mode === "existing_chat" && !t.sessionId) return "";
+  return null;
 }
 
 /** The router's reply as a plan. Tolerates a fenced block or prose around
@@ -356,7 +413,9 @@ export function parsePlan(text: string, ctx?: RouteContext): ParseResult {
     for (const k of ["projectId", "mode", "worktreeId", "sessionId", "skill", "past"] as const) {
       if (task[k] === undefined) delete task[k];
     }
-    if (!target || task.confidence < CONFIDENCE_THRESHOLD || (ctx && !refsOk(task, ctx))) task = flagged(task);
+    const problem = ctx ? refsProblem(task, ctx) : null;
+    if (problem !== null) task = flagged(task, problem);
+    else if (!target || task.confidence < CONFIDENCE_THRESHOLD) task = flagged(task);
     tasks.push(task);
   }
   return { ok: true, plan: { tasks } };
@@ -454,7 +513,7 @@ export function defaultMode(projectId: string, ctx: RouteContext): Pick<PlanTask
 
 /** A task moved to another target or project by the user. */
 export function retarget(task: PlanTask, target: Target, projectId: string | undefined, ctx: RouteContext): PlanTask {
-  const { projectId: _p, mode: _m, worktreeId: _w, sessionId: _s, past: _x, skill, ...rest } = task;
+  const { projectId: _p, mode: _m, worktreeId: _w, sessionId: _s, past: _x, choiceNote: _n, skill, ...rest } = task;
   const next: PlanTask = { ...rest, target, needsChoice: false };
   if (target !== "project" || !projectId) return next;
   const keepSkill = skill && ctx.cards.find((c) => c.projectId === projectId)?.skills.includes(skill);
@@ -492,7 +551,7 @@ export interface RoutedPlan {
 /** The plan the user confirmed, kept until batch.ts turns it into a batch
  *  (`dispatchPlan`) and clears it. Nothing is launched here. */
 export function handOffPlan(plan: Plan): RoutedPlan {
-  const routed = { tasks: plan.tasks.map(({ needsChoice: _n, ...t }) => ({ ...t, needsChoice: false })), at: Date.now() };
+  const routed = { tasks: plan.tasks.map(({ needsChoice: _n, choiceNote: _c, ...t }) => ({ ...t, needsChoice: false })), at: Date.now() };
   try {
     localStorage.setItem(ROUTED_KEY, JSON.stringify(routed));
   } catch {

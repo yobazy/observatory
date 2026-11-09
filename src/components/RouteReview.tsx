@@ -68,7 +68,7 @@ function useRouteContext(items: DispatchItem[]): RouteContext {
           recentPrompts: a.recent_prompts.map((p) => p.text),
         };
       });
-    const projects = Object.values(s.projects).map((p) => ({ id: p.id, name: p.name }));
+    const projects = Object.values(s.projects).map((p) => ({ id: p.id, name: p.name, path: p.repo_path }));
     const routerItems = items.map(({ id, text, context }) => ({ id, text, context }));
     // Past threads matching the items, beside the open sessions; only ones
     // nebula still has, in a project that's still here.
@@ -79,6 +79,7 @@ function useRouteContext(items: DispatchItem[]): RouteContext {
       items: routerItems,
       cards: routerCards(allCards, projects, worktrees),
       worktrees,
+      projects,
       sessions,
       pastThreads: pastThreadsFor(routerItems, known, new Set(sessions.map((x) => x.id))),
     };
@@ -104,7 +105,7 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
     setRouting({ kind: "routing" });
     const c = ctxRef.current;
     try {
-      const prompt = buildRouterPrompt(c.items, c.cards, c.sessions, c.pastThreads);
+      const prompt = buildRouterPrompt(c.items, c.cards, c.sessions, c.pastThreads, c.projects);
       const reply = await runRouter(prompt, () => previewReply(c.items, c.cards, c.sessions, c.pastThreads));
       if (n !== run.current) return;
       const parsed = parsePlan(reply, ctxRef.current);
@@ -339,7 +340,9 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
 
                 {t.question && <p className="route-question">Router asks: {t.question}</p>}
                 {t.needsChoice && (
-                  <p className="route-unsure">The router wasn't sure where this goes. Check the target and project.</p>
+                  <p className="route-unsure">
+                    {t.choiceNote ? `${t.choiceNote} Pick where this goes.` : "The router wasn't sure where this goes. Check the target and project."}
+                  </p>
                 )}
                 {own.map((i) => (
                   <p key={i.message} className="dialog-error route-issue">
