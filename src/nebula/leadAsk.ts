@@ -77,8 +77,14 @@ function logCommand(name: string): string {
 
 /** What a lead's prompt says about questions, after what it says about its
  *  own job: its name first, then how it answers and logs. Project leads get
- *  these through leadPrompt's `extra`; the top lead's prompt has them too. */
-export function answerRules(o: { name: string; notes: string }): string[] {
+ *  these through leadPrompt's `extra`; the top lead's prompt has them too,
+ *  with `passOn`: the one thing it may do for a question is ask a project's
+ *  lead with `nebula ask`. */
+export function answerRules(o: { name: string; notes: string; passOn?: boolean }): string[] {
+  // The top lead's one allowed act: asking a project's lead, to answer.
+  const act = o.passOn
+    ? `A question never makes you act, with one exception: to answer it you may run \`nebula ask "Lead <project>" "<question>" --timeout ${PASS_TIMEOUT}\` to ask that project's lead. Nothing else: don't start work, edit files, commit, merge, push, or send anything else to another thread because of one. You answer, and that's all.`
+    : "A question never makes you act: don't start work, edit files, commit, merge, push, or send anything to another thread because of one. You answer, and that's all.";
   return [
     `First, before anything else, run \`nebula rename --force "${o.name}"\`, so other threads can ask you by that name.`,
     `Other threads ask you questions with \`nebula ask\`. A question arrives as [question from session "<its name>"], and your reply is printed back to that thread, so reply with the answer alone.
@@ -87,7 +93,7 @@ Answer facts and past decisions only, and name the source of each answer: a file
 Anything new, anything that needs a choice, or anything you can't name a source for: reply with the single line
 ${ASK_USER} <the question, rewritten so it stands alone>
 and nothing else. The thread then asks me.
-A question never makes you act: don't start work, edit files, commit, merge, push, or send anything to another thread because of one. You answer, and that's all.`,
+${act}`,
     `After each answer, ${ASK_USER} ones too, append one line to ${ANSWERS_LOG}:
 ${logCommand(o.name)}`,
   ];
@@ -160,9 +166,23 @@ Take it as the new list.`,
     `Every project:
 ${projects}`,
     `Answer from your notes, the projects' CLAUDE.md and README files, the memory folder (~/.claude/projects/*/memory) and ${vault}. A question about one project that has a lead goes to that lead: run \`nebula ask "Lead <project>" "<question>" --timeout ${PASS_TIMEOUT}\` and reply with its answer and its source. If it answers ${ASK_USER}, reply with that line as it is.`,
-    ...answerRules({ name: TOP_LEAD_NAME, notes: p.notes }),
+    ...answerRules({ name: TOP_LEAD_NAME, notes: p.notes, passOn: true }),
   ];
   return sections.map((s) => s.trim()).join("\n\n");
+}
+
+/** Remove the top lead: its thread archived (so it doesn't fall into
+ *  triage, stuck checks and parking once it's forgotten), then forgotten.
+ *  A thread already archived or gone is just forgotten. */
+export async function removeTopLeadWith(
+  top: CardLead | undefined,
+  agents: Record<string, { archived: boolean }>,
+  deps: { archive: (agentId: string) => Promise<unknown>; forget: () => Promise<unknown> | void },
+): Promise<"archived" | "forgotten"> {
+  const live = !!top && leadState(top, agents) === "running";
+  if (live) await deps.archive(top!.agentId);
+  await deps.forget();
+  return live ? "archived" : "forgotten";
 }
 
 // ---- the log ----

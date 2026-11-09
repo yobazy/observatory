@@ -32,6 +32,7 @@ import {
   askLineFor,
   DEFAULT_TOP_MODEL,
   logCounts,
+  removeTopLeadWith,
   roster,
   rosterLine,
   tellRoster,
@@ -270,9 +271,13 @@ export function setTopLeadModel(top: TopLead, model: string) {
   });
 }
 
-/** Turn the top lead off: forgotten, its thread left to archive. */
+/** Turn the top lead off: its thread archived, then forgotten. */
 export function removeTopLead() {
-  return saveTopLead(undefined);
+  const s = getState();
+  return removeTopLeadWith(s.prefs.topLead, s.agents, {
+    archive: (id) => request("ArchiveAgent", { id }),
+    forget: () => saveTopLead(undefined),
+  });
 }
 
 /** The ask line for a task starting in `projectId` now (leadAsk.ts), or

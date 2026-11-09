@@ -739,8 +739,9 @@ function LeadsSettings() {
             <button
               className="link-btn hint"
               onClick={() =>
-                void removeTopLead().then(() =>
-                  flash(`The top lead is off${state === "running" ? "; its thread is still there to archive" : ""}`),
+                void removeTopLead().then(
+                  (how) => flash(how === "archived" ? "The top lead is off, and its thread is archived" : "The top lead is off"),
+                  (e) => flash(`Couldn't archive the top lead's thread, so it's still on: ${errText(e)}`),
                 )
               }
             >

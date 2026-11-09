@@ -19,6 +19,7 @@ const {
   askLineFor,
   countsText,
   logCounts,
+  removeTopLeadWith,
   roster,
   rosterLine,
   tellRoster,
@@ -205,7 +206,8 @@ test('Given Start a lead or Start the top lead, the thread is renamed Lead <proj
     assert.ok(p.includes(`nebula rename --force "${name}"`), `${name} renames itself`);
     assert.match(p, /Answer facts and past decisions only, and name the source of each answer/);
     assert.match(p, /ASK_USER: <the question, rewritten so it stands alone>/);
-    assert.match(p, /A question never makes you act: don't start work, edit files, commit, merge, push/);
+    assert.match(p, /A question never makes you act/);
+    assert.match(p, /don't start work, edit files, commit, merge, push/);
     assert.ok(p.includes(`reread your notes in ${notesFile}`), 'rereads its notes before each answer');
     assert.ok(p.includes(`>> ${ANSWERS_LOG}`), 'logs to the answers log');
     assert.ok(p.includes(`"${name}" "<asking thread>" "<question>"`), 'each log line names the lead and the asker');
@@ -285,4 +287,35 @@ test("The top lead's thread is never reviewed (S10), as reviewRunner sees it thr
   assert.equal(needsReview({ ...trigger, lead: ids.has('task-1') }), true, 'a task is reviewed');
   assert.equal(needsReview({ ...trigger, lead: ids.has('top') }), false, 'the top lead is not');
   assert.equal(needsReview({ ...trigger, lead: leadIds(cards).has('top') }), true, 'it is only left out once it is the top lead');
+});
+
+test("The top lead may nebula ask a project's lead to answer a question, and nothing else; a project lead may not", () => {
+  const notes = '~/.config/observatory/leads/shop.md';
+  const project = leadPrompt({ project: 'shop', path: '/code/shop', notes }, answerRules({ name: 'Lead shop', notes }));
+  const top = topLeadPrompt({ path: '/Users/me', notes: TOP_NOTES, leads: [], projects: [] });
+  const allowed = /with one exception: to answer it you may run `nebula ask "Lead <project>" "<question>" --timeout 90`/;
+  assert.match(top, allowed);
+  assert.match(top, /Nothing else: don't start work, edit files, commit, merge, push, or send anything else to another thread/);
+  assert.ok(!/send anything to another thread because of one/.test(top), "the top lead isn't told the opposite");
+  assert.doesNotMatch(project, allowed);
+  assert.doesNotMatch(project, /nebula ask "Lead <project>"/);
+  assert.match(project, /don't start work, edit files, commit, merge, push, or send anything to another thread because of one/);
+});
+
+test("Removing the top lead archives its running thread, then forgets it; a stopped one is just forgotten", async () => {
+  const calls = [];
+  const deps = {
+    archive: async (id) => void calls.push(['archive', id]),
+    forget: async () => void calls.push(['forget']),
+  };
+  assert.equal(await removeTopLeadWith(lead('top'), { top: { archived: false } }, deps), 'archived');
+  assert.deepEqual(calls, [['archive', 'top'], ['forget']]);
+  calls.length = 0;
+  assert.equal(await removeTopLeadWith(lead('top'), { top: { archived: true } }, deps), 'forgotten');
+  assert.equal(await removeTopLeadWith(lead('top'), {}, deps), 'forgotten');
+  assert.deepEqual(calls, [['forget'], ['forget']]);
+  // An archive that fails leaves it on, so it isn't triaged as a task.
+  calls.length = 0;
+  await assert.rejects(removeTopLeadWith(lead('top'), { top: { archived: false } }, { ...deps, archive: async () => { throw new Error('daemon down'); } }));
+  assert.deepEqual(calls, []);
 });
