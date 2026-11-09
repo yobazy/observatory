@@ -5,6 +5,7 @@ import { request, sendInput } from "../nebula/client";
 import { relativeTime } from "../nebula/status";
 import { flash, getState, projectOfWorktree, setState, useAppState } from "../nebula/store";
 import { LABEL_TEXT, ackState, acknowledge, useTriage, type QueueRow } from "../nebula/triage";
+import { useReviews } from "../nebula/review";
 import { queueOf, triageNow, useTriageStatus } from "../nebula/triageRunner";
 import { putDownStuck, useStuck } from "../nebula/stuck";
 import type { Agent } from "../nebula/types";
@@ -26,8 +27,12 @@ export function TriageQueue() {
   const { records, acks } = useTriage();
   const stuck = useStuck();
   const status = useTriageStatus();
-  const { agents, limits } = state;
-  const queue = useMemo(() => queueOf({ agents, limits }, records, acks, stuck), [agents, limits, records, acks, stuck]);
+  const reviews = useReviews();
+  const { agents, limits, git } = state;
+  const queue = useMemo(
+    () => queueOf({ agents, limits, git }, records, acks, reviews.records, stuck),
+    [agents, limits, git, records, acks, reviews.records, stuck],
+  );
   const on = state.prefs.triageOn === true;
   const error = status.result?.errors[0];
 

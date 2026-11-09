@@ -15,6 +15,7 @@ mod nebula_setup;
 mod notes;
 mod preview;
 mod relocate;
+mod review;
 mod router;
 mod serving;
 mod settings;
@@ -100,10 +101,14 @@ pub fn run() {
             router::tag_threads,
             router::triage_threads,
             router::suggest_next,
+            review::review_state,
+            review::run_checks,
+            review::review_task,
             git::git_status,
             git::git_diff,
             git::delete_branch,
             git::local_branches,
+            git::git_push_ff,
             gh::gh_pr,
             gh::gh_pr_create,
             gh::gh_pr_merge,

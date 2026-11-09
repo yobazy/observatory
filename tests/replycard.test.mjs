@@ -563,3 +563,44 @@ test('a terminal prompt is shown with what you asked and what the thread said th
   assert.deepEqual(promptContext([...entries, { n: 4, kind: 'claude', text: 'Running it.' }]), { asked: 'now run the e2e suite', said: 'Running it.' });
   assert.deepEqual(promptContext(entries.slice(0, 2)), { asked: 'fix the header', said: 'Header fixed.' });
 });
+
+test('a decision asked again shows the why only its first asking gave', async () => {
+  const { withBefore, pendingCard } = await import('../src/nebula/replycard.ts');
+  const first = `**Resumed**
+
+**Needs you**
+1. **How should S9 count spend against a thread's budget?** On real data, counting a thread's whole 30-day spend against the $10 default would flag most long threads as Stuck at once.
+   A: count only spend since your last prompt *(my pick)* · B: merge as is · C: drop the budget check
+
+**🟠 Keep open:** decision 1 is waiting on you.`;
+  const again = `**#174 is mergeable again**
+
+**Needs you**
+1. **How should S9 count spend against a thread's budget?** A: only spend since your last prompt *(my pick)* · B: merge as is · C: drop the budget check. #174 stays a draft until you pick.
+
+**🟠 Keep open:** decision 1 is waiting on you.`;
+  const latest = `**S26 is built**
+
+**Needs you**
+1. **How should S9 count spend against a thread's budget?** A: only spend since your last prompt *(my pick)* · B: merge as is · C: drop the budget check. The leads are stacked behind this.
+2. **Old spec branch:** still waiting on you.
+
+**🟠 Keep open:** decision 1 is holding the lead stack.`;
+  const entries = [
+    { n: 1, kind: 'claude', text: first },
+    { n: 2, kind: 'claude', text: again },
+    { n: 3, kind: 'claude', text: latest },
+  ];
+  const card = withBefore(readCard(latest), entries, 3);
+  assert.equal(
+    card.asks[0].before,
+    "On real data, counting a thread's whole 30-day spend against the $10 default would flag most long threads as Stuck at once.",
+  );
+  assert.equal(card.asks[1].before, undefined);
+  assert.equal(pendingCard(entries).card.asks[0].before, card.asks[0].before);
+  // Asked once, there's nothing earlier to add.
+  assert.equal(withBefore(readCard(first), entries, 1).asks[0].before, undefined);
+  // Something said again already isn't repeated.
+  const same = withBefore(readCard(first), [entries[0], { n: 2, kind: 'claude', text: first }], 2);
+  assert.equal(same.asks[0].before, undefined);
+});

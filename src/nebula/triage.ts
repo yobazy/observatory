@@ -368,6 +368,19 @@ export function queueRows(
   return rankQueue(rows);
 }
 
+/** The queue once later rules have relabelled it (the review check): a
+ *  stuck flag keeps its label and reason over theirs, a wait on you aside. */
+export function keepStuck(
+  queue: { rows: QueueRow[]; stale: QueueRow[] },
+  stuck: (id: string) => string | null,
+): { rows: QueueRow[]; stale: QueueRow[] } {
+  const rows = [...queue.rows, ...queue.stale].map((r) => {
+    const why = r.label === "decision" ? null : stuck(r.id);
+    return why ? { ...r, label: "stuck" as const, need: why } : r;
+  });
+  return rankQueue(rows);
+}
+
 /** ⌘J's next row: the one after the open session, else the top. */
 export function nextInQueue(rows: QueueRow[], selected: string | null): QueueRow | null {
   if (!rows.length) return null;
