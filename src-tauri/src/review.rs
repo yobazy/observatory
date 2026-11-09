@@ -100,9 +100,11 @@ pub struct CheckResult {
     output: String,
 }
 
+/// `-s KILL -- -<pgid>`, not `-KILL -<pgid>`: procps-ng 4.0.4 (Ubuntu 24.04)
+/// reads the latter as pid -1 and kills every process the user owns.
 fn kill_group(pgid: u32) {
     let _ = Command::new("/bin/kill")
-        .args(["-KILL", &format!("-{pgid}")])
+        .args(["-s", "KILL", "--", &format!("-{pgid}")])
         .stderr(Stdio::null())
         .status();
 }
