@@ -11,15 +11,24 @@ import type { AgentStatus } from "./types";
 export type LeadEventKind = "finished" | "failed" | "needs you" | "PR opened";
 
 /** A thread as the lead watches it, polled from the store. `failed` is the
- *  mark of what flagged it: an S9 stuck flag, or a failed review. `pr` is
- *  the number of the open (or draft) PR on its branch. */
+ *  mark of the S9 stuck flag that's up, and `review` the mark of a failed
+ *  review (S10, reviewMark()). `pr` is the number of the open (or draft) PR
+ *  on its branch. */
 export interface ThreadState {
   id: string;
   projectId: string | null;
   status: AgentStatus;
   archived: boolean;
   failed: string | null;
+  review?: string | null;
   pr: number | null;
+}
+
+/** A failed review as a mark: a new fail (another state, or a second fail)
+ *  is a new mark; the same record seen again is the same one. Null unless
+ *  the review's state is `failed`. */
+export function reviewMark(rec: { state: string; key: string; fails: number; at: number } | undefined): string | null {
+  return rec?.state === "failed" ? `${rec.key}|${rec.fails}|${rec.at}` : null;
 }
 export type Snapshot = Record<string, ThreadState>;
 
@@ -47,7 +56,10 @@ export function leadEvents(before: Snapshot, after: Snapshot, leads: Leads): Lea
     const add = (kind: LeadEventKind) => out.push({ kind, threadId: t.id, projectId: t.projectId!, leadId });
     if (was.status === "running" && t.status === "finished") add("finished");
     if (was.status !== "needs_feedback" && t.status === "needs_feedback") add("needs you");
-    if (t.failed && t.failed !== was.failed) add("failed");
+    // A stuck flag and a failed review landing together are one failure.
+    const stuck = !!t.failed && t.failed !== was.failed;
+    const review = !!t.review && t.review !== was.review;
+    if (stuck || review) add("failed");
     if (t.pr !== null && t.pr !== was.pr) add("PR opened");
   }
   return out;

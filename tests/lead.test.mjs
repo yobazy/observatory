@@ -23,6 +23,7 @@ const {
   leadIds,
   leadPrompt,
   leadState,
+  reviewMark,
   runningLeads,
   startLead,
   MAX_LINE,
@@ -48,7 +49,7 @@ test('Given a lead, running to finished makes one finished event; needs_feedback
   assert.deepEqual(kinds(thread('a1'), thread('a1', { status: 'needs_feedback' })), ['needs you']);
   // S9's stuck flag, and a failed review (S10), both come in as `failed`.
   assert.deepEqual(kinds(thread('a1', { status: 'finished' }), thread('a1', { status: 'finished', failed: 'errors:turn3' })), ['failed']);
-  assert.deepEqual(kinds(thread('a1', { status: 'finished' }), thread('a1', { status: 'finished', failed: 'review:abc' })), ['failed']);
+  assert.deepEqual(kinds(thread('a1', { status: 'finished' }), thread('a1', { status: 'finished', review: 'k1|1|500' })), ['failed']);
   assert.deepEqual(kinds(thread('a1', { status: 'finished' }), thread('a1', { status: 'finished', pr: 12 })), ['PR opened']);
   const e = leadEvents(snap(thread('a1')), snap(thread('a1', { status: 'finished' })), LEADS)[0];
   assert.deepEqual(e, { kind: 'finished', threadId: 'a1', projectId: 'p1', leadId: 'lead1' });
@@ -251,4 +252,35 @@ test("A lead's thread is never parked, however long it sits idle", async () => {
   const leads = leadIds({ p1: card({ agentId: 'lead1', model: 'haiku', notes: 'n.md' }) });
   const due = toPark([idle('lead1'), idle('a1')], now, parkMs(3), { pinned: new Set(), inBatch: new Set(), leads });
   assert.deepEqual(due.map((s) => s.id), ['a1']);
+});
+
+/** review.ts's record for a failed (or other) review. */
+const reviewRec = (over = {}) => ({ state: 'failed', key: 'head1|2|0', failures: ['npm test: 2 failing'], fails: 1, at: 500, ...over });
+
+test("Given a review that goes to failed (S10), then the lead gets one failed event; the same failure seen again on the next poll makes no second one", () => {
+  const before = thread('a1', { status: 'finished', review: reviewMark(undefined) });
+  const failed = thread('a1', { status: 'finished', review: reviewMark(reviewRec()) });
+  assert.deepEqual(leadEvents(snap(before), snap(failed), LEADS).map((e) => e.kind), ['failed']);
+  // The next poll: the same record.
+  const again = thread('a1', { status: 'finished', review: reviewMark(reviewRec()) });
+  assert.deepEqual(leadEvents(snap(failed), snap(again), LEADS), []);
+  // Only `failed` is a failure: passed, couldn't run and not trusted aren't.
+  for (const state of ['passed', 'error', 'untrusted']) assert.equal(reviewMark(reviewRec({ state })), null);
+  // A second fail on the same task (after the builder's fix) is a new one.
+  const second = thread('a1', { status: 'finished', review: reviewMark(reviewRec({ fails: 2, key: 'head2|1|0', at: 900 })) });
+  assert.deepEqual(leadEvents(snap(again), snap(second), LEADS).map((e) => e.kind), ['failed']);
+  // A stuck flag (S9) and a failed review landing on the same poll are one failure.
+  const both = thread('a1', { status: 'finished', failed: 'errors:turn3', review: reviewMark(reviewRec()) });
+  assert.deepEqual(leadEvents(snap(before), snap(both), LEADS).map((e) => e.kind), ['failed']);
+  // The stuck flag stays a source on its own, and once seen, makes no second event.
+  const stuck = thread('a1', { status: 'finished', failed: 'budget:85' });
+  assert.deepEqual(leadEvents(snap(before), snap(stuck), LEADS).map((e) => e.kind), ['failed']);
+  assert.deepEqual(leadEvents(snap(stuck), snap({ ...stuck }), LEADS), []);
+});
+
+test("A lead's thread is never reviewed (S10), whatever its checkout holds", async () => {
+  const { needsReview } = await import('../src/nebula/review.ts');
+  const trigger = { changed: true, label: 'review', checks: ['npm test'], key: 'k' };
+  assert.equal(needsReview(trigger), true);
+  assert.equal(needsReview({ ...trigger, lead: true }), false);
 });

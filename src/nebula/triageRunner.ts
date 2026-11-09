@@ -9,7 +9,10 @@ import { isPreview, runTriage } from "./client";
 import { getState, projectOfWorktree, subscribe, type State } from "./store";
 import { stepsLine, type Transcript } from "./transcript";
 import { summarize, type Turn } from "./turnsummary";
+import { loadReviews, withReviews } from "./review";
 import {
+  ackState,
+  keepStuck,
   loadAcks,
   loadTriage,
   previewTriageReply,
@@ -163,16 +166,21 @@ export function triageNow(): Promise<TriageResult> {
   return pass();
 }
 
-/** The queue as it stands: every open session with a label, ranked, a
- *  stuck one (stuck.ts) as `stuck` with its reason. */
+/** The queue as it stands: every open session with a label, ranked. The
+ *  check before "done" (review.ts) has the last word on `checked`; a stuck
+ *  flag (stuck.ts) has it over both the model and the review. */
 export function queueOf(
-  s: Pick<State, "agents" | "limits">,
+  s: Pick<State, "agents" | "limits" | "git">,
   records = loadTriage(),
   acks = loadAcks(),
+  reviews = loadReviews(),
   stuck: StuckEntries = loadStuck(),
 ): { rows: QueueRow[]; stale: QueueRow[] } {
+  const why = (id: string) => stuckNeed(stuck, id);
   const leads = leadIds(allCards(), getState().prefs.topLead);
-  return queueRows(Object.values(s.agents).filter((a) => !leads.has(a.id)), records, acks, (id) => !!s.limits[id], (id) => stuckNeed(stuck, id));
+  const queue = queueRows(Object.values(s.agents).filter((a) => !leads.has(a.id)), records, acks, (id) => !!s.limits[id], why);
+  const reviewed = withReviews(queue, s, reviews, (a) => acks[a.id] === ackState(a));
+  return keepStuck(reviewed, why);
 }
 
 const ready = (s: State) => s.loaded && s.link.state === "connected" && s.prefs !== unloaded && s.prefs.triageOn === true;

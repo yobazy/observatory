@@ -1,11 +1,12 @@
 // Stuck and over-budget sessions, flagged in the triage queue (triage.ts).
 // Two checks, both without a model call: the latest turn hitting the same
 // error over and over (from its steps, turns.rs), and a session that's
-// spent most of its budget (in the usage view's API-equivalent dollars).
+// spent most of its budget (in the usage view's API-equivalent dollars)
+// since your last prompt to it, or for a Dispatch task since it launched.
 // Either one makes the session's label `stuck`, with the reason as its need,
 // whatever the model said. A flag holds until the session runs again (you
-// replied, or redirected it) or you press "Got it"; a put-down budget flag
-// comes back only at the next level (85%, then 100%). Nothing is stopped or
+// replied, or redirected it) or you press "Got it"; a budget flag put down
+// by Got it comes back only at 100% of the same spend. Nothing is stopped or
 // archived on its own. Pure, so the tests load it in Node; triageRunner.ts
 // runs it in the triage pass, and the 85%/100% banners go through notify.ts.
 // Value imports name their .ts files so the tests run under plain Node.
@@ -13,11 +14,11 @@
 // Later stories read the flags: `loadStuck()` / `useStuck()` give a
 // `StuckEntry` per agent id, and `stuckNeed()` its reason while it's up.
 import { useSyncExternalStore } from "react";
-import { costBySession, dollars } from "./budgetHold.ts";
-import { sessionKey } from "./usageData.ts";
+import { dollars } from "./budgetHold.ts";
+import { costOf, type Tokens, type UsageReport } from "./usageData.ts";
 import type { Batch } from "./batch.ts";
 import type { Step, Turn } from "./turnsummary.ts";
-import type { AgentKind, AgentStatus } from "./types";
+import type { AgentKind, AgentStatus, PromptEntry } from "./types";
 
 /** A session's budget when neither Settings nor its task sets one. */
 export const DEFAULT_TASK_BUDGET = 10;
@@ -121,12 +122,63 @@ export function taskBudget(agentId: string, batches: Batch[], pref: number | und
   return pref && pref > 0 ? pref : DEFAULT_TASK_BUDGET;
 }
 
-/** What a session has cost, from the usage report (known costs only). */
-export function sessionCost(costs: Map<string, number>, agent: { kind: AgentKind; session_id: string | null }): number {
-  return agent.session_id ? (costs.get(sessionKey(agent.kind, agent.session_id)) ?? 0) : 0;
+/** What a session has spent toward its budget, and from when (ms): since
+ *  your last prompt to it, or since its Dispatch task launched. */
+export interface Spend {
+  cost: number;
+  from: number;
+  since: "prompt" | "task";
+}
+/** By agent id. */
+export type Spent = Map<string, Spend>;
+
+/** A timestamp in ms, whether it came in seconds or ms. */
+const ms = (t: number) => (t < 1e12 ? t * 1000 : t);
+
+/** Where a session's spend counts from: its Dispatch task's launch, else
+ *  your last prompt to it (the newer of nebula's prompt list and its latest
+ *  turn's start, which turns.rs dates from the prompt you typed). Null when
+ *  neither is known: nothing is counted then. */
+export function spendStart(
+  agent: { id: string; recent_prompts: PromptEntry[] },
+  batches: Batch[],
+  turnStarted?: number | null,
+): { from: number; since: Spend["since"] } | null {
+  for (const b of batches) for (const t of b.tasks) if (t.agentId === agent.id && t.launchedAt) return { from: t.launchedAt, since: "task" };
+  let from = turnStarted ? ms(turnStarted) : 0;
+  for (const p of agent.recent_prompts) from = Math.max(from, ms(p.submitted_at));
+  return from > 0 ? { from, since: "prompt" } : null;
 }
 
-export { costBySession };
+/** Priced token rows (usage_since: one per session and model, counted per
+ *  response from the start point on), by session id. */
+export function priceRows(rows: (Tokens & { session: string; model: string })[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const r of rows) {
+    const cost = costOf(r, r.model);
+    if (cost !== null) out.set(r.session, (out.get(r.session) ?? 0) + cost);
+  }
+  return out;
+}
+
+/** A session's spend from `from` (ms) in the hourly usage report, for
+ *  sources with no per-response times: hours after it in full, and the hour
+ *  it falls in for the share of that hour after it. */
+export function spendInBuckets(report: UsageReport | null, kind: AgentKind, session: string, from: number): number {
+  if (!report) return 0;
+  const start = from / 1000;
+  let total = 0;
+  for (const b of report.buckets) {
+    if (b.source !== kind || b.session !== session || b.hour + 3600 <= start) continue;
+    const cost = costOf(b, b.model);
+    if (cost === null) continue;
+    total += b.hour >= start ? cost : (cost * (b.hour + 3600 - start)) / 3600;
+  }
+  return total;
+}
+
+/** "since your last message" / "since the task started", for the board. */
+export const sinceText = (s: Spend["since"]) => (s === "task" ? "since the task started" : "since your last message");
 
 /** Whole percent, down, without float dust (8.7 / 10 is 87%). */
 const percent = (share: number) => Math.floor(share * 100 + 1e-9);
@@ -134,19 +186,23 @@ const percent = (share: number) => Math.floor(share * 100 + 1e-9);
 /** 100 once it's over, 85 from NEAR, else 0. */
 export const budgetStep = (share: number) => (share >= 1 ? 100 : share >= NEAR ? 85 : 0);
 
-/** The flag once the cost reaches NEAR of the budget. */
-export function budgetFlag(cost: number, budget: number): StuckFlag | null {
+/** The flag once the spend reaches NEAR of the budget. `from`, where the
+ *  spend counts from, is part of its mark: a new prompt starts a new count,
+ *  which can flag again at 85%. */
+export function budgetFlag(cost: number, budget: number, from = 0): StuckFlag | null {
   if (!(budget > 0)) return null;
   const share = cost / budget;
   const step = budgetStep(share);
   if (!step) return null;
-  return { kind: "budget", reason: `Used ${percent(share)}% of its ${dollars(budget)} budget`, mark: `budget:${step}:${budget}` };
+  return { kind: "budget", reason: `Used ${percent(share)}% of its ${dollars(budget)} budget`, mark: `budget:${from}:${step}:${budget}` };
 }
+
+const spendFlag = (spend: Spend | undefined, budget: number) => (spend ? budgetFlag(spend.cost, budget, spend.from) : null);
 
 export interface StuckInput {
   /** The session's latest turn, for its steps. */
   turn?: Pick<Turn, "number" | "steps"> | null;
-  /** What it's cost so far, and its budget, in dollars. */
+  /** What it's spent since its start point, and its budget, in dollars. */
   cost?: number;
   budget?: number;
 }
@@ -170,6 +226,8 @@ export function stuckReason(input: StuckInput, cleared: string[] = []): string |
 export interface StuckEntry {
   /** `${status}|${status_changed_at}` when its turn was last read. */
   read?: string;
+  /** When that turn started (ms): your last prompt, for spendStart(). */
+  turnStarted?: number;
   errors?: StuckFlag | null;
   /** The flag up, since when (ms), and the session's status then. */
   raised?: StuckFlag & { at: number; status: AgentStatus };
@@ -232,9 +290,9 @@ export interface StuckDeps {
   entries: () => StuckEntries;
   save: (entries: StuckEntries) => void;
   /** Its latest turn (thread_turn), or null when there's no log to read. */
-  turn: (s: StuckSession) => Promise<Pick<Turn, "number" | "steps"> | null>;
-  /** Each session's cost, read once the turns are in. */
-  costs: () => Map<string, number>;
+  turn: (s: StuckSession) => Promise<(Pick<Turn, "number" | "steps"> & { started?: number }) | null>;
+  /** Each session's spend since its start point, read once the turns are in. */
+  spent: () => Spent;
   budget: (id: string) => number;
   now?: number;
 }
@@ -249,14 +307,16 @@ export async function stuckCheck(deps: StuckDeps): Promise<StuckEntries> {
   const open = (s: StuckSession) => !s.archived && s.status !== "fresh" && !s.stale;
   // The turns first; the flags are settled after, against what's stored
   // and spent by then, so a settle in the meantime isn't written over.
-  const read = new Map<string, StuckFlag | null>();
+  const read = new Map<string, { errors: StuckFlag | null; started?: number }>();
   const was = deps.entries();
   for (const s of deps.sessions)
-    if (open(s) && (s.status === "running" || was[s.id]?.read !== stateOf(s)))
-      read.set(s.id, errorFlag(await deps.turn(s).catch(() => null)));
+    if (open(s) && (s.status === "running" || was[s.id]?.read !== stateOf(s))) {
+      const turn = await deps.turn(s).catch(() => null);
+      read.set(s.id, { errors: errorFlag(turn), started: turn?.started ? ms(turn.started) : undefined });
+    }
   const now = deps.now ?? Date.now();
   const before = deps.entries();
-  const costs = deps.costs();
+  const spent = deps.spent();
   const out: StuckEntries = {};
   for (const s of deps.sessions) {
     let e = before[s.id] ?? {};
@@ -266,8 +326,12 @@ export async function stuckCheck(deps: StuckDeps): Promise<StuckEntries> {
       // Folded away: no flag up, but what was put down stays down.
       if (e.raised) e = { ...e, raised: undefined };
     } else {
-      if (read.has(s.id)) e = { ...e, read: stateOf(s), errors: read.get(s.id) ?? null };
-      e = settle(e, s, budgetFlag(sessionCost(costs, s), deps.budget(s.id)), now);
+      const r = read.get(s.id);
+      if (r) {
+        e = { ...e, read: stateOf(s), errors: r.errors };
+        if (r.started) e.turnStarted = r.started;
+      }
+      e = settle(e, s, spendFlag(spent.get(s.id), deps.budget(s.id)), now);
     }
     if (Object.keys(e).length) out[s.id] = e;
   }
@@ -278,13 +342,13 @@ export async function stuckCheck(deps: StuckDeps): Promise<StuckEntries> {
 
 /** Settle every flag against spend and status alone, between checks (a
  *  usage scan landed, a session started): no turn is read. */
-export function resettle(entries: StuckEntries, sessions: StuckSession[], costs: Map<string, number>, budget: (id: string) => number, now: number): StuckEntries | null {
+export function resettle(entries: StuckEntries, sessions: StuckSession[], spent: Spent, budget: (id: string) => number, now: number): StuckEntries | null {
   let changed = false;
   const out: StuckEntries = { ...entries };
   for (const s of sessions) {
     if (s.archived || s.stale || s.status === "fresh") continue;
     const e = entries[s.id] ?? {};
-    const next = settle(e, s, budgetFlag(sessionCost(costs, s), budget(s.id)), now);
+    const next = settle(e, s, spendFlag(spent.get(s.id), budget(s.id)), now);
     if (next !== e) {
       out[s.id] = next;
       changed = true;
@@ -296,12 +360,12 @@ export function resettle(entries: StuckEntries, sessions: StuckSession[], costs:
 // ---- banners ----
 
 /** Which sessions just crossed 85% or 100% of their budget, for one banner
- *  each. `sent` holds what already went (`id:budget:step`); it's updated in
+ *  each. `sent` holds what already went (`id:from:budget:step`); it's updated in
  *  place. With `seen` null (the first look since launch) nothing fires, and
  *  what's already over is marked sent, so a relaunch doesn't banner old
  *  sessions. Crossing 100% straight from below marks 85% too. */
 export function budgetNudges(
-  rows: { id: string; cost: number; budget: number }[],
+  rows: { id: string; cost: number; budget: number; from?: number }[],
   sent: Set<string>,
   seen: boolean,
 ): { id: string; step: 85 | 100; share: number; budget: number }[] {
@@ -311,10 +375,11 @@ export function budgetNudges(
     const share = r.cost / r.budget;
     const step = budgetStep(share);
     if (!step) continue;
-    const key = `${r.id}:${r.budget}:${step}`;
-    if (sent.has(key)) continue;
-    sent.add(key);
-    if (step === 100) sent.add(`${r.id}:${r.budget}:85`);
+    // A new start point (your next prompt) is a new count, with its own banners.
+    const key = (n: number) => `${r.id}:${r.from ?? 0}:${r.budget}:${n}`;
+    if (sent.has(key(step))) continue;
+    sent.add(key(step));
+    if (step === 100) sent.add(key(85));
     if (seen) out.push({ id: r.id, step: step as 85 | 100, share, budget: r.budget });
   }
   return out;
@@ -370,7 +435,7 @@ export function putDownStuck(id: string) {
   if (next !== all[id] && next) saveStuck({ ...all, [id]: next });
 }
 
-/** The banners already sent, by `id:budget:step`. */
+/** The banners already sent, by `id:from:budget:step`. */
 export function loadSent(): Set<string> {
   return (sent ??= new Set(read<string[]>(SENT_KEY, [])));
 }

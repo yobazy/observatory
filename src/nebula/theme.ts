@@ -126,6 +126,13 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   /** Dollars one session may spend before the queue flags it stuck, at 85%
    *  (stuck.ts); $10 when unset. A Dispatch task can set its own. */
   taskBudget?: number;
+  /** The check before "done" (review.ts): a finished turn's changes are
+   *  checked by a read-only reviewer; off unless true, since each review is
+   *  a model call and runs the project's checks. */
+  reviewOn?: boolean;
+  /** The reviewer CLI, run headless in the checkout (review.rs); unset is
+   *  Claude in plan mode (DEFAULT_REVIEW_COMMAND). */
+  reviewCommand?: string;
   /** Sessions working at once, however they were started; Dispatch's tasks
    *  and New task's queue wait past it (batch.ts); 4 when unset. */
   dispatchCap?: number;

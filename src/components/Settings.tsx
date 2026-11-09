@@ -3,6 +3,7 @@ import { useOverlayKeys } from "./Overlay";
 import { flash, getState, setState, useAppState } from "../nebula/store";
 import { DEFAULT_STALE_DAYS, DEFAULT_TRIAGE_COMMAND } from "../nebula/triage";
 import { DEFAULT_TASK_BUDGET } from "../nebula/stuck";
+import { CODEX_REVIEW_COMMAND, DEFAULT_REVIEW_COMMAND } from "../nebula/review";
 import { DEFAULT_PARK_DAYS } from "../nebula/park";
 import {
   AGENTS_HEAD,
@@ -446,8 +447,9 @@ function DispatchSettings() {
             Task budget
           </label>
           <span className="setting-hint">
-            What one thread may spend, in the dollars the usage view shows. At 85% the queue flags it stuck and a banner
-            says so, then again at 100%. A Dispatch task can set its own on the board. Nothing is stopped on its own.
+            What one thread may spend since your last message to it (a Dispatch task: since it started), in the dollars
+            the usage view shows. At 85% the queue flags it stuck and a banner says so, then again at 100%. A Dispatch
+            task can set its own on the board. Nothing is stopped on its own.
           </span>
         </div>
         <span className="budget-input">
@@ -470,6 +472,41 @@ function DispatchSettings() {
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
           />
         </span>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-review-on">
+            Check before done
+          </label>
+          <span className="setting-hint">
+            When a thread's turn ends with changes in its checkout, the app runs the project card's checks there and a
+            read-only reviewer checks the work against the task. A pass shows it as done and checked; a fail goes back to
+            the thread once. Each review is a model call. Only turns that end while the app is open are checked.
+          </span>
+        </div>
+        <Switch
+          id="set-review-on"
+          on={prefs.reviewOn === true}
+          onChange={(on) => void savePrefs({ ...prefs, reviewOn: on || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-review">
+            Review command
+          </label>
+          <span className="setting-hint">
+            The reviewer CLI, run headless in the checkout with the prompt on stdin. Keep it read-only by its own flags;
+            the app also throws away any verdict from a reviewer that changed files. Empty uses Claude in plan mode.
+          </span>
+        </div>
+        <TextSetting
+          id="set-review"
+          value={prefs.reviewCommand ?? ""}
+          placeholder={DEFAULT_REVIEW_COMMAND}
+          suggestions={[DEFAULT_REVIEW_COMMAND, CODEX_REVIEW_COMMAND]}
+          onCommit={(v) => void savePrefs({ ...prefs, reviewCommand: v || undefined })}
+        />
       </div>
       <div className="setting">
         <div className="setting-text">

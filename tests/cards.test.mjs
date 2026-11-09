@@ -24,6 +24,7 @@ function readSources(dir, isGitRepo) {
   const add = (rel) => existsSync(join(dir, rel)) && files.push({ path: rel, text: readFileSync(join(dir, rel), 'utf8') });
   add('CLAUDE.md');
   add('AGENTS.md');
+  add('package.json');
   readdirSync(dir).filter((n) => n.toUpperCase().startsWith('README')).sort().forEach(add);
   const skills = join(dir, '.claude/skills');
   if (existsSync(skills)) readdirSync(skills).sort().forEach((s) => add(`.claude/skills/${s}/SKILL.md`));
@@ -140,4 +141,46 @@ test('saved cards come back after a reload, and unreadable storage starts with n
   assert.deepEqual(Object.keys(allCards()), ['a']);
   assert.equal(cardFor('a').policy, 'isolated');
   assert.equal(cardFor('a').concurrency, 1);
+});
+
+test('S10: a CLAUDE.md "## Checks" block drafts the card\'s checks; else package.json\'s test and lint scripts', () => {
+  const fromNotes = draftCard(readSources(new URL('./fixtures/checks-claude', import.meta.url).pathname, true));
+  assert.deepEqual(fromNotes.checks, ['npm run build && npm test', 'cd src-tauri && cargo test --locked']);
+  const fromPackage = draftCard(readSources(new URL('./fixtures/checks-package', import.meta.url).pathname, true));
+  assert.deepEqual(fromPackage.checks, ['npm test', 'npm run lint']);
+  assert.deepEqual(draftCard({ files: [{ path: 'package.json', text: '{"scripts":{"test":"x"}}' }], isGitRepo: true }).checks, ['npm test']);
+  assert.deepEqual(draftCard({ files: [{ path: 'package.json', text: 'not json' }], isGitRepo: true }).checks, []);
+  assert.deepEqual(draftCard({ files: [], isGitRepo: true }).checks, []);
+  // This repo's own CLAUDE.md, as the spec's example.
+  const own = readFileSync(new URL('../CLAUDE.md', import.meta.url), 'utf8');
+  assert.deepEqual(cards.checksBlock(own), [
+    'npm run build && npm test',
+    'cd src-tauri && cargo fmt --check && cargo clippy --all-targets --locked -- -D warnings && cargo test --locked',
+  ]);
+});
+
+test('S10: checks and the check-off switch are saved on the card; a card saved before checks has none set', () => {
+  fresh();
+  saveCard('p1', { ...draftCard({ files: [], isGitRepo: true }), checks: [' npm test ', '', 'npm run lint'], reviewOff: true });
+  reloadCards();
+  assert.deepEqual(cardFor('p1').checks, ['npm test', 'npm run lint']);
+  assert.equal(cardFor('p1').reviewOff, true);
+  const { checks: _c, ...old } = draftCard({ files: [], isGitRepo: true });
+  saveCard('p2', old);
+  reloadCards();
+  assert.equal(cardFor('p2').checks, undefined);
+  assert.equal(cardFor('p2').reviewOff, undefined);
+});
+
+test('push after every turn is off on a new card and is kept once turned on', () => {
+  fresh();
+  const card = draftCard({ files: [], isGitRepo: true });
+  assert.equal(card.pushAfterTurn, false);
+  saveCard('p1', { ...card, pushAfterTurn: true });
+  reloadCards();
+  assert.equal(cardFor('p1').pushAfterTurn, true);
+  // Cards saved before the setting existed read as off.
+  localStorage.setItem('observatory.cards', JSON.stringify({ cards: { p2: { description: 'x' } } }));
+  reloadCards();
+  assert.equal(cardFor('p2').pushAfterTurn, false);
 });

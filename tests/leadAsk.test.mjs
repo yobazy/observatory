@@ -276,3 +276,13 @@ test('The top lead is left out of triage, parking and stuck checks, like the pro
   assert.deepEqual([...leadIds(cards, lead('top'))].sort(), ['l1', 'top']);
   assert.deepEqual([...leadIds(cards, undefined)], ['l1']);
 });
+
+test("The top lead's thread is never reviewed (S10), as reviewRunner sees it through leadIds()", async () => {
+  const { needsReview } = await import('../src/nebula/review.ts');
+  const cards = { pa: card(lead('l1')), pb: card() };
+  const ids = leadIds(cards, lead('top'));
+  const trigger = { changed: true, label: 'review', checks: ['npm test'], key: 'k' };
+  assert.equal(needsReview({ ...trigger, lead: ids.has('task-1') }), true, 'a task is reviewed');
+  assert.equal(needsReview({ ...trigger, lead: ids.has('top') }), false, 'the top lead is not');
+  assert.equal(needsReview({ ...trigger, lead: leadIds(cards).has('top') }), true, 'it is only left out once it is the top lead');
+});

@@ -4,7 +4,7 @@ import { dollars } from "../nebula/budgetHold";
 import { useSessionCosts } from "../nebula/budget";
 import { DEFAULT_LEAD_MODEL, defaultNotes, leadName, leadState } from "../nebula/lead";
 import { setLeadModel, startProjectLead } from "../nebula/leadRunner";
-import { sessionCost } from "../nebula/stuck";
+import { sessionKey } from "../nebula/usageData";
 import { flash, setState, useAppState } from "../nebula/store";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -54,7 +54,7 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
                 >
                   Open {agent.name}
                 </button>
-                <span className="dialog-note card-flat">{dollars(sessionCost(costs, agent))} so far</span>
+                <span className="dialog-note card-flat">{dollars(agent.session_id ? (costs.get(sessionKey(agent.kind, agent.session_id)) ?? 0) : 0)} so far</span>
               </>
             )}
           </div>
