@@ -249,9 +249,11 @@ export interface World {
 }
 
 export type Where =
-  | { how: "follow_up"; agent: Agent }
-  | { how: "agent"; worktreeId: string }
-  | { how: "new_worktree"; projectId: string }
+  /** `unarchive`: an archived past thread, reopened before the follow-up. */
+  | { how: "follow_up"; agent: Agent; unarchive?: boolean }
+  /** `note`: why a follow-up became a new thread (its past thread is gone). */
+  | { how: "agent"; worktreeId: string; note?: string }
+  | { how: "new_worktree"; projectId: string; note?: string }
   /** Home is a plain folder: it has to be a project before it can run anything. */
   | { how: "add_home"; folder: string }
   /** Home's folder has become a project: its card moves to the project's id. */
@@ -306,6 +308,19 @@ export function whereTo(t: BatchTask, w: World): Where {
   if (!projectId || !w.projects[projectId]) return { how: "failed", note: "Its project is gone." };
   if (t.mode === "existing_chat") {
     const a = t.sessionId ? w.agents[t.sessionId] : undefined;
+    if (t.past) {
+      // A past thread deleted since (or its worktree with it): a new thread
+      // in the same project, the way the project runs its tasks.
+      if (!a || !w.worktrees[a.worktree_id]) {
+        const note = `${t.past.title} was deleted, so this started a new thread.`;
+        if (w.cards[projectId]?.policy === "shared") {
+          const main = mainOf(w, projectId);
+          return main ? { how: "agent", worktreeId: main, note } : { how: "failed", note: "The project's main checkout isn't there." };
+        }
+        return { how: "new_worktree", projectId, note };
+      }
+      return a.archived ? { how: "follow_up", agent: a, unarchive: true } : { how: "follow_up", agent: a };
+    }
     if (!a || a.archived) return { how: "failed", note: "The chat it was to follow up in is gone." };
     return { how: "follow_up", agent: a };
   }
@@ -334,6 +349,8 @@ export interface LaunchDeps {
   queuedFor(agentId: string): number;
   followUp(a: Agent, text: string): Promise<void>;
   enqueue(a: Agent, text: string): Promise<unknown>;
+  /** Reopen an archived thread (nebula's UnarchiveAgent). */
+  unarchive(agentId: string): Promise<void>;
   /** Start a session without selecting it; resolves with its id. */
   createAgent(worktreeId: string, prompt: string): Promise<string | null>;
   createWorktree(projectId: string, branch: string): Promise<string>;
@@ -392,6 +409,13 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
       const a = where.agent;
       const prompt = promptFor(a.custom_harness ?? a.kind);
       deps.progress({ prompt, agentId: a.id });
+      if (t.past) {
+        // A past thread: reopened first when archived, then the follow-up
+        // goes through the queue, which sends it once the thread can take it.
+        if (where.unarchive) await deps.unarchive(a.id);
+        const how = await deps.enqueue(a, prompt);
+        return how === "queued" ? { state: "launched", agentId: a.id, note: "queued" } : { state: "launched", agentId: a.id };
+      }
       if (deps.isIdle(a) && deps.queuedFor(a.id) === 0) {
         await deps.followUp(a, prompt);
         return { state: "launched", agentId: a.id };
@@ -412,7 +436,7 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
       deps.progress({ prompt });
       const id = await deps.createAgent(worktreeId, prompt);
       if (!id) return { state: "failed", note: "The daemon didn't return the new session." };
-      return { state: "launched", agentId: id };
+      return where.note ? { state: "launched", agentId: id, note: where.note } : { state: "launched", agentId: id };
     }
   }
 }
