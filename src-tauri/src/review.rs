@@ -61,7 +61,11 @@ fn state(dir: &Path) -> Result<String, String> {
         .unwrap_or_default();
     let status = git(dir, &["status", "--porcelain=v1", "-z", "-uall"])?;
     let mut hasher = DefaultHasher::new();
-    let diff = git(dir, &["diff", "--no-color", "--no-ext-diff", "--binary", "HEAD"]).unwrap_or_default();
+    let diff = git(
+        dir,
+        &["diff", "--no-color", "--no-ext-diff", "--binary", "HEAD"],
+    )
+    .unwrap_or_default();
     diff.hash(&mut hasher);
     for entry in status.split('\0') {
         if let Some(path) = entry.strip_prefix("?? ") {
@@ -192,7 +196,10 @@ pub async fn run_checks(
 /// CLI, run in the checkout so it can read the files; its reply as text.
 #[tauri::command]
 pub async fn review_task(app: AppHandle, path: PathBuf, prompt: String) -> Result<String, String> {
-    let words = review_words(review_on(&app), configured(&app, "reviewCommand").as_deref())?;
+    let words = review_words(
+        review_on(&app),
+        configured(&app, "reviewCommand").as_deref(),
+    )?;
     tauri::async_runtime::spawn_blocking(move || {
         run(&words, prompt, &path, login_path(), REVIEW_TIMEOUT)
     })
