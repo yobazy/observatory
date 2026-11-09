@@ -26,6 +26,8 @@ import {
 } from "./triage";
 import { loadStuck, stuckNeed, type StuckEntries } from "./stuck";
 import { runStuckCheck } from "./stuckRunner";
+import { allCards } from "./cards";
+import { leadIds } from "./lead";
 import type { Agent } from "./types";
 
 const EVERY = 5 * 60_000;
@@ -98,9 +100,11 @@ async function context(s: TriageSource): Promise<{ tail: string; summary: string
   return { tail: t ? tailText(t.entries, stepsLine) : "", summary };
 }
 
-/** Every session as the pass reads it. */
+/** Every session as the pass reads it. A project's lead (lead.ts) isn't
+ *  one: it's told of the others, not triaged with them. */
 function sources(s: State): TriageSource[] {
-  return Object.values(s.agents).map((a) => ({
+  const leads = leadIds(allCards());
+  return Object.values(s.agents).filter((a) => !leads.has(a.id)).map((a) => ({
     id: a.id,
     status: a.status,
     status_changed_at: a.status_changed_at,
@@ -167,7 +171,8 @@ export function queueOf(
   acks = loadAcks(),
   stuck: StuckEntries = loadStuck(),
 ): { rows: QueueRow[]; stale: QueueRow[] } {
-  return queueRows(Object.values(s.agents), records, acks, (id) => !!s.limits[id], (id) => stuckNeed(stuck, id));
+  const leads = leadIds(allCards());
+  return queueRows(Object.values(s.agents).filter((a) => !leads.has(a.id)), records, acks, (id) => !!s.limits[id], (id) => stuckNeed(stuck, id));
 }
 
 const ready = (s: State) => s.loaded && s.link.state === "connected" && s.prefs !== unloaded && s.prefs.triageOn === true;

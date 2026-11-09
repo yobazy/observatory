@@ -35,6 +35,17 @@ export interface ProjectCard {
   /** Today's spend, in API-equivalent dollars, past which this project's
    *  pending Dispatch tasks wait (budgetHold.ts). Unset: no budget of its own. */
   dailyBudget?: number;
+  /** The project's lead (lead.ts): a long-lived thread told of each task's
+   *  turn ends, failures, waits and PRs. Unset: no lead, and nothing sent. */
+  lead?: CardLead;
+}
+
+/** A lead as its card keeps it: its thread, the model it's switched to, and
+ *  the notes file it keeps (outside the repo). */
+export interface CardLead {
+  agentId: string;
+  model: string;
+  notes: string;
 }
 
 /** A file a card is drafted from, its path relative to the project root. */
@@ -204,6 +215,18 @@ function normalize(x: unknown): ProjectCard | null {
     ...(typeof c.dailyBudget === "number" && Number.isFinite(c.dailyBudget) && c.dailyBudget > 0
       ? { dailyBudget: c.dailyBudget }
       : {}),
+    ...(leadOf(c.lead) ? { lead: leadOf(c.lead)! } : {}),
+  };
+}
+
+function leadOf(x: unknown): CardLead | null {
+  if (!x || typeof x !== "object") return null;
+  const l = x as Partial<CardLead>;
+  if (typeof l.agentId !== "string" || !l.agentId) return null;
+  return {
+    agentId: l.agentId,
+    model: typeof l.model === "string" ? l.model : "",
+    notes: typeof l.notes === "string" ? l.notes : "",
   };
 }
 
@@ -284,6 +307,15 @@ export function saveCard(key: string, card: ProjectCard) {
   const all = next.isHome ? withoutOtherHomes(allCards(), key) : { ...allCards() };
   all[key] = next;
   write(all);
+}
+
+/** Set or clear a card's lead, leaving the rest as saved; `base` is the card
+ *  to start from when the project has none saved yet. */
+export function saveLead(key: string, lead: CardLead | undefined, base?: ProjectCard) {
+  const card = cardFor(key) ?? base;
+  if (!card) return;
+  const { lead: _old, ...rest } = card;
+  saveCard(key, lead ? { ...rest, lead } : rest);
 }
 
 export function removeCard(key: string) {

@@ -15,6 +15,7 @@ import {
 } from "../nebula/cards";
 import { flash, getState } from "../nebula/store";
 import { Switch } from "./Settings";
+import { LeadSection } from "./LeadCard";
 
 /** Which card to edit: a project's (keyed by its id), or a plain folder's
  *  Home card (`folder:<path>`). `makeHome` opens it flagged as Home. */
@@ -111,6 +112,8 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
       taskKinds: splitList(kinds),
       homeFolder: card.isHome ? folder : null,
       dailyBudget: Number(budget) > 0 ? Number(budget) : undefined,
+      // Started or stopped from this dialog meanwhile: as saved, not as opened.
+      lead: cardFor(cardKey)?.lead,
     };
     saveCard(cardKey, next);
     flash(next.isHome ? `${target.name} is Home` : `Saved ${target.name}'s card`);
@@ -250,6 +253,10 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
                   <span className="dialog-note card-flat">Past this today, its Dispatch tasks wait. Running ones carry on.</span>
                 </div>
               </div>
+            )}
+
+            {!folderHome && getState().projects[cardKey] && (
+              <LeadSection projectId={cardKey} projectName={target.name} base={card} />
             )}
 
             {card.isHome && (
