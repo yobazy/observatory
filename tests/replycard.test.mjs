@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { answerText, isCard, pointerText, readAsk, readCard, readChips, replyQuote } from '../src/nebula/replycard.ts';
+import { answerText, isCard, pointerText, readAsk, readCard, readChips, replyQuote, suggested } from '../src/nebula/replycard.ts';
 
 const reply = `**Yes. The Read view already exists, so cards are a small step.**
 
@@ -614,4 +614,25 @@ test('a decision asked again shows the why only its first asking gave', async ()
   // Something said again already isn't repeated.
   const same = withBefore(readCard(first), [entries[0], { n: 2, kind: 'claude', text: first }], 2);
   assert.equal(same.asks[0].before, undefined);
+});
+
+test('a "**Needs you.**" heading with a sentence after it starts the decisions, and an all-bold option is the pick', () => {
+  const c = readCard(`**Done.**
+
+**Needs you.** My pick is in bold.
+1. Domain: **A buy one now** · B wait
+2. Id: A keep it · **B a new one**. Depends on 1.
+3. Tabs: A four · B five`);
+  assert.equal(c.asksNote.includes('My pick is in bold.'), true);
+  assert.deepEqual(c.asks.map((a) => a.options.map((o) => o.label)), [['buy one now', 'wait'], ['keep it', 'a new one'], ['four', 'five']]);
+  assert.equal(c.asks[1].text, 'Id: Depends on 1.');
+  assert.deepEqual(suggested(c), { 1: 'A', 2: 'B' });
+});
+
+test('an own-line option written all in bold is read too', () => {
+  const c = readCard(`**Needs you**
+1. Ship it?
+   - **A today**
+   - B Monday`);
+  assert.deepEqual(c.asks[0].options, [{ letter: 'A', label: 'today', bold: true }, { letter: 'B', label: 'Monday' }]);
 });
