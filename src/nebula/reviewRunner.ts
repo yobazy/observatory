@@ -91,7 +91,11 @@ async function review(agentId: string) {
   const a = s.agents[agentId];
   const g = s.git[wt.id];
   if (!a || a.archived || a.status === "running" || !g || "error" in g) return;
-  const key = reviewKey(g);
+  // The content, not just the counts: a fix on the same line as the break
+  // changes no count, and must still get its second review.
+  const content = await reviewState(wt.path).catch(() => null);
+  if (content === null) return;
+  const key = reviewKey(g, content);
   const rec = loadReviews()[a.id];
   const fresh = freshRound(rec, a.recent_prompts);
   const { checks, off } = await checksFor(project.id, wt.path);

@@ -21,6 +21,7 @@ const {
   failsSoFar,
   freshRound,
   hasChanges,
+  keysMatch,
   loadReviews,
   needsReview,
   parseVerdict,
@@ -265,4 +266,47 @@ test('S10: the prompt carries the criteria, each check with its result and outpu
   assert.match(p, /\$ npm test {3}\(failed, exit 1\)\nFAIL login/);
   assert.match(p, /--- login\.ts \(modified, \+1 -0\)\n@@ -1 \+1,2 @@\n\+if \(!pw\) throw/);
   assert.match(p, /read-only/);
+});
+
+test('a fix on the same line as the break gets its own key and a second review; the same content keeps the key', async () => {
+  // A one-line break and its one-line fix: the same counts, different content.
+  const shape = git({ head: '6af8b3c', unstaged: 1, insertions: 1, deletions: 1 });
+  const broken = reviewKey(shape, '6af8b3c|refs/heads/fix|1111|M add.sh  (a + b)');
+  const fixed = reviewKey(shape, '6af8b3c|refs/heads/fix|2222|M add.sh  (a - b)');
+  assert.notEqual(broken, fixed, 'same size, different content: a new key');
+  assert.equal(reviewKey(shape, '6af8b3c|refs/heads/fix|1111|M add.sh  (a + b)'), broken, 'identical content: the same key');
+  assert.equal(reviewKey(shape), '6af8b3c|0|1|0|0|1|1', 'the shape alone, as the polled state gives it');
+
+  // The first review fails at the broken state and sends the follow-up.
+  const reply = JSON.stringify({ pass: false, failures: ['sh test.sh fails: add.sh subtracts'] });
+  const first = await reviewPass(world({ reply }).deps({ key: broken }));
+  assert.equal(first.fails, 1);
+
+  // The builder's fix: the same counts, new content. It's reviewed again, for real.
+  const trigger = { changed: true, label: 'review', checks: ['sh test.sh'], rec: first, fresh: false };
+  assert.equal(needsReview({ ...trigger, key: fixed }), true);
+  const w = world();
+  const second = await reviewPass(w.deps({ prev: first, fails: 1, key: fixed }));
+  assert.equal(w.calls, 1, 'the reviewer ran');
+  assert.equal(second.state, 'passed');
+  assert.notEqual(reviewedLabel('review', '', { changed: true, rec: second, key: fixed }).label, 'stuck');
+
+  // A fix turn that changed nothing is still the second fail, with no call.
+  assert.equal(needsReview({ ...trigger, key: broken }), true);
+  const w2 = world();
+  const again = await reviewPass(w2.deps({ prev: first, fails: 1, key: broken }));
+  assert.equal(w2.calls, 0);
+  assert.equal(again.fails, 2);
+  assert.deepEqual(reviewedLabel('review', '', { changed: true, rec: again, key: broken }), { label: 'stuck', need: TWICE });
+});
+
+test('the queue reads a review as current from the polled counts, which carry no content', () => {
+  const shape = git({ head: 'abc', unstaged: 1, insertions: 1, deletions: 1 });
+  const rec = { state: 'passed', key: reviewKey(shape, 'content A'), failures: [], fails: 0, at: NOW };
+  assert.equal(keysMatch(rec.key, reviewKey(shape)), true);
+  assert.equal(keysMatch(rec.key, reviewKey(git({ head: 'abc', unstaged: 2 }))), false);
+  assert.equal(keysMatch(rec.key, reviewKey(shape, 'content B')), false);
+  assert.equal(reviewedLabel('review', '', { changed: true, rec, key: reviewKey(shape) }).label, 'checked');
+  // A record saved before keys had content still matches by its shape.
+  assert.equal(keysMatch('abc|0|1|0|0|1|1', reviewKey(shape, 'content A')), true);
 });
