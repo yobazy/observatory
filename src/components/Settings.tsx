@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
+import { filterSettings, markWords, searchWords } from "../nebula/settingsSearch";
 import { flash, getState, setState, useAppState } from "../nebula/store";
 import { DEFAULT_STALE_DAYS, DEFAULT_TRIAGE_COMMAND } from "../nebula/triage";
 import { DEFAULT_TASK_BUDGET } from "../nebula/stuck";
@@ -58,6 +59,52 @@ export function SettingsView() {
   const tabList = useRef<HTMLElement>(null);
   useOverlayKeys(tabList);
 
+  const [query, setQuery] = useState("");
+  const words = searchWords(query);
+  const searching = words.length > 0;
+  const [found, setFound] = useState<Record<string, number> | null>(null);
+  const pane = useRef<HTMLDivElement>(null);
+  const searchBox = useRef<HTMLInputElement>(null);
+  const wordsKey = words.join(" ");
+
+  // Every tab is on screen while searching; hide what doesn't match, and again
+  // when a section's own content changes (a lead starting, a version loading).
+  useLayoutEffect(() => {
+    const root = pane.current;
+    if (!root || !searching || !settings) {
+      markWords(root ?? document.body, []);
+      setFound(null);
+      return;
+    }
+    const run = () => {
+      const counts = filterSettings(root, words);
+      markWords(root, words);
+      setFound((was) => (was && TABS.every((t) => was[t] === counts[t]) ? was : counts));
+    };
+    run();
+    const watch = new MutationObserver(run);
+    watch.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => watch.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wordsKey, settings]);
+  useEffect(() => () => markWords(document.body, []), []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey && !e.altKey && !e.ctrlKey && e.key === "f") {
+        e.preventDefault();
+        searchBox.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const openTab = (t: Tab) => {
+    setQuery("");
+    setTab(t);
+  };
+
   const save = async (key: string, v: unknown) => {
     setSettings((s) => ({ ...s, [key]: v }));
     if (key === "theme" && typeof v === "string") setState({ theme: v });
@@ -68,6 +115,40 @@ export function SettingsView() {
       setSettings(await loadSettings());
     }
   };
+
+  const tabContent = (t: Tab) =>
+    !settings ? null : t === "Appearance" ? (
+      <Appearance settings={settings} save={save} />
+    ) : t === "General" ? (
+      <>
+        <Rows rows={GENERAL} settings={settings} save={save} />
+        <Previews />
+        <ReadView />
+        <DispatchSettings />
+        <LeadsSettings />
+        <AutomationsSettings />
+        <Updates />
+        <UsageLog />
+      </>
+    ) : t === "Sessions" ? (
+      <Rows rows={SESSIONS} settings={settings} save={save} />
+    ) : t === "Agents" ? (
+      <>
+        <Rows rows={AGENTS_HEAD} settings={settings} save={save} />
+        <Handoffs />
+        {harnessRows().map((h) => (
+          <Group key={h.title} title={h.title}>
+            <Rows rows={h.rows} settings={settings} save={save} />
+          </Group>
+        ))}
+      </>
+    ) : t === "Project" ? (
+      <ProjectTab settings={settings} onChange={() => void loadSettings().then(setSettings)} />
+    ) : t === "Shortcuts" ? (
+      <Shortcuts />
+    ) : (
+      <Rows rows={EXPERIMENTAL} settings={settings} save={save} />
+    );
 
   return (
     <section className="settings" aria-labelledby="settings-title">
@@ -86,51 +167,59 @@ export function SettingsView() {
       </header>
       <div className="settings-body">
         <nav className="settings-tabs" aria-label="Settings sections" ref={tabList}>
-          {TABS.map((t) => (
-            <button
-              key={t}
-              className={`settings-tab${tab === t ? " is-on" : ""}`}
-              aria-current={tab === t ? "page" : undefined}
-              onClick={() => setTab(t)}
-            >
-              {t}
-            </button>
-          ))}
+          <input
+            ref={searchBox}
+            type="search"
+            className="setting-input settings-search"
+            placeholder="Search settings"
+            aria-label="Search settings"
+            title="Search every tab (⌘F)"
+            value={query}
+            spellCheck={false}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              e.preventDefault();
+              if (query) setQuery("");
+              else setState({ view: "sessions" });
+            }}
+          />
+          {TABS.map((t) => {
+            const n = searching ? (found?.[t] ?? 0) : null;
+            return (
+              <button
+                key={t}
+                className={`settings-tab${!searching && tab === t ? " is-on" : ""}${n === 0 ? " is-empty" : ""}`}
+                aria-current={!searching && tab === t ? "page" : undefined}
+                onClick={() => openTab(t)}
+              >
+                {t}
+                {n !== null && n > 0 && <span className="settings-tab-count">{n}</span>}
+              </button>
+            );
+          })}
         </nav>
-        <div className="settings-pane">
+        <div className="settings-pane" ref={pane}>
           {!settings ? (
             <p className="usage-empty">Reading settings…</p>
-          ) : tab === "Appearance" ? (
-            <Appearance settings={settings} save={save} />
-          ) : tab === "General" ? (
+          ) : searching ? (
             <>
-              <Rows rows={GENERAL} settings={settings} save={save} />
-              <Previews />
-              <ReadView />
-              <DispatchSettings />
-              <LeadsSettings />
-              <AutomationsSettings />
-              <Updates />
-              <UsageLog />
-            </>
-          ) : tab === "Sessions" ? (
-            <Rows rows={SESSIONS} settings={settings} save={save} />
-          ) : tab === "Agents" ? (
-            <>
-              <Rows rows={AGENTS_HEAD} settings={settings} save={save} />
-              <Handoffs />
-              {harnessRows().map((h) => (
-                <Group key={h.title} title={h.title}>
-                  <Rows rows={h.rows} settings={settings} save={save} />
-                </Group>
+              {TABS.map((t) => (
+                <section key={t} className="settings-found" data-settings-tab={t}>
+                  <h2 className="settings-found-tab">
+                    <button className="link-btn" onClick={() => openTab(t)} title={`Open the ${t} tab`}>
+                      {t}
+                    </button>
+                  </h2>
+                  {tabContent(t)}
+                </section>
               ))}
+              {found && Object.values(found).every((n) => n === 0) && (
+                <p className="usage-empty">No settings match “{query.trim()}”.</p>
+              )}
             </>
-          ) : tab === "Project" ? (
-            <ProjectTab settings={settings} onChange={() => void loadSettings().then(setSettings)} />
-          ) : tab === "Shortcuts" ? (
-            <Shortcuts />
           ) : (
-            <Rows rows={EXPERIMENTAL} settings={settings} save={save} />
+            tabContent(tab)
           )}
         </div>
       </div>
@@ -1066,7 +1155,7 @@ function Appearance({ settings, save }: { settings: Settings; save: (k: string, 
   return (
     <>
       <Group title="Desktop app">
-        <div className="setting">
+        <div className="setting" data-search="dark light mode">
           <div className="setting-text">
             <span className="setting-label" id="mode-label">
               Appearance
