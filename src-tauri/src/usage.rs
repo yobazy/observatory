@@ -426,7 +426,10 @@ fn spend_since(state: &Scan, from: &[SpendFrom]) -> Vec<Spend> {
     let starts: HashMap<&str, i64> = from.iter().map(|f| (f.session.as_str(), f.since)).collect();
     let mut sums: HashMap<(&str, &str), (Tokens, u32)> = HashMap::new();
     for r in state.records.values() {
-        if starts.get(r.session.as_str()).is_some_and(|&since| r.time >= since) {
+        if starts
+            .get(r.session.as_str())
+            .is_some_and(|&since| r.time >= since)
+        {
             let e = sums.entry((&r.session, &r.model)).or_default();
             e.0.add(&r.usage);
             e.1 += 1;
@@ -449,7 +452,10 @@ fn spend_since(state: &Scan, from: &[SpendFrom]) -> Vec<Spend> {
 /// responses the last usage scan read (one per API response, with its own
 /// time), so a turn's spend isn't blurred into its hour. No new scan.
 #[tauri::command]
-pub async fn usage_since(from: Vec<SpendFrom>, state: State<'_, UsageState>) -> Result<Vec<Spend>, String> {
+pub async fn usage_since(
+    from: Vec<SpendFrom>,
+    state: State<'_, UsageState>,
+) -> Result<Vec<Spend>, String> {
     let shared = state.0.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let scan_state = shared.lock().map_err(|_| "usage scan poisoned")?;
