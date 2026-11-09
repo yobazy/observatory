@@ -187,6 +187,46 @@ test('a project, worktree or chat the router made up is treated as low confidenc
   assert.deepEqual(r.plan.tasks[3].sourceItemIds, ['i4'], 'unknown item ids are dropped');
 });
 
+test('a project the daemon knows keeps its task without a card; an unknown project is cleared and the task says why', () => {
+  // No cards at all, as in a fresh setup: the daemon's projects are enough.
+  const bare = {
+    ...ctx,
+    cards: [],
+    projects: [
+      { id: 'career', name: 'career-ops' },
+      { id: 'shop', name: 'storefront' },
+    ],
+  };
+  const r = parsePlan(
+    reply([
+      { sourceItemIds: ['i2'], text: 'follow up', target: 'project', projectId: 'career', mode: 'existing_chat', sessionId: 'a1', confidence: 0.9 },
+      { sourceItemIds: ['i4'], text: 'fix it', target: 'project', projectId: 'shop', mode: 'new_worktree', confidence: 0.9 },
+      { sourceItemIds: ['i1'], text: 'elsewhere', target: 'project', projectId: 'nope', mode: 'new_worktree', confidence: 0.9 },
+    ]),
+    bare,
+  );
+  assert.ok(r.ok, r.error);
+  const [chat, fresh, unknown] = r.plan.tasks;
+  assert.equal(chat.needsChoice, false);
+  assert.equal(chat.projectId, 'career');
+  assert.equal(chat.sessionId, 'a1');
+  assert.equal(chat.choiceNote, undefined);
+  assert.equal(fresh.needsChoice, false);
+  assert.equal(fresh.projectId, 'shop');
+  assert.ok(validatePlan({ tasks: [chat, fresh] }, bare).canDispatch);
+
+  assert.equal(unknown.needsChoice, true);
+  assert.equal(unknown.projectId, undefined);
+  assert.equal(unknown.choiceNote, "The router picked a project Observatory doesn't know.");
+
+  // Only unsure, not wrong: no note, the review's usual line.
+  const unsure = parsePlan(reply([{ sourceItemIds: ['i4'], text: 'x', target: 'project', projectId: 'shop', mode: 'new_worktree', confidence: 0.2 }]), bare);
+  assert.equal(unsure.plan.tasks[0].needsChoice, true);
+  assert.equal(unsure.plan.tasks[0].choiceNote, undefined);
+  // Picking a project by hand clears the note.
+  assert.equal(retarget(unknown, 'project', 'shop', bare).choiceNote, undefined);
+});
+
 test('two tasks on the same existing worktree or the same chat conflict, and confirm stays disabled', () => {
   const plan = (a, b) => ({
     tasks: [

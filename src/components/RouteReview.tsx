@@ -79,6 +79,7 @@ function useRouteContext(items: DispatchItem[]): RouteContext {
       items: routerItems,
       cards: routerCards(allCards, projects, worktrees),
       worktrees,
+      projects,
       sessions,
       pastThreads: pastThreadsFor(routerItems, known, new Set(sessions.map((x) => x.id))),
     };
@@ -339,7 +340,9 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
 
                 {t.question && <p className="route-question">Router asks: {t.question}</p>}
                 {t.needsChoice && (
-                  <p className="route-unsure">The router wasn't sure where this goes. Check the target and project.</p>
+                  <p className="route-unsure">
+                    {t.choiceNote ? `${t.choiceNote} Pick where this goes.` : "The router wasn't sure where this goes. Check the target and project."}
+                  </p>
                 )}
                 {own.map((i) => (
                   <p key={i.message} className="dialog-error route-issue">
