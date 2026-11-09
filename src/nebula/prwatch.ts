@@ -53,6 +53,8 @@ async function ask(path: string, nums: number[]) {
       : await (await import("@tauri-apps/api/core")).invoke<[number, string][]>("gh_pr_states", { path, numbers: todo });
     const at = Date.now();
     for (const [n, s] of found) known.set(`${path}#${n}`, { state: word(s), at });
+    // One gh couldn't find (a typo, another repo's) waits a minute like an open one.
+    for (const n of todo) if (!found.some(([f]) => f === n)) known.set(`${path}#${n}`, { state: "open", at });
   } catch {
     // No gh, signed out, offline: say nothing, and ask again later.
     const at = Date.now();
