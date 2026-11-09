@@ -1,8 +1,9 @@
-import { memo, useEffect, useMemo, useRef, useState, type JSX, type RefObject } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { getState, subscribe, waitingAgents } from "../nebula/store";
 import { onPetMood } from "../nebula/delight";
 import { CAT_W, H, SCALE, SCOPE_AT, keepWatch, step, TICK_MS, W, type Cat, type Frame } from "./petBrain";
-import { BOOK, FRAMES, LAPTOP, TELESCOPE, TELESCOPE_W, type Px } from "./petFrames";
+import { BOOK, COAT, FRAMES, LAPTOP, TELESCOPE, TELESCOPE_W } from "./petFrames";
+import { EAR, EYE, framePaths, NOSE, SHINE, type Px } from "../vendor/pixel-pets/frames.ts";
 import { DESK, DESK_W, deskStep, doingNow, PROP_AT, type Desk } from "./workCat";
 import type { Act } from "../nebula/transcript";
 
@@ -13,26 +14,25 @@ import type { Act } from "../nebula/transcript";
 // attention. Frames face right and are mirrored for walking left.
 
 const COLORS: Record<Exclude<Px, ".">, string> = {
-  O: "#f2a65a", // fur
-  D: "#c8742f", // stripes
-  W: "#fff1de", // muzzle, chest, paws
-  K: "#1b2233", // eyes
-  P: "#ff9eb5", // nose
+  O: COAT.O, // fur
+  D: COAT.D, // stripes
+  W: COAT.W, // muzzle, chest, paws
+  S: COAT.S, // shade
+  X: COAT.X, // outline
+  K: EYE,
+  H: SHINE,
+  P: NOSE,
+  E: EAR,
 };
 
+/** One path per color, from pixel-pets, rather than a rect per pixel. */
 function Sprite({ frame }: { frame: Frame }) {
-  const rects = useMemo(() => {
-    const out: JSX.Element[] = [];
-    FRAMES[frame].forEach((row, y) => {
-      [...row].forEach((c, x) => {
-        if (c !== ".") out.push(<rect key={`${x}-${y}`} x={x} y={y} width="1.02" height="1.02" fill={COLORS[c as Exclude<Px, ".">]} />);
-      });
-    });
-    return out;
-  }, [frame]);
+  const paths = useMemo(() => framePaths(FRAMES[frame]), [frame]);
   return (
     <svg width={CAT_W} height={H * SCALE} viewBox={`0 0 ${W} ${H}`} shapeRendering="crispEdges" aria-hidden>
-      {rects}
+      {(Object.keys(paths) as Exclude<Px, ".">[]).map((c) => (
+        <path key={c} d={paths[c]} fill={COLORS[c]} />
+      ))}
     </svg>
   );
 }
@@ -46,9 +46,9 @@ const SCOPE_COLORS: Record<string, string> = {
 };
 
 /** Where the tube turns on the tripod, in the telescope's pixels. */
-const PIVOT = { x: 6.5, y: 3.5 };
-/** The tube is the top four rows; the tripod stands under it. */
-const TUBE_ROWS = 4;
+const PIVOT = { x: 10.5, y: 7.5 };
+/** The tube is the top nine rows; the tripod stands under it. */
+const TUBE_ROWS = 9;
 
 const scopeRects = (from: number, to: number) =>
   TELESCOPE.slice(from, to).flatMap((row, i) =>

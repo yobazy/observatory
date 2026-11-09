@@ -251,6 +251,8 @@ types at a laptop while the agent edits, reads a book while it reads, paces whil
 looks through its telescope during a web search, sweats when a command fails, and dozes if one step
 takes two minutes. Click either cat to say hi, or turn them off in Settings.
 
+The cat is shared with the owner's other apps through pixel-pets (a private repo): `src/vendor/pixel-pets/` is a copy written by its `sync.sh`, so don't edit it here. The telescope, laptop and book are this app's own, in `src/components/petFrames.ts`.
+
 ## Building from source
 
 ```sh
