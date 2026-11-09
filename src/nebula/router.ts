@@ -101,6 +101,16 @@ export interface Plan {
   tasks: PlanTask[];
 }
 
+/** A project as the daemon has it, card or not. */
+export interface RouterProject {
+  id: string;
+  name: string;
+  path?: string;
+}
+
+/** Most projects the router prompt lists, cards and all. */
+export const MAX_PROJECTS = 30;
+
 /** What a plan is checked against. */
 export interface RouteContext {
   items: RouterItem[];
@@ -108,7 +118,7 @@ export interface RouteContext {
   worktrees: RouterWorktree[];
   sessions: OpenSession[];
   /** Every project the daemon has, card or not: a task may go to any of them. */
-  projects?: { id: string; name: string }[];
+  projects?: RouterProject[];
   /** Past threads (threadIndex.ts) sent to the router beside the open
    *  sessions: a follow-up may go to one of these too. */
   pastThreads?: IndexEntry[];
@@ -152,15 +162,38 @@ export function routerCards(
   return out;
 }
 
+/** The daemon's projects with no card that the router prompt lists after
+ *  the carded ones, so it can start new work there too. Together with the
+ *  carded ones at most `max`; when they don't all fit, those with open
+ *  sessions or past threads in the prompt go first. Then by name. Also says
+ *  how many were left out. */
+export function cardlessProjects(
+  projects: RouterProject[],
+  cards: RouterCard[],
+  openSessions: { projectId: string }[] = [],
+  pastThreads: { projectId: string }[] = [],
+  max = MAX_PROJECTS,
+): { list: RouterProject[]; left: number } {
+  const carded = new Set(cards.map((c) => c.projectId));
+  const active = new Set([...openSessions, ...pastThreads].map((x) => x.projectId));
+  const bare = projects
+    .filter((p) => !carded.has(p.id))
+    .sort((a, b) => Number(active.has(b.id)) - Number(active.has(a.id)) || a.name.localeCompare(b.name));
+  const room = Math.max(0, max - cards.filter((c) => !c.projectId.startsWith("folder:")).length);
+  return { list: bare.slice(0, room), left: Math.max(0, bare.length - room) };
+}
+
 /** The prompt for the router: what each target means, the items, the
- *  cards, and the sessions a task could follow up in: the open ones, and
- *  past threads that match the items (threadIndex.ts's `pastThreadsFor`).
- *  JSON out, only. */
+ *  projects (with a card, then the daemon's others: `cardlessProjects`),
+ *  and the sessions a task could follow up in: the open ones, and past
+ *  threads that match the items (threadIndex.ts's `pastThreadsFor`). JSON
+ *  out, only. */
 export function buildRouterPrompt(
   items: RouterItem[],
   cards: RouterCard[],
   openSessions: OpenSession[],
   pastThreads: IndexEntry[] = [],
+  allProjects: RouterProject[] = [],
 ): string {
   const home = cards.find((c) => c.isHome);
   const projects = cards.filter((c) => !c.projectId.startsWith("folder:"));
@@ -194,7 +227,8 @@ export function buildRouterPrompt(
   }
 
   L.push("", "Projects:");
-  if (!projects.length) L.push("(none have a card yet)");
+  const bare = cardlessProjects(allProjects, cards, openSessions, pastThreads);
+  if (!projects.length && !bare.list.length) L.push("(none yet)");
   for (const c of projects) {
     const run =
       c.policy === "shared"
@@ -208,6 +242,10 @@ export function buildRouterPrompt(
     }
     if (c.taskKinds.length) L.push(`  task kinds: ${c.taskKinds.map(oneLine).join(", ")}`);
   }
+  for (const p of bare.list) {
+    L.push(`- [${p.id}] ${oneLine(p.name)}${p.path ? ` (${p.path})` : ""}: no card yet, so nothing is known of it beyond its name and path. Isolated.`);
+  }
+  if (bare.left) L.push(`(${bare.left} more projects without a card aren't listed.)`);
 
   L.push("");
   if (!home) L.push('Home: none set. Don\'t use target "home"; "you" tasks stay on the list.');

@@ -24,6 +24,8 @@ const {
   loadRoutedPlan,
   previewReply,
   CONFIDENCE_THRESHOLD,
+  cardlessProjects,
+  MAX_PROJECTS,
 } = await import('../src/nebula/router.ts');
 
 const items = [
@@ -316,4 +318,33 @@ test("the preview's made-up reply parses, and its error case doesn't", () => {
   assert.deepEqual(r.plan.tasks[0].sourceItemIds, ['i1', 'i2']);
   assert.ok(r.plan.tasks.some((t) => t.needsChoice));
   assert.equal(parsePlan(previewReply([{ id: 'x', text: 'router error', context: [] }], cards, sessions)).ok, false);
+});
+
+test("the prompt's project section lists carded projects first, then the daemon's projects without a card, capped, those with threads first", () => {
+  const all = [
+    { id: 'career', name: 'career-ops', path: '/code/career' },
+    { id: 'shop', name: 'storefront', path: '/code/shop' },
+    { id: 'blog', name: 'blog', path: '/code/blog' },
+  ];
+  const prompt = buildRouterPrompt(items, cards, sessions, [], all);
+  const section = prompt.slice(prompt.indexOf('Projects:'), prompt.indexOf('\nHome:'));
+  const lines = section.split('\n').filter((l) => l.startsWith('- ['));
+  assert.deepEqual(lines.map((l) => l.slice(3, l.indexOf(']'))), ['career', 'shop', 'blog'], 'carded first, then cardless');
+  assert.equal(lines[2], '- [blog] blog (/code/blog): no card yet, so nothing is known of it beyond its name and path. Isolated.');
+  assert.ok(!/blog[^\n]*\n {2}(description|skills|task kinds)/.test(section), 'no card rules for a cardless project');
+
+  // 40 cardless projects: the total stays at MAX_PROJECTS, and ones with an
+  // open session or a past thread go in ahead of the rest.
+  const many = Array.from({ length: 40 }, (_, n) => ({ id: `p${String(n).padStart(2, '0')}`, name: `proj ${String(n).padStart(2, '0')}`, path: `/code/p${n}` }));
+  const open = [{ ...sessions[0], id: 'o', projectId: 'p39' }];
+  const past = [{ id: 'x', projectId: 'p38', title: 't', branch: '', pr: null, tags: [], summary: '', archived: true, at: 0 }];
+  const { list, left } = cardlessProjects(many, cards, open, past);
+  const carded = cards.filter((c) => !c.projectId.startsWith('folder:')).length;
+  assert.equal(list.length + carded, MAX_PROJECTS);
+  assert.equal(left, 40 - list.length);
+  assert.deepEqual(list.slice(0, 2).map((p) => p.id), ['p38', 'p39']);
+  const big = buildRouterPrompt(items, cards, open, past, many);
+  const bigSection = big.slice(big.indexOf('Projects:'), big.indexOf('\nHome:'));
+  assert.equal(bigSection.split('\n').filter((l) => l.startsWith('- [')).length, MAX_PROJECTS);
+  assert.match(bigSection, new RegExp(`\\(${left} more projects without a card aren't listed\\.\\)`));
 });
