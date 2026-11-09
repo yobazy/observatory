@@ -5851,6 +5851,21 @@ button.attempt-status:hover span:nth-child(2) {
   color: var(--st-waiting);
   font-weight: 600;
 }
+/* Over a budget, Dispatch holds pending tasks: say so, and where it went. */
+.usage-chip-hold {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.budget-bar-top {
+  color: var(--muted);
+  font-weight: 400;
+}
 .band-cost {
   flex: none;
   color: var(--faint);
