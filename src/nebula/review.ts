@@ -72,9 +72,35 @@ export interface Verdict {
 // ---- the trigger ----
 
 /** The checkout state a review covers: HEAD and the shape of what's
- *  uncommitted. Any commit or edit changes it. */
-export function reviewKey(g: Pick<GitStatus, "head" | "staged" | "unstaged" | "untracked" | "conflicted" | "insertions" | "deletions">): string {
-  return [g.head ?? "-", g.staged, g.unstaged, g.untracked, g.conflicted, g.insertions, g.deletions].join("|");
+ *  uncommitted, and with `content` (review_state's string: every path's
+ *  status and a hash of the diff) a hash of that too. The shape alone can't
+ *  tell a one-line breakage from its one-line fix, so the review's own key
+ *  always has the content; the shape alone is the polled git state's
+ *  best guess (keysMatch). */
+export function reviewKey(
+  g: Pick<GitStatus, "head" | "staged" | "unstaged" | "untracked" | "conflicted" | "insertions" | "deletions">,
+  content?: string,
+): string {
+  const shape = [g.head ?? "-", g.staged, g.unstaged, g.untracked, g.conflicted, g.insertions, g.deletions].join("|");
+  return content === undefined ? shape : `${shape}#${fnv1a(content)}`;
+}
+
+/** A short, stable hash of a string (FNV-1a, 32 bits, as hex). */
+function fnv1a(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+/** Whether a review's key is for the checkout as it is now. Two keys with
+ *  content compare whole; when one has only the shape (the polled git
+ *  state, which has no content), the shapes are compared. */
+export function keysMatch(a: string, b: string): boolean {
+  if (a.includes("#") && b.includes("#")) return a === b;
+  return a.split("#")[0] === b.split("#")[0];
 }
 
 /** Whether the checkout has changes from the turn: anything uncommitted, or
@@ -146,7 +172,7 @@ export function needsReview(t: ReviewTrigger): boolean {
   // The same state again: passed, or couldn't be checked, needs no second
   // call. A fail at the same state is the thread's turn after the follow-up
   // changing nothing, which the pass counts as the second fail.
-  if (rec.key === t.key) return rec.state === "failed" && !t.fresh;
+  if (keysMatch(rec.key, t.key)) return rec.state === "failed" && !t.fresh;
   return true;
 }
 
@@ -283,7 +309,7 @@ export function reviewedLabel(label: TriageLabel, need: string, c: LabelContext)
   if (label === "decision") return { label, need };
   const rec = c.rec;
   if (rec?.state === "failed" && rec.fails >= 2) return { label: "stuck", need: TWICE };
-  const current = !!rec && (c.key == null || rec.key === c.key);
+  const current = !!rec && (c.key == null || keysMatch(rec.key, c.key));
   if (rec && current) {
     if (rec.state === "passed") return { label: "checked", need: need && label === "checked" ? need : "Checks passed" };
     if (rec.state === "failed") return { label: "review", need: `Fixing: ${failedCount(rec.failures.length)}` };
@@ -379,7 +405,7 @@ export async function reviewPass(d: ReviewDeps): Promise<ReviewRecord | null> {
   };
   // The thread's turn after the follow-up changed nothing: the same fail
   // again, without a second call.
-  if (d.prev?.state === "failed" && d.prev.key === d.key && d.fails >= 1) {
+  if (d.prev?.state === "failed" && keysMatch(d.prev.key, d.key) && d.fails >= 1) {
     return done({ ...d.prev, fails: d.fails + 1, sent: d.prev.sent });
   }
   let before: string, mid: string, after: string, checks: CheckResult[], reply: string;
