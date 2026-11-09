@@ -135,7 +135,7 @@ async function lineFor(e: LeadEvent): Promise<string | null> {
   const failed =
     raised?.reason ??
     (rev?.state === "failed" ? [failedCount(rev.failures.length), rev.failures[0]].filter(Boolean).join(": ") : null);
-  const summary = fresh || (e.kind === "failed" && failed) || e.kind === "CI failed" ? "" : await turnSummary(a).catch(() => "");
+  const summary = fresh || (e.kind === "failed" && failed) || e.kind === "CI failed" || e.kind === "CI passed" ? "" : await turnSummary(a).catch(() => "");
   const found = s.prs[a.worktree_id];
   const url = found?.kind === "found" && found.pr.number === e.pr ? found.pr.url : undefined;
   return eventLine({
@@ -144,7 +144,12 @@ async function lineFor(e: LeadEvent): Promise<string | null> {
     branch: s.worktrees[a.worktree_id]?.branch ?? "?",
     agentId: a.id,
     // A CI failure is about its checks, by name.
-    need: e.kind === "CI failed" ? (e.failing ?? []).join(", ") || "a check" : eventNeed(e.kind, a, record, failed, summary),
+    need:
+      e.kind === "CI failed"
+        ? (e.failing ?? []).join(", ") || "a check"
+        : e.kind === "CI passed"
+          ? "every check passed"
+          : eventNeed(e.kind, a, record, failed, summary),
     pr: e.kind === "PR opened" ? openPr(found) : e.pr !== undefined ? { number: e.pr, url } : null,
   });
 }

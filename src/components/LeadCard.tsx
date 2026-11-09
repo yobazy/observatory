@@ -110,21 +110,24 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
             <label htmlFor={`lead-acts-${projectId}`} className="dialog-note card-flat">
               Let the lead start and nudge threads
             </label>
-            {lead.acts === true && (
-              <label className="card-cap">
-                at most
-                <input
-                  type="number"
-                  min={1}
-                  max={9}
-                  className="lead-max"
-                  value={lead.maxTasks ?? DEFAULT_MAX_TASKS}
-                  onChange={(e) => setLeadMaxTasks(projectId, lead, Number(e.target.value))}
-                  aria-label="Tasks the lead may run at once"
-                />
-                at once
-              </label>
-            )}
+          </div>
+        )}
+        {lead?.acts === true && (
+          <div className="card-row">
+            {/* Its own row, so it never wraps beside the switch. */}
+            <label className="card-cap lead-max-cap">
+              at most
+              <input
+                type="number"
+                min={1}
+                max={9}
+                className="lead-max"
+                value={lead.maxTasks ?? DEFAULT_MAX_TASKS}
+                onChange={(e) => setLeadMaxTasks(projectId, lead, Number(e.target.value))}
+                aria-label="Tasks the lead may run at once"
+              />
+              at once
+            </label>
           </div>
         )}
         {started.length > 0 && (

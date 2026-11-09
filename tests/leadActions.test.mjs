@@ -155,6 +155,21 @@ const snap = (...ts) => Object.fromEntries(ts.map((t) => [t.id, t]));
 const LEADS = { p1: 'lead1' };
 const ci = (checks, failing = []) => ({ pr: 12, checks, failing });
 
+test("Given a thread's PR whose checks go from pending or failing to passing, one `CI passed #12`; first seen already passing, or passing again, none", () => {
+  const ev = (b, a) => leadEvents(snap(b), snap(a), LEADS);
+  assert.deepEqual(ev(thread('a1', { ci: ci('pending') }), thread('a1', { ci: ci('passing') })), [
+    { kind: 'CI passed', threadId: 'a1', projectId: 'p1', leadId: 'lead1', pr: 12 },
+  ]);
+  assert.deepEqual(ev(thread('a1', { ci: ci('failing', ['lint']) }), thread('a1', { ci: ci('passing') })).map((e) => e.kind), ['CI passed']);
+  // Passing on the next poll too: nothing new.
+  assert.deepEqual(ev(thread('a1', { ci: ci('passing') }), thread('a1', { ci: ci('passing') })), []);
+  // First sight of an already-passing PR (unknown or no PR before) is the baseline.
+  assert.deepEqual(ev(thread('a1'), thread('a1', { ci: ci('passing') })), []);
+  assert.deepEqual(ev(thread('a1', { ci: null }), thread('a1', { ci: ci('passing') })), []);
+  // A PR with no checks at all isn't "passing".
+  assert.deepEqual(ev(thread('a1', { ci: ci('pending') }), thread('a1', { ci: ci('none') })), []);
+});
+
 test("Given a thread's PR whose checks go from pending to failing, one `CI failed #12: lint, test`; to merged, one `PR merged #12`; a verdict becoming ✅, one `safe to close`; the same state again, none", () => {
   const ev = (b, a) => leadEvents(snap(b), snap(a), LEADS);
   const failing = ev(thread('a1', { ci: ci('pending') }), thread('a1', { ci: ci('failing', ['lint', 'test']) }));
@@ -219,8 +234,8 @@ test("Given a started, refused, nudged or answered action, then the lead's next 
     '[observatory] refused START fix-clipping: 2 of your tasks are running, at most 2',
     '[observatory] nudged a1',
     "[observatory] refused NUDGE a1: that's your own thread",
-    '[observatory] you merged #12',
-    '[observatory] you said no to merging #12',
+    '[observatory] the user merged #12 (your ASK)',
+    '[observatory] the user said no to merging #12',
   ]);
   const stub = stubQueue();
   for (const l of lines) await deliver([l], stub.q);
@@ -255,15 +270,15 @@ test('Given an ASK merge line, the call count includes it and the row has Yes an
   const told = [];
   const deps = { merge: async (n) => merged.push(n), archive: () => assert.fail('no archive'), tell: (l) => told.push(l) };
   const key = askKey('lead1', 4, ask);
-  assert.equal(await answerAsk(key, ask, true, deps), '[observatory] you merged #12');
+  assert.equal(await answerAsk(key, ask, true, deps), '[observatory] the user merged #12 (your ASK)');
   assert.equal(await answerAsk(key, ask, true, deps), null, 'answered once');
   assert.deepEqual(merged, [12]);
   assert.ok(isAnswered(key));
 
   const other = askKey('lead1', 5, ask);
-  assert.equal(await answerAsk(other, ask, false, deps), '[observatory] you said no to merging #12');
+  assert.equal(await answerAsk(other, ask, false, deps), '[observatory] the user said no to merging #12');
   assert.deepEqual(merged, [12], 'No merges nothing');
-  assert.deepEqual(told, ['[observatory] you merged #12', '[observatory] you said no to merging #12']);
+  assert.deepEqual(told, ['[observatory] the user merged #12 (your ASK)', '[observatory] the user said no to merging #12']);
 
   // An ASK for a PR that isn't open in the project isn't shown; it's refused.
   const gone = await runActions(parseActions('ASK merge #99: green'), { context: () => ctx(), start: () => ({ full: null }), nudge: async () => {}, name: (id) => id });
@@ -273,7 +288,7 @@ test('Given an ASK merge line, the call count includes it and the row has Yes an
   const arch = { kind: 'ask', what: 'archive', agentId: 'a1', why: 'safe to close' };
   const archived = [];
   const line = await answerAsk(askKey('lead1', 6, arch), arch, true, { ...deps, archive: (id) => archived.push(id) });
-  assert.equal(line, '[observatory] you archived a1');
+  assert.equal(line, '[observatory] the user archived a1 (your ASK)');
   assert.deepEqual(archived, ['a1']);
 });
 

@@ -8,7 +8,7 @@
 import type { CardLead, Cards } from "./cards";
 import type { AgentStatus } from "./types";
 
-export type LeadEventKind = "finished" | "failed" | "needs you" | "PR opened" | "CI failed" | "PR merged" | "safe to close";
+export type LeadEventKind = "finished" | "failed" | "needs you" | "PR opened" | "CI failed" | "CI passed" | "PR merged" | "safe to close";
 
 /** A thread as the lead watches it, polled from the store. `failed` is the
  *  mark of the S9 stuck flag that's up, and `review` the mark of a failed
@@ -94,7 +94,7 @@ export interface LeadEvent {
   threadId: string;
   projectId: string;
   leadId: string;
-  /** The PR a `CI failed` or `PR merged` event is about. */
+  /** The PR a `CI failed`, `CI passed` or `PR merged` event is about. */
   pr?: number;
   /** A `CI failed` event's failing checks. */
   failing?: string[];
@@ -128,6 +128,10 @@ export function leadEvents(before: Snapshot, after: Snapshot, leads: Leads): Lea
     const ci = t.ci;
     const failedBefore = !!was.ci && was.ci.pr === ci?.pr && was.ci.checks === "failing";
     if (ci?.checks === "failing" && was.ci !== undefined && !failedBefore) add("CI failed", { pr: ci.pr, failing: ci.failing });
+    // Green from pending or failing on the same PR: when the lead may ASK
+    // merge. A PR first seen already passing is the baseline.
+    if (ci?.checks === "passing" && was.ci?.pr === ci.pr && (was.ci.checks === "pending" || was.ci.checks === "failing"))
+      add("CI passed", { pr: ci.pr });
     if (typeof t.merged === "number" && was.merged !== undefined && was.merged !== t.merged) add("PR merged", { pr: t.merged });
     if (typeof t.safe === "string" && was.safe !== undefined && was.safe !== t.safe) add("safe to close");
   }
@@ -308,7 +312,7 @@ export function leadPrompt(p: LeadPromptInput, extra: string[] = []): string {
     `Your notes live in ${p.notes}, outside the repo. Create the file (and its folder) if it isn't there, and read it now. Keep it current: what each task is for, what finished, what failed and why, open PRs, decisions I made, and what should happen next. Keep it short enough to reread.`,
     `Observatory sends you one line per event, several at once when they piled up while you were busy:
 [observatory] <event>: <thread title> on <branch> (agent <id>): <what it needs, or its turn summary>
-The events are: finished (its turn ended), failed (it's stuck on the same error, near its budget, or failed review), needs you (it's waiting on me), PR opened (written "PR opened #<number>:", with the PR's link after the agent id), CI failed (written "CI failed #<number>:", ending with the failing checks), PR merged (written "PR merged #<number>:"), and safe to close (its last reply says ✅ Safe to close). For each line, update your notes. Reply in a sentence or two; don't wait for me.`,
+The events are: finished (its turn ended), failed (it's stuck on the same error, near its budget, or failed review), needs you (it's waiting on me), PR opened (written "PR opened #<number>:", with the PR's link after the agent id), CI failed (written "CI failed #<number>:", ending with the failing checks), CI passed (written "CI passed #<number>:", its checks went green), PR merged (written "PR merged #<number>:"), and safe to close (its last reply says ✅ Safe to close). For each line, update your notes. Reply in a sentence or two; don't wait for me.`,
     p.acts
       ? actionRules(p.maxTasks ?? 2)
       : `You can suggest work. Nothing you open starts or sends on its own: I see it prefilled and decide. URL-encode the text.

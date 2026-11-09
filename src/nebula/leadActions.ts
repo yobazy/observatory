@@ -174,8 +174,9 @@ export function reportLine(r: Report): string {
         const a = r.ask;
         const what = a.what === "merge" ? `#${a.pr}` : a.agentId;
         if (r.error) return `couldn't ${a.what === "merge" ? "merge" : "archive"} ${what}: ${oneLine(r.error)}`;
-        if (a.what === "merge") return r.yes ? `you merged ${what}` : `you said no to merging ${what}`;
-        return r.yes ? `you archived ${what}` : `you said no to archiving ${what}`;
+        // "The user", not "you": the lead reads "you" as itself.
+        if (a.what === "merge") return r.yes ? `the user merged ${what} (your ASK)` : `the user said no to merging ${what}`;
+        return r.yes ? `the user archived ${what} (your ASK)` : `the user said no to archiving ${what}`;
       }
     }
   })();

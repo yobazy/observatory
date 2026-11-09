@@ -9725,6 +9725,9 @@ button.board-main:hover .board-text {
 
 /* What a lead started (S28, LeadCard.tsx): its tasks on the card, each with
    where it is now. */
+.card-cap.lead-max-cap {
+  white-space: nowrap;
+}
 .card-cap .lead-max {
   width: 3.5em;
 }
