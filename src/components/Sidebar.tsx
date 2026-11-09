@@ -24,6 +24,7 @@ import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon
 import { FlagGlyph, FollowUps, PriorityMark } from "./Organize";
 import { UncommittedEntry } from "./Uncommitted";
 import { IdeasEntry } from "./Ideas";
+import { ParkNotice } from "./Park";
 import { InboxEntry } from "./Inbox";
 import { createFolder, deleteFolder, moveFolder, moveInFolder, moveProject, moveToFolder, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
 import { allTags, cleanTag, layout, matches, type ProjectFolder } from "../nebula/folders";
@@ -273,6 +274,7 @@ export function Sidebar({
         )}
 
         <AwayDigest onOpen={selectAgent} />
+        <ParkNotice />
         <FollowUps />
         <div className="side-entries">
           <UncommittedEntry />
