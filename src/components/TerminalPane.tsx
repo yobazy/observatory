@@ -29,6 +29,7 @@ import { useLanded } from "../nebula/prwatch";
 import { ThreadPlate } from "./Plate";
 import { currentWell, onWellChange } from "../nebula/sky";
 import { LiveStrip } from "./LiveStrip";
+import { openLeadChat, useIsLead } from "../nebula/leadCalls";
 
 const THEME = {
   // The eyepiece well's color (styles.css .pane-body::before): --term, darkened.
@@ -100,6 +101,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const verdict = useVerdict(agent);
   const landed = useLanded(agent ? state.worktrees[agent.worktree_id]?.path : undefined, verdict);
   const tab = session && "Terminal" in session ? state.terminals[session.Terminal] : undefined;
+  // A lead's raw session (S29), opened from its chat: a way back to it.
+  const lead = useIsLead(agent?.id);
   const exists = !!(agent || tab);
 
   const host = useRef<HTMLDivElement>(null);
@@ -414,6 +417,11 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
             </span>
           </div>
           <div className="pane-actions">
+            {lead && agent && (
+              <button className="btn btn-primary" onClick={() => openLeadChat(agent.id)} title="Back to the lead's chat">
+                Chat
+              </button>
+            )}
             {canRead && summaryHidden && (
               <button className="btn btn-sm btn-rare" onClick={() => setTurnLineHidden(false)} title="Show what the latest turn did, above the terminal">
                 Summary

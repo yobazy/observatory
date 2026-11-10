@@ -5,7 +5,7 @@
 import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "./client";
-import { getState, subscribe } from "./store";
+import { getState, subscribe, threadAgents } from "./store";
 import { asksYou, pendingCard, promptContext, type Card, type Pending } from "./replycard";
 import type { Transcript } from "./transcript";
 import type { Agent } from "./types";
@@ -76,9 +76,11 @@ const STALE_MS = 14 * 24 * 3600_000;
  *  working, stopped or cut off can't; a finished one with an answer queued
  *  already has it. Waiting on a prompt first, since it holds up a turn under way. */
 function idle(): Agent[] {
-  const { agents, queue } = getState();
+  const s = getState();
+  const { queue } = s;
   const now = Date.now();
-  return Object.values(agents)
+  // A lead is its project's chat (S29), not a thread to answer here.
+  return threadAgents(s)
     .filter((a) => !a.archived && a.session_id)
     // A prompt still needs answering even with a reply queued behind it.
     .filter((a) => a.status === "needs_feedback" || (a.status === "finished" && !queue[a.id]?.length && now - a.status_changed_at < STALE_MS))

@@ -13,20 +13,15 @@ function stubStorage() {
 globalThis.localStorage = stubStorage();
 
 const {
+  ALL_PROJECTS,
   callState,
   defaultPet,
   lastReply,
   leadsOf,
   markSeenInChat,
-  pages,
-  paragraphs,
   petOf,
-  readViewLine,
   seenInChat,
-  shortcutTarget,
-  talkPhase,
   validPet,
-  wrap,
   TOP_PET,
   QUIET,
 } = await import('../src/nebula/leadChat.ts');
@@ -64,82 +59,6 @@ test("the top lead's default is a big cat", () => {
   assert.deepEqual(validPet({ kind: 'cat', coat: 'plaid' }), { kind: 'cat', coat: 'orange' });
 });
 
-// ---- paging ----
-
-const prose =
-  'Fix login redirect finished and opened PR #61. The middleware was dropping returnTo when it refreshed the cookie, so people landed on the home page. ' +
-  'I added a test for it and all 42 pass. Nothing else in the project changed, and the branch is pushed.\n\n' +
-  'Next I would like to look at the token refresh, which has the same shape of bug in another place.';
-
-const words = (s) => s.split(/\s+/).filter(Boolean);
-
-test('paging splits prose into pages that fit and never splits a word', () => {
-  const box = { cols: 40, rows: 3 };
-  const got = pages(prose, box);
-  assert.ok(got.length > 1, 'long prose takes more than one page');
-  for (const p of got) {
-    const lines = p.split('\n').flatMap((para) => wrap(para, box.cols));
-    assert.ok(lines.length <= box.rows, `"${p}" is ${lines.length} lines`);
-    for (const l of lines) assert.ok(l.length <= box.cols, `"${l}" is wider than the box`);
-  }
-  // Every word, whole and in order, once.
-  assert.deepEqual(words(got.join(' ')), words(prose));
-  // A paragraph starts on its own line.
-  assert.ok(got.some((p) => p.includes('\nNext') || p.startsWith('Next')));
-  // A word longer than a line gets a line to itself, uncut.
-  const long = 'see /Users/dev/code/storefront-worktrees/cart-sync/src/cart/sync.ts now';
-  const cut = pages(long, { cols: 20, rows: 3 });
-  assert.deepEqual(words(cut.join(' ')), words(long));
-  assert.ok(cut.join(' ').includes('/Users/dev/code/storefront-worktrees/cart-sync/src/cart/sync.ts'));
-  // Short prose is one page; nothing is none.
-  assert.deepEqual(pages('All quiet.', box), ['All quiet.']);
-  assert.deepEqual(pages('', box), []);
-});
-
-test('code, table and list blocks are replaced by the Read view line', () => {
-  const md = [
-    'Sync applied every update with `Promise.all`, so they **raced**.',
-    '',
-    '```ts',
-    'for (const update of pending) {',
-    '  await this.apply(update);',
-    '}',
-    '```',
-    '',
-    '| Pick | File | Change |',
-    '|---|---|---|',
-    '| 1 | `src/cart/sync.ts` | one at a time |',
-    '| 2 | `src/cart/retry.ts` | back off |',
-    '',
-    '- one',
-    '- two',
-    '- three',
-    '- four',
-    '- five',
-    '',
-    'Two choices:',
-    '1. Fix it with a queue?',
-    '2. Keep the old sync?',
-    '',
-    'ASK_USER: should a failed refresh go to /login?',
-  ].join('\n');
-  assert.deepEqual(paragraphs(md), [
-    'Sync applied every update with Promise.all, so they raced.',
-    readViewLine('code'),
-    readViewLine('table'),
-    readViewLine('list'),
-    'Two choices:',
-    '1. Fix it with a queue?',
-    '2. Keep the old sync?',
-    'ASK_USER: should a failed refresh go to /login?',
-  ]);
-  assert.equal(readViewLine('code'), '(code, see Read view)');
-  const said = pages(md, { cols: 60, rows: 3 }).join('\n');
-  assert.ok(!said.includes('await this.apply'), 'no code in the box');
-  assert.ok(!said.includes('retry.ts'), 'no table in the box');
-  assert.ok(!said.includes('five'), 'no long list in the box');
-});
-
 // ---- calling ----
 
 const entries = (...texts) => texts.map(([kind, text], n) => ({ n, kind, text, at: 1000 + n, steps: [] }));
@@ -155,32 +74,48 @@ test('the call state is right for an ASK_USER reply, an unread reply, and an ope
   const ask = { n: 7, text: 'Fix login finished.\nASK_USER: should a failed refresh go to /login?', at: 1 };
   const plain = { n: 7, text: 'All quiet.', at: 1 };
   // Asks you: calls with the number of questions, read or not.
-  assert.deepEqual(callState({ reply: ask, unseen: false, seen: 3 }), { calling: true, count: 1, why: 'ask' });
+  assert.deepEqual(callState({ reply: ask, unseen: false, seen: { n: 3, at: 0 } }), { calling: true, count: 1, why: 'ask' });
   assert.deepEqual(
     callState({ reply: { ...ask, text: `${ask.text}\nASK_USER: and keep returnTo?` }, unseen: true, seen: null }),
     { calling: true, count: 2, why: 'ask' },
   );
   // Unread: calls with one.
   assert.deepEqual(callState({ reply: plain, unseen: true, seen: null }), { calling: true, count: 1, why: 'unread' });
-  assert.deepEqual(callState({ reply: plain, unseen: true, seen: 6 }), { calling: true, count: 1, why: 'unread' });
+  assert.deepEqual(callState({ reply: plain, unseen: true, seen: { n: 6, at: 0 } }), { calling: true, count: 1, why: 'unread' });
   // Read and asking nothing: quiet.
   assert.deepEqual(callState({ reply: plain, unseen: false, seen: null }), QUIET);
   // Opened since that reply: quiet, even one that asks or is still unread.
-  assert.deepEqual(callState({ reply: ask, unseen: true, seen: 7 }), QUIET);
-  assert.deepEqual(callState({ reply: plain, unseen: true, seen: 9 }), QUIET);
+  assert.deepEqual(callState({ reply: ask, unseen: true, seen: { n: 7, at: 1 } }), QUIET);
+  assert.deepEqual(callState({ reply: plain, unseen: true, seen: { n: 9, at: 1 } }), QUIET);
   // No reply yet: quiet.
   assert.deepEqual(callState({ reply: null, unseen: true, seen: null }), QUIET);
 });
 
-test('opening a lead in the dialogue is remembered, and never goes backwards', () => {
+test("opening a lead's chat is remembered by the reply's time, and never goes backwards", () => {
   assert.equal(seenInChat('lead1'), null);
-  markSeenInChat('lead1', 5);
-  assert.equal(seenInChat('lead1'), 5);
-  markSeenInChat('lead1', 3);
-  assert.equal(seenInChat('lead1'), 5);
+  markSeenInChat('lead1', 5, 500);
+  assert.deepEqual(seenInChat('lead1'), { n: 5, at: 500 });
+  markSeenInChat('lead1', 3, 300);
+  assert.deepEqual(seenInChat('lead1'), { n: 5, at: 500 });
 });
 
-// ---- ⌘L ----
+test("Given a lead's session restarted (its entries numbered from 0 again), then a new reply calls even though its number is below the seen one", () => {
+  markSeenInChat('lead2', 40, 1000);
+  const seen = seenInChat('lead2');
+  // The restarted session's first reply: entry 2, said later.
+  const fresh = { n: 2, text: 'Back. Nothing new.', at: 2000 };
+  assert.deepEqual(callState({ reply: fresh, unseen: true, seen }), { calling: true, count: 1, why: 'unread' });
+  // Seen in the chat now: quiet, and the mark moved to the new session's reply.
+  markSeenInChat('lead2', fresh.n, fresh.at);
+  assert.deepEqual(seenInChat('lead2'), { n: 2, at: 2000 });
+  assert.deepEqual(callState({ reply: fresh, unseen: true, seen: seenInChat('lead2') }), QUIET);
+  // A mark saved before S29 (a bare number) still goes by entry number.
+  localStorage.setItem('observatory.leadChat.seen', JSON.stringify({ old: 7 }));
+  assert.deepEqual(seenInChat('old'), { n: 7 });
+  assert.deepEqual(callState({ reply: { n: 7, text: 'x', at: 9 }, unseen: true, seen: seenInChat('old') }), QUIET);
+});
+
+// ---- which leads ----
 
 const agents = { top: { archived: false }, la: { archived: false }, lb: { archived: false }, gone: { archived: true } };
 const projects = { pa: { name: 'storefront' }, pb: { name: 'billing-api' }, pc: { name: 'old' } };
@@ -201,31 +136,6 @@ test('the running leads, the top lead first, with their pets', () => {
   assert.deepEqual(got[0].pet, TOP_PET);
   assert.deepEqual(got[1].pet, { kind: 'turtle', coat: 'sea' });
   assert.deepEqual(got[2].pet, defaultPet('storefront'));
-});
-
-test("⌘L's target picks the calling lead first, otherwise the top lead", () => {
-  const leads = leadsOf(cards, topLead, agents, projects);
-  const ask = { calling: true, count: 1, why: 'ask' };
-  const unread = { calling: true, count: 1, why: 'unread' };
-  assert.equal(shortcutTarget(leads, { la: ask }), 'la');
-  // A question outranks an unread reply, wherever it is in the list.
-  assert.equal(shortcutTarget(leads, { lb: unread, la: ask }), 'la');
-  assert.equal(shortcutTarget(leads, { la: unread }), 'la');
-  // Nobody calling: the top lead.
-  assert.equal(shortcutTarget(leads, { la: QUIET, lb: QUIET }), 'top');
-  assert.equal(shortcutTarget(leads, {}), 'top');
-  // No top lead and nobody calling: nothing to open.
-  assert.equal(shortcutTarget(leadsOf(cards, null, agents, projects), {}), null);
-});
-
-test('the closed dialogue renders nothing; it is only drawn while open or sliding', () => {
-  // Never opened, and after the slide away ends: nothing to draw.
-  assert.equal(talkPhase(null, null, false), 'closed');
-  assert.equal(talkPhase(null, null, true), 'closed');
-  // Asked for, before the first frame up: sliding in.
-  assert.equal(talkPhase('la', 'la', false), 'sliding');
-  assert.equal(talkPhase('la', 'la', true), 'open');
-  // Closed but still sliding away; or another lead asked for meanwhile.
-  assert.equal(talkPhase(null, 'la', false), 'sliding');
-  assert.equal(talkPhase('lb', 'la', true), 'sliding');
+  // What each one's chat is called (S29).
+  assert.deepEqual(got.map((l) => l.name), [ALL_PROJECTS, 'billing-api', 'storefront']);
 });

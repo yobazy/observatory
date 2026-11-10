@@ -37,6 +37,7 @@ import { useBatches } from "../nebula/batch";
 import { openLeadChat, useLeadCalls, useLeads } from "../nebula/leadCalls";
 import { petLabel, QUIET, type Call, type LeadEntry } from "../nebula/leadChat";
 import { PetSprite } from "./Pet";
+import { ChatRow } from "./ProjectChat";
 import { useRecentCount, useVisits } from "../nebula/recent";
 import { RECENT_COUNTS, recentProjects, type RecentCount } from "../nebula/recentList";
 
@@ -766,8 +767,9 @@ function ProjectRow({
 }
 
 /** The pet a project's running lead is (S27), after its name: it hops
- *  with a count when the lead has something for you, and a click talks to
- *  it. Inside the row's button, so it's a span; ⌘L reaches it by keyboard. */
+ *  with a count when the lead has something for you, and a click opens
+ *  the project's chat (S29). Inside the row's button, so it's a span; the
+ *  chat row at the top of the project's threads reaches it by keyboard. */
 function LeadMark({ projectId }: { projectId: string }) {
   const leads = useLeads();
   const lead = leads.find((l) => l.projectId === projectId);
@@ -782,7 +784,7 @@ function LeadMark({ projectId }: { projectId: string }) {
         e.stopPropagation();
         openLeadChat(lead.agentId);
       }}
-      title={`${leadTitle(lead, call)}\nClick to talk to it.`}
+      title={`${leadTitle(lead, call)}\nClick to chat with it.`}
       aria-label={leadTitle(lead, call)}
       role="img"
     >
@@ -794,36 +796,13 @@ function LeadMark({ projectId }: { projectId: string }) {
 
 const leadTitle = (lead: LeadEntry, call: Call) =>
   `${lead.title}${lead.model ? ` (${lead.model})` : ""}: ${petLabel(lead.pet).toLowerCase()}. ${
-    call.why === "ask" ? `It has ${call.count === 1 ? "a question" : `${call.count} questions`} for you (⌘L).` : call.why === "unread" ? "It has an unread reply (⌘L)." : "Nothing new."
+    call.why === "ask" ? `It has ${call.count === 1 ? "a question" : `${call.count} questions`} for you.` : call.why === "unread" ? "It has an unread reply." : "Nothing new."
   }`;
 
-/** The top lead's pet, at the top of the projects list. */
+/** The top lead's chat, "All projects", at the top of the projects list. */
 function TopLeadRow() {
-  const leads = useLeads();
-  const top = leads.find((l) => l.projectId === null);
-  const mine = useMemo(() => (top ? [top] : []), [top]);
-  const calls = useLeadCalls(mine);
-  if (!top) return null;
-  const call = calls[top.agentId] ?? QUIET;
-  return (
-    <button
-      className={`top-lead-row${call.calling ? " is-calling" : ""}`}
-      onClick={() => openLeadChat(top.agentId)}
-      title={`${leadTitle(top, call)}\nClick to talk to it, or press ⌘L.`}
-    >
-      <span className="lead-pet" aria-hidden>
-        <PetSprite kind={top.pet.kind} coat={top.pet.coat} width={34} />
-      </span>
-      <span className="top-lead-name">
-        Top lead
-        <span className="top-lead-sub">
-          {petLabel(top.pet)}
-          {top.model ? ` · ${top.model}` : ""}
-        </span>
-      </span>
-      {call.calling && <span className="lead-badge">{call.count}</span>}
-    </button>
-  );
+  const top = useLeads().find((l) => l.projectId === null);
+  return top ? <ChatRow lead={top} /> : null;
 }
 
 function LinkDot() {

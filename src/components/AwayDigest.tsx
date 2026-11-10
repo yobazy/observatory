@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { dismissAway, useAwaySince } from "../nebula/away";
 import { lastPrompt, relativeTime } from "../nebula/status";
-import { projectOfWorktree, useAppState } from "../nebula/store";
+import { projectOfWorktree, threadAgents, useAppState } from "../nebula/store";
 import { summarize } from "../nebula/turnsummary";
 import type { Agent } from "../nebula/types";
 import { CheckGlyph } from "./Organize";
@@ -42,10 +42,10 @@ function Row({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
  *  yet. A thread leaves once you open it; × puts the whole list away. */
 export function AwayDigest({ onOpen }: { onOpen: (agent: Agent) => void }) {
   const since = useAwaySince();
-  const { agents } = useAppState();
+  const state = useAppState();
   const [all, setAll] = useState(false);
   if (since === null) return null;
-  const done = Object.values(agents)
+  const done = threadAgents(state)
     .filter(
       (a) =>
         !a.archived &&

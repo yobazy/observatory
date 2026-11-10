@@ -17,7 +17,7 @@ import { PRIORITIES, priorityLabel, type Priority } from "../nebula/priority";
 import { tagColor, tagCounts, tagList, tagShare, threadTagsOf } from "../nebula/threadtags";
 import type { DesktopPrefs } from "../nebula/theme";
 import { relativeTime } from "../nebula/status";
-import { flash, getState, projectOfWorktree, projectWorktrees, useAppState } from "../nebula/store";
+import { flash, getState, projectOfWorktree, projectWorktrees, threadAgents, useAppState } from "../nebula/store";
 import type { Agent } from "../nebula/types";
 import { useEscape } from "./Dialogs";
 import { ProjectDot, selectAgent } from "./Sidebar";
@@ -318,7 +318,7 @@ export function TagListDialog({ repo, onClose }: { repo: string; onClose: () => 
   const project = Object.values(state.projects).find((p) => p.repo_path === repo);
   const wts = new Set(project ? projectWorktrees(state, project.id).map((w) => w.id) : []);
   const counts = tagCounts(
-    Object.values(state.agents).filter((a) => wts.has(a.worktree_id)),
+    threadAgents(state).filter((a) => wts.has(a.worktree_id)),
     state.prefs,
     repo,
   );

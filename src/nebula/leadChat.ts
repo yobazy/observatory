@@ -1,9 +1,8 @@
-// Talk to a lead as its pet (S27): each lead (lead.ts, and S26's top lead)
-// is a pixel-pets animal, and talking to one opens a DS-style dialogue along
-// the bottom of whatever view is open. This file is the pure part: which pet
-// a lead is, the lead's latest reply cut into box-sized pages (code, tables
-// and long lists left to the Read view), whether a lead is calling you, and
-// who ⌘L opens. LeadChat.tsx draws it. Kept free of the app so its tests run
+// A lead as its pet (S27): each lead (lead.ts, and S26's top lead) is a
+// pixel-pets animal, and since S29 the face of its project's chat
+// (projectChat.ts). This file is the pure part: which pet a lead is and the
+// colour its chat is tinted with, the lead's latest reply, whether a lead is
+// calling you, and what you've seen. Kept free of the app so its tests run
 // under plain Node.
 import { COATS, coatFor, type CritterKind } from "../vendor/pixel-pets/frames.ts";
 import { ASK_USER } from "./leadAsk.ts";
@@ -65,6 +64,61 @@ export function petOf(lead: { pet?: unknown } | undefined, project: string | nul
   return validPet(lead?.pet) ?? (project === null ? TOP_PET : defaultPet(project));
 }
 
+/** Relative luminance of a `#rrggbb` colour, 0 (black) to 1 (white). */
+export function luminance(hex: string): number {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
+  if (!m) return 0.5;
+  const [r, g, b] = m.slice(1).map((h) => {
+    const c = parseInt(h, 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** The colour a lead's chat is tinted with (S29): its coat's base colour,
+ *  from pixel-pets' coats. A coat too dark or too pale to tint with on
+ *  either theme (a black cat, a white one) gives way to its stripes, then
+ *  its shade, then its muzzle. */
+export function petTint(p: LeadPet): string {
+  const c = coatFor(p.kind, p.coat);
+  return [c.O, c.D, c.S, c.W].find((x) => {
+    const l = luminance(x);
+    return l >= 0.08 && l <= 0.7;
+  }) ?? c.O;
+}
+
+/** The ink for words on a tint (a button, a badge): the app's dark ink or
+ *  white, whichever has the higher contrast against it (WCAG's ratio), so a
+ *  pale coat's button gets dark words. */
+export const DARK_INK = "#121726";
+export const LIGHT_INK = "#ffffff";
+export function inkOn(tint: string): string {
+  const l = luminance(tint);
+  const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  return ratio(l, luminance(DARK_INK)) >= ratio(l, 1) ? DARK_INK : LIGHT_INK;
+}
+
+/** WCAG's contrast ratio between two colours. */
+export function contrast(a: string, b: string): number {
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/** A tint to fill a button or badge with: the tint itself when its ink
+ *  reads at 4.5:1 or better, else the tint lightened toward white until
+ *  dark ink does (a mid grey-blue coat, say). */
+export function solidTint(tint: string): string {
+  if (contrast(tint, inkOn(tint)) >= 4.5) return tint;
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(tint.trim());
+  if (!m) return tint;
+  const rgb = m.slice(1).map((h) => parseInt(h, 16));
+  for (let k = 0.05; k <= 1; k += 0.05) {
+    const hex = `#${rgb.map((c) => Math.round(c + (255 - c) * k).toString(16).padStart(2, "0")).join("")}`;
+    if (contrast(hex, DARK_INK) >= 4.5) return hex;
+  }
+  return "#ffffff";
+}
+
 export const petKey = (p: LeadPet) => `${p.kind}:${p.coat}`;
 
 export function petFromKey(key: string): LeadPet | null {
@@ -76,18 +130,7 @@ export function petLabel(p: LeadPet): string {
   return PET_CHOICES.find((c) => c.kind === p.kind && c.coat === p.coat)?.label ?? kindLabel(p.kind);
 }
 
-// ---- the reply, in pages ----
-
-/** What a block the box doesn't page says instead. */
-export const readViewLine = (what: "code" | "table" | "list") => `(${what}, see Read view)`;
-
-/** Lists longer than this are left to the Read view. */
-export const LIST_MAX = 4;
-
-const FENCE = /^\s*(```|~~~)/;
-const TABLE_ROW = /^\s*\|.*\|\s*$/;
-const TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
-const ITEM = /^\s*(?:[-*+•]|\d+[.)])\s+/;
+// ---- the reply, in a line ----
 
 /** Markdown's marks taken off a line, keeping its words. */
 export function plainLine(s: string): string {
@@ -101,106 +144,6 @@ export function plainLine(s: string): string {
     .replace(/^\s*>\s?/, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-/** A reply as the paragraphs the box says, in order: code blocks, tables
- *  and lists of more than LIST_MAX items become one line pointing at the
- *  Read view; a short list's items are a paragraph each. */
-export function paragraphs(md: string): string[] {
-  const lines = md.replace(/\r\n?/g, "\n").split("\n");
-  const out: string[] = [];
-  let para: string[] = [];
-  const flush = () => {
-    const text = plainLine(para.join(" "));
-    if (text) out.push(text);
-    para = [];
-  };
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (FENCE.test(line)) {
-      flush();
-      const mark = line.trim().slice(0, 3);
-      i++;
-      while (i < lines.length && !lines[i].trim().startsWith(mark)) i++;
-      out.push(readViewLine("code"));
-    } else if (TABLE_ROW.test(line) && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1])) {
-      flush();
-      while (i + 1 < lines.length && TABLE_ROW.test(lines[i + 1])) i++;
-      out.push(readViewLine("table"));
-    } else if (ITEM.test(line)) {
-      flush();
-      const items: string[] = [];
-      for (; i < lines.length; i++) {
-        if (ITEM.test(lines[i])) items.push(lines[i]);
-        // An indented line goes on with the item above it.
-        else if (/^\s{2,}\S/.test(lines[i]) && items.length) items[items.length - 1] += ` ${lines[i].trim()}`;
-        else break;
-      }
-      i--;
-      if (items.length > LIST_MAX) out.push(readViewLine("list"));
-      else
-        for (const it of items) {
-          const num = it.match(/^\s*(\d+[.)])\s+/)?.[1];
-          const text = plainLine(it.replace(ITEM, ""));
-          if (text) out.push(`${num ?? "•"} ${text}`);
-        }
-    } else if (!line.trim()) flush();
-    else para.push(line);
-  }
-  flush();
-  return out;
-}
-
-/** The box's size in characters: `cols` to a line, `rows` lines. */
-export interface BoxSize {
-  cols: number;
-  rows: number;
-}
-
-/** Words wrapped into lines of at most `cols` characters. A word longer
- *  than a line has one to itself and is never cut. */
-export function wrap(text: string, cols: number): string[] {
-  const out: string[] = [];
-  let cur = "";
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    if (!cur) cur = word;
-    else if (cur.length + 1 + word.length <= cols) cur += ` ${word}`;
-    else {
-      out.push(cur);
-      cur = word;
-    }
-  }
-  if (cur) out.push(cur);
-  return out;
-}
-
-/** The reply in pages that fit the box: at most `rows` wrapped lines each,
- *  paragraphs starting on a line of their own ("\n" between them), words
- *  never split across lines or pages. */
-export function pages(md: string, box: BoxSize): string[] {
-  const cols = Math.max(8, Math.floor(box.cols));
-  const rows = Math.max(1, Math.floor(box.rows));
-  const lines = paragraphs(md).flatMap((p) => wrap(p, cols).map((text, i) => ({ text, starts: i === 0 })));
-  const out: string[] = [];
-  for (let i = 0; i < lines.length; i += rows) {
-    const page = lines.slice(i, i + rows);
-    out.push(page.map((l, j) => (j === 0 ? "" : l.starts ? "\n" : " ") + l.text).join(""));
-  }
-  return out;
-}
-
-/** Whether a reply has a block only the Read view shows. */
-export const hasStandIn = (md: string) => paragraphs(md).some((p) => /^\((code|table|list), see Read view\)$/.test(p));
-
-// ---- the dialogue on screen ----
-
-/** Where the dialogue is: nothing on screen ("closed", so it renders
- *  nothing and takes no layout), sliding in or away, or up. `open` is the
- *  lead asked for, `shown` the one still drawn while it slides away, `up`
- *  whether the slide up has started. */
-export function talkPhase(open: string | null, shown: string | null, up: boolean): "closed" | "sliding" | "open" {
-  if (shown === null) return "closed";
-  return open === shown && up ? "open" : "sliding";
 }
 
 // ---- calling you ----
@@ -238,20 +181,41 @@ export interface Call {
 
 export const QUIET: Call = { calling: false, count: 0, why: null };
 
+/** The last reply of a lead you saw in its chat: its entry and when it was
+ *  said. A restarted session numbers its entries from 0 again, so a reply
+ *  is seen by its time when that's known, not by its number alone. */
+export interface Seen {
+  n: number;
+  /** Unix seconds; missing on a mark saved before S29. */
+  at?: number;
+}
+
+/** Whether `seen` covers `reply`: said no later than the reply you saw.
+ *  An old mark without a time goes by entry number. */
+export function seenCovers(seen: Seen | null, reply: LeadReply): boolean {
+  if (!seen) return false;
+  return seen.at !== undefined ? reply.at <= seen.at : reply.n <= seen.n;
+}
+
 /** Whether a lead has something for you: its latest reply asks you
- *  (`ASK_USER:`), or it's unread, since you last opened it here or in the
- *  Read view (`seen`, the last entry you saw). */
-export function callState(o: { reply: LeadReply | null; unseen: boolean; seen: number | null; actions?: boolean }): Call {
+ *  (`ASK_USER:`, or an ASK line), or it's unread, since you last opened its
+ *  chat (`seen`). `asks`, when given, is how many of the reply's ASK lines
+ *  are still open (the app took them, and they aren't answered), in place
+ *  of counting the lines in its text. */
+export function callState(o: { reply: LeadReply | null; unseen: boolean; seen: Seen | null; actions?: boolean; asks?: number }): Call {
   const { reply } = o;
   if (!reply) return QUIET;
-  if (o.seen !== null && reply.n <= o.seen) return QUIET;
-  const asks = askCount(reply.text, o.actions);
+  if (seenCovers(o.seen, reply)) return QUIET;
+  const asks = o.asks !== undefined ? askCount(reply.text) + o.asks : askCount(reply.text, o.actions);
   if (asks > 0) return { calling: true, count: asks, why: "ask" };
   if (o.unseen) return { calling: true, count: 1, why: "unread" };
   return QUIET;
 }
 
-// ---- which leads, and who ⌘L opens ----
+// ---- which leads ----
+
+/** The top lead's chat. */
+export const ALL_PROJECTS = "All projects";
 
 export interface LeadEntry {
   /** The lead's thread. */
@@ -260,6 +224,8 @@ export interface LeadEntry {
   projectId: string | null;
   /** "<project> lead", or "Top lead". */
   title: string;
+  /** What its chat is called (S29): the project's name, or "All projects". */
+  name: string;
   model: string;
   pet: LeadPet;
   /** Its action lines are carried out (S28): a project lead with them on. */
@@ -275,7 +241,7 @@ export function leadsOf(
 ): LeadEntry[] {
   const live = (id: string) => !!agents[id] && !agents[id].archived;
   const out: LeadEntry[] = [];
-  if (top && live(top.agentId)) out.push({ agentId: top.agentId, projectId: null, title: "Top lead", model: top.model, pet: petOf(top, null), acts: false });
+  if (top && live(top.agentId)) out.push({ agentId: top.agentId, projectId: null, title: "Top lead", name: ALL_PROJECTS, model: top.model, pet: petOf(top, null), acts: false });
   const rows = Object.entries(cards)
     .flatMap(([key, c]) => {
       const p = projects[key];
@@ -287,6 +253,7 @@ export function leadsOf(
       agentId: r.lead.agentId,
       projectId: r.key,
       title: `${r.name} lead`,
+      name: r.name,
       model: r.lead.model,
       pet: petOf(r.lead, r.name),
       acts: r.lead.acts === true,
@@ -294,18 +261,11 @@ export function leadsOf(
   return out;
 }
 
-/** The lead ⌘L opens: one calling you (a question before an unread reply,
- *  then in list order), else the top lead; null when neither is there. */
-export function shortcutTarget(leads: readonly LeadEntry[], calls: Record<string, Call>): string | null {
-  const calling = (why: Call["why"]) => leads.find((l) => calls[l.agentId]?.calling && calls[l.agentId].why === why);
-  return (calling("ask") ?? calling("unread") ?? leads.find((l) => l.projectId === null))?.agentId ?? null;
-}
-
 // ---- what you've seen ----
 
 const SEEN_KEY = "observatory.leadChat.seen";
 
-function loadSeen(): Record<string, number> {
+function loadSeen(): Record<string, unknown> {
   try {
     const raw = JSON.parse(localStorage.getItem(SEEN_KEY) ?? "{}");
     return raw && typeof raw === "object" ? raw : {};
@@ -314,22 +274,27 @@ function loadSeen(): Record<string, number> {
   }
 }
 
-/** The last entry of `agentId`'s thread you saw in the dialogue, or null. */
-export function seenInChat(agentId: string): number | null {
-  const n = loadSeen()[agentId];
-  return typeof n === "number" ? n : null;
+/** The last reply of `agentId`'s thread you saw in its chat, or null. A
+ *  mark saved before S29 is a bare entry number. */
+export function seenInChat(agentId: string): Seen | null {
+  const v = loadSeen()[agentId];
+  if (typeof v === "number") return { n: v };
+  if (v && typeof v === "object" && typeof (v as Seen).n === "number")
+    return typeof (v as Seen).at === "number" ? { n: (v as Seen).n, at: (v as Seen).at } : { n: (v as Seen).n };
+  return null;
 }
 
-export function markSeenInChat(agentId: string, n: number) {
+/** You saw reply `n`, said at `at`: kept unless a later reply was seen, so
+ *  it never goes backwards, and a restarted session's new replies (its
+ *  numbers from 0 again, its times later) still call. */
+export function markSeenInChat(agentId: string, n: number, at: number) {
   try {
     const all = loadSeen();
-    if ((all[agentId] ?? -1) >= n) return;
-    all[agentId] = n;
+    const was = seenInChat(agentId);
+    if (was?.at !== undefined && was.at >= at) return;
+    all[agentId] = { n, at };
     localStorage.setItem(SEEN_KEY, JSON.stringify(all));
   } catch {
     // Without storage a lead calls again next launch.
   }
 }
-
-/** The later of two "last seen" entries, either of which may be unknown. */
-export const laterSeen = (a: number | null, b: number | null): number | null => (a === null ? b : b === null ? a : Math.max(a, b));

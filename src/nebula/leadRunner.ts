@@ -413,7 +413,7 @@ function holdNow(projectId: string): string | null {
 }
 
 /** Carry out the action lines in a lead's reply `n`. */
-async function act(leadId: string, projectId: string, lead: CardLead, n: number, text: string) {
+async function act(leadId: string, projectId: string, lead: CardLead, n: number, text: string, at?: number) {
   const actions = parseActions(text);
   if (!actions.length) return;
   if (lead.acts !== true) {
@@ -458,7 +458,7 @@ async function act(leadId: string, projectId: string, lead: CardLead, n: number,
     context,
     start: (branch, brief) => {
       const batch = queueNewTask({ text: brief, projectId, branch }, allCards());
-      const rec: LeadTask = { leadId, projectId, batchId: batch.id, taskId: batch.tasks[0].id, branch, at: Date.now() };
+      const rec: LeadTask = { leadId, projectId, batchId: batch.id, taskId: batch.tasks[0].id, branch, at: Date.now(), n, ...(at !== undefined ? { replyAt: at } : {}) };
       updateLeadActs((x) => ({ tasks: [...x.tasks, rec] }));
       void import("./batchRunner").then((m) => m.kickBatches());
       const s = getState();
@@ -474,7 +474,8 @@ async function act(leadId: string, projectId: string, lead: CardLead, n: number,
     },
     name: (agentId) => getState().agents[agentId]?.name ?? agentId,
   });
-  updateLeadActs((x) => ({ outcomes: { ...x.outcomes, [leadId]: { n, lines: done.lines, asks: done.asks } } }));
+  const outcome = { n, ...(at !== undefined ? { at } : {}), lines: done.lines, asks: done.asks };
+  updateLeadActs((x) => ({ outcomes: { ...x.outcomes, [leadId]: outcome }, history: [...x.history, { ...outcome, leadId }] }));
   await tell(leadId, done.reports.map(reportLine));
 }
 
@@ -521,7 +522,7 @@ function actOnTurns() {
     }
     const mine = projectLead(leadId);
     if (!mine) continue;
-    void act(leadId, mine.projectId, mine.lead, reply.n, reply.text).catch((e) => flash(`The lead's actions didn't go: ${errText(e)}`));
+    void act(leadId, mine.projectId, mine.lead, reply.n, reply.text, latestReply(leadId)?.at).catch((e) => flash(`The lead's actions didn't go: ${errText(e)}`));
   }
 }
 
@@ -539,9 +540,9 @@ async function passOn(topId: string, text: string) {
 }
 
 /** Yes or No on a lead's ASK row in the dialogue. */
-export function answerLeadAsk(leadId: string, n: number, ask: AskAction, yes: boolean) {
+export function answerLeadAsk(leadId: string, n: number, ask: AskAction, yes: boolean, at?: number) {
   const mine = projectLead(leadId);
-  return answerAsk(askKey(leadId, n, ask), ask, yes, {
+  return answerAsk(askKey(leadId, n, ask, at), ask, yes, {
     merge: async (number) => {
       const s = getState();
       const wt = Object.values(s.worktrees).find((w) => {

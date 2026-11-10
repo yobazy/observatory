@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import { onExit, onPty, send, sendInput } from "../nebula/client";
-import { getState, projectOfWorktree, setState, urgency, useAppState, type State } from "../nebula/store";
+import { getState, projectOfWorktree, setState, threadAgents, urgency, useAppState, type State } from "../nebula/store";
 import { statusLabel } from "../nebula/status";
 import { terminalTheme } from "./TerminalPane";
 import { gridFont, whenLoaded } from "../nebula/termfont";
@@ -23,7 +23,7 @@ export function gridAgents(s: State): Agent[] {
   const sel = s.selectedSession;
   const current = sel && "Agent" in sel ? s.agents[sel.Agent] : undefined;
   const inProject = (a: Agent) => s.worktrees[a.worktree_id]?.project_id === s.selectedProject;
-  const rest = Object.values(s.agents)
+  const rest = threadAgents(s)
     .filter((a) => !a.archived && a.id !== current?.id && inProject(a))
     .sort((a, b) => urgency(a) - urgency(b) || b.status_changed_at - a.status_changed_at);
   const first = current && !current.archived && inProject(current) ? [current] : [];

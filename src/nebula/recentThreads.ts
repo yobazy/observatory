@@ -1,4 +1,4 @@
-import { getState, setState, subscribe, type State } from "./store.ts";
+import { getState, leadThreads, setState, subscribe, type State } from "./store.ts";
 import type { Agent } from "./types";
 
 const KEY = "observatory.recentThreads";
@@ -25,8 +25,10 @@ export function visit(ids: string[], id: string): string[] {
 export function recentThreads(s: State, ids: string[] = recent): Agent[] {
   const sel = s.selectedSession;
   const open = sel && "Agent" in sel ? sel.Agent : null;
+  // A lead is its project's chat (S29), not a thread to go back to.
+  const leads = leadThreads(s);
   return ids
-    .filter((id) => id !== open)
+    .filter((id) => id !== open && !leads.has(id))
     .map((id) => s.agents[id])
     .filter((a): a is Agent => !!a && !a.archived);
 }
