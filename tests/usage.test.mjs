@@ -64,3 +64,32 @@ test('project filters do not alter the all-project chart; future and old usage s
   assert.equal(sum.daily.at(-1).tokens, 340);
   assert.equal(sum.block.tokens, 340);
 });
+
+/** One million of each kind of token, so a cost reads as the rates summed. */
+const million = { input: 1e6, output: 1e6, cacheRead: 1e6, cacheWrite5m: 0, cacheWrite1h: 0 };
+const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+
+test('the Claude 5 family is priced: Haiku 5.5, Sonnet 5.5, Opus 5.5 and Fable 5.1', () => {
+  // input + output + cache reads, $ per million (platform.claude.com pricing).
+  close(costOf(million, 'claude-haiku-5-5'), 0.1 + 0.5 + 0.01);
+  close(costOf(million, 'claude-sonnet-5-5'), 2 + 10 + 0.1);
+  close(costOf(million, 'claude-opus-5-5'), 4 + 20 + 0.2);
+  close(costOf(million, 'claude-fable-5-1'), 10 + 50 + 0.25);
+  // What `claude -p --model haiku` resolves to has a price now.
+  assert.notEqual(costOf(bucket(), 'claude-haiku-5-5'), null);
+});
+
+test('a family alias or a versioned name not in the table takes the latest known price of its family', () => {
+  for (const family of ['haiku', 'sonnet', 'opus', 'fable']) {
+    const latest = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5', fable: 'claude-fable-5-1' }[family];
+    assert.equal(costOf(million, `claude-${family}`), costOf(million, latest), `claude-${family}`);
+    assert.equal(costOf(million, `claude-${family}-9-9`), costOf(million, latest), `claude-${family}-9-9`);
+    assert.equal(costOf(million, `claude-${family}-9-9-20270101`), costOf(million, latest), 'dated snapshot of a new version');
+  }
+  // Listed versions keep their own prices.
+  close(costOf(million, 'claude-haiku-4-5'), 1 + 5 + 0.1);
+  close(costOf(million, 'claude-sonnet-4-6'), 3 + 15 + 0.3);
+  // Not a known family: still unpriced, not guessed.
+  assert.equal(costOf(million, 'claude-future-model'), null);
+  assert.equal(costOf(million, 'claude-haikus'), null);
+});

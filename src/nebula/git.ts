@@ -32,6 +32,8 @@ export interface GitStatus {
 /** `missing`: the checkout's folder is gone, though nebula still lists it. */
 export type GitState = GitStatus | { error: string; missing?: boolean };
 
+export { shouldPush } from "./autopush";
+
 export type ShipKind = "resolve" | "commit" | "push";
 
 export function changedFiles(g: GitStatus): number {
@@ -68,13 +70,14 @@ const inFlight = new Set<string>();
  *  that fetch may predate the commit or push the ask was about. */
 const again = new Set<string>();
 
-function mainBranch(wt: Worktree): string | null {
+/** The branch of the project's main checkout, when `wt` is another one. */
+export function mainBranch(wt: Worktree): string | null {
   const s = getState();
   const main = Object.values(s.worktrees).find((w) => w.project_id === wt.project_id && w.is_main);
   return main && main.id !== wt.id ? main.branch : null;
 }
 
-async function fetchStatus(wt: Worktree): Promise<GitState> {
+export async function fetchStatus(wt: Worktree): Promise<GitState> {
   try {
     if (isPreview()) {
       const { mockGitStatus } = await import("./mock");

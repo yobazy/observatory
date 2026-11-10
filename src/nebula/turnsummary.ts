@@ -12,6 +12,8 @@ export interface Step {
   note: string | null;
   /** Whether it worked, once its result is in. */
   ok: boolean | null;
+  /** What a failed call's result said, clipped (turns.rs). */
+  error?: string | null;
   /** Unix seconds. */
   at: number;
 }

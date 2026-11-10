@@ -229,7 +229,9 @@ size it from anywhere.
 **Usage log** (Settings › General, off unless you turn it on): notes what you click, the views
 and dialogs you open and how long they stay up, the ⌘ shortcuts you press and the errors you hit,
 one JSON line each in `~/Library/Application Support/dev.bazil.observatory/usage-log.jsonl`. Never what you
-type, and nothing is sent anywhere. It's there to show where the app gets in your way.
+type, and nothing is sent anywhere. It's there to show where the app gets in your way. A dev build
+(`npm run tauri dev`, the sandbox) keeps its prefs, log and moments in a `dev` folder inside that
+one, apart from the installed app's.
 
 **Mark this moment** (`⇧⌘M`): noticed something off? This saves the last minute of those events,
 what's on screen (the view, project, session and its status) and a screenshot of the window to a
@@ -249,6 +251,8 @@ on you. While a thread works, a second cat keeps it company on the Read view's w
 types at a laptop while the agent edits, reads a book while it reads, paces while a command runs,
 looks through its telescope during a web search, sweats when a command fails, and dozes if one step
 takes two minutes. Click either cat to say hi, or turn them off in Settings.
+
+The cat is shared with the owner's other apps through pixel-pets (a private repo): `src/vendor/pixel-pets/` is a copy written by its `sync.sh`, so don't edit it here. The telescope, laptop and book are this app's own, in `src/components/petFrames.ts`.
 
 ## Building from source
 
@@ -294,6 +298,8 @@ scripts/sandbox.sh automations-clean  # remove it
 `scripts/drive` works the sandbox app from a shell, so an agent can check a change without you
 clicking for it: `state`, `view`, `select`, `click`, `type`, `key`, `shot` and more (run it with
 `-h`). `scripts/drive replay <moment dir>` puts a marked moment's view and thread back on screen.
+`scripts/drive run <steps>` does a whole list of those in one go, one per line, and stops at the
+first that fails; its `shot before` and `shot after` land numbered in one folder.
 
 `npm run dev` on its own serves a browser preview with demo data and a canned terminal. It's
 handy for styling, and needs no daemon. The screenshots above are from it:

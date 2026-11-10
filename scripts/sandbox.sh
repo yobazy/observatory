@@ -114,12 +114,15 @@ up() {
     OBSERVATORY_DEV_PORT=$port nohup npm run tauri dev -- --config "$config" >"$ROOT/app.log" 2>&1 &
   fi
   echo $! >"$ROOT/app.pid"
-  for _ in $(seq 1 600); do
+  # By the clock, not a count of tries: on a busy Mac a first build can take
+  # half an hour, and each try takes longer than its second of sleep.
+  local deadline=$((SECONDS + 1800))
+  while [ "$SECONDS" -lt "$deadline" ]; do
     scripts/drive state >/dev/null 2>&1 && { echo "app up (log $ROOT/app.log)"; return; }
     kill -0 "$(cat "$ROOT/app.pid")" 2>/dev/null || { echo "app exited; see $ROOT/app.log" >&2; tail -20 "$ROOT/app.log" >&2; exit 1; }
-    sleep 1
+    sleep 2
   done
-  echo "app not reachable after 10 minutes; see $ROOT/app.log" >&2
+  echo "app not reachable after 30 minutes, still building or stuck; see $ROOT/app.log (scripts/sandbox.sh down stops it)" >&2
   exit 1
 }
 

@@ -6,6 +6,7 @@ import {
   projectAgents,
   projectWorktrees,
   setState,
+  threadAgents,
   useAppState,
   worktreeAgents,
   worktreeTerminals,
@@ -13,6 +14,8 @@ import {
 import { agentSpec, harnessLabel, KIND_LABEL, lastPrompt, relativeTime, statusLabel, usualHarness } from "../nebula/status";
 import { request } from "../nebula/client";
 import { changedFiles, neverPushed, shipKind, type GitState, type GitStatus } from "../nebula/git";
+import { pushNote } from "../nebula/autopush";
+import { usePushResult } from "../nebula/pushRunner";
 import { runOnWorktree, SHIP_LABEL, shipPrompt, shipWhat, takerFor } from "../nebula/actions";
 import { AgentServerMark, BandRunButton, BandRunLine, ProjectRun } from "./Run";
 import { PrLine } from "./Pr";
@@ -38,6 +41,8 @@ import { useVerdict } from "../nebula/verdicts";
 import { Plate, ThreadPlate } from "./Plate";
 import { LooseRows } from "./LooseSand";
 import { warmth } from "../nebula/warmth";
+import { useLeads } from "../nebula/leadCalls";
+import { LeadPetButton } from "./ProjectChat";
 
 /** Re-render once a minute so relative times stay honest. */
 function useMinuteTick() {
@@ -110,8 +115,8 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
   const filter = useMemo((): Filter => ({ terms, tags: on, prefs: state.prefs }), [terms, on, state.prefs]);
   const threads = useMemo(() => {
     const wts = new Set(worktrees.map((w) => w.id));
-    return Object.values(state.agents).filter((a) => wts.has(a.worktree_id));
-  }, [state.agents, worktrees]);
+    return threadAgents(state).filter((a) => wts.has(a.worktree_id));
+  }, [state, worktrees]);
   const counts = useMemo(
     () => (project ? tagCounts(threads, state.prefs, project.repo_path) : new Map<string, number>()),
     [threads, state.prefs, project],
@@ -226,6 +231,7 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
           <ProjectIdeas repo={project.repo_path} />
         </div>
         <div className="sessions-actions">
+          <ProjectLeadPet projectId={project.id} />
           <button className="icon-btn" title="Hide tasks (⌥⌘B)" aria-label="Hide tasks" onClick={onHide}>
             <PanelGlyph />
           </button>
@@ -624,6 +630,7 @@ function MissingLine({ worktree }: { worktree: Worktree }) {
 /** Where the branch's code stands, in the order it matters: conflicts, then
  *  uncommitted work, then commits that aren't on the remote yet. */
 function GitLine({ git, worktree }: { git: GitState; worktree: Worktree }) {
+  const pushed = usePushResult(worktree.id);
   if ("error" in git && git.missing) return <MissingLine worktree={worktree} />;
   if ("error" in git) {
     return (
@@ -635,6 +642,13 @@ function GitLine({ git, worktree }: { git: GitState; worktree: Worktree }) {
   const files = changedFiles(git);
   const commits = (n: number) => `${n} ${n === 1 ? "commit" : "commits"}`;
   const parts: React.ReactNode[] = [];
+  // After a turn, when the card pushes the branch (autopush.ts).
+  if (pushed)
+    parts.push(
+      <span className={pushed.ok ? "git-muted" : "git-warn"} role="status">
+        {pushNote(pushed)}
+      </span>,
+    );
   if (!git.branch) parts.push(<span className="git-muted">Detached HEAD</span>);
   if (git.conflicted > 0) parts.push(<span className="git-warn">{git.conflicted} in conflict</span>);
   if (files > 0)
@@ -914,6 +928,14 @@ function ShellGlyph() {
       />
     </svg>
   );
+}
+
+/** The project's lead (S29), as its pet in the header: a click opens the
+ *  project's chat. A project without a running lead has none; its card
+ *  has Start a lead. */
+function ProjectLeadPet({ projectId }: { projectId: string }) {
+  const lead = useLeads().find((l) => l.projectId === projectId);
+  return lead ? <LeadPetButton lead={lead} /> : null;
 }
 
 /** The project's plate: moved by every prompt across its threads, and

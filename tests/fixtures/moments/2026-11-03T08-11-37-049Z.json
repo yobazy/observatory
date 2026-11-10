@@ -1,0 +1,21 @@
+{
+  "moment": "2026-11-03T08-11-37-049Z",
+  "family": "sent",
+  "note": "Reviewer sessions arent automatically updated in the reader it seems?",
+  "fixedBy": "#153 A thread waiting on pull requests says when they've merged",
+  "source": "The latest reply in thread.json, whose verdict waits on a reviewer for #136; the screenshot shows #136 already Merged in the task list. Scratchpad paths shortened.",
+  "checks": [
+    {
+      "reads": "landed",
+      "input": {
+        "text": "**A draft PR now gets a Mark ready button under its branch: PR #136**\n\n✅ PR opened · 🟠 reviewer running\n\nThe button sits where \"#134 Draft\" showed in your moment. Clicking it runs `gh pr ready`.\n\n- Before: `/tmp/scratchpad/before.png`\n- After: `/tmp/scratchpad/after-ready.png`\n\n**Needs you:** nothing.\n\n**Details**\n- A separate reviewer session will merge it if the review passes.\n\n🟠 Keep open: the reviewer session for #136 is still running. Memory has the PR.",
+        "states": {
+          "136": "merged"
+        }
+      },
+      "expect": {
+        "landed": "#136 merged"
+      }
+    }
+  ]
+}

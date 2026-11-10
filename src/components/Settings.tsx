@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
+import { filterSettings, markWords, searchWords } from "../nebula/settingsSearch";
 import { flash, getState, setState, useAppState } from "../nebula/store";
+import { DEFAULT_STALE_DAYS, DEFAULT_TRIAGE_COMMAND } from "../nebula/triage";
+import { DEFAULT_TASK_BUDGET } from "../nebula/stuck";
+import { CODEX_REVIEW_COMMAND, DEFAULT_REVIEW_COMMAND } from "../nebula/review";
+import { DEFAULT_PARK_DAYS } from "../nebula/park";
 import {
   AGENTS_HEAD,
   EXPERIMENTAL,
@@ -21,6 +26,7 @@ import { ACCENTS, MODES, resolvedMode, savePrefs, themeName } from "../nebula/th
 import { LINE_HEIGHTS, SIZE_MAX, SIZE_MIN, TERM_FONTS, termFont } from "../nebula/termfont";
 import { HANDOFF_INSTRUCTION } from "../nebula/handoff";
 import { sortedProjects } from "../nebula/store";
+import { openLeadChat } from "../nebula/leadCalls";
 import { QUICK_CAPTURE_CHOICES, QUICK_CAPTURE_DEFAULT } from "../nebula/desktop";
 import { play } from "../nebula/delight";
 import { chosenEditor, useEditors } from "./Editor";
@@ -31,6 +37,12 @@ import { defaultPrefixes, parsePrefixes } from "../nebula/automations";
 import { checkForUpdates, restartToUpdate, useUpdateState } from "../nebula/updates";
 import { clearUseLog, useLogPath } from "../nebula/uselog";
 import { momentsDir } from "../nebula/moments";
+import { leadState } from "../nebula/lead";
+import { ASK_LINE_TEMPLATE, countsText, DEFAULT_TOP_MODEL, TOP_LEAD_NAME, TOP_NOTES, type LogCounts } from "../nebula/leadAsk";
+import { answerCounts, defaultTopFolder, openAnswersLog, removeTopLead, setTopLeadModel, setTopLeadPet, startTopLead } from "../nebula/leadRunner";
+import { petOf } from "../nebula/leadChat";
+import { LeadVoiceFields, ModelPicker, PetPicker, VOICE_HELP } from "./LeadCard";
+import { useCards } from "../nebula/cards";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
 type Tab = (typeof TABS)[number];
@@ -49,6 +61,52 @@ export function SettingsView() {
   const tabList = useRef<HTMLElement>(null);
   useOverlayKeys(tabList);
 
+  const [query, setQuery] = useState("");
+  const words = searchWords(query);
+  const searching = words.length > 0;
+  const [found, setFound] = useState<Record<string, number> | null>(null);
+  const pane = useRef<HTMLDivElement>(null);
+  const searchBox = useRef<HTMLInputElement>(null);
+  const wordsKey = words.join(" ");
+
+  // Every tab is on screen while searching; hide what doesn't match, and again
+  // when a section's own content changes (a lead starting, a version loading).
+  useLayoutEffect(() => {
+    const root = pane.current;
+    if (!root || !searching || !settings) {
+      markWords(root ?? document.body, []);
+      setFound(null);
+      return;
+    }
+    const run = () => {
+      const counts = filterSettings(root, words);
+      markWords(root, words);
+      setFound((was) => (was && TABS.every((t) => was[t] === counts[t]) ? was : counts));
+    };
+    run();
+    const watch = new MutationObserver(run);
+    watch.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => watch.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wordsKey, settings]);
+  useEffect(() => () => markWords(document.body, []), []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey && !e.altKey && !e.ctrlKey && e.key === "f") {
+        e.preventDefault();
+        searchBox.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const openTab = (t: Tab) => {
+    setQuery("");
+    setTab(t);
+  };
+
   const save = async (key: string, v: unknown) => {
     setSettings((s) => ({ ...s, [key]: v }));
     if (key === "theme" && typeof v === "string") setState({ theme: v });
@@ -59,6 +117,40 @@ export function SettingsView() {
       setSettings(await loadSettings());
     }
   };
+
+  const tabContent = (t: Tab) =>
+    !settings ? null : t === "Appearance" ? (
+      <Appearance settings={settings} save={save} />
+    ) : t === "General" ? (
+      <>
+        <Rows rows={GENERAL} settings={settings} save={save} />
+        <Previews />
+        <ReadView />
+        <DispatchSettings />
+        <LeadsSettings />
+        <AutomationsSettings />
+        <Updates />
+        <UsageLog />
+      </>
+    ) : t === "Sessions" ? (
+      <Rows rows={SESSIONS} settings={settings} save={save} />
+    ) : t === "Agents" ? (
+      <>
+        <Rows rows={AGENTS_HEAD} settings={settings} save={save} />
+        <Handoffs />
+        {harnessRows().map((h) => (
+          <Group key={h.title} title={h.title}>
+            <Rows rows={h.rows} settings={settings} save={save} />
+          </Group>
+        ))}
+      </>
+    ) : t === "Project" ? (
+      <ProjectTab settings={settings} onChange={() => void loadSettings().then(setSettings)} />
+    ) : t === "Shortcuts" ? (
+      <Shortcuts />
+    ) : (
+      <Rows rows={EXPERIMENTAL} settings={settings} save={save} />
+    );
 
   return (
     <section className="settings" aria-labelledby="settings-title">
@@ -77,50 +169,59 @@ export function SettingsView() {
       </header>
       <div className="settings-body">
         <nav className="settings-tabs" aria-label="Settings sections" ref={tabList}>
-          {TABS.map((t) => (
-            <button
-              key={t}
-              className={`settings-tab${tab === t ? " is-on" : ""}`}
-              aria-current={tab === t ? "page" : undefined}
-              onClick={() => setTab(t)}
-            >
-              {t}
-            </button>
-          ))}
+          <input
+            ref={searchBox}
+            type="search"
+            className="setting-input settings-search"
+            placeholder="Search settings"
+            aria-label="Search settings"
+            title="Search every tab (⌘F)"
+            value={query}
+            spellCheck={false}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              e.preventDefault();
+              if (query) setQuery("");
+              else setState({ view: "sessions" });
+            }}
+          />
+          {TABS.map((t) => {
+            const n = searching ? (found?.[t] ?? 0) : null;
+            return (
+              <button
+                key={t}
+                className={`settings-tab${!searching && tab === t ? " is-on" : ""}${n === 0 ? " is-empty" : ""}`}
+                aria-current={!searching && tab === t ? "page" : undefined}
+                onClick={() => openTab(t)}
+              >
+                {t}
+                {n !== null && n > 0 && <span className="settings-tab-count">{n}</span>}
+              </button>
+            );
+          })}
         </nav>
-        <div className="settings-pane">
+        <div className="settings-pane" ref={pane}>
           {!settings ? (
             <p className="usage-empty">Reading settings…</p>
-          ) : tab === "Appearance" ? (
-            <Appearance settings={settings} save={save} />
-          ) : tab === "General" ? (
+          ) : searching ? (
             <>
-              <Rows rows={GENERAL} settings={settings} save={save} />
-              <Previews />
-              <ReadView />
-              <DispatchSettings />
-              <AutomationsSettings />
-              <Updates />
-              <UsageLog />
-            </>
-          ) : tab === "Sessions" ? (
-            <Rows rows={SESSIONS} settings={settings} save={save} />
-          ) : tab === "Agents" ? (
-            <>
-              <Rows rows={AGENTS_HEAD} settings={settings} save={save} />
-              <Handoffs />
-              {harnessRows().map((h) => (
-                <Group key={h.title} title={h.title}>
-                  <Rows rows={h.rows} settings={settings} save={save} />
-                </Group>
+              {TABS.map((t) => (
+                <section key={t} className="settings-found" data-settings-tab={t}>
+                  <h2 className="settings-found-tab">
+                    <button className="link-btn" onClick={() => openTab(t)} title={`Open the ${t} tab`}>
+                      {t}
+                    </button>
+                  </h2>
+                  {tabContent(t)}
+                </section>
               ))}
+              {found && Object.values(found).every((n) => n === 0) && (
+                <p className="usage-empty">No settings match “{query.trim()}”.</p>
+              )}
             </>
-          ) : tab === "Project" ? (
-            <ProjectTab settings={settings} onChange={() => void loadSettings().then(setSettings)} />
-          ) : tab === "Shortcuts" ? (
-            <Shortcuts />
           ) : (
-            <Rows rows={EXPERIMENTAL} settings={settings} save={save} />
+            tabContent(tab)
           )}
         </div>
       </div>
@@ -374,6 +475,176 @@ function DispatchSettings() {
       </div>
       <div className="setting">
         <div className="setting-text">
+          <label className="setting-label" htmlFor="set-triage-on">
+            Triage queue
+          </label>
+          <span className="setting-hint">
+            A cheap model reads the end of each open thread that changed since its last read and says in one line what
+            it needs from you, ranked at the top of the Dispatch board and walked by ⌘J. Each read is a model call, a
+            batch of up to 10 threads at a time; the first one reads every thread that isn't stale. Off, only threads
+            waiting on you show.
+          </span>
+        </div>
+        <Switch
+          id="set-triage-on"
+          on={prefs.triageOn === true}
+          onChange={(on) => void savePrefs({ ...prefs, triageOn: on || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-triage">
+            Triage command
+          </label>
+          <span className="setting-hint">
+            The agent CLI that triages, run headless with the prompt on stdin. Empty uses Haiku with no tools.
+          </span>
+        </div>
+        <TextSetting
+          id="set-triage"
+          value={prefs.triageCommand ?? ""}
+          placeholder={DEFAULT_TRIAGE_COMMAND}
+          suggestions={[DEFAULT_TRIAGE_COMMAND, "codex exec --skip-git-repo-check"]}
+          onCommit={(v) => void savePrefs({ ...prefs, triageCommand: v || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-triage-stale">
+            Stale after
+          </label>
+          <span className="setting-hint">
+            A thread unchanged this long is labelled stale without a model call, and folded away at the end of the queue.
+          </span>
+        </div>
+        <select
+          id="set-triage-stale"
+          className="setting-input"
+          value={String(prefs.triageStaleDays ?? DEFAULT_STALE_DAYS)}
+          onChange={(e) => {
+            const days = Number(e.target.value);
+            void savePrefs({ ...prefs, triageStaleDays: days === DEFAULT_STALE_DAYS ? undefined : days });
+          }}
+        >
+          {[1, 2, 3, 5, 7, 14, 30].map((n) => (
+            <option key={n} value={n}>
+              {n} {n === 1 ? "day" : "days"}
+              {n === DEFAULT_STALE_DAYS ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-task-budget">
+            Task budget
+          </label>
+          <span className="setting-hint">
+            What one thread may spend since your last message to it (a Dispatch task: since it started), in the dollars
+            the usage view shows. At 85% the queue flags it stuck and a banner says so, then again at 100%. A Dispatch
+            task can set its own on the board. Nothing is stopped on its own.
+          </span>
+        </div>
+        <span className="budget-input">
+          $
+          <input
+            id="set-task-budget"
+            key={prefs.taskBudget ?? "default"}
+            className="setting-input"
+            type="number"
+            min={1}
+            step={1}
+            inputMode="decimal"
+            defaultValue={prefs.taskBudget ?? DEFAULT_TASK_BUDGET}
+            onBlur={(e) => {
+              const v = Number(e.target.value);
+              const next = v > 0 && v !== DEFAULT_TASK_BUDGET ? v : undefined;
+              if (next !== prefs.taskBudget) void savePrefs({ ...prefs, taskBudget: next });
+              else e.target.value = String(prefs.taskBudget ?? DEFAULT_TASK_BUDGET);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+          />
+        </span>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-review-on">
+            Check before done
+          </label>
+          <span className="setting-hint">
+            When a thread's turn ends with changes in its checkout, the app runs the project card's checks there and a
+            read-only reviewer checks the work against the task. A pass shows it as done and checked; a fail goes back to
+            the thread once. Each review is a model call. Only turns that end while the app is open are checked.
+          </span>
+        </div>
+        <Switch
+          id="set-review-on"
+          on={prefs.reviewOn === true}
+          onChange={(on) => void savePrefs({ ...prefs, reviewOn: on || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-review">
+            Review command
+          </label>
+          <span className="setting-hint">
+            The reviewer CLI, run headless in the checkout with the prompt on stdin. Keep it read-only by its own flags;
+            the app also throws away any verdict from a reviewer that changed files. Empty uses Claude in plan mode.
+          </span>
+        </div>
+        <TextSetting
+          id="set-review"
+          value={prefs.reviewCommand ?? ""}
+          placeholder={DEFAULT_REVIEW_COMMAND}
+          suggestions={[DEFAULT_REVIEW_COMMAND, CODEX_REVIEW_COMMAND]}
+          onCommit={(v) => void savePrefs({ ...prefs, reviewCommand: v || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-park-on">
+            Park idle threads in Ideas
+          </label>
+          <span className="setting-hint">
+            A thread that finished and sat unchanged past the time below becomes an idea in its project, with a brief
+            of what was asked and where it got to, and its session is archived. Never one that's running, waiting on
+            you, dragged into place, or in a Dispatch batch still going. Resume in Ideas brings a thread back as it
+            was; Undo in the sidebar brings back a whole park. The first time, you confirm the list. No model call.
+          </span>
+        </div>
+        <Switch
+          id="set-park-on"
+          on={prefs.parkOn === true}
+          onChange={(on) => void savePrefs({ ...prefs, parkOn: on || undefined })}
+        />
+      </div>
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-park-days">
+            Park after
+          </label>
+          <span className="setting-hint">How long a thread sits unchanged before it's parked. Separate from Stale after.</span>
+        </div>
+        <select
+          id="set-park-days"
+          className="setting-input"
+          value={String(prefs.parkDays ?? DEFAULT_PARK_DAYS)}
+          onChange={(e) => {
+            const days = Number(e.target.value);
+            void savePrefs({ ...prefs, parkDays: days === DEFAULT_PARK_DAYS ? undefined : days });
+          }}
+        >
+          {[1, 2, 3, 5, 7, 14, 30].map((n) => (
+            <option key={n} value={n}>
+              {n} {n === 1 ? "day" : "days"}
+              {n === DEFAULT_PARK_DAYS ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="setting">
+        <div className="setting-text">
           <label className="setting-label" htmlFor="set-suggest-on">
             Next-prompt suggestions
           </label>
@@ -411,8 +682,8 @@ function DispatchSettings() {
             Sessions at once
           </label>
           <span className="setting-hint">
-            How many dispatched tasks run at the same time. The rest wait and start as these finish. A Shared
-            project's own limit applies too.
+            How many sessions work at the same time, however they were started. Past it, dispatched tasks wait and
+            start as others finish, and New task offers to wait too. A Shared project's own limit applies as well.
           </span>
         </div>
         <select
@@ -430,6 +701,217 @@ function DispatchSettings() {
         </select>
       </div>
     </Group>
+  );
+}
+
+/** The top lead over every project, today's answers from the leads, and
+ *  the ask line for a CLAUDE.md (leadAsk.ts). */
+function LeadsSettings() {
+  const { prefs, agents } = useAppState();
+  const top = prefs.topLead;
+  const state = leadState(top, agents);
+  const [folder, setFolder] = useState(top?.path ?? "");
+  const [model, setModel] = useState(top?.model || DEFAULT_TOP_MODEL);
+  const [notes, setNotes] = useState(top?.notes || TOP_NOTES);
+  const [busy, setBusy] = useState(false);
+  const [counts, setCounts] = useState<LogCounts | null>(null);
+  const [copied, setCopied] = useState(false);
+  const agent = top ? agents[top.agentId] : undefined;
+  const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+  useEffect(() => {
+    if (!folder) void defaultTopFolder().then((f) => setFolder((now) => now || f)).catch(() => {});
+    let live = true;
+    const load = () => void answerCounts().then((c) => live && setCounts(c)).catch(() => live && setCounts(null));
+    load();
+    const timer = setInterval(load, 30_000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const start = () => {
+    if (!folder.trim()) return flash("Pick the folder the top lead runs in.");
+    setBusy(true);
+    startTopLead({ path: folder.trim(), model, notes: notes.trim() || TOP_NOTES })
+      .then(() => flash(`Started the top lead as ${TOP_LEAD_NAME}`))
+      .catch((e) => flash(`Couldn't start the top lead: ${errText(e)}`, 6000))
+      .finally(() => setBusy(false));
+  };
+  const pickModel = (next: string) => {
+    setModel(next);
+    if (!top || !next.trim() || next.trim() === top.model) return;
+    setTopLeadModel(top, next)
+      .then(() => flash(state === "running" ? `Restarted the top lead on ${next.trim()}` : `The top lead will use ${next.trim()}`))
+      .catch((e) => flash(`Couldn't switch the top lead's model: ${errText(e)}`));
+  };
+
+  return (
+    <Group title="Leads">
+      <div className="setting setting-stack">
+        <div className="setting-text">
+          <span className="setting-label">
+            Top lead{" "}
+            {state !== "none" && (
+              <span className={`lead-mark is-small${state === "stopped" ? " is-stopped" : ""}`}>
+                {state === "running" ? "Running" : "Top lead stopped"}
+              </span>
+            )}
+          </span>
+          <span className="setting-hint">
+            {state === "stopped"
+              ? "Its thread was archived or deleted, so tasks only ask their project's lead. Restart starts a fresh one from its notes."
+              : `One thread over every project, named ${TOP_LEAD_NAME}. Tasks ask it about other projects; it answers facts and past decisions with a source from its notes, the projects' CLAUDE.md and README, memory and your vault, passes a question about one project to that project's lead, and sends anything else back to you. It never acts on a question. Off until you start it; it costs nothing till then.`}
+          </span>
+        </div>
+        <div className="setting-inline top-lead-fields">
+          <label className="card-cap">
+            folder
+            <input
+              className="setting-input"
+              value={folder}
+              onChange={(e) => setFolder(e.target.value)}
+              disabled={state === "running"}
+              spellCheck={false}
+              aria-label="The folder the top lead runs in"
+            />
+          </label>
+          {state !== "running" && (
+            <button
+              className="btn btn-sm"
+              onClick={() => void pickFolder(folder || undefined, "Choose where the top lead runs").then((d) => d && setFolder(d))}
+            >
+              Choose…
+            </button>
+          )}
+        </div>
+        <div className="setting-inline top-lead-fields">
+          <ModelPicker model={model} label="The top lead's model" onPick={pickModel} />
+          <label className="card-cap">
+            notes
+            <input
+              className="setting-input"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              disabled={state === "running"}
+              spellCheck={false}
+              aria-label="The top lead's notes file"
+            />
+          </label>
+        </div>
+        {top && (
+          <div className="setting-inline top-lead-fields">
+            <PetPicker
+              pet={petOf(top, null)}
+              label="The top lead's animal"
+              onPick={(pet) => void setTopLeadPet(top, pet).then(() => flash(`The top lead is a ${pet.kind} now`))}
+            />
+          </div>
+        )}
+        <div className="setting-inline">
+          {state === "running" && agent && (
+            <button
+              className="link-btn"
+              onClick={() => openLeadChat(agent.id)}
+            >
+              Open its chat
+            </button>
+          )}
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={start}
+            title={state === "running" ? "Archive its thread and start a fresh one from its notes" : undefined}
+          >
+            {busy ? "Starting…" : state === "none" ? "Start the top lead" : "Restart"}
+          </button>
+          {state !== "none" && (
+            <button
+              className="link-btn hint"
+              onClick={() =>
+                void removeTopLead().then(
+                  (how) => flash(how === "archived" ? "The top lead is off, and its thread is archived" : "The top lead is off"),
+                  (e) => flash(`Couldn't archive the top lead's thread, so it's still on: ${errText(e)}`),
+                )
+              }
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+      <ProjectLeadsVoice />
+      <div className="setting">
+        <div className="setting-text">
+          <span className="setting-label">Answers</span>
+          <span className="setting-hint">
+            {counts ? `${countsText(counts)}.` : "Couldn't read the answers log."} Every lead writes one line per answer to{" "}
+            <code>answers.log</code> beside its notes.
+          </span>
+        </div>
+        <button
+          className="btn"
+          onClick={() => void openAnswersLog().catch((e) => flash(`Couldn't open the log: ${errText(e)}`))}
+        >
+          Open the log
+        </button>
+      </div>
+      <div className="setting setting-stack">
+        <div className="setting-text">
+          <span className="setting-label">Ask a lead first</span>
+          <span className="setting-hint">
+            Dispatch's tasks and Start task get this line when a lead is running. For threads you start yourself, put it in a
+            project's <code>CLAUDE.md</code>, with the project's name.
+          </span>
+        </div>
+        <pre className="handoff-text">{ASK_LINE_TEMPLATE}</pre>
+        <div>
+          <button
+            className="btn btn-sm"
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(ASK_LINE_TEMPLATE)
+                .then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1800);
+                })
+                .catch(() => flash("Couldn't copy it; select the text instead."))
+            }
+          >
+            {copied ? "Copied" : "Copy the ask line"}
+          </button>
+        </div>
+      </div>
+    </Group>
+  );
+}
+
+/** Each project lead's personality and instructions (also in its chat's
+ *  header and its project's card). */
+function ProjectLeadsVoice() {
+  const cards = useCards();
+  const { projects } = useAppState();
+  const leads = Object.entries(cards)
+    .flatMap(([id, c]) => (c.lead && projects[id] ? [{ id, name: projects[id].name, lead: c.lead }] : []))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-text">
+        <span className="setting-label">Project leads' personality and instructions</span>
+        <span className="setting-hint">
+          {VOICE_HELP}
+          {leads.length ? "" : " Start a lead from a project's card to set them."}
+        </span>
+      </div>
+      {leads.map((l) => (
+        <div key={l.id} className="lead-voice-project">
+          <span className="lead-voice-name">{l.name}</span>
+          <LeadVoiceFields projectId={l.id} projectName={l.name} lead={l.lead} help={false} />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -703,7 +1185,7 @@ function Appearance({ settings, save }: { settings: Settings; save: (k: string, 
   return (
     <>
       <Group title="Desktop app">
-        <div className="setting">
+        <div className="setting" data-search="dark light mode">
           <div className="setting-text">
             <span className="setting-label" id="mode-label">
               Appearance
@@ -1077,7 +1559,7 @@ const SHORTCUTS: [string, string][] = [
   ["⌘O", "Add a project"],
   ["⌘P", "Filter projects"],
   ["⌘1 – ⌘9", "Jump to a project"],
-  ["⌘J", "Next session waiting on you"],
+  ["⌘J", "Next in the triage queue, or the next session waiting on you"],
   ["⌘I", "Write an idea down for later"],
   ["⇧⌘I", "Ideas: everything written down to start later"],
   ["⌘U", "Agent usage"],

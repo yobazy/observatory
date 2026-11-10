@@ -10,7 +10,19 @@ const POLL_MS = 1_500;
 /** Answer a waiting agent without opening its terminal: its numbered
  *  choices as buttons when it's showing some (a permission prompt), else
  *  the end of its screen and a line to reply on. */
-export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
+export function QuickAnswer({
+  agent,
+  onOpen,
+  onPicked,
+  every = POLL_MS,
+}: {
+  agent: Agent;
+  onOpen: () => void;
+  /** A choice went to its terminal. */
+  onPicked?: () => void;
+  /** How often to read its screen. */
+  every?: number;
+}) {
   // undefined while the first read is out; null when there's no live
   // terminal to read.
   const [screen, setScreen] = useState<string[] | null | undefined>(undefined);
@@ -25,7 +37,7 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
       const lines = document.hidden ? undefined : await readScreen(agent).catch(() => null);
       if (!live) return;
       if (lines !== undefined) setScreen(lines);
-      t = setTimeout(read, POLL_MS);
+      t = setTimeout(read, every);
     };
     void read();
     return () => {
@@ -41,7 +53,11 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
     try {
       await answer(agent, q, c);
       if (c.typed) onOpen();
-      else flash(`Answered ${agent.name}: ${c.label}`);
+      else {
+        flash(`Answered ${agent.name}: ${c.label}`);
+        // A box ticked or a step forward leaves it waiting on you still.
+        if (!c.stays) onPicked?.();
+      }
     } catch (e) {
       flash(e instanceof Error ? e.message : String(e));
     } finally {
@@ -78,6 +94,8 @@ export function QuickAnswer({ agent, onOpen }: { agent: Agent; onOpen: () => voi
   if (q) {
     return (
       <div className="qa" role="group" aria-label={`Answer ${agent.name}`}>
+        {/* What it asks about: the command, the file. */}
+        {q.detail && <pre className="rd-ask-detail">{q.detail.join("\n")}</pre>}
         {q.prompt && <p className="qa-prompt">{q.prompt}</p>}
         <div className="qa-choices">
           {q.choices.map((c) => (

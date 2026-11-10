@@ -13,7 +13,8 @@ export interface Handoff {
 
 export const MAX_PROMPT = 20_000;
 
-export function parseHandoff(url: string): Handoff | { error: string } {
+/** The link, and what it asks for: `new-task`, `follow-up`. */
+function readLink(url: string): { u: URL; action: string } | { error: string } {
   let u: URL;
   try {
     u = new URL(url);
@@ -22,7 +23,19 @@ export function parseHandoff(url: string): Handoff | { error: string } {
   }
   if (u.protocol !== "observatory:") return { error: "That isn't an observatory:// link." };
   // `observatory://new-task?…` parses with new-task as the host.
-  const action = (u.hostname || u.pathname.replace(/^\/+/, "")).replace(/\/+$/, "");
+  return { u, action: (u.hostname || u.pathname.replace(/^\/+/, "")).replace(/\/+$/, "") };
+}
+
+/** What an observatory:// link asks for, or null when it can't be read. */
+export function linkAction(url: string): string | null {
+  const read = readLink(url);
+  return "error" in read ? null : read.action;
+}
+
+export function parseHandoff(url: string): Handoff | { error: string } {
+  const read = readLink(url);
+  if ("error" in read) return read;
+  const { u, action } = read;
   if (action !== "new-task") return { error: `Observatory doesn't know the link action “${action || "(none)"}”.` };
   const prompt = (u.searchParams.get("prompt") ?? "").trim();
   if (!prompt) return { error: "The link has no task in it." };
@@ -30,6 +43,28 @@ export function parseHandoff(url: string): Handoff | { error: string } {
   const project = u.searchParams.get("project")?.trim() || null;
   const from = u.searchParams.get("from")?.trim() || null;
   return { project, prompt, from };
+}
+
+/** A lead's follow-up on one of its project's threads (lead.ts):
+ *  `observatory://follow-up?agent=<id>&prompt=<text>&from=$NEBULA_AGENT_ID`.
+ *  It opens the thread with the prompt in its reply box, unsent. */
+export interface FollowUpLink {
+  agent: string;
+  prompt: string;
+  from: string | null;
+}
+
+export function parseFollowUp(url: string): FollowUpLink | { error: string } {
+  const read = readLink(url);
+  if ("error" in read) return read;
+  const { u, action } = read;
+  if (action !== "follow-up") return { error: `Observatory doesn't know the link action “${action || "(none)"}”.` };
+  const agent = u.searchParams.get("agent")?.trim() ?? "";
+  if (!agent) return { error: "The follow-up link doesn't say which thread it's for." };
+  const prompt = (u.searchParams.get("prompt") ?? "").trim();
+  if (!prompt) return { error: "The follow-up link has nothing to say." };
+  if (prompt.length > MAX_PROMPT) return { error: `The follow-up in the link is over ${MAX_PROMPT.toLocaleString("en-US")} characters.` };
+  return { agent, prompt, from: u.searchParams.get("from")?.trim() || null };
 }
 
 interface ProjectLike {

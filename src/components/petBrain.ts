@@ -1,28 +1,15 @@
 // The sidebar cat's behavior, apart from its drawing (Pet.tsx): pure
-// functions of the cat and the yard's width, so it can be simulated.
+// functions of the cat and the yard's width, so it can be simulated. Its
+// frames come from pixel-pets (petFrames.ts).
+import { FRAME_H, FRAME_W } from "../vendor/pixel-pets/frames.ts";
+import { EYE_COL, TELESCOPE_W, type Frame } from "./petFrames.ts";
 
-export type Frame =
-  | "stand"
-  | "walkA"
-  | "walkB"
-  | "sit"
-  | "blink"
-  | "pounce"
-  | "sleep"
-  | "gazeA"
-  | "gazeB"
-  | "groomA"
-  | "groomB"
-  | "stretch"
-  | "lookUp"
-  | "typeA"
-  | "typeB"
-  | "readA"
-  | "readB";
+export type { Frame };
 
-export const W = 18;
-export const H = 12;
-export const SCALE = 2;
+export const W = FRAME_W;
+export const H = FRAME_H;
+/** Px per frame pixel: 27×18 frames come out 36×24, the size the first cat was. */
+export const SCALE = 4 / 3;
 export const CAT_W = W * SCALE;
 export const TICK_MS = 140;
 /** Ticks a chase may spend not closing in on the yarn (waiting, or stuck)
@@ -31,8 +18,8 @@ export const TICK_MS = 140;
 const CHASE_PATIENCE = 60;
 /** The telescope stands this far right of the cat's left edge, its
  *  eyepiece at the cat's eye, and is this wide (both px). */
-export const SCOPE_AT = CAT_W - 4;
-export const SCOPE_W = 32;
+export const SCOPE_AT = EYE_COL * SCALE;
+export const SCOPE_W = TELESCOPE_W * SCALE;
 /** A falling star starts this high over the ground (px) and falls this fast. */
 const STAR_FROM = 30;
 const STAR_FALL = 1.1;

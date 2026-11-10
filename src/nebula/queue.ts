@@ -3,12 +3,12 @@
 // daemon has no queue of its own, so this app is what sends them: kept in
 // localStorage across launches, and sent only while the app is open.
 import { useEffect } from "react";
-import { BOOTING_MS, createAgent, defaultKind, followUp, takerFor } from "./actions";
+import { createAgent, defaultKind, followUp, takerFor } from "./actions";
 import { onAgentStatus, readSettings } from "./client";
 import { trackedCommand } from "./command";
+import * as gate from "./queuegate";
 import { endRun, startRun } from "./shellruns";
 import { flash, getState, setState } from "./store";
-import { heldAtPrompt } from "./transcript";
 import { isReport } from "./typed";
 import type { Agent } from "./types";
 
@@ -47,49 +47,31 @@ function write(agentId: string, items: Queued[]) {
   });
 }
 
-/** Whether an agent can take a prompt right now: done with its turn (or
- *  never started one) and not waiting on you. */
-export function isIdle(a: Agent, now = Date.now()): boolean {
-  if (a.archived) return false;
-  // A fresh agent this young is most likely still booting with a prompt.
-  return a.status === "finished" || (a.status === "fresh" && now - a.status_changed_at >= BOOTING_MS);
-}
+export const isIdle = gate.isIdle;
 
 /** Agents a prompt is being typed into, and when this app last typed one
  *  into each: until the agent reports a status change after that, it's
  *  still "finished" only because the daemon hasn't said it's running yet. */
 const sending = new Map<string, number>();
-/** Longest a send holds its agent: one whose promise never settles (an
- *  IPC call or timer lost while the window was hidden) mustn't hold the
- *  queue for good. Waking an agent takes up to about 23s of it. */
-const SEND_MS = 45_000;
 const lastSent = new Map<string, number>();
 /** When you last typed into each agent's terminal (`noteTyped`). */
 const lastTyped = new Map<string, number>();
 /** When this app sent each queued prompt, by id, so one gone from the queue
  *  can be told apart from one taken back. */
 const sentAt = new Map<string, number>();
-const TYPING_MS = 10_000;
 
-/** Whether a send to `agentId` is under way. */
-function busy(agentId: string, now = Date.now()): boolean {
-  const since = sending.get(agentId);
-  return since !== undefined && now - since < SEND_MS;
-}
+/** What the gate (queuegate.ts) needs to know of an agent's sends. */
+const sends = (agentId: string): gate.Sends => ({
+  sendingSince: sending.get(agentId),
+  lastSent: lastSent.get(agentId),
+  lastTyped: lastTyped.get(agentId),
+});
 
 /** Called on what goes into an agent's terminal from its view: a queued
  *  prompt waits rather than land in the middle of what you're typing. */
 export function noteTyped(agentId: string, data = "") {
   if (isReport(data)) return;
   lastTyped.set(agentId, Date.now());
-}
-
-/** Idle, and idle since the last prompt this app sent it. */
-function readyForNext(a: Agent, now = Date.now()): boolean {
-  const sent = lastSent.get(a.id) ?? 0;
-  // A prompt that never started a turn (the CLI swallowed it) mustn't
-  // stall the queue for good: after a minute, idle is idle.
-  return isIdle(a, now) && !busy(a.id, now) && (a.status_changed_at > sent || now - sent > 60_000);
 }
 
 async function type(agent: Agent, text: string, select: boolean, stay = false) {
@@ -112,11 +94,6 @@ async function type(agent: Agent, text: string, select: boolean, stay = false) {
   }
 }
 
-/** Held at its prompt, and nothing typed in since that hasn't reached the log. */
-function reads(a: Agent, turnEndedAt: number | null | undefined): boolean {
-  return !busy(a.id) && heldAtPrompt(a, turnEndedAt, lastSent.get(a.id));
-}
-
 /** Queue `text` for `agent`, or send it now if the agent is idle and
  *  nothing is queued ahead of it. The agent is looked up afresh: a dialog
  *  may have been open for a while. Resolves with what happened. `stay`
@@ -131,8 +108,8 @@ export async function enqueue(
   const s = getState();
   const now = s.agents[agent.id] ?? agent;
   const ahead = s.queue[agent.id] ?? [];
-  const reading = reads(now, opts.turnEndedAt);
-  if (!ahead.length && (reading || readyForNext(now))) {
+  const reading = gate.reads(now, opts.turnEndedAt, sends(now.id));
+  if (!ahead.length && (reading || gate.readyForNext(now, sends(now.id)))) {
     await type(now, text, !opts.stay, opts.stay);
     return "sent";
   }
@@ -194,7 +171,7 @@ export async function sendQueued(agent: Agent, id: string, turnEndedAt: number |
 /** Whether a queued prompt for `a` can go now, by hand: it's at its prompt,
  *  done with its turn or held there for its subagents. */
 export function canSendQueued(a: Agent, turnEndedAt: number | null | undefined, now = Date.now()): boolean {
-  return reads(a, turnEndedAt) || (isIdle(a, now) && !busy(a.id, now));
+  return gate.canSendQueued(a, turnEndedAt, sends(a.id), now);
 }
 
 export function unqueue(agentId: string, id: string) {
@@ -209,12 +186,7 @@ function onScreen(agentId: string): boolean {
 async function sendNext(agentId: string) {
   const first = getState().agents[agentId];
   const [next] = getState().queue[agentId] ?? [];
-  // An agent asleep (reaped when idle) waits: waking it means attaching,
-  // which would switch the terminal out from under you. Unless it's the
-  // thread on screen: then nothing switches, and you're waiting on it.
-  if (!next || !first || !readyForNext(first)) return;
-  if (!first.alive && !onScreen(agentId)) return;
-  if (Date.now() - (lastTyped.get(agentId) ?? 0) < TYPING_MS) return;
+  if (!next || !first || gate.holdNext(first, sends(agentId), onScreen(agentId))) return;
   sending.set(agentId, Date.now());
   try {
     // Let the CLI settle back to its prompt before typing into it.
@@ -225,7 +197,7 @@ async function sendNext(agentId: string) {
   const now = getState().agents[agentId];
   const [still, ...rest] = getState().queue[agentId] ?? [];
   // It started another turn meanwhile, or the item was removed.
-  if (!now || !readyForNext(now) || still?.id !== next.id) return;
+  if (!now || !gate.readyForNext(now, sends(agentId)) || still?.id !== next.id) return;
   sentAt.set(next.id, Date.now());
   write(agentId, rest);
   try {

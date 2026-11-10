@@ -2,7 +2,7 @@
 // the step under way, while the sidebar cat keeps to its own yard. Pure
 // functions, like petBrain, so it can be simulated.
 import type { Act } from "../nebula/transcript";
-import { CAT_W, SCOPE_AT, SCOPE_W, type Frame } from "./petBrain.ts";
+import { SCALE, SCOPE_AT, SCOPE_W, type Frame } from "./petBrain.ts";
 
 /** What it's doing: the step's kind, "think" between steps, and "nap"
  *  once one thing has gone on a while. */
@@ -75,5 +75,7 @@ export function deskStep(d: Desk, doing: Doing): Desk {
   }
 }
 
-/** Where each act's prop stands, from the cat's left edge (px). */
-export const PROP_AT = { edit: CAT_W - 6, read: CAT_W - 4, web: SCOPE_AT } as const;
+/** Where each act's prop stands, from the cat's left edge (px): the laptop
+ *  and the book from its body's right side (frame column 19), where its paw
+ *  reaches the keys; the telescope with its eyepiece at the cat's eye. */
+export const PROP_AT = { edit: Math.round(19 * SCALE), read: Math.round(19 * SCALE), web: SCOPE_AT } as const;

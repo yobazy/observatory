@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { answerText, isCard, pointerText, readAsk, readCard, readChips, replyQuote } from '../src/nebula/replycard.ts';
+import { answerText, isCard, pointerText, readAsk, readCard, readChips, replyQuote, suggested } from '../src/nebula/replycard.ts';
 
 const reply = `**Yes. The Read view already exists, so cards are a small step.**
 
@@ -209,6 +209,17 @@ test('a card offers the answers it recommends', async () => {
    - B: Monday`)),
     { 1: 'A' },
   );
+  // A reason inside the brackets, and options on the line under the question.
+  assert.deepEqual(
+    suggested(readCard(`**Needs you**
+1. **Ship when?** It waits on review.
+   A today (recommended; review is done) · B Monday
+2. **Name?**
+   A Nova · B Atlas (recommended, it's shorter)`)),
+    { 1: 'A', 2: 'B' },
+  );
+  assert.deepEqual(suggested(readCard(`**Needs you**
+1. Ship?  A today · B Monday (not recommended)`)), {});
   assert.deepEqual(suggested(readCard(`**Needs you**
 1. Ship?  A today · B Monday`)), {});
   // A pick naming an option the card doesn't have is no suggestion.
@@ -413,6 +424,24 @@ test('Decisions also lists a Needs you without options, and decisions left open 
   assert.equal(pendingCard([...earlier, { n: 2, kind: 'claude', text: 'Done.' }]), null);
 });
 
+test('Decisions skips a Needs you that says nothing, earlier asks on a safe-to-close card, and answer-only messages as what you asked', async () => {
+  const { pendingCard } = await import('../src/nebula/replycard.ts');
+  const { emptyNote } = await import('../src/nebula/replycard.ts');
+  assert.equal(emptyNote('Nothing yet, but confirm the API key'), false);
+  for (const note of ['Nothing.', '- None', 'n/a']) {
+    assert.equal(pendingCard([{ n: 0, kind: 'you', text: 'go' }, { n: 1, kind: 'claude', text: `**Done.**\n\n**Needs you**\n${note}` }]), null, note);
+  }
+  const asks = '**Needs you**\n1. Ship?  A yes · B no';
+  const entries = [
+    { n: 0, kind: 'you', text: 'fix the header' },
+    { n: 1, kind: 'claude', text: '**Needs you**\n1. Queue or lock?  A queue · B lock' },
+    { n: 2, kind: 'you', text: 'About your reply that starts "x": 2 B\n\n1 A, 3 B' },
+  ];
+  const safe = pendingCard([...entries, { n: 3, kind: 'claude', text: `${asks}\n\n**✅ Safe to close.**` }]);
+  assert.deepEqual(safe?.earlier, []);
+  assert.equal(safe?.asked, 'fix the header');
+});
+
 test('answers written in, or given in the tray alongside taps, count as answered', async () => {
   const { openDecisions, answersSaid } = await import('../src/nebula/replycard.ts');
   assert.deepEqual(answersSaid('1 A\n2: keep it for a week'), { 1: 'A', 2: 'keep it for a week' });
@@ -529,4 +558,81 @@ test('a question under a lead-in line or bold heading is still a decision', () =
     readCard('**Needs you**\nBefore you sign:\n1. Pay the onboarding time.\n2. Which start date works for you?').asksNote,
     /Before you sign:\n1\. Pay the onboarding time\./,
   );
+});
+
+test('a terminal prompt is shown with what you asked and what the thread said this turn', async () => {
+  const { promptContext } = await import('../src/nebula/replycard.ts');
+  const entries = [
+    { n: 0, kind: 'you', text: 'fix the header' },
+    { n: 1, kind: 'claude', text: 'Header fixed.' },
+    { n: 2, kind: 'you', text: '1 A' },
+    { n: 3, kind: 'you', text: 'now run the e2e suite' },
+  ];
+  assert.deepEqual(promptContext(entries), { asked: 'now run the e2e suite', said: '' });
+  // A card you just answered isn't what it's doing now.
+  assert.deepEqual(promptContext(entries.slice(0, 3)), { asked: 'fix the header', said: '' });
+  assert.deepEqual(promptContext([...entries, { n: 4, kind: 'claude', text: 'Running it.' }]), { asked: 'now run the e2e suite', said: 'Running it.' });
+  assert.deepEqual(promptContext(entries.slice(0, 2)), { asked: 'fix the header', said: 'Header fixed.' });
+});
+
+test('a decision asked again shows the why only its first asking gave', async () => {
+  const { withBefore, pendingCard } = await import('../src/nebula/replycard.ts');
+  const first = `**Resumed**
+
+**Needs you**
+1. **How should S9 count spend against a thread's budget?** On real data, counting a thread's whole 30-day spend against the $10 default would flag most long threads as Stuck at once.
+   A: count only spend since your last prompt *(my pick)* · B: merge as is · C: drop the budget check
+
+**🟠 Keep open:** decision 1 is waiting on you.`;
+  const again = `**#174 is mergeable again**
+
+**Needs you**
+1. **How should S9 count spend against a thread's budget?** A: only spend since your last prompt *(my pick)* · B: merge as is · C: drop the budget check. #174 stays a draft until you pick.
+
+**🟠 Keep open:** decision 1 is waiting on you.`;
+  const latest = `**S26 is built**
+
+**Needs you**
+1. **How should S9 count spend against a thread's budget?** A: only spend since your last prompt *(my pick)* · B: merge as is · C: drop the budget check. The leads are stacked behind this.
+2. **Old spec branch:** still waiting on you.
+
+**🟠 Keep open:** decision 1 is holding the lead stack.`;
+  const entries = [
+    { n: 1, kind: 'claude', text: first },
+    { n: 2, kind: 'claude', text: again },
+    { n: 3, kind: 'claude', text: latest },
+  ];
+  const card = withBefore(readCard(latest), entries, 3);
+  assert.equal(
+    card.asks[0].before,
+    "On real data, counting a thread's whole 30-day spend against the $10 default would flag most long threads as Stuck at once.",
+  );
+  assert.equal(card.asks[1].before, undefined);
+  assert.equal(pendingCard(entries).card.asks[0].before, card.asks[0].before);
+  // Asked once, there's nothing earlier to add.
+  assert.equal(withBefore(readCard(first), entries, 1).asks[0].before, undefined);
+  // Something said again already isn't repeated.
+  const same = withBefore(readCard(first), [entries[0], { n: 2, kind: 'claude', text: first }], 2);
+  assert.equal(same.asks[0].before, undefined);
+});
+
+test('a "**Needs you.**" heading with a sentence after it starts the decisions, and an all-bold option is the pick', () => {
+  const c = readCard(`**Done.**
+
+**Needs you.** My pick is in bold.
+1. Domain: **A buy one now** · B wait
+2. Id: A keep it · **B a new one**. Depends on 1.
+3. Tabs: A four · B five`);
+  assert.equal(c.asksNote.includes('My pick is in bold.'), true);
+  assert.deepEqual(c.asks.map((a) => a.options.map((o) => o.label)), [['buy one now', 'wait'], ['keep it', 'a new one'], ['four', 'five']]);
+  assert.equal(c.asks[1].text, 'Id: Depends on 1.');
+  assert.deepEqual(suggested(c), { 1: 'A', 2: 'B' });
+});
+
+test('an own-line option written all in bold is read too', () => {
+  const c = readCard(`**Needs you**
+1. Ship it?
+   - **A today**
+   - B Monday`);
+  assert.deepEqual(c.asks[0].options, [{ letter: 'A', label: 'today', bold: true }, { letter: 'B', label: 'Monday' }]);
 });

@@ -5,6 +5,7 @@ import {
   projectOfWorktree,
   setState,
   sortedProjects,
+  threadAgents,
   urgency,
   waitingAgents,
   type State,
@@ -150,7 +151,7 @@ function build(s: State, ctx: PaletteContext): Item[] {
   act("projects", "Hide or show projects", ctx.toggleProjects, "⌘B");
   act("tasks", "Hide or show tasks", ctx.toggleTasks, "⌥⌘B");
 
-  const agents = Object.values(s.agents)
+  const agents = threadAgents(s)
     .filter((a) => !a.archived)
     .sort((a, b) => urgency(a) - urgency(b) || b.status_changed_at - a.status_changed_at);
   // Each tag threads carry, in every project: picking one filters the

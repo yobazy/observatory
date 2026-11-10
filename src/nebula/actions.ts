@@ -4,6 +4,7 @@ import { readSettings, request, sendInput } from "./client";
 import { defaultAgentName, settingsStem } from "./status";
 import { flash, getState, selectInPlace, setState, type State } from "./store";
 import { remoteOf, type GitStatus, type ShipKind } from "./git";
+import { BOOTING_MS } from "./queuegate";
 import type { Agent, AgentKind, AgentPreset } from "./types";
 
 type Settings = Record<string, unknown>;
@@ -97,10 +98,6 @@ export async function followUp(agent: Agent, text: string, opts: { select?: bool
   }
   await deliverPrompt(getState().agents[agent.id] ?? agent, text);
 }
-
-/** A fresh agent this young is most likely still booting with a starting
- *  prompt in hand: its CLI isn't reading yet, so it can't take another. */
-export const BOOTING_MS = 20_000;
 
 /** Who should take a job on a worktree: an agent that's done and idle there
  *  (the selected one first, else the latest), a new one when there's none,

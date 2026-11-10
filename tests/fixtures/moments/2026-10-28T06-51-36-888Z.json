@@ -1,0 +1,60 @@
+{
+  "moment": "2026-10-28T06-51-36-888Z",
+  "family": "sent",
+  "note": "The message I sent diddnt show in the reader?",
+  "fixedBy": "#100 Show a message that's only a paste in the Read view",
+  "source": "The user record from the thread's Claude log at 06:51:17, the ⌘V in the moment's events: a message that is only a paste. thread.json has the reply to it but no `you` entry. Paste text replaced with a neutral form.",
+  "checks": [
+    {
+      "reads": "transcript",
+      "input": {
+        "log": [
+          {
+            "type": "user",
+            "timestamp": "2026-10-28T06:45:40.298Z",
+            "message": {
+              "content": "for the registration, can you find the link?"
+            }
+          },
+          {
+            "type": "assistant",
+            "timestamp": "2026-10-28T06:47:13.000Z",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Here's the link to the registration form."
+                }
+              ]
+            }
+          },
+          {
+            "type": "user",
+            "timestamp": "2026-10-28T06:51:17.622Z",
+            "message": {
+              "content": "\n\n<pasted_content id=\"3aef\">\nRegister client - general information\nLegal name (max. 175 characters)\nOperating name (max. 175 characters)\n</pasted_content id=\"3aef\">\n"
+            }
+          },
+          {
+            "type": "assistant",
+            "timestamp": "2026-10-28T06:51:23.000Z",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Fill it in like this: leave the operating name blank."
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "you": [
+          "for the registration, can you find the link?",
+          "Register client - general information\nLegal name (max. 175 characters)\nOperating name (max. 175 characters)"
+        ]
+      }
+    }
+  ]
+}
