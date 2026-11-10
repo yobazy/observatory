@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CAT_W, H, SCOPE_AT, SCOPE_W, W, pickNext, step } from '../src/components/petBrain.ts';
-import { FRAMES, TELESCOPE, TELESCOPE_W } from '../src/components/petFrames.ts';
+import { H, SCALE, SCOPE_AT, SCOPE_W, W, pickNext, step } from '../src/components/petBrain.ts';
+import { BOOK, EYE_COL, FRAMES, LAPTOP, PROP_W, TELESCOPE, TELESCOPE_W } from '../src/components/petFrames.ts';
 
 const cat = (over = {}) => ({ x: 20, dir: -1, mode: 'sit', left: 20, frame: 'sit', step: 0, bubble: null, bubbleLeft: 0, ball: null, ...over });
 
@@ -12,17 +12,23 @@ test('every frame, and the telescope, is the size the sprite draws', () => {
   }
   assert.equal(TELESCOPE.length, H);
   for (const r of TELESCOPE) assert.equal(r.length, TELESCOPE_W);
-  assert.equal(SCOPE_W, TELESCOPE_W * 2);
+  assert.equal(SCOPE_W, TELESCOPE_W * SCALE);
+  for (const prop of [LAPTOP, BOOK]) {
+    assert.equal(prop.length, H);
+    for (const r of prop) assert.equal(r.length, PROP_W);
+  }
 });
 
 test("the telescope points right, its eyepiece at the cat's eye", () => {
-  // The eyepiece is the leftmost pixel of the tube, in the rows of the eyes.
-  const eyeRow = FRAMES.gazeA.findIndex((r) => r.includes('K'));
-  assert.equal(TELESCOPE[eyeRow][0], 'E');
+  // The eyepiece is the leftmost pixel of the tube, over the right eye.
+  const eyeRows = FRAMES.gazeA.flatMap((r, y) => (r.slice(EYE_COL, EYE_COL + 2).includes('K') ? [y] : []));
+  assert.ok(eyeRows.length > 0);
+  for (const y of eyeRows) assert.equal(TELESCOPE[y][0], 'E', `row ${y}`);
   // The hood, the far end, is at the right.
-  assert.ok(TELESCOPE[0].trimEnd().endsWith('H') && !TELESCOPE[0].startsWith('H'));
-  // And it stands where the cat's face ends.
-  assert.equal(SCOPE_AT, CAT_W - 4);
+  const top = TELESCOPE.find((r) => r.replace(/\./g, ''));
+  assert.ok(top.trimEnd().endsWith('H') && !top.startsWith('H'));
+  // And it stands with its eyepiece at that eye.
+  assert.equal(SCOPE_AT, EYE_COL * SCALE);
 });
 
 test('stargazing faces right, with room for the telescope', () => {
@@ -114,13 +120,13 @@ test('while a thread waits the cat keeps to its telescope, and goes back to its 
   assert.equal(w.mode, 'gaze');
   assert.equal(w.dir, 1);
   assert.ok(w.watch);
-  assert.ok(w.x <= 260 - 32 - 32, 'the scope fits on its right');
+  assert.ok(w.x <= 260 - SCOPE_AT - SCOPE_W, 'the scope fits on its right');
   // It stays: a gaze running out is topped up while anything waits.
   assert.ok(keepWatch({ ...w, left: 1 }, 260, true).left >= 20);
   // An alert plays out first.
   assert.equal(keepWatch({ ...cat, mode: 'alert' }, 260, true).mode, 'alert');
   // Too narrow a yard for the telescope: no watching.
-  assert.equal(keepWatch(cat, 60, true).mode, 'walk');
+  assert.equal(keepWatch(cat, SCOPE_AT + SCOPE_W, true).mode, 'walk');
   // Nothing waits: it's free again soon.
   const done = keepWatch({ ...w, left: 500 }, 260, false);
   assert.equal(done.watch, false);

@@ -402,9 +402,121 @@ pub async fn usage_report(days: u32, state: State<'_, UsageState>) -> Result<Usa
     .map_err(|e| e.to_string())?
 }
 
+/// Where one session's spend is counted from: its last prompt, or its
+/// Dispatch task's launch (Unix seconds).
+#[derive(Deserialize)]
+pub struct SpendFrom {
+    session: String,
+    since: i64,
+}
+
+/// A session's tokens from its start point on, per model, for the webview
+/// to price (stuck.ts's budget check).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Spend {
+    session: String,
+    model: String,
+    #[serde(flatten)]
+    tokens: Tokens,
+    responses: u32,
+}
+
+fn spend_since(state: &Scan, from: &[SpendFrom]) -> Vec<Spend> {
+    let starts: HashMap<&str, i64> = from.iter().map(|f| (f.session.as_str(), f.since)).collect();
+    let mut sums: HashMap<(&str, &str), (Tokens, u32)> = HashMap::new();
+    for r in state.records.values() {
+        if starts
+            .get(r.session.as_str())
+            .is_some_and(|&since| r.time >= since)
+        {
+            let e = sums.entry((&r.session, &r.model)).or_default();
+            e.0.add(&r.usage);
+            e.1 += 1;
+        }
+    }
+    let mut out: Vec<Spend> = sums
+        .into_iter()
+        .map(|((session, model), (tokens, responses))| Spend {
+            session: session.to_string(),
+            model: model.to_string(),
+            tokens,
+            responses,
+        })
+        .collect();
+    out.sort_by(|a, b| (&a.session, &a.model).cmp(&(&b.session, &b.model)));
+    out
+}
+
+/// Claude Code sessions' tokens since each one's start point, from the
+/// responses the last usage scan read (one per API response, with its own
+/// time), so a turn's spend isn't blurred into its hour. No new scan.
+#[tauri::command]
+pub async fn usage_since(
+    from: Vec<SpendFrom>,
+    state: State<'_, UsageState>,
+) -> Result<Vec<Spend>, String> {
+    let shared = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let scan_state = shared.lock().map_err(|_| "usage scan poisoned")?;
+        Ok(spend_since(&scan_state, &from))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spend_counts_from_each_sessions_start_point() {
+        let mut state = Scan::default();
+        let rec = |session: &str, time: i64, model: &str, output: u64| Record {
+            time,
+            session: session.into(),
+            cwd: "/r".into(),
+            model: model.into(),
+            usage: Tokens {
+                output,
+                ..Tokens::default()
+            },
+        };
+        for (i, r) in [
+            rec("a", 100, "m1", 1),
+            rec("a", 200, "m1", 10),
+            rec("a", 300, "m2", 100),
+            rec("b", 50, "m1", 1000),
+            rec("c", 999, "m1", 7),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            state.records.insert(i.to_string(), r);
+        }
+        let from = vec![
+            SpendFrom {
+                session: "a".into(),
+                since: 200,
+            },
+            SpendFrom {
+                session: "b".into(),
+                since: 60,
+            },
+        ];
+        let got: Vec<_> = spend_since(&state, &from)
+            .into_iter()
+            .map(|s| (s.session, s.model, s.tokens.output, s.responses))
+            .collect();
+        // a from 200 on; b's only response came before its start; c wasn't asked for.
+        assert_eq!(
+            got,
+            vec![
+                ("a".to_string(), "m1".to_string(), 10, 1),
+                ("a".to_string(), "m2".to_string(), 100, 1)
+            ]
+        );
+    }
 
     #[test]
     fn parses_log_timestamps() {

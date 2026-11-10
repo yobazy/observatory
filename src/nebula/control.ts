@@ -100,7 +100,8 @@ async function run(req: Req): Promise<unknown> {
       const preview = getState().preview;
       return preview ? preview.files.map((f) => ({ path: f.path, kind: f.kind })) : [];
     }
-    case "click": {
+    case "click":
+    case "menu": {
       const all = [...document.querySelectorAll(CONTROLS)].filter(visible);
       const hits = matching(all, labelFor, str(req, "text"));
       const nth = typeof req.nth === "number" ? req.nth : null;
@@ -112,7 +113,12 @@ async function run(req: Req): Promise<unknown> {
       const el = hits[nth ?? 0] as HTMLElement | undefined;
       if (!el) throw new Error(`there are only ${hits.length} matches`);
       el.scrollIntoView({ block: "center" });
-      el.click();
+      if (req.cmd === "click") el.click();
+      else {
+        // A right-click, for the menus a row keeps there.
+        const r = el.getBoundingClientRect();
+        el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+      }
       await frames();
       return labelFor(el);
     }

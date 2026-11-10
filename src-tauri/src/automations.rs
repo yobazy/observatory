@@ -492,9 +492,11 @@ fn resolve(program: &str) -> PathBuf {
 const AFTER_EXIT: Duration = Duration::from_millis(300);
 
 /// End every process in a group: the status command and whatever it started.
+/// `-s KILL -- -<pgid>`, not `-KILL -<pgid>`: procps-ng 4.0.4 (Ubuntu 24.04)
+/// reads the latter as pid -1 and kills every process the user owns.
 fn kill_group(pgid: u32) {
     let _ = Command::new("/bin/kill")
-        .args(["-KILL", &format!("-{pgid}")])
+        .args(["-s", "KILL", "--", &format!("-{pgid}")])
         .stderr(Stdio::null())
         .status();
 }
@@ -605,6 +607,38 @@ pub async fn automations_status(label: String) -> Result<String, String> {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn killing_a_group_ends_only_that_group() {
+        let spawn = || {
+            Command::new("sleep")
+                .arg("30")
+                .stdin(Stdio::null())
+                .process_group(0)
+                .spawn()
+                .unwrap()
+        };
+        let mut target = spawn();
+        let mut other = spawn();
+        kill_group(target.id());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let ended = loop {
+            if let Some(status) = target.try_wait().unwrap() {
+                break Some(status);
+            }
+            if Instant::now() >= deadline {
+                break None;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let still_running = other.try_wait().unwrap().is_none();
+        let _ = target.kill();
+        let _ = other.kill();
+        let _ = target.wait();
+        let _ = other.wait();
+        assert!(ended.is_some_and(|s| !s.success()), "the group was killed");
+        assert!(still_running, "another group was left alone");
+    }
 
     fn fixture(name: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))

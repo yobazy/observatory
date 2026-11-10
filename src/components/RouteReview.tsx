@@ -14,7 +14,9 @@ import {
   retarget,
   routerCards,
   validatePlan,
+  withChat,
   withMode,
+  defaultMode,
   type Mode,
   type OpenSession,
   type PlanTask,
@@ -24,6 +26,7 @@ import {
 } from "../nebula/router";
 import { flash, getState, setState, sortedProjects, useAppState } from "../nebula/store";
 import { addIdea } from "../nebula/ideas";
+import { followsUpText, pastState, pastThreadsFor, useThreadIndex } from "../nebula/threadIndex";
 
 const TARGET_LABEL: Record<Target, string> = { project: "Project", home: "Home", you: "You" };
 const MODE_LABEL: Record<Mode, string> = {
@@ -41,6 +44,7 @@ type Routing = { kind: "routing" } | { kind: "error"; error: string } | { kind: 
 function useRouteContext(items: DispatchItem[]): RouteContext {
   const s = useAppState();
   const allCards = useCards();
+  const index = useThreadIndex();
   return useMemo(() => {
     const worktrees: RouterWorktree[] = Object.values(s.worktrees).map((w) => ({
       id: w.id,
@@ -64,14 +68,22 @@ function useRouteContext(items: DispatchItem[]): RouteContext {
           recentPrompts: a.recent_prompts.map((p) => p.text),
         };
       });
-    const projects = Object.values(s.projects).map((p) => ({ id: p.id, name: p.name }));
+    const projects = Object.values(s.projects).map((p) => ({ id: p.id, name: p.name, path: p.repo_path }));
+    const routerItems = items.map(({ id, text, context }) => ({ id, text, context }));
+    // Past threads matching the items, beside the open sessions; only ones
+    // nebula still has, in a project that's still here.
+    const known = Object.fromEntries(
+      Object.entries(index).filter(([id, e]) => s.agents[id] && s.projects[e.projectId]),
+    );
     return {
-      items: items.map(({ id, text, context }) => ({ id, text, context })),
+      items: routerItems,
       cards: routerCards(allCards, projects, worktrees),
       worktrees,
+      projects,
       sessions,
+      pastThreads: pastThreadsFor(routerItems, known, new Set(sessions.map((x) => x.id))),
     };
-  }, [s.worktrees, s.agents, s.projects, allCards, items]);
+  }, [s.worktrees, s.agents, s.projects, allCards, items, index]);
 }
 
 /** The router's plan for the list, every task editable, before anything
@@ -93,8 +105,8 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
     setRouting({ kind: "routing" });
     const c = ctxRef.current;
     try {
-      const prompt = buildRouterPrompt(c.items, c.cards, c.sessions);
-      const reply = await runRouter(prompt, () => previewReply(c.items, c.cards, c.sessions));
+      const prompt = buildRouterPrompt(c.items, c.cards, c.sessions, c.pastThreads, c.projects);
+      const reply = await runRouter(prompt, () => previewReply(c.items, c.cards, c.sessions, c.pastThreads));
       if (n !== run.current) return;
       const parsed = parsePlan(reply, ctxRef.current);
       if (!parsed.ok) return setRouting({ kind: "error", error: parsed.error });
@@ -155,6 +167,7 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
             const own = issuesFor(t.id);
             const worktrees = ctx.worktrees.filter((w) => w.projectId === t.projectId);
             const chats = ctx.sessions.filter((s) => s.projectId === t.projectId);
+            const pastChats = (ctx.pastThreads ?? []).filter((p) => p.projectId === t.projectId);
             const card = ctx.cards.find((c) => c.projectId === t.projectId);
             return (
               <li key={t.id} className={`route-task${own.length ? " has-issue" : ""}`}>
@@ -238,18 +251,42 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
                     <select
                       className="route-select"
                       value={t.sessionId ?? ""}
-                      onChange={(e) => update(t.id, (x) => ({ ...x, sessionId: e.target.value || undefined }))}
+                      onChange={(e) => update(t.id, (x) => withChat(x, e.target.value || undefined, ctx))}
                       aria-label="Chat"
                     >
-                      <option value="">{chats.length ? "Pick a chat…" : "No open chats here"}</option>
+                      <option value="">{chats.length || pastChats.length ? "Pick a chat…" : "No open chats here"}</option>
                       {chats.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name} · {s.branch} · {s.status}
                         </option>
                       ))}
+                      {pastChats.length > 0 && (
+                        <optgroup label="Past threads">
+                          {pastChats.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.title} · {p.branch || "no branch"} · {pastState(p)}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                   )}
                 </div>
+
+                {t.target === "project" && t.mode === "existing_chat" && t.past && t.projectId && (
+                  <p className={`route-past${t.past.archived ? " is-archived" : ""}`}>
+                    {followsUpText(t.past)}
+                    {t.past.archived ? ". Dispatch reopens it." : "."}{" "}
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => update(t.id, (x) => (x.projectId ? withMode(x, defaultMode(x.projectId, ctx).mode!, ctx) : x))}
+                      title="Start a new thread for this instead"
+                    >
+                      New thread instead
+                    </button>
+                  </p>
+                )}
 
                 <div className="route-row route-meta">
                   <label className="route-check">
@@ -303,7 +340,9 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
 
                 {t.question && <p className="route-question">Router asks: {t.question}</p>}
                 {t.needsChoice && (
-                  <p className="route-unsure">The router wasn't sure where this goes. Check the target and project.</p>
+                  <p className="route-unsure">
+                    {t.choiceNote ? `${t.choiceNote} Pick where this goes.` : "The router wasn't sure where this goes. Check the target and project."}
+                  </p>
                 )}
                 {own.map((i) => (
                   <p key={i.message} className="dialog-error route-issue">

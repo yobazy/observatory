@@ -3,6 +3,9 @@ import ReactDOM from "react-dom/client";
 import "@fontsource-variable/bricolage-grotesque/opsz.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
+// The leads' chat rows (ProjectChat.tsx): a pixel face for their names. OFL.
+import "@fontsource/pixelify-sans/latin-500.css";
+import "@fontsource/pixelify-sans/latin-700.css";
 // The other terminal faces (termfont.ts), Latin only: each loads on first use.
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-700.css";

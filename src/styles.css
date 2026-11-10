@@ -108,6 +108,13 @@ body,
   height: 100%;
   margin: 0;
 }
+/* Nothing scrolls the window itself: screen-reader-only text and the
+   terminal's hidden input can sit past the bottom edge, and focusing
+   something then scrolled the whole app up and left a strip below it. */
+#root {
+  position: relative;
+  overflow: clip;
+}
 
 body {
   background: var(--night);
@@ -1338,23 +1345,31 @@ body.is-resizing-rows * {
   background: transparent !important;
 }
 /* xterm 6 draws its own scrollbar in a 14px gutter, with a square slider set
-   inline. Make it a thin pill like the rest of the app's, which fattens when
-   pointed at so it's easy to grab. */
+   inline, and shows it whenever the pointer is over the terminal. Make it a
+   slim pill in the text's own color, so it reads on every sky and in Light:
+   barely there while the pointer only rests on the terminal, firmer while you
+   scroll (.is-scrolling, TerminalPane), wider and brightest when pointed at
+   or dragged, so it's easy to grab. */
 .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
-  left: 6px !important;
-  width: 5px !important;
-  border-radius: 3px;
-  background: var(--faint) !important;
-  opacity: 0.6;
-  transition: left 120ms, width 120ms, opacity 120ms;
+  left: 7px !important;
+  width: 4px !important;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 45%, transparent) !important;
+  transition:
+    left 140ms ease,
+    width 140ms ease,
+    border-radius 140ms ease,
+    background-color 200ms ease;
+}
+.xterm-host:not(.is-scrolling) .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  background: color-mix(in srgb, var(--text) 18%, transparent) !important;
 }
 .xterm .xterm-scrollable-element > .scrollbar.vertical:hover > .slider,
 .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider.active {
-  left: 3px !important;
-  width: 9px !important;
-  border-radius: 5px;
-  background: var(--muted) !important;
-  opacity: 0.8;
+  left: 4px !important;
+  width: 7px !important;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 55%, transparent) !important;
 }
 
 /* Shown while the terminal is scrolled up off its newest output. */
@@ -2833,6 +2848,47 @@ td.task-last {
   background: var(--raised);
   color: var(--text);
   font-weight: 600;
+}
+/* Search in Settings: the box over the tabs, each tab's match count, and
+   every tab's matching rows under its name (settingsSearch.ts). */
+.settings-tabs .settings-search {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 10px;
+}
+.settings-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-tab.is-empty {
+  color: var(--faint);
+}
+.settings-tab-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.settings-found + .settings-found {
+  margin-top: 22px;
+}
+.settings-found-tab {
+  margin: 12px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.settings-found-tab .link-btn {
+  font: inherit;
+  color: var(--text);
+}
+.settings-pane [data-search-hidden] {
+  display: none;
+}
+::highlight(settings-search) {
+  background-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: inherit;
 }
 .settings-pane {
   overflow-y: auto;
@@ -4472,6 +4528,9 @@ td.task-last {
   font-size: 16.5px;
   font-weight: 600;
   line-height: 1.4;
+  /* A long link or path in the headline breaks rather than running past
+     the card, where the pane would cut it off. */
+  overflow-wrap: anywhere;
 }
 .rd-head code {
   font-family: var(--mono);
@@ -4588,6 +4647,19 @@ td.task-last {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+/* What an earlier reply said about a decision asked again: quieter than
+   the question, so it reads as background. */
+.rd-q-before {
+  margin: -2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.rd-q-before > span:first-child {
+  color: var(--faint);
+  margin-right: 2px;
+}
 .rd-opts {
   display: flex;
   flex-wrap: wrap;
@@ -4601,7 +4673,9 @@ td.task-last {
   padding: 4px 13px 4px 11px;
   text-align: left;
   border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
-  border-radius: var(--r-pill);
+  /* Half the one-line height: a pill on one line, and a long option that
+     wraps becomes a rounded box instead of a stretched lozenge. */
+  border-radius: 15px;
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -4616,6 +4690,14 @@ td.task-last {
 .rd-opt b {
   font-weight: 600;
   color: var(--faint);
+}
+/* An option that's a long link or path wraps inside its pill. */
+.rd-opt {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.rd-opt > span {
+  min-width: 0;
 }
 .rd-opt:hover:not(:disabled) {
   border-color: var(--accent);
@@ -4656,7 +4738,7 @@ td.task-last {
   content: "✓";
   color: var(--accent);
 }
-.rd-fold summary {
+.rd-fold > summary {
   width: fit-content;
   font-size: 13px;
   color: var(--muted);
@@ -4681,7 +4763,7 @@ td.task-last {
   margin-left: 12px;
   font-weight: 600;
 }
-.rd-fold summary::-webkit-details-marker {
+.rd-fold > summary::-webkit-details-marker {
   display: none;
 }
 .rd-fold .rd-md {
@@ -4803,8 +4885,9 @@ td.task-last {
   display: none;
 }
 .rd-steps summary::before,
-.rd-fold summary::before,
-.rd-open > summary::before {
+.rd-fold > summary::before,
+.rd-open > summary::before,
+.inbox-earlier > summary::before {
   content: "›";
   display: inline-block;
   width: 14px;
@@ -4815,8 +4898,9 @@ td.task-last {
   transition: transform 160ms ease;
 }
 .rd-steps[open] summary::before,
-.rd-fold[open] summary::before,
-.rd-open[open] > summary::before {
+.rd-fold[open] > summary::before,
+.rd-open[open] > summary::before,
+.inbox-earlier[open] > summary::before {
   content: "›";
   transform: rotate(90deg);
 }
@@ -5242,8 +5326,13 @@ td.task-last {
   margin: 0;
 }
 .task-box.card-desc,
-.task-box.card-sched {
+.task-box.card-sched,
+.task-box.card-checks {
   min-height: 0;
+}
+.task-box.card-checks {
+  font-family: var(--mono);
+  font-size: 12px;
 }
 .card-row {
   display: flex;
@@ -5829,6 +5918,21 @@ button.attempt-status:hover span:nth-child(2) {
 .usage-chip.is-over .usage-chip-value {
   color: var(--st-waiting);
   font-weight: 600;
+}
+/* Over a budget, Dispatch holds pending tasks: say so, and where it went. */
+.usage-chip-hold {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.budget-bar-top {
+  color: var(--muted);
+  font-weight: 400;
 }
 .band-cost {
   flex: none;
@@ -7026,6 +7130,14 @@ th:last-child > .col-grip {
 .route-unsure {
   color: var(--st-waiting);
 }
+.route-past {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.route-past.is-archived {
+  color: var(--text);
+}
 
 /* ---------- dispatch board ---------- */
 
@@ -7178,6 +7290,101 @@ button.board-main:hover .board-text {
 }
 .board-batch-when {
   color: var(--faint);
+}
+
+/* ---------- triage queue (Dispatch board) ---------- */
+
+.triage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.triage-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.triage-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.triage-sub,
+.triage-empty,
+.triage-stale summary {
+  color: var(--muted);
+  font-size: 12px;
+}
+.triage-empty {
+  margin: 0;
+}
+.triage-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--st-error);
+  user-select: text;
+}
+.triage-stale summary {
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.triage-row.is-decision {
+  border-color: color-mix(in srgb, var(--st-waiting) 45%, var(--line));
+}
+.triage-row.is-stuck {
+  border-color: color-mix(in srgb, var(--st-error) 45%, var(--line));
+}
+.triage-label {
+  flex: none;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.triage-label.is-decision {
+  color: var(--st-waiting);
+  border-color: color-mix(in srgb, var(--st-waiting) 50%, var(--line));
+}
+.triage-label.is-stuck {
+  color: var(--st-error);
+  border-color: color-mix(in srgb, var(--st-error) 50%, var(--line));
+}
+.triage-label.is-review {
+  color: var(--st-running);
+  border-color: color-mix(in srgb, var(--st-running) 50%, var(--line));
+}
+.triage-label.is-checked {
+  color: var(--st-done);
+  border-color: color-mix(in srgb, var(--st-done) 50%, var(--line));
+}
+.triage-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.triage-redirect {
+  margin: 0 0 0 18px;
+}
+.task-budget {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.task-budget .is-near {
+  color: var(--st-error);
+}
+.task-budget input {
+  width: 56px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  user-select: text;
 }
 
 /* ---------- uncommitted work, by thread ---------- */
@@ -8303,6 +8510,10 @@ button.board-main:hover .board-text {
 }
 .rd-verdict-row .rd-verdict {
   flex: 1;
+  /* A long verdict wraps beside its button instead of pushing it out of
+     the card. */
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding-top: 0;
   border-top: none;
 }
@@ -8347,13 +8558,19 @@ button.board-main:hover .board-text {
 }
 .inbox-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 2px 10px;
 }
 .inbox-name {
   font-weight: 600;
 }
 .inbox-project {
+  min-width: 0;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
   font-size: 12.5px;
 }
@@ -8376,24 +8593,27 @@ button.board-main:hover .board-text {
   font-size: 12px;
   white-space: nowrap;
 }
-/* What you asked for this turn, one line until clicked. */
+/* What you asked for this turn, one line until opened. */
 .inbox-asked {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  overflow: hidden;
-  padding: 0;
-  border: none;
-  background: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
   color: var(--muted);
-  font: inherit;
   font-size: 13px;
-  text-align: left;
-  cursor: default;
 }
-.inbox-asked.is-full {
-  -webkit-line-clamp: unset;
+.inbox-asked-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inbox-asked.is-full .inbox-asked-text {
   white-space: pre-wrap;
+}
+.inbox-asked .link-btn {
+  flex-shrink: 0;
 }
 .inbox-asked-label {
   color: var(--text);
@@ -8417,19 +8637,6 @@ button.board-main:hover .board-text {
 .inbox-earlier > summary::-webkit-details-marker {
   display: none;
 }
-.inbox-earlier > summary::before {
-  content: "›";
-  display: inline-block;
-  width: 14px;
-  margin-right: 4px;
-  font-size: 15px;
-  line-height: 1;
-  text-align: center;
-  transition: transform 160ms ease;
-}
-.inbox-earlier[open] > summary::before {
-  transform: rotate(90deg);
-}
 .inbox-earlier:not([open]) {
   padding-block: 9px;
 }
@@ -8451,8 +8658,162 @@ button.board-main:hover .board-text {
   margin-left: auto;
   white-space: nowrap;
 }
+/* A compact card's opening words, two lines at most. */
+.rd-lead {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--muted);
+}
+.rd-lead > :first-child {
+  margin-top: 0;
+}
+.rd-lead > :last-child {
+  margin-bottom: 0;
+}
+/* Stopped on a terminal prompt: a quiet tag, and what it last said. */
+.inbox-kind {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.inbox-said {
+  margin: 0;
+  max-height: 7.5em;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  font-size: 13.5px;
+}
+.inbox-item > .qa {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--st-waiting) 7%, transparent);
+}
+/* The card keys go to: a bar at its left edge, out in the gutter. */
+.inbox-item {
+  position: relative;
+}
+.inbox-item.is-focus::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -14px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .inbox-item.is-focus::before {
+    animation: fade 140ms ease-out;
+  }
+}
+/* Put off with Later: at the bottom, quieter. */
+/* Its name and card fade; its buttons keep full contrast. */
+.inbox-item.is-later > :not(.inbox-head),
+.inbox-item.is-later .inbox-name {
+  opacity: 0.62;
+}
+.inbox-item.is-later:hover > :not(.inbox-head),
+.inbox-item.is-later:hover .inbox-name,
+.inbox-item.is-later:focus-within > :not(.inbox-head),
+.inbox-item.is-later:focus-within .inbox-name {
+  opacity: 1;
+}
+.inbox-later-head {
+  margin: 8px 0 -6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inbox-head .inbox-later-btn {
+  margin-left: auto;
+  color: var(--muted);
+}
+.inbox-head .inbox-later-btn:hover {
+  color: var(--accent);
+}
+.inbox-head .inbox-later-btn + .link-btn {
+  margin-left: 0;
+}
+.inbox-keys {
+  margin: 0 8px 0 0;
+  color: var(--faint);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .inbox-keys {
+    display: none;
+  }
+}
+.inbox-chord {
+  color: var(--accent);
+}
+/* Threads answered from here, and how each is getting on. */
+.inbox-moving {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 12.5px;
+}
+.inbox-moving-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inbox-moving-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: default;
+}
+.inbox-moving-what {
+  color: var(--muted);
+}
+.inbox-moving-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--st-idle);
+}
+.inbox-moving-item.is-run .inbox-moving-dot {
+  background: var(--st-running);
+}
+.inbox-moving-item.is-wait .inbox-moving-dot {
+  background: var(--st-waiting);
+}
+.inbox-moving-item.is-done .inbox-moving-dot {
+  background: var(--st-done);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .inbox-moving-item.is-run .inbox-moving-dot {
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+}
+.inbox-earlier-foot {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
 .rd-more > summary {
   margin-bottom: 2px;
+}
+.inbox-hint {
+  margin: 0;
+  color: var(--st-waiting);
+  font-size: 12.5px;
 }
 .inbox-compose {
   display: flex;
@@ -9002,6 +9363,616 @@ button.board-main:hover .board-text {
 }
 @media (prefers-reduced-motion: reduce) {
   .pet-tube {
+    transition: none;
+  }
+}
+
+/* A project's lead (lead.ts): a small mark on its card and its sidebar row. */
+.lead-mark {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.lead-mark.is-stopped {
+  border-color: var(--line);
+  color: var(--muted);
+}
+.lead-mark.is-small {
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+.card-cap.lead-model-pick select.lead-model {
+  max-width: 240px;
+}
+.card-cap.lead-notes {
+  display: flex;
+}
+.field .card-cap.lead-notes input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+/* A lead as its pet (S27, LeadChat.tsx): the small pet on its project's
+   row and the top lead's row, hopping with a count when it has something
+   for you; and the DS-style dialogue along the bottom of every view. */
+.lead-pet {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
+  cursor: pointer;
+}
+.lead-pet svg {
+  image-rendering: pixelated;
+}
+.lead-pet.is-calling svg {
+  animation: lead-hop 0.9s steps(2) infinite;
+}
+@keyframes lead-hop {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.project-line .lead-pet {
+  position: relative;
+  margin: -4px 0 -2px 2px;
+}
+.lead-badge {
+  flex: none;
+  min-width: 16px;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 700 10px/1.2 var(--ui);
+  text-align: center;
+}
+.project-line .lead-pet .lead-badge {
+  position: absolute;
+  top: -5px;
+  right: -9px;
+}
+.card-cap.lead-pet-pick select {
+  max-width: 220px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lead-pet.is-calling svg {
+    animation: none;
+  }
+}
+
+/* Parking (Park.tsx): the first list of idle threads to confirm, and the
+   sidebar's line after a park with its Undo. */
+.park-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.park-list .field-check {
+  margin-top: 6px;
+  align-items: baseline;
+  color: var(--text);
+}
+.park-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.park-meta {
+  margin-left: auto;
+  flex: none;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.park-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 10px 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--raised);
+  font-size: 12px;
+}
+.park-notice-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* The New task box when every slot is taken. */
+.launch-cap {
+  margin-top: 12px;
+}
+
+/* Leads in Settings (S26): the top lead's folder, model and notes. */
+.top-lead-fields {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.top-lead-fields .card-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.top-lead-fields .setting-input {
+  width: 260px;
+  max-width: 100%;
+}
+
+
+/* What a lead started (S28, LeadCard.tsx): its tasks on the card, each with
+   where it is now. */
+.card-cap.lead-max-cap {
+  white-space: nowrap;
+}
+.card-cap .lead-max {
+  width: 3.5em;
+}
+.lead-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.lead-tasks li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.lead-tasks li > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lead-task-state {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+.lead-task-state.is-running,
+.lead-task-state.is-pr {
+  color: var(--accent);
+}
+.lead-task-state.is-failed {
+  color: var(--st-error);
+}
+
+
+/* Chat with a project (S29, ProjectChat.tsx): each lead is its project's
+   chat, drawn in its pet's coat colour (`--t`, petTint()). The row sits
+   above the project's threads, or at the top of the projects list for the
+   top lead; the chat takes the terminal column's place. */
+.chat-row {
+  --pixel: "Pixelify Sans", ui-monospace, Menlo, monospace;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--t) 9%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--t) 22%, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-row:hover,
+.chat-row.is-on {
+  background: color-mix(in oklab, var(--t) 18%, transparent);
+}
+.chat-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.chat-row.is-top {
+  width: calc(100% - 20px);
+  margin: 0 10px 6px;
+}
+.sessions-chat {
+  margin: 10px 10px 0;
+}
+.chat-row-pet {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
+}
+.chat-row-pet svg {
+  image-rendering: pixelated;
+}
+.chat-row.is-calling .chat-row-pet svg {
+  animation: lead-hop 0.9s steps(2) infinite;
+}
+.chat-row-txt {
+  flex: 1;
+  min-width: 0;
+}
+.chat-row-name,
+.chat-row-sub {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-row-name {
+  font: 500 13px var(--pixel);
+  letter-spacing: 0.01em;
+  color: color-mix(in oklab, var(--t) 55%, var(--text));
+}
+.chat-row-sub {
+  font-size: 11px;
+  color: var(--faint);
+}
+.chat-badge {
+  flex: none;
+  min-width: 16px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--t-solid, var(--t));
+  color: var(--t-ink);
+  font: 700 10px/1.3 var(--ui);
+  text-align: center;
+}
+
+.chat {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--panel);
+}
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 58px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--t) 12%, transparent), transparent), var(--night);
+}
+.chat-head-pet {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
+}
+.chat-head-pet svg {
+  image-rendering: pixelated;
+}
+.chat-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.chat-head h1 {
+  margin: 0;
+  font: 600 19px var(--display);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+.chat-meta b {
+  font-weight: 600;
+  color: color-mix(in oklab, var(--t) 60%, var(--text));
+}
+.chat-meta .chat-raw {
+  font-size: 12px;
+}
+.chat-acts {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px;
+}
+.chat-empty {
+  align-self: center;
+  margin: auto 0;
+  color: var(--faint);
+  font-size: 13px;
+}
+.chat-day {
+  align-self: center;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.chat-say {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: 78%;
+}
+.chat-say-pet {
+  display: inline-flex;
+  flex: none;
+  margin-bottom: 4px;
+  line-height: 0;
+}
+.chat-say-pet svg {
+  image-rendering: pixelated;
+}
+.chat-bubble {
+  min-width: 0;
+  padding: 10px 13px;
+  border: 1px solid color-mix(in oklab, var(--t) 28%, transparent);
+  border-radius: 14px 14px 14px 4px;
+  background: color-mix(in oklab, var(--t) 14%, var(--raised));
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.chat-bubble.chat-md {
+  padding: 10px 13px;
+}
+.chat-md > :first-child {
+  margin-top: 0;
+}
+.chat-md > :last-child {
+  margin-bottom: 0;
+}
+.chat-md pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+/* A reply written as a card is the Read view's card, in the pet's tint,
+   with room for its decisions. */
+.chat-say:has(> .rd-card) {
+  max-width: min(92%, 760px);
+}
+.chat-say > .rd-card {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 18px 14px;
+  border-color: color-mix(in oklab, var(--t) 28%, transparent);
+  border-radius: 18px 18px 18px 4px;
+  background: color-mix(in oklab, var(--t) 8%, var(--panel));
+}
+.chat-say.is-me {
+  align-self: flex-end;
+  max-width: 70%;
+}
+.chat-say.is-me .chat-bubble {
+  border-color: transparent;
+  border-radius: 14px 14px 4px 14px;
+  background: color-mix(in oklab, var(--st-running) 14%, var(--raised));
+  white-space: pre-wrap;
+}
+.chat-say.is-sending .chat-bubble {
+  opacity: 0.7;
+}
+.chat-event {
+  align-self: center;
+  max-width: 80%;
+  font-size: 12px;
+  color: var(--faint);
+  text-align: center;
+}
+.chat-typing {
+  display: inline-flex;
+  gap: 3px;
+}
+.chat-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: chat-dots 1s infinite;
+}
+.chat-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.chat-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes chat-dots {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Work the lead started, under the reply that started it, on four steps. */
+.chat-task {
+  display: grid;
+  gap: 8px;
+  max-width: 460px;
+  margin-left: 37px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--night);
+}
+.chat-task-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.chat-task-line code {
+  font: 12px var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-task-state {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--st-running);
+}
+.chat-task.is-done .chat-task-state {
+  color: var(--st-done);
+}
+.chat-task.is-bad .chat-task-state {
+  color: var(--st-error);
+}
+.chat-task.is-quiet .chat-task-state {
+  color: var(--faint);
+}
+.chat-steps,
+.chat-step-labels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.chat-steps span {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background 0.4s;
+}
+.chat-steps span.is-on {
+  background: var(--st-running);
+}
+.chat-task.is-done .chat-steps span {
+  background: var(--st-done);
+}
+.chat-task.is-bad .chat-steps span.is-on:has(+ span:not(.is-on)) {
+  background: var(--st-error);
+}
+.chat-task.is-quiet .chat-steps span.is-on {
+  background: var(--faint);
+}
+.chat-step-labels {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* An ASK line (S28) as a dashed row with Yes and No. */
+.chat-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: 460px;
+  margin-left: 37px;
+  padding: 10px 12px;
+  border: 1px dashed color-mix(in oklab, var(--t) 50%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--t) 7%, transparent);
+}
+.chat-ask.is-answered {
+  opacity: 0.7;
+}
+.chat-ask-q {
+  flex: 1;
+  min-width: 180px;
+  font-size: 13px;
+}
+.chat-ask-q small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.btn.chat-yes,
+.btn.chat-send {
+  border-color: transparent;
+  background: var(--t-solid, var(--t));
+  color: var(--t-ink);
+}
+.chat-badge.is-prompt {
+  background: var(--st-waiting);
+  color: var(--night);
+}
+/* The lead is stuck on a prompt only its terminal can answer. */
+.chat-prompt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  align-self: center;
+  max-width: 460px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--st-waiting) 50%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--st-waiting) 10%, transparent);
+  font-size: 13px;
+}
+
+.chat-compose {
+  display: flex;
+  gap: 8px;
+  padding: 12px 22px 16px;
+  border-top: 1px solid var(--line);
+}
+.chat-compose input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text);
+  font: 13.5px var(--ui);
+}
+.chat-compose input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--t) 60%, transparent);
+}
+@media (max-width: 720px) {
+  .chat-say,
+  .chat-say.is-me {
+    max-width: 92%;
+  }
+  .chat-task,
+  .chat-ask {
+    margin-left: 0;
+  }
+  .chat-head {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+  .chat-log {
+    padding: 14px;
+  }
+  .chat-compose {
+    padding: 10px 14px 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-row.is-calling .chat-row-pet svg,
+  .chat-typing i {
+    animation: none;
+  }
+  .chat-steps span {
     transition: none;
   }
 }

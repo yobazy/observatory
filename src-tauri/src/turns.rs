@@ -70,6 +70,10 @@ pub struct Step {
     note: Option<String>,
     /// Whether it worked, once its result is in.
     ok: Option<bool>,
+    /// What a failed call's result said, clipped: how the webview tells one
+    /// error repeating from several different ones (stuck.ts).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
     at: i64,
 }
 
@@ -110,6 +114,31 @@ fn tail(s: &str) -> String {
         Some((i, _)) if n > MAX_TAIL => format!("…{}", &s[i..]),
         _ => s.to_string(),
     }
+}
+
+/// Characters kept of a failed call's result.
+const MAX_ERROR: usize = 300;
+
+/// A tool result's text (a string, or its text blocks), clipped; none when
+/// it says nothing.
+fn result_text(content: Option<&serde_json::Value>) -> Option<String> {
+    let text = match content? {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(blocks) => blocks
+            .iter()
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => return None,
+    };
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    Some(match text.char_indices().nth(MAX_ERROR) {
+        Some((i, _)) => format!("{}…", &text[..i]),
+        None => text.to_string(),
+    })
 }
 
 fn text_of(v: &serde_json::Value, key: &str) -> Option<String> {
@@ -258,6 +287,7 @@ impl Reading {
                 if let Some(step) = self.turn.as_mut().and_then(|t| t.steps.get_mut(i)) {
                     let failed = b.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
                     step.ok = Some(!failed);
+                    step.error = failed.then(|| result_text(b.get("content"))).flatten();
                 }
             }
         }
@@ -321,6 +351,7 @@ impl Reading {
                         target: target_of(&input),
                         note,
                         ok: None,
+                        error: None,
                         at,
                     });
                 }
@@ -451,6 +482,20 @@ mod tests {
         assert_eq!(t.steps[1].target, "/r/a.ts");
         assert_eq!(t.steps[1].ok, Some(true));
         assert_eq!(t.last - t.started, 9);
+    }
+
+    #[test]
+    fn a_failed_call_keeps_what_its_result_said() {
+        let failed = r#"{"type":"user","timestamp":"2026-10-14T01:00:09Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"Exit code 1\nError: cannot find module './x'"},{"type":"tool_result","tool_use_id":"t2","content":[{"type":"text","text":"ok"}]}]}}"#;
+        let t = read(&[PROMPT, BASH, failed]).turn.unwrap();
+        assert_eq!(
+            t.steps[0].error.as_deref(),
+            Some("Exit code 1\nError: cannot find module './x'")
+        );
+        assert_eq!(t.steps[1].error, None);
+        // No content, no text: as before.
+        let t = read(&[PROMPT, BASH, RESULTS]).turn.unwrap();
+        assert_eq!(t.steps[0].error, None);
     }
 
     #[test]

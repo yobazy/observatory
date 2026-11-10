@@ -1,0 +1,54 @@
+{
+  "moment": "2026-11-09T02-45-31-665Z",
+  "family": "choices",
+  "note": "the format of this agents answer isn't captured by the reader",
+  "fixedBy": "Read a decision's options from the indented line under it",
+  "source": "thread.json's last reply, from Needs you on; the Done list above it cut. Each decision's lettered options sit on an indented line under its bold question.",
+  "checks": [
+    {
+      "reads": "card",
+      "input": {
+        "text": "**The spec is written and nothing is built yet. It waits on four answers from you.**\n\n🟠 waiting on you · ⚪ nothing running\n\n**Needs you**\n1. **Where Fresh session keeps its state note.** Before starting a new thread, the old one writes a short note (goal, done, next, open decisions) that the new thread opens on.\n   A a per-thread file at `.observatory/state/<thread>.md` in the checkout, kept out of git (recommended) · B the project's shared TODO.md · C the app's own folder, outside the repo\n2. **When idle time triggers the warning.** The chip warns before you return to a thread that's costly to reopen, and reopening a small thread costs little.\n   A idle over 2h *and* over 100k tokens (recommended; otherwise about 150 old threads light up) · B any thread idle over 2h, as you first asked\n3. **What happens to the old thread after Fresh session.**\n   A it stays, with a \"Continued in …\" link to the new one (recommended) · B it's archived automatically\n4. **How a dead turn's error reaches the app.** Without this, a Claude turn that died on an API error keeps showing as Working.\n   A the app installs one marked hook in `~/.claude/settings.json` from a Settings Install/Remove row (recommended; ships now with no nebula change) · B a PR to nebula adding the hook to the ones it installs (cleaner, but waits on a nebula release and a protocol pin bump) · C the workbench mod (only your machine gets it)\n\nEach answer stands alone. Picking 4B only delays the API-error label (S25); the other three stories don't wait on it.\n\n**🔴 Don't close:** the spec commit is only on a local branch, and the four decisions above are open."
+      },
+      "expect": {
+        "asks": [
+          {
+            "n": 1,
+            "letters": "ABC",
+            "labelsStart": [
+              "a per-thread file",
+              "the project's shared",
+              "the app's own"
+            ]
+          },
+          {
+            "n": 2,
+            "letters": "AB",
+            "labelsStart": [
+              "idle over 2h",
+              "any thread idle"
+            ]
+          },
+          {
+            "n": 3,
+            "letters": "AB",
+            "labelsStart": [
+              "it stays",
+              "it's archived"
+            ]
+          },
+          {
+            "n": 4,
+            "letters": "ABC",
+            "labelsStart": [
+              "the app installs",
+              "a PR to nebula",
+              "the workbench mod"
+            ]
+          }
+        ],
+        "verdict": "bad"
+      }
+    }
+  ]
+}

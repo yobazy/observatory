@@ -31,12 +31,15 @@ Drive the sandbox app yourself with `scripts/drive`, instead of asking the user 
 `scripts/sandbox.sh up` starts it in the background (the first build takes minutes), then
 `scripts/drive select|open|click|type|key|text|shot …` (run it with `-h` for the list).
 `scripts/drive replay <moment dir>` puts a marked moment's view and thread back on screen.
+To check something, write the steps out and send them as one `scripts/drive run - <<'STEPS'`
+(one command per line, `shot before` and `shot after` among them) rather than one call per
+click: it stops at the first failing step and leaves the screenshots numbered in one folder.
 Screenshots need Screen Recording allowed for the terminal app that started it. `scripts/sandbox.sh
 down` stops it.
 
 Prefer the always-on PC when `ssh pc` answers. Push the branch, then run `scripts/pc up` and
-`scripts/pc drive …`. It's the same commands, `replay` copies the moment over and `shot` copies
-the screenshot back. It renders with WebKitGTK, which doesn't play video over `preview://`, so
+`scripts/pc drive …`. It's the same commands, `replay` copies the moment over, and `shot` and `run`
+copy the screenshots back. It renders with WebKitGTK, which doesn't play video over `preview://`, so
 check video and anything only macOS does on the Mac.
 
 ## Reviewing

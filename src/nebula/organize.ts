@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { onAgentStatus } from "./client";
 import { afterStatus, inFollowUpOrder, settled } from "./followupRules";
 import { isWatching } from "./notify";
-import { flash, getState, projectWorktrees, sortedProjects, subscribe, worktreeAgents, type State } from "./store";
+import { flash, getState, leadThreads, projectWorktrees, sortedProjects, subscribe, threadAgents, worktreeAgents, type State } from "./store";
 import { moveWithin, placeIn, reorderFolders, type ProjectFolder } from "./folders";
 import { pruned } from "./prune";
 import { addTag, deleteTag, renameTag, setTagColor, setThreadTags, tagThreads } from "./threadtags";
@@ -184,7 +184,7 @@ function threadIds(s: State, repo: string): string[] {
   const project = Object.values(s.projects).find((p) => p.repo_path === repo);
   if (!project) return [];
   const wts = new Set(projectWorktrees(s, project.id).map((w) => w.id));
-  return Object.values(s.agents)
+  return threadAgents(s)
     .filter((a) => wts.has(a.worktree_id))
     .map((a) => a.id);
 }
@@ -284,7 +284,9 @@ export async function toggleFlag(agent: Agent) {
 
 /** Every marked task still around, in the order chosen on the card. */
 export function followUpAgents(s: State): { agent: Agent; at: number }[] {
-  const rows = Object.entries(s.prefs.followUps ?? {}).flatMap(([id, at]) => (s.agents[id] ? [{ agent: s.agents[id], at }] : []));
+  // A lead is its project's chat (S29), never a thread to follow up.
+  const leads = leadThreads(s);
+  const rows = Object.entries(s.prefs.followUps ?? {}).flatMap(([id, at]) => (s.agents[id] && !leads.has(id) ? [{ agent: s.agents[id], at }] : []));
   return inFollowUpOrder(rows, s.prefs.followUpOrder);
 }
 

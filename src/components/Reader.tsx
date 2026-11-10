@@ -11,7 +11,7 @@ import { enqueue, isIdle, sendQueued, unqueue, queuedSentAt, type Queued } from 
 import { actOf, clock, doingLine, heldAtPrompt, liveStep, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
 import { useLanded } from "../nebula/prwatch";
-import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, type Card, type Chip } from "../nebula/replycard";
+import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, withBefore, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
 import { useStandIn } from "../nebula/pane";
 import { shipKind } from "../nebula/git";
@@ -65,7 +65,7 @@ function ReaderHero({ agent, work }: { agent: Agent; work: number }) {
 }
 
 /** The thread's conversation, read again as it moves. */
-function useTranscript(agent: Agent): Transcript | null {
+export function useTranscript(agent: Agent): Transcript | null {
   const standIn = useStandIn(agent.id);
   const [got, setGot] = useState<Transcript | null>(null);
   const last = useRef<number | null>(null);
@@ -113,7 +113,15 @@ export const toHtml = (md: string, inline = false) =>
 
 /** What a reply's paths and "#75"s are read against: the thread they're
  *  from, its checkout, and any PR of its project, for the repo's address. */
-export const Where = createContext<{ from: string; root: string; prUrl: string | null; turnEndedAt: number | null }>({
+export const Where = createContext<{
+  from: string;
+  root: string;
+  prUrl: string | null;
+  turnEndedAt: number | null;
+  /** Whether command blocks get a Run, as "! cmd"; the project chat's lead
+   *  runs nothing typed at its prompt. */
+  run?: boolean;
+}>({
   from: "",
   root: "",
   prUrl: null,
@@ -168,7 +176,7 @@ export function AskText({ n, text }: { n: number; text: string }) {
   );
 }
 
-function Md({ text, className = "" }: { text: string; className?: string }) {
+export function Md({ text, className = "" }: { text: string; className?: string }) {
   const html = useMemo(() => toHtml(text), [text]);
   const el = useRef<HTMLDivElement>(null);
   const where = useContext(Where);
@@ -181,7 +189,7 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
     if (el.current) highlightUnder(el.current);
     const added: HTMLElement[] = [];
     const watching: (() => void)[] = [];
-    const runs = getState().agents[where.from]?.kind === "claude";
+    const runs = where.run !== false && getState().agents[where.from]?.kind === "claude";
     for (const pre of el.current?.querySelectorAll("pre") ?? []) {
       const code = pre.querySelector("code") ?? pre;
       const body = code.textContent?.replace(/\n$/, "") ?? "";
@@ -226,7 +234,7 @@ function Md({ text, className = "" }: { text: string; className?: string }) {
       added.forEach((b) => b.remove());
       el.current?.querySelectorAll("pre.is-command").forEach((p) => p.classList.remove("is-command"));
     };
-  }, [html, where.from]);
+  }, [html, where.from, where.run]);
   // A table scrolls sideways when it's wide, and its columns drag to resize.
   useEffect(() => (el.current ? fitTables(el.current) : undefined), [html]);
   // A code span that names a file on disk opens it; "#75" goes to that PR.
@@ -489,6 +497,11 @@ export function CardReply({
           {card.asks.map((a) => (
             <div key={a.n} className="rd-q">
               <AskText n={a.n} text={a.text} />
+              {a.before && (
+                <p className="rd-q-before">
+                  <span>When first asked:</span> <span dangerouslySetInnerHTML={{ __html: toHtml(a.before, true) }} />
+                </p>
+              )}
               {a.options.length > 0 && (
                 <span className="rd-opts">
                   {a.options.map((o) => (
@@ -538,22 +551,31 @@ function More({ card, from, pair }: { card: Card; from: string; pair: [string, s
     card.details && "Details",
   ].filter(Boolean);
   if (!what.length) return null;
+  // Its opening words, unfolded, when they're prose: often what decides it.
+  const lead = card.body.trim().split(/\n\s*\n/)[0];
+  // Not one that leads into what's folded ("…like this:").
+  const prose = !!lead && !/^(```|~~~|\||[-*+] |\d+\. |#|>|!\[|<)/.test(lead) && !/:\s*$/.test(lead);
   return (
-    <details className="rd-fold rd-more" onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>More: {what.join(", ")}</summary>
-      {open && (
-        <>
-          <Pictures paths={card.images} from={from} pair={pair} />
-          <Videos paths={card.videos} from={from} />
-          {card.body && <Md text={card.body} />}
-          {card.details && <Md text={card.details} />}
-        </>
-      )}
-    </details>
+    <>
+      {prose && !open && <Md className="rd-lead" text={lead} />}
+      <details className="rd-fold rd-more" onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary>More: {what.join(", ")}</summary>
+        {open && (
+          <>
+            <Pictures paths={card.images} from={from} pair={pair} />
+            <Videos paths={card.videos} from={from} />
+            {card.body && <Md text={card.body} />}
+            {card.details && <Md text={card.details} />}
+          </>
+        )}
+      </details>
+    </>
   );
 }
 
-function Reply(props: {
+/** A reply as the Read view sets it: a card when it's written as one, else
+ *  prose. The project chat draws its lead's replies with it too. */
+export function Reply(props: {
   ship?: Ship | null;
   text: string;
   from: string;
@@ -563,10 +585,19 @@ function Reply(props: {
   onPick: (n: number, letter: string) => void;
   onClose?: () => void;
   landed?: string | null;
+  /** The thread up to it, for what earlier replies said about the
+   *  decisions it asks again. */
+  thread?: { n: number; entries: Entry[] };
+  /** Classes for a prose reply's text, which isn't a card. */
+  prose?: string;
 }) {
-  const card = useMemo(() => readCard(props.text), [props.text]);
+  const { thread, prose, ...rest } = props;
+  const card = useMemo(
+    () => (thread ? withBefore(readCard(props.text), thread.entries, thread.n) : readCard(props.text)),
+    [props.text, thread],
+  );
   const pair = useMemo(() => beforeAfter(card.images, props.text), [card.images, props.text]);
-  return isCard(card) ? <CardReply card={card} pair={pair} {...props} /> : <Md text={props.text} />;
+  return isCard(card) ? <CardReply card={card} pair={pair} {...rest} /> : <Md className={prose} text={props.text} />;
 }
 
 /** What a step changed, or how it failed: a failure shows at once, a
@@ -833,6 +864,7 @@ export function Reader({
     const e = t?.entries.find((x) => x.n === latest);
     return e ? readCard(e.text) : null;
   }, [t?.entries, latest]);
+  const latestThread = useMemo(() => (t && latest >= 0 ? { n: latest, entries: t.entries } : undefined), [t?.entries, latest]);
   // The PRs the latest reply's verdict waits on, once they've all landed.
   const prsLanded = useLanded(state.worktrees[agent.worktree_id]?.path, latestCard?.verdict ?? null);
   // Answers typed or dictated into the box ("2 a, 3 b") light up as taps.
@@ -1228,6 +1260,7 @@ export function Reader({
                         onPick={pick}
                         onClose={e.n === latest && agent.status === "finished" && !agent.archived ? () => closeThread(agent) : undefined}
                         landed={e.n === latest ? prsLanded : null}
+                        thread={e.n === latest ? latestThread : undefined}
                       />
                       <div className="rd-tools">
                         <button className="rd-point" onClick={() => copy(e.text, "the reply")} title="Copy this reply as Markdown. To copy part of it, select that part and press ⌘C">

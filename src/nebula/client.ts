@@ -206,6 +206,32 @@ export function runTagger(prompt: string, previewReply: () => string): Promise<s
   return invoke("tag_threads", { prompt });
 }
 
+/** The triage prompt (triage.ts) to the `triageCommand` CLI, the same way
+ *  (router.rs); refused there unless `triageOn`. */
+export function runTriage(prompt: string, previewReply: () => string): Promise<string> {
+  if (isPreview()) return new Promise((r) => setTimeout(() => r(previewReply()), 900));
+  return invoke("triage_threads", { prompt });
+}
+
+/** The check before "done" (review.ts, review.rs): a checkout's git state,
+ *  its card's checks run there, and one read-only reviewer call there. The
+ *  last two are refused unless `reviewOn`. The preview has no checkout, so
+ *  its state never changes, its checks pass and `previewReply` reviews. */
+export function reviewState(path: string): Promise<string> {
+  if (isPreview()) return Promise.resolve(`preview|${path}`);
+  return invoke("review_state", { path });
+}
+
+export function runChecks(path: string, checks: string[]): Promise<{ command: string; code: number | null; output: string }[]> {
+  if (isPreview()) return new Promise((r) => setTimeout(() => r(checks.map((command) => ({ command, code: 0, output: "ok" }))), 600));
+  return invoke("run_checks", { path, checks });
+}
+
+export function runReviewer(path: string, prompt: string, previewReply: () => string): Promise<string> {
+  if (isPreview()) return new Promise((r) => setTimeout(() => r(previewReply()), 900));
+  return invoke("review_task", { path, prompt });
+}
+
 /** The next-prompt suggestions prompt (nextprompts.ts) to the
  *  `suggestCommand` CLI, the same way (router.rs). */
 export function runSuggester(prompt: string, previewReply: () => string): Promise<string> {

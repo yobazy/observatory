@@ -53,6 +53,16 @@ export interface BatchTask extends Omit<PlanTask, "needsChoice"> {
   cancelled?: boolean;
   /** Checked off on the board; its source items are checked too. */
   done?: boolean;
+  /** Queued from the New task box (queueNewTask): the harness and branch
+   *  picked there, used in place of the default kind and a suggested name. */
+  kind?: AgentKind;
+  branch?: string;
+  /** "Start anyway" on a row a budget held (budgetHold.ts): it launches
+   *  despite the hold. */
+  budgetOverride?: boolean;
+  /** Its own budget in dollars, over the default task budget: past 85% of
+   *  it, the queue flags its session stuck (stuck.ts). */
+  budget?: number;
 }
 
 export interface Batch {
@@ -74,6 +84,10 @@ export const DEFAULT_CAP = 4;
  *  terminated; one waiting on you still holds it, and so does one that's
  *  only disconnected (the link dropped, not the session). */
 const WORKING: AgentStatus[] = ["fresh", "running", "needs_feedback", "disconnected"];
+/** A session Dispatch didn't start holds a slot only while its turn is
+ *  under way: a thread left waiting on you, or finished, isn't working, and
+ *  counting the dozens of those would hold every launch back. */
+const OUTSIDE_WORKING: AgentStatus[] = ["running"];
 /** How long a session just created may be missing from the store (its
  *  entity can land after the Ack) and still hold its slot. */
 const ARRIVAL_MS = 30_000;
@@ -95,12 +109,13 @@ export interface PromptTask {
 
 /** What a task's session is sent: the task (through its skill when it has
  *  one), the items' detail lines, Home's scheduling instruction for Home and
- *  `you` tasks, and the plan-and-stop postfix last when the task stops for
+ *  `you` tasks, the line on asking a lead first when one is running
+ *  (leadAsk.ts), and the plan-and-stop postfix last when the task stops for
  *  approval. Claude runs a skill as `/<skill>`; other harnesses are told it
  *  by name. */
 export function buildStartingPrompt(
   task: PromptTask,
-  opts: { kind: AgentKind | string; schedulingInstruction?: string },
+  opts: { kind: AgentKind | string; schedulingInstruction?: string; askLine?: string | null },
 ): string {
   const text = task.text.trim();
   let body =
@@ -115,6 +130,7 @@ export function buildStartingPrompt(
   if (details.length) parts.push(["Details:", ...details.map((c) => `- ${c}`)].join("\n"));
   const instruction = opts.schedulingInstruction?.trim();
   if (instruction && task.target !== "project") parts.push(`How I schedule things: ${instruction}`);
+  if (opts.askLine) parts.push(opts.askLine);
   if (task.planCheckpoint) parts.push(PLAN_POSTFIX);
   return parts.join("\n\n");
 }
@@ -168,10 +184,25 @@ export interface Limits {
   globalCap: number;
   /** A lane's own cap: a Shared project's (or Home's) concurrency. */
   laneCap: (lane: string) => number;
+  /** Pending tasks that wait anyway: a budget holds them (budgetHold.ts). */
+  held?: (t: BatchTask) => boolean;
+}
+
+/** Sessions working that no task here started: from New task, a fan-out,
+ *  a terminal. They count against the global cap too, not a lane's. */
+export function outsideWorking(tasks: BatchTask[], agents: Record<string, Agent>): number {
+  const ours = new Set(tasks.map((t) => t.agentId).filter((x): x is string => !!x));
+  return Object.values(agents).filter((a) => !ours.has(a.id) && !a.archived && OUTSIDE_WORKING.includes(a.status)).length;
+}
+
+/** Everything holding a global slot: the tasks', and every other running session. */
+export function workingNow(tasks: BatchTask[], agents: Record<string, Agent>, now = Date.now()): number {
+  return tasks.filter((t) => occupies(t, agents, now)).length + outsideWorking(tasks, agents);
 }
 
 /** The pending tasks to launch now, in plan order: as many as the global
- *  cap has room for, skipping any whose lane is full. */
+ *  cap has room for, counting every working session however it started,
+ *  and skipping any whose lane is full. */
 export function nextLaunchable(
   tasks: BatchTask[],
   agents: Record<string, Agent>,
@@ -179,13 +210,13 @@ export function nextLaunchable(
   now = Date.now(),
 ): BatchTask[] {
   const busy = tasks.filter((t) => occupies(t, agents, now));
-  let free = limits.globalCap - busy.length;
+  let free = limits.globalCap - busy.length - outsideWorking(tasks, agents);
   const inLane = new Map<string, number>();
   for (const t of busy) if (t.lane) inLane.set(t.lane, (inLane.get(t.lane) ?? 0) + 1);
   const out: BatchTask[] = [];
   for (const t of tasks) {
     if (free <= 0) break;
-    if (t.state !== "pending") continue;
+    if (t.state !== "pending" || limits.held?.(t)) continue;
     if (t.lane) {
       const n = inLane.get(t.lane) ?? 0;
       if (n >= Math.max(1, limits.laneCap(t.lane))) continue;
@@ -249,9 +280,11 @@ export interface World {
 }
 
 export type Where =
-  | { how: "follow_up"; agent: Agent }
-  | { how: "agent"; worktreeId: string }
-  | { how: "new_worktree"; projectId: string }
+  /** `unarchive`: an archived past thread, reopened before the follow-up. */
+  | { how: "follow_up"; agent: Agent; unarchive?: boolean }
+  /** `note`: why a follow-up became a new thread (its past thread is gone). */
+  | { how: "agent"; worktreeId: string; note?: string }
+  | { how: "new_worktree"; projectId: string; note?: string }
   /** Home is a plain folder: it has to be a project before it can run anything. */
   | { how: "add_home"; folder: string }
   /** Home's folder has become a project: its card moves to the project's id. */
@@ -306,6 +339,19 @@ export function whereTo(t: BatchTask, w: World): Where {
   if (!projectId || !w.projects[projectId]) return { how: "failed", note: "Its project is gone." };
   if (t.mode === "existing_chat") {
     const a = t.sessionId ? w.agents[t.sessionId] : undefined;
+    if (t.past) {
+      // A past thread deleted since (or its worktree with it): a new thread
+      // in the same project, the way the project runs its tasks.
+      if (!a || !w.worktrees[a.worktree_id]) {
+        const note = `${t.past.title} was deleted, so this started a new thread.`;
+        if (w.cards[projectId]?.policy === "shared") {
+          const main = mainOf(w, projectId);
+          return main ? { how: "agent", worktreeId: main, note } : { how: "failed", note: "The project's main checkout isn't there." };
+        }
+        return { how: "new_worktree", projectId, note };
+      }
+      return a.archived ? { how: "follow_up", agent: a, unarchive: true } : { how: "follow_up", agent: a };
+    }
     if (!a || a.archived) return { how: "failed", note: "The chat it was to follow up in is gone." };
     return { how: "follow_up", agent: a };
   }
@@ -334,8 +380,11 @@ export interface LaunchDeps {
   queuedFor(agentId: string): number;
   followUp(a: Agent, text: string): Promise<void>;
   enqueue(a: Agent, text: string): Promise<unknown>;
-  /** Start a session without selecting it; resolves with its id. */
-  createAgent(worktreeId: string, prompt: string): Promise<string | null>;
+  /** Reopen an archived thread (nebula's UnarchiveAgent). */
+  unarchive(agentId: string): Promise<void>;
+  /** Start a session without selecting it; resolves with its id. `kind`
+   *  is the task's own harness, when it was picked (New task). */
+  createAgent(worktreeId: string, prompt: string, kind?: AgentKind): Promise<string | null>;
   createWorktree(projectId: string, branch: string): Promise<string>;
   takenBranches(projectId: string): Promise<Set<string>>;
   /** Add a folder as a nebula project; resolves with its id. */
@@ -345,6 +394,9 @@ export interface LaunchDeps {
   /** Saves what's known mid-launch (the prompt, a new worktree), so a
    *  restart can find the session. */
   progress(patch: Partial<BatchTask>): void;
+  /** The line telling a task in this project to ask a lead before asking
+   *  you (leadAsk.ts), or null when no lead is running. */
+  askLine?(projectId: string | null): string | null;
 }
 
 export type Outcome =
@@ -361,7 +413,10 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
   const w = deps.world();
   const where = whereTo(t, w);
   const instruction = t.target !== "project" ? homeCard(w.cards)?.card.schedulingInstruction : undefined;
-  const promptFor = (kind: string) => buildStartingPrompt(t, { kind, schedulingInstruction: instruction });
+  const promptFor = (kind: string, worktreeId: string | null, projectId?: string) => {
+    const project = projectId ?? (worktreeId ? w.worktrees[worktreeId]?.project_id : undefined) ?? null;
+    return buildStartingPrompt(t, { kind, schedulingInstruction: instruction, askLine: deps.askLine?.(project) ?? null });
+  };
 
   switch (where.how) {
     case "wait":
@@ -390,8 +445,15 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
       }
     case "follow_up": {
       const a = where.agent;
-      const prompt = promptFor(a.custom_harness ?? a.kind);
+      const prompt = promptFor(a.custom_harness ?? a.kind, a.worktree_id);
       deps.progress({ prompt, agentId: a.id });
+      if (t.past) {
+        // A past thread: reopened first when archived, then the follow-up
+        // goes through the queue, which sends it once the thread can take it.
+        if (where.unarchive) await deps.unarchive(a.id);
+        const how = await deps.enqueue(a, prompt);
+        return how === "queued" ? { state: "launched", agentId: a.id, note: "queued" } : { state: "launched", agentId: a.id };
+      }
       if (deps.isIdle(a) && deps.queuedFor(a.id) === 0) {
         await deps.followUp(a, prompt);
         return { state: "launched", agentId: a.id };
@@ -401,18 +463,18 @@ export async function launchTask(t: BatchTask, deps: LaunchDeps): Promise<Outcom
     }
     case "agent":
     case "new_worktree": {
-      const prompt = promptFor(deps.kind);
       let worktreeId: string;
       if (where.how === "agent") worktreeId = where.worktreeId;
       else {
-        const branch = freeName(suggestBranch(t.text) || "task", await deps.takenBranches(where.projectId));
+        const branch = freeName(t.branch?.trim() || suggestBranch(t.text) || "task", await deps.takenBranches(where.projectId));
         worktreeId = await deps.createWorktree(where.projectId, branch);
         deps.progress({ createdWorktreeId: worktreeId });
       }
+      const prompt = promptFor(t.kind ?? deps.kind, worktreeId, where.how === "new_worktree" ? where.projectId : undefined);
       deps.progress({ prompt });
-      const id = await deps.createAgent(worktreeId, prompt);
+      const id = await deps.createAgent(worktreeId, prompt, t.kind);
       if (!id) return { state: "failed", note: "The daemon didn't return the new session." };
-      return { state: "launched", agentId: id };
+      return where.note ? { state: "launched", agentId: id, note: where.note } : { state: "launched", agentId: id };
     }
   }
 }
@@ -525,6 +587,14 @@ export function retryTask(batchId: string, taskId: string): boolean {
   return true;
 }
 
+/** "Start anyway" on a task a budget holds: it launches on the next pass,
+ *  within the caps, while the rest stay held. Returns whether it will. */
+export function startAnyway(batchId: string, taskId: string): boolean {
+  if (findTask(batchId, taskId)?.state !== "pending") return false;
+  updateTask(batchId, taskId, { budgetOverride: true });
+  return true;
+}
+
 /** Check a task off (or back on), and its source items in the list with it. */
 export function checkOffTask(batchId: string, taskId: string, done: boolean) {
   const t = findTask(batchId, taskId);
@@ -559,5 +629,52 @@ export function dispatchPlan(routed: RoutedPlan, items: { id: string; context: s
   write([...allBatches(), batch]);
   linkItems([...new Set(batch.tasks.flatMap((t) => t.sourceItemIds))], batch.id);
   clearRoutedPlan();
+  return batch;
+}
+
+/** What the New task box queues when the cap is full: the task as typed,
+ *  in the checkout picked (or a new worktree on the branch named). */
+export interface NewTask {
+  text: string;
+  projectId: string;
+  /** An existing checkout; none is a new worktree on `branch`. */
+  worktreeId?: string | null;
+  branch?: string;
+  kind?: AgentKind;
+}
+
+/** A task from the New task box as a batch of one, waiting for a slot. The
+ *  runner launches it as a slot frees, the same as a dispatched task; it
+ *  has no list items behind it. Its prompt is what was typed, as is. */
+export function newTaskBatch(task: NewTask, cards: Cards, id = `b${Date.now().toString(36)}n`): Batch {
+  const shared = cards[task.projectId]?.policy === "shared";
+  const t: BatchTask = {
+    id: `${id}-t1`,
+    sourceItemIds: [],
+    text: task.text,
+    target: "project",
+    projectId: task.projectId,
+    mode: task.worktreeId ? "existing_worktree" : "new_worktree",
+    ...(task.worktreeId ? { worktreeId: task.worktreeId } : {}),
+    ...(task.branch?.trim() ? { branch: task.branch.trim() } : {}),
+    ...(task.kind ? { kind: task.kind } : {}),
+    confidence: 1,
+    planCheckpoint: false,
+    context: [],
+    state: "pending",
+    lane: shared ? task.projectId : null,
+  };
+  return { id, at: Date.now(), tasks: [t] };
+}
+
+/** The New task box's line when every slot is taken; null while there's room. */
+export function capNote(working: number, cap: number): string | null {
+  return working >= cap ? `${working} running, this will wait in Dispatch's queue` : null;
+}
+
+/** Queue a New task in Dispatch's line; the runner starts it when there's room. */
+export function queueNewTask(task: NewTask, cards: Cards): Batch {
+  const batch = newTaskBatch(task, cards);
+  write([...allBatches(), batch]);
   return batch;
 }

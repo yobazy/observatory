@@ -27,6 +27,14 @@ export async function addIdea(text: string, project: string | null, source: Idea
   return (await save((all) => [idea, ...all])) ? idea : null;
 }
 
+/** Write several down in one save (a park, park.ts); they go first, in order. */
+export async function addIdeas(list: Omit<Idea, "id" | "createdAt">[]): Promise<Idea[] | null> {
+  const now = Date.now();
+  const made = list.map((i): Idea => ({ ...i, id: newId(), createdAt: now, text: i.text.trim() || "Untitled" }));
+  if (!made.length) return [];
+  return (await save((all) => [...made, ...all])) ? made : null;
+}
+
 export function updateIdea(id: string, patch: Partial<Idea>) {
   return save((all) => all.map((i) => (i.id === id ? { ...i, ...patch } : i)));
 }

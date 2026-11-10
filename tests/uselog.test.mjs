@@ -44,3 +44,18 @@ test('state changes become view, session, preview and notice lines', () => {
   assert.deepEqual(changes(next, next, 10), []);
   assert.deepEqual(changes(next, { ...next, selectedSession: null, preview: null }, 10).map((l) => l.e), ['preview.close']);
 });
+
+test('opening a session from the queue logs queue.open with its label, and a wait on you logs how long it lasted', () => {
+  const agents = { a1: { id: 'a1', kind: 'claude', status: 'needs_feedback', status_changed_at: 1_000, unseen: true } };
+  const prev = { ...base, agents, queueOpened: null };
+  const opened = { ...prev, selectedSession: { Agent: 'a1' }, queueOpened: { agent: 'a1', label: 'decision', at: 5 } };
+  const lines = changes(prev, opened, 10).map(({ t, ...rest }) => rest);
+  assert.deepEqual(lines, [
+    { e: 'session', kind: 'agent', harness: 'claude', status: 'needs_feedback', unseen: true },
+    { e: 'queue.open', label: 'decision' },
+  ]);
+  const answered = { ...opened, agents: { a1: { ...agents.a1, status: 'running', status_changed_at: 61_000 } } };
+  assert.deepEqual(changes(opened, answered, 10).map(({ t, ...rest }) => rest), [{ e: 'wait', ms: 60_000, to: 'running' }]);
+  // Opened by hand, not from the queue: no queue.open.
+  assert.deepEqual(changes(prev, { ...prev, selectedSession: { Agent: 'a1' } }, 10).map((l) => l.e), ['session']);
+});
