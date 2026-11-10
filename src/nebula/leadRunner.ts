@@ -17,6 +17,8 @@ import {
   actionRules,
   ciOf,
   changeLeadModel,
+  cleanInstructions,
+  cleanPersonality,
   deliver,
   LINE_PREFIX,
   eventLine,
@@ -32,6 +34,7 @@ import {
   startLeadThread,
   type LeadEvent,
   type LeadQueue,
+  voiceChangedLine,
   type Snapshot,
 } from "./lead";
 import {
@@ -211,9 +214,20 @@ export async function startProjectLead(projectId: string, opts: { model: string;
     ...(before?.pet ? { pet: before.pet } : {}),
     ...((before ? before.acts === true : true) ? { acts: true } : {}),
     ...(before?.maxTasks ? { maxTasks: before.maxTasks } : {}),
+    ...(before?.personality ? { personality: before.personality } : {}),
+    ...(before?.instructions ? { instructions: before.instructions } : {}),
   };
   return startLead(
-    { project: project.name, path: main.path, notes: opts.notes, model: opts.model, acts: !!keep.acts, maxTasks: keep.maxTasks ?? DEFAULT_MAX_TASKS },
+    {
+      project: project.name,
+      path: main.path,
+      notes: opts.notes,
+      model: opts.model,
+      acts: !!keep.acts,
+      maxTasks: keep.maxTasks ?? DEFAULT_MAX_TASKS,
+      personality: keep.personality,
+      instructions: keep.instructions,
+    },
     {
       create: (prompt, model) =>
         createAgent({ worktree: main.id, kind, settings, prompt, preset: { name: "Lead", kind, model }, select: false }),
@@ -580,6 +594,21 @@ export function setLeadActs(projectId: string, lead: CardLead, on: boolean) {
     updateLeadActs((x) => ({ toldOff: [...x.toldOff.filter((t) => t !== id), id] }));
     void tell(id, [reportLine({ kind: "off" })]);
   }
+}
+
+/** A lead's personality or instructions, from Settings or its chat. Saved
+ *  for its next start (in its prompt, after the app's rules); a running lead
+ *  is also told the new text now. The same text again does nothing. */
+export function setLeadVoice(projectId: string, given: CardLead, what: "personality" | "instructions", text: string): boolean {
+  // The card as saved now: a field saved a moment ago isn't lost.
+  const lead = allCards()[projectId]?.lead ?? given;
+  const next = what === "personality" ? cleanPersonality(text) : cleanInstructions(text);
+  const was = what === "personality" ? cleanPersonality(lead.personality) : cleanInstructions(lead.instructions);
+  if (next === was) return false;
+  const { [what]: _old, ...rest } = lead;
+  saveLead(projectId, next ? { ...rest, [what]: next } : rest);
+  if (leadState(lead, getState().agents) === "running") void tell(lead.agentId, [voiceChangedLine(what, next)]);
+  return true;
 }
 
 /** How many of the lead's tasks may run at once. */

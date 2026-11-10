@@ -28,6 +28,21 @@ export const PET_CHOICES: (LeadPet & { label: string })[] = (Object.keys(COATS) 
   COATS[kind].map((c) => ({ kind, coat: c.id, label: `${kindLabel(kind)} · ${c.label}` })),
 );
 
+/** Personalities that suit each animal, offered beside free text: the
+ *  pet is the lead, so it talks like one. */
+export const PERSONALITY_PRESETS: Record<CritterKind, string[]> = {
+  cat: ["dry and brief", "aloof, a little smug, usually right", "curious, notices the small things"],
+  dog: ["warm, cheers me on", "eager and loyal, keen to help", "upbeat, celebrates every merge"],
+  turtle: ["calm and unhurried", "patient and steady, never rushes me", "plain-spoken, thinks before it talks"],
+  frog: ["chirpy and playful", "laid back, takes things easy", "jumps straight to the point"],
+  leopard: ["sharp and quick, no wasted words", "confident, backs its calls"],
+  bobcat: ["scrappy and blunt", "independent, says what it would do"],
+  jaguar: ["quiet authority, few words", "sees the whole picture, sums it up"],
+};
+
+/** The presets for a pet; any kind without its own gets the cat's. */
+export const personalityPresets = (kind: string): string[] => PERSONALITY_PRESETS[kind as CritterKind] ?? PERSONALITY_PRESETS.cat;
+
 function kindLabel(kind: CritterKind): string {
   return kind[0].toUpperCase() + kind.slice(1);
 }

@@ -17,6 +17,7 @@ import type { FrameName } from "../vendor/pixel-pets/frames.ts";
 import { PetSprite } from "./Pet";
 import { Reply, useTranscript, Where } from "./Reader";
 import { Switch } from "./Settings";
+import { LeadVoiceFields } from "./LeadCard";
 
 // Chat with a project (S29): the project's lead, as its pet, is the face of
 // the project. Its thread shows here as a chat, not in the Read view or the
@@ -226,6 +227,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
   const frame = useBlink(!reduced, working ? "lookUp" : "sit");
   const top = lead.projectId === null;
   const days = dayLabels(items);
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   return (
     <section className="chat" style={tintStyle(lead)} aria-label={top ? "Chat with every project's top lead" : `Chat with ${lead.name}`}>
@@ -242,6 +244,20 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
             <button type="button" className="link-btn chat-raw" onClick={() => openLeadTerminal(agent.id)} title="The lead's raw session, as a thread's terminal">
               Open terminal
             </button>
+            {!top && card && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="link-btn chat-raw"
+                  aria-expanded={voiceOpen}
+                  onClick={() => setVoiceOpen((o) => !o)}
+                  title="How the lead talks, and your instructions to it"
+                >
+                  Personality{card.personality ? `: ${card.personality.length > 40 ? `${card.personality.slice(0, 39)}…` : card.personality}` : ""}
+                </button>
+              </>
+            )}
           </p>
         </div>
         {!top && card && lead.projectId && (
@@ -256,6 +272,14 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
             />
             Starts and nudges threads
           </label>
+        )}
+        {voiceOpen && !top && card && lead.projectId && (
+          <div className="chat-voice" role="dialog" aria-label={`${lead.name}'s personality and instructions`} onKeyDown={(e) => e.key === "Escape" && setVoiceOpen(false)}>
+            <LeadVoiceFields projectId={lead.projectId} projectName={lead.name} lead={card} />
+            <button type="button" className="link-btn chat-voice-done" onClick={() => setVoiceOpen(false)}>
+              Done
+            </button>
+          </div>
         )}
       </header>
       <div
