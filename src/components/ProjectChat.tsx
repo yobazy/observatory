@@ -80,6 +80,32 @@ export function ChatRow({ lead }: { lead: LeadEntry }) {
   );
 }
 
+/** A project's lead as a small pet in its header, with a dot when it has
+ *  something for you (a new reply, an open ask, or a prompt only its
+ *  terminal can answer). A click opens its chat, as ⌘L does. */
+export function LeadPetButton({ lead }: { lead: LeadEntry }) {
+  const mine = useMemo(() => [lead], [lead]);
+  const call = useLeadCalls(mine)[lead.agentId] ?? QUIET;
+  const on = useChatLead()?.agentId === lead.agentId;
+  const prompt = useAppState().agents[lead.agentId]?.status === "needs_feedback";
+  const why = prompt ? "Waiting on a prompt in its terminal" : call.why === "ask" ? `${call.count === 1 ? "A question" : `${call.count} questions`} for you` : call.why === "unread" ? "An unread reply" : null;
+  const label = `Chat with ${lead.name}${why ? `: ${why.toLowerCase()}` : ""}`;
+  return (
+    <button
+      type="button"
+      className={`lead-pet-btn${call.calling || prompt ? " is-calling" : ""}${on ? " is-on" : ""}`}
+      style={tintStyle(lead)}
+      onClick={() => openLeadChat(lead.agentId)}
+      aria-label={label}
+      aria-pressed={on}
+      title={`${label} (⌘L)${lead.model ? `\nThe project's lead, on ${lead.model}.` : ""}`}
+    >
+      <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={26} />
+      {(call.calling || prompt) && <span className={`lead-pet-dot${prompt ? " is-prompt" : ""}`} aria-hidden />}
+    </button>
+  );
+}
+
 /** The chat, in place of the terminal column's thread. */
 export function ProjectChat({ lead }: { lead: LeadEntry }) {
   const state = useAppState();

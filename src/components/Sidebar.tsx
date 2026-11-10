@@ -769,7 +769,7 @@ function ProjectRow({
 /** The pet a project's running lead is (S27), after its name: it hops
  *  with a count when the lead has something for you, and a click opens
  *  the project's chat (S29). Inside the row's button, so it's a span; the
- *  chat row at the top of the project's threads reaches it by keyboard. */
+ *  pet in the project's header reaches it by keyboard. */
 function LeadMark({ projectId }: { projectId: string }) {
   const leads = useLeads();
   const lead = leads.find((l) => l.projectId === projectId);
