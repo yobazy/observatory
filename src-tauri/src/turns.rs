@@ -170,9 +170,17 @@ pub(crate) fn target_of(input: &serde_json::Value) -> String {
 
 /// A prompt you typed, as opposed to what the harness adds as a user message:
 /// command output, task notifications, skill text, another session's message.
+/// A picture you attach puts `[Image #1]` before your words; that tag is
+/// dropped, and a message of only pictures reads as "[image]".
 pub(crate) fn typed_prompt(content: &serde_json::Value) -> Option<String> {
+    let mut pictures = false;
+    let mut words = |t: &str| {
+        let rest = after_image_tags(t);
+        pictures |= rest.len() < t.len();
+        rest.to_string()
+    };
     let text = match content {
-        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::String(s) => words(s),
         serde_json::Value::Array(blocks) => {
             if blocks
                 .iter()
@@ -180,21 +188,44 @@ pub(crate) fn typed_prompt(content: &serde_json::Value) -> Option<String> {
             {
                 return None;
             }
-            blocks
+            let texts = blocks
                 .iter()
                 .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
-                .filter(|t| !t.starts_with("[Image"))
+                .map(&mut words)
+                .filter(|t| !t.trim().is_empty())
                 .collect::<Vec<_>>()
-                .join("\n")
+                .join("\n");
+            pictures |= blocks
+                .iter()
+                .any(|b| b.get("type").and_then(|t| t.as_str()) == Some("image"));
+            texts
         }
         _ => return None,
     };
     let text = unwrap_pastes(&text);
     let t = text.trim_start();
+    if t.trim_end().is_empty() && pictures {
+        return Some("[image]".to_string());
+    }
     let harness = t.starts_with('<')
         || t.starts_with("Another Claude session sent a message")
         || t.starts_with("Base directory for this skill");
     (!t.is_empty() && !harness).then(|| t.trim_end().to_string())
+}
+
+/// `text` past the `[Image #N]` tags it starts with.
+fn after_image_tags(text: &str) -> &str {
+    let mut rest = text;
+    loop {
+        let Some(n) = rest.trim_start().strip_prefix("[Image #") else {
+            return rest;
+        };
+        let digits = n.len() - n.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+        match n[digits..].strip_prefix(']') {
+            Some(after) if digits > 0 => rest = after,
+            _ => return rest,
+        }
+    }
 }
 
 /// Text you pasted arrives between `<pasted_content id="…">` lines; drop the
@@ -502,6 +533,53 @@ mod tests {
         let note = r#"{"type":"user","message":{"content":"Heres our convo: \n\n<pasted_content id=\"3aef\">\nhi\n</pasted_content id=\"3aef\">\n"}}"#;
         let t = read(&[note]).turn.unwrap();
         assert_eq!(t.prompt, "Heres our convo: \n\nhi");
+    }
+
+    fn with_pictures(text: &str, pictures: usize) -> serde_json::Value {
+        let mut blocks = vec![serde_json::json!({"type": "text", "text": text})];
+        blocks.extend(
+            (0..pictures).map(|_| serde_json::json!({"type": "image", "source": {"data": ""}})),
+        );
+        serde_json::Value::Array(blocks)
+    }
+
+    #[test]
+    fn a_picture_keeps_the_words_after_it() {
+        let p = typed_prompt(&with_pictures("[Image #1] what's wrong here?", 1));
+        assert_eq!(p.as_deref(), Some("what's wrong here?"));
+    }
+
+    #[test]
+    fn several_pictures_keep_the_words_after_them() {
+        let p = typed_prompt(&with_pictures("[Image #1] [Image #2]\ncompare these", 2));
+        assert_eq!(p.as_deref(), Some("compare these"));
+        let p = typed_prompt(&with_pictures("[Image #1] this one, then [Image #2]", 2));
+        assert_eq!(p.as_deref(), Some("this one, then [Image #2]"));
+    }
+
+    #[test]
+    fn a_message_of_only_pictures_says_so() {
+        let p = typed_prompt(&with_pictures("[Image #1] [Image #2]\n", 2));
+        assert_eq!(p.as_deref(), Some("[image]"));
+        // Older logs put each tag in a block of its own.
+        let blocks = serde_json::json!([
+            {"type": "text", "text": "[Image #1]"},
+            {"type": "image", "source": {"data": ""}},
+            {"type": "text", "text": "look at this"},
+        ]);
+        assert_eq!(typed_prompt(&blocks).as_deref(), Some("look at this"));
+    }
+
+    #[test]
+    fn words_that_only_mention_an_image_stay() {
+        let text = "the [Image #1] tag hides my words";
+        assert_eq!(typed_prompt(&with_pictures(text, 0)).as_deref(), Some(text));
+        let text = "[Image of the logo] is wrong";
+        assert_eq!(typed_prompt(&with_pictures(text, 0)).as_deref(), Some(text));
+        assert_eq!(
+            typed_prompt(&serde_json::json!(text)).as_deref(),
+            Some(text)
+        );
     }
 
     #[test]
