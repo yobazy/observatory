@@ -390,3 +390,17 @@ test("A lead-started task's state for the card: queued, running, PR #n, merged",
   assert.deepEqual(startedState({ state: 'launched', agentId: 'a1' }, { status: 'finished', archived: false }, { number: 12, state: 'merged' }), { label: 'merged', busy: false });
   assert.deepEqual(startedState({ state: 'failed' }, undefined, null), { label: 'failed', busy: false });
 });
+
+test("A started task whose thread is gone from the loaded store is closed and holds no slot; one just launched still counts while it arrives", () => {
+  const now = 1_000_000;
+  const task = { state: 'launched', agentId: 'a1', launchedAt: now - 60_000 };
+  assert.deepEqual(startedState(task, undefined, null, { loaded: true, now }), { label: 'closed', busy: false });
+  // A task with no launch time recorded, gone from the store: closed too.
+  assert.deepEqual(startedState({ state: 'launched', agentId: 'a1' }, undefined, null, { loaded: true, now }), { label: 'closed', busy: false });
+  // Launched seconds ago and not in the store yet: still running.
+  assert.deepEqual(startedState({ ...task, launchedAt: now - 5_000 }, undefined, null, { loaded: true, now }), { label: 'running', busy: true });
+  // Before the store has loaded, a missing thread isn't taken as gone.
+  assert.deepEqual(startedState(task, undefined, null, { loaded: false, now }), { label: 'running', busy: true });
+  // Archived: closed.
+  assert.deepEqual(startedState(task, { status: 'finished', archived: true }, null, { now }), { label: 'closed', busy: false });
+});

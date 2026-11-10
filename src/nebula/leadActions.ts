@@ -355,19 +355,30 @@ export interface LeadTask {
 
 export type StartedState = "queued" | "running" | "finished" | `PR #${number}` | "merged" | "closed" | "failed";
 
+/** How long a just-launched thread may be missing from the store (its
+ *  entity can land after the launch) and still count as running. */
+export const ARRIVAL_MS = 30_000;
+
 /** Where a lead-started task is now, for the card, and whether it holds
- *  one of the lead's slots (queued, or its thread working). */
+ *  one of the lead's slots (queued, or its thread working). A thread gone
+ *  from a loaded store, past its arrival window, is closed: it never holds
+ *  a slot. */
 export function startedState(
-  task: { state: string; agentId?: string } | undefined,
+  task: { state: string; agentId?: string; launchedAt?: number } | undefined,
   agent: { status: AgentStatus; archived: boolean } | undefined,
   pr: { number: number; state: string } | null | undefined,
+  o: { loaded?: boolean; now?: number } = {},
 ): { label: StartedState; busy: boolean } {
   if (!task || task.state === "failed") return { label: "failed", busy: false };
   if (task.state !== "launched") return { label: "queued", busy: true };
   const working = !!agent && !agent.archived && ["fresh", "running", "needs_feedback", "disconnected"].includes(agent.status);
   if (pr?.state === "merged") return { label: "merged", busy: false };
   if (pr && (pr.state === "open" || pr.state === "draft")) return { label: `PR #${pr.number}`, busy: working };
-  if (!agent || agent.archived) return { label: agent ? "closed" : "running", busy: !agent };
+  if (agent?.archived) return { label: "closed", busy: false };
+  if (!agent) {
+    const arriving = o.loaded === false || (o.now ?? Date.now()) - (task.launchedAt ?? 0) < ARRIVAL_MS;
+    return arriving ? { label: "running", busy: true } : { label: "closed", busy: false };
+  }
   return { label: working ? "running" : "finished", busy: working };
 }
 
