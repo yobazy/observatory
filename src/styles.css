@@ -9763,3 +9763,75 @@ button.board-main:hover .board-text {
   max-width: 100%;
 }
 
+
+/* What a lead started (S28, LeadCard.tsx): its tasks on the card, each with
+   where it is now. */
+.card-cap.lead-max-cap {
+  white-space: nowrap;
+}
+.card-cap .lead-max {
+  width: 3.5em;
+}
+.lead-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.lead-tasks li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.lead-tasks li > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lead-task-state {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+.lead-task-state.is-running,
+.lead-task-state.is-pr {
+  color: var(--accent);
+}
+.lead-task-state.is-failed {
+  color: var(--st-error);
+}
+
+/* Under a lead's reply in the dialogue (S28): what the reply started or
+   nudged, and its asks with Yes and No. */
+.talk-acts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 14px/1.35 var(--talk);
+}
+.talk-did {
+  opacity: 0.7;
+}
+.talk-asks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.talk-asks > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.talk-asks .talk-btn {
+  padding: 2px 9px;
+}

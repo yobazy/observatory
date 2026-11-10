@@ -3,11 +3,13 @@ import { saveLead, useCards, type ProjectCard } from "../nebula/cards";
 import { dollars } from "../nebula/budgetHold";
 import { useSessionCosts } from "../nebula/budget";
 import { DEFAULT_LEAD_MODEL, defaultNotes, leadModelOptions, leadName, leadState } from "../nebula/lead";
-import { setLeadModel, startProjectLead } from "../nebula/leadRunner";
+import { setLeadActs, setLeadMaxTasks, setLeadModel, startedTasks, startProjectLead } from "../nebula/leadRunner";
+import { DEFAULT_MAX_TASKS, useLeadActs } from "../nebula/leadActions";
 import { sessionKey } from "../nebula/usageData";
 import { flash, setState, useAppState } from "../nebula/store";
 import { PET_CHOICES, petFromKey, petKey, petOf, type LeadPet } from "../nebula/leadChat";
 import { PetSprite } from "./Pet";
+import { Switch } from "./Settings";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -16,13 +18,17 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
  *  as the dialog has it, saved with the lead when there's none saved yet. */
 export function LeadSection({ projectId, projectName, base }: { projectId: string; projectName: string; base: ProjectCard }) {
   const lead = useCards()[projectId]?.lead;
-  const { agents } = useAppState();
+  const app = useAppState();
+  const { agents } = app;
   const costs = useSessionCosts();
   const state = leadState(lead, agents);
   const [model, setModel] = useState(lead?.model || DEFAULT_LEAD_MODEL);
   const [notes, setNotes] = useState(lead?.notes || defaultNotes(projectName));
   const [busy, setBusy] = useState(false);
+  const [maxDraft, setMaxDraft] = useState<string | null>(null);
   const agent = lead ? agents[lead.agentId] : undefined;
+  useLeadActs();
+  const started = lead ? startedTasks(projectId, app) : [];
 
   const start = () => {
     setBusy(true);
@@ -93,6 +99,69 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
           )}
         </div>
         {lead && (
+          <div className="card-row lead-acts">
+            <Switch
+              id={`lead-acts-${projectId}`}
+              on={lead.acts === true}
+              onChange={(on) => {
+                setLeadActs(projectId, lead, on);
+                flash(on ? `${projectName}'s lead can start and nudge threads` : `${projectName}'s lead's action lines are ignored now`);
+              }}
+            />
+            <label htmlFor={`lead-acts-${projectId}`} className="dialog-note card-flat">
+              Let the lead start and nudge threads
+            </label>
+          </div>
+        )}
+        {lead?.acts === true && (
+          <div className="card-row">
+            {/* Its own row, so it never wraps beside the switch. */}
+            <label className="card-cap lead-max-cap">
+              at most
+              <input
+                type="number"
+                min={1}
+                max={9}
+                className="lead-max"
+                value={maxDraft ?? String(lead.maxTasks ?? DEFAULT_MAX_TASKS)}
+                // Empty while you type; a whole 1 to 9 is saved on Enter or
+                // leaving the field, anything else goes back to what was saved.
+                onChange={(e) => setMaxDraft(e.target.value)}
+                onBlur={() => {
+                  const n = Number(maxDraft);
+                  if (maxDraft !== null && Number.isInteger(n) && n >= 1 && n <= 9) setLeadMaxTasks(projectId, lead, n);
+                  setMaxDraft(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                aria-label="Tasks the lead may run at once"
+              />
+              at once
+            </label>
+          </div>
+        )}
+        {started.length > 0 && (
+          <ul className="lead-tasks" aria-label="Tasks the lead started">
+            {started.slice(0, 8).map((t) => (
+              <li key={t.rec.taskId}>
+                {t.agent ? (
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setState({ view: "sessions", selectedProject: projectId, selectedSession: { Agent: t.agent!.id } })}
+                  >
+                    {t.rec.branch}
+                  </button>
+                ) : (
+                  <span>{t.rec.branch}</span>
+                )}
+                <span className={`lead-task-state is-${t.label.startsWith("PR") ? "pr" : t.label}`}>{t.label}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {lead && (
           <PetPicker
             pet={petOf(lead, projectName)}
             label="The lead's animal"
@@ -117,7 +186,11 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
             ? "A thread in the main checkout that hears when this project's tasks finish, fail, need you or open a PR, and keeps the project's notes. Nothing runs until you start it."
             : state === "stopped"
               ? "Its thread was archived or deleted, so it hears nothing. Restart starts a fresh one from its notes."
-              : `It hears of every task here and answers their questions about facts and past decisions as ${leadName(projectName)}. Anything it starts or follows up on opens for you to send.`}
+              : `It hears of every task here and answers their questions about facts and past decisions as ${leadName(projectName)}. ${
+                  lead?.acts === true
+                    ? "It starts and nudges threads itself, within Dispatch's caps, and asks you before it merges or archives."
+                    : "Anything it starts or follows up on opens for you to send."
+                }`}
         </span>
       </div>
     </div>

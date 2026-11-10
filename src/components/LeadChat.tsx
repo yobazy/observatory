@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent }
 import { closeLeadChat, markLeadSeen, noteReply, useLeads, useOpenLead } from "../nebula/leadCalls";
 import { ASK_USER } from "../nebula/leadAsk";
 import { hasStandIn, lastReply, pages, talkPhase, type BoxSize, type LeadEntry } from "../nebula/leadChat";
+import { askKey, isAnswered, useLeadActs, type AskAction } from "../nebula/leadActions";
+import { answerLeadAsk } from "../nebula/leadRunner";
 import { enqueue } from "../nebula/queue";
 import { setPaneMode } from "../nebula/pane";
 import { flash, getState, projectOfWorktree, setState, useAppState } from "../nebula/store";
@@ -184,6 +186,7 @@ function Dialogue({ lead, agent, up }: { lead: LeadEntry; agent: Agent; up: bool
             <Said text={text} />
           )}
         </div>
+        {!sent && reply && <Acts lead={lead} n={reply.n} />}
         {more && (
           <span className="talk-more" aria-hidden>
             ▼
@@ -206,6 +209,51 @@ function Dialogue({ lead, agent, up }: { lead: LeadEntry; agent: Agent; up: bool
         </form>
       </div>
     </div>
+  );
+}
+
+/** What reply `n` made happen (S28): "Started fix-clipping", "Nudged Fix
+ *  login", and its asks still to answer, each with Yes and No. */
+function Acts({ lead, n }: { lead: LeadEntry; n: number }) {
+  const out = useLeadActs().outcomes[lead.agentId];
+  const { agents } = useAppState();
+  const [busy, setBusy] = useState<string | null>(null);
+  if (!lead.acts || !out || out.n !== n) return null;
+  const asks = out.asks.filter((a) => !isAnswered(askKey(lead.agentId, n, a)));
+  if (!out.lines.length && !asks.length) return null;
+  const answer = (a: AskAction, yes: boolean) => {
+    const key = askKey(lead.agentId, n, a);
+    setBusy(key);
+    answerLeadAsk(lead.agentId, n, a, yes)
+      .then((line) => line && yes && flash(a.what === "merge" ? `Merged #${a.pr}` : `Archived ${agents[a.agentId]?.name ?? a.agentId}`))
+      .catch((e) => flash(`Couldn't ${a.what}: ${e instanceof Error ? e.message : String(e)}`))
+      .finally(() => setBusy(null));
+  };
+  return (
+    <ul className="talk-acts">
+      {out.lines.map((l, i) => (
+        <li key={i} className="talk-did">
+          {l}
+        </li>
+      ))}
+      {asks.map((a) => {
+        const key = askKey(lead.agentId, n, a);
+        const what = a.what === "merge" ? `Merge #${a.pr}?` : `Archive ${agents[a.agentId]?.name ?? a.agentId}?`;
+        return (
+          <li key={key} className="talk-asks">
+            <span title={a.why}>
+              <strong>{what}</strong> {a.why}
+            </span>
+            <button type="button" className="talk-btn" disabled={busy === key} onClick={() => answer(a, true)}>
+              Yes
+            </button>
+            <button type="button" className="talk-btn is-quiet" disabled={busy === key} onClick={() => answer(a, false)}>
+              No
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

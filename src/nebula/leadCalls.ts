@@ -38,6 +38,13 @@ export function noteReply(agentId: string, reply: LeadReply | null) {
   notify();
 }
 
+/** A lead's latest reply as last read, or undefined before it's read
+ *  (S28: the runner acts on it once its turn has ended). */
+export const latestReply = (agentId: string): LeadReply | null | undefined => replies[agentId];
+
+/** Called on every change here: a reply read, the dialogue opened or closed. */
+export const watchLeadCalls = watch;
+
 export function openLeadChat(agentId: string) {
   open = agentId;
   notify();
@@ -77,6 +84,7 @@ function callsFor(leads: LeadEntry[], agents: State["agents"]): Record<string, C
       reply: replies[l.agentId] ?? null,
       unseen: !!agents[l.agentId]?.unseen,
       seen: laterSeen(seenInChat(l.agentId), readTo(l.agentId)),
+      actions: l.acts,
     });
   return out;
 }
