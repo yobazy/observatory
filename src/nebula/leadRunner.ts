@@ -14,11 +14,10 @@ import { allBatches, globalCap, queueNewTask, workingNow } from "./batch";
 import { holdOn, holds, holdText } from "./budgetHold";
 import { isPreview, readSettings, request } from "./client";
 import {
-  actionRules,
+  levelLine,
   ciOf,
   changeLeadModel,
   deliver,
-  LINE_PREFIX,
   eventLine,
   eventNeed,
   carryUnknown,
@@ -69,7 +68,9 @@ import {
   type LeadTask,
 } from "./leadActions";
 import { latestReply, watchLeadCalls } from "./leadCalls";
-import { mergePr } from "./prs";
+import { cleanUp, mergePr } from "./prs";
+import { holdsPrWork } from "./autoclean";
+import { DEFAULT_LEVEL, levelName, levelOf, type LeadLevel } from "./leadLevel";
 import { checkVerdict, closeThread, onVerdicts, verdictKnown } from "./verdicts";
 import { openPreview } from "./preview";
 import { editQueued, enqueue } from "./queue";
@@ -205,15 +206,16 @@ export async function startProjectLead(projectId: string, opts: { model: string;
   const kind = defaultKind(settings);
   const before = allCards()[projectId]?.lead;
   await retire(before);
-  // A restarted lead stays the same animal, and keeps its actions switch:
-  // on for a new lead, off for one saved before S28 until it's turned on.
+  // A restarted lead stays the same animal, and keeps its level: Suggest
+  // for a new lead.
+  const level = before ? levelOf(before) : DEFAULT_LEVEL;
   const keep = {
     ...(before?.pet ? { pet: before.pet } : {}),
-    ...((before ? before.acts === true : true) ? { acts: true } : {}),
+    level,
     ...(before?.maxTasks ? { maxTasks: before.maxTasks } : {}),
   };
-  return startLead(
-    { project: project.name, path: main.path, notes: opts.notes, model: opts.model, acts: !!keep.acts, maxTasks: keep.maxTasks ?? DEFAULT_MAX_TASKS },
+  const lead = await startLead(
+    { project: project.name, path: main.path, notes: opts.notes, model: opts.model, level, maxTasks: keep.maxTasks ?? DEFAULT_MAX_TASKS },
     {
       create: (prompt, model) =>
         createAgent({ worktree: main.id, kind, settings, prompt, preset: { name: "Lead", kind, model }, select: false }),
@@ -221,6 +223,54 @@ export async function startProjectLead(projectId: string, opts: { model: string;
     },
     answerRules({ name: leadName(project.name), notes: opts.notes }),
   );
+  const saved = { ...lead, ...keep };
+  await guardLead(projectId, saved);
+  return saved;
+}
+
+// ---- keeping a lead in its project ----
+
+/** The folders a lead's project is in: its repo, every worktree, and the
+ *  folder its worktrees sit in when that's named for the repo. */
+export function projectRoots(projectId: string, s: Pick<State, "projects" | "worktrees"> = getState()): string[] {
+  const repo = s.projects[projectId]?.repo_path.replace(/\/+$/, "");
+  if (!repo) return [];
+  const base = repo.split("/").pop() ?? "";
+  const out = new Set([repo]);
+  for (const w of Object.values(s.worktrees)) {
+    if (w.project_id !== projectId) continue;
+    const path = w.path.replace(/\/+$/, "");
+    out.add(path);
+    const parent = path.slice(0, path.lastIndexOf("/"));
+    const name = parent.split("/").pop() ?? "";
+    if (base && name.startsWith(base) && parent !== repo) out.add(parent);
+  }
+  return [...out];
+}
+
+/** Put the lead's guard in its main checkout (lead_guard.rs): a hook that
+ *  runs only in the lead's session and keeps it to its project's folders
+ *  and its notes. A failure is shown, not thrown: the app's own checks on
+ *  what the lead does still hold. */
+async function guardLead(projectId: string, lead: CardLead) {
+  if (isPreview()) return;
+  const s = getState();
+  const main = Object.values(s.worktrees).find((w) => w.project_id === projectId && w.is_main);
+  if (!main) return;
+  await invoke("lead_guard_install", {
+    checkout: main.path,
+    agentId: lead.agentId,
+    roots: projectRoots(projectId, s),
+    notes: lead.notes,
+    level: levelOf(lead),
+  }).catch((e) => flash(`Couldn't keep the lead to its project: ${errText(e)}`, 6000));
+}
+
+/** Take the guard out when a project's lead is removed. */
+export async function unguardLead(projectId: string) {
+  if (isPreview()) return;
+  const main = Object.values(getState().worktrees).find((w) => w.project_id === projectId && w.is_main);
+  if (main) await invoke("lead_guard_remove", { checkout: main.path }).catch((e) => flash(`Couldn't take the lead's guard out: ${errText(e)}`));
 }
 
 // ---- the top lead (S26) ----
@@ -416,13 +466,8 @@ function holdNow(projectId: string): string | null {
 async function act(leadId: string, projectId: string, lead: CardLead, n: number, text: string, at?: number) {
   const actions = parseActions(text);
   if (!actions.length) return;
-  if (lead.acts !== true) {
-    // Off: the lines are ignored, and the lead is told so once.
-    if (leadActs().toldOff.includes(leadId)) return;
-    updateLeadActs((x) => ({ toldOff: [...x.toldOff, leadId] }));
-    await tell(leadId, [reportLine({ kind: "off" })]);
-    return;
-  }
+  // Read afresh: the level may have changed since the card was read.
+  const level = levelOf(allCards()[projectId]?.lead ?? lead);
   const context = (): DecideContext => {
     const s = getState();
     const waiting = tasksOf(projectId).filter((t) => !t.told).map((t) => t.branch);
@@ -432,16 +477,29 @@ async function act(leadId: string, projectId: string, lead: CardLead, n: number,
         .map((w) => w.branch),
       ...waiting,
     ]);
-    const prs = new Set(
-      Object.values(s.worktrees).flatMap((w) => {
-        const p = w.project_id === projectId ? s.prs[w.id] : undefined;
-        return p?.kind === "found" && (p.pr.state === "open" || p.pr.state === "draft") ? [p.pr.number] : [];
-      }),
-    );
+    const open = Object.values(s.worktrees).flatMap((w) => {
+      const p = w.project_id === projectId ? s.prs[w.id] : undefined;
+      return p?.kind === "found" && (p.pr.state === "open" || p.pr.state === "draft") ? [p.pr] : [];
+    });
+    const prs = new Set(open.map((p) => p.number));
+    const green = new Set(open.filter((p) => p.state === "open" && p.checks === "passing").map((p) => p.number));
     const threads: DecideContext["threads"] = {};
-    for (const x of Object.values(s.agents)) threads[x.id] = { projectId: s.worktrees[x.worktree_id]?.project_id ?? null, archived: x.archived };
+    for (const x of Object.values(s.agents))
+      threads[x.id] = { projectId: s.worktrees[x.worktree_id]?.project_id ?? null, archived: x.archived, safe: !!safeMark(x) };
+    const worktrees: DecideContext["worktrees"] = {};
+    for (const w of Object.values(s.worktrees)) {
+      if (w.project_id !== projectId) continue;
+      const p = s.prs[w.id];
+      const g = s.git[w.id];
+      worktrees[w.branch] = {
+        main: w.is_main,
+        merged: p?.kind === "found" && p.pr.state === "merged",
+        clean: !g || "error" in g ? undefined : g.staged + g.unstaged + g.untracked + g.conflicted === 0,
+        busy: Object.values(s.agents).some((a) => a.worktree_id === w.id && !a.archived && ["fresh", "running", "needs_feedback"].includes(a.status)),
+      };
+    }
     return {
-      acts: true,
+      level,
       top: false,
       leadId,
       projectId,
@@ -452,8 +510,12 @@ async function act(leadId: string, projectId: string, lead: CardLead, n: number,
       threads,
       nudges: (id) => nudgesWithin(leadActs().nudges, id),
       prs,
+      green,
+      worktrees,
     };
   };
+  const inProject = (find: (w: State["worktrees"][string]) => boolean) =>
+    Object.values(getState().worktrees).find((w) => w.project_id === projectId && find(w));
   const done = await runActions(actions, {
     context,
     start: (branch, brief) => {
@@ -473,6 +535,29 @@ async function act(leadId: string, projectId: string, lead: CardLead, n: number,
       updateLeadActs((x) => ({ nudges: [...x.nudges, { leadId, agentId, at: Date.now() }] }));
     },
     name: (agentId) => getState().agents[agentId]?.name ?? agentId,
+    archive: (agentId) => {
+      const a = getState().agents[agentId];
+      if (!a) throw new Error("that thread is gone");
+      closeThread(a);
+    },
+    remove: async (branch) => {
+      const s = getState();
+      const wt = inProject((w) => w.branch === branch && !w.is_main);
+      if (!wt) throw new Error(`no worktree on ${branch} in this project`);
+      const p = s.prs[wt.id];
+      const g = s.git[wt.id];
+      await cleanUp(wt, false, p?.kind === "found" && !!g && !("error" in g) && holdsPrWork(p.pr, g.head), `${leadName(s.projects[projectId]?.name ?? "")} removed ${branch}, whose PR merged`);
+    },
+    merge: async (number) => {
+      const s = getState();
+      const wt = inProject((w) => {
+        const p = s.prs[w.id];
+        return p?.kind === "found" && p.pr.number === number;
+      });
+      const p = wt ? s.prs[wt.id] : undefined;
+      if (!wt || p?.kind !== "found") throw new Error(`no PR #${number} in this project`);
+      await mergePr(wt, p.pr);
+    },
   });
   const outcome = { n, ...(at !== undefined ? { at } : {}), lines: done.lines, asks: done.asks };
   updateLeadActs((x) => ({ outcomes: { ...x.outcomes, [leadId]: outcome }, history: [...x.history, { ...outcome, leadId }] }));
@@ -533,7 +618,7 @@ async function passOn(topId: string, text: string) {
   const targets: PassTarget[] = Object.entries(allCards()).flatMap(([projectId, card]) => {
     const p = s.projects[projectId];
     if (!card.lead || !p) return [];
-    return [{ project: p.name, agentId: card.lead.agentId, running: leadState(card.lead, s.agents) === "running", acts: card.lead.acts === true }];
+    return [{ project: p.name, agentId: card.lead.agentId, running: leadState(card.lead, s.agents) === "running", level: levelOf(card.lead) }];
   });
   const reports = await runPasses(parseActions(text), targets, (agentId, line) => tell(agentId, [line]));
   await tell(topId, reports.map(reportLine));
@@ -562,25 +647,23 @@ export function answerLeadAsk(leadId: string, n: number, ask: AskAction, yes: bo
   });
 }
 
-/** The card's "Let the lead start and nudge threads". A running lead hears
- *  of it: turned on, with what the action lines are (its prompt may not
- *  have had them), and from its next reply on; off, once. */
-export function setLeadActs(projectId: string, lead: CardLead, on: boolean) {
+/** The lead's level, from Settings or its card: saved, its guard updated,
+ *  and a running lead told what it may do now, from its next reply on. */
+export function setLeadLevel(projectId: string, lead: CardLead, level: LeadLevel) {
   const { acts: _was, ...rest } = lead;
-  saveLead(projectId, on ? { ...rest, acts: true } : rest);
+  const next = { ...rest, level };
+  saveLead(projectId, next);
   if (leadState(lead, getState().agents) !== "running") return;
+  void guardLead(projectId, next);
   const id = lead.agentId;
   // What it said before now isn't acted on.
   const n = latestReply(id)?.n;
   if (n !== undefined) markActed(id, n);
-  if (on) {
-    updateLeadActs((x) => ({ toldOff: x.toldOff.filter((t) => t !== id) }));
-    void tell(id, [`${LINE_PREFIX}actions are on. ${actionRules(lead.maxTasks ?? DEFAULT_MAX_TASKS)}`]);
-  } else {
-    updateLeadActs((x) => ({ toldOff: [...x.toldOff.filter((t) => t !== id), id] }));
-    void tell(id, [reportLine({ kind: "off" })]);
-  }
+  void tell(id, [levelLine(level, lead.maxTasks ?? DEFAULT_MAX_TASKS)]);
 }
+
+/** A flash for a level change. */
+export const levelFlash = (project: string, level: LeadLevel) => `${leadName(project)} is at ${levelName(level)} now`;
 
 /** How many of the lead's tasks may run at once. */
 export function setLeadMaxTasks(projectId: string, lead: CardLead, max: number) {
@@ -596,9 +679,17 @@ export function useLeadRunner() {
     // Bumped when a verdict is read, which the store doesn't signal.
     let verdicts = 0;
     let leadsBefore: RosterEntry[] | null = null;
+    // Leads guarded since launch: one started before guards existed, or
+    // whose checkout lost its hook, gets it back once.
+    const guarded = new Set<string>();
     const tick = () => {
       const s = getState();
       if (!s.loaded || s.link.state !== "connected") return;
+      for (const [projectId, card] of Object.entries(allCards())) {
+        if (!card.lead || guarded.has(card.lead.agentId) || leadState(card.lead, s.agents) !== "running") continue;
+        guarded.add(card.lead.agentId);
+        void guardLead(projectId, card.lead);
+      }
       // The top lead hears when a project's lead starts or stops.
       const leadsNow = currentRoster(s);
       const top = s.prefs.topLead;

@@ -3,14 +3,14 @@ import { saveLead, useCards, type ProjectCard } from "../nebula/cards";
 import { dollars } from "../nebula/budgetHold";
 import { useSessionCosts } from "../nebula/budget";
 import { DEFAULT_LEAD_MODEL, defaultNotes, leadModelOptions, leadName, leadState } from "../nebula/lead";
-import { setLeadActs, setLeadMaxTasks, setLeadModel, startedTasks, startProjectLead } from "../nebula/leadRunner";
+import { levelFlash, setLeadLevel, setLeadMaxTasks, setLeadModel, startedTasks, startProjectLead, unguardLead } from "../nebula/leadRunner";
+import { LEVELS, levelOf, type LeadLevel } from "../nebula/leadLevel";
 import { DEFAULT_MAX_TASKS, useLeadActs } from "../nebula/leadActions";
 import { sessionKey } from "../nebula/usageData";
 import { flash, setState, useAppState } from "../nebula/store";
 import { PET_CHOICES, petFromKey, petKey, petOf, type LeadPet } from "../nebula/leadChat";
 import { PetSprite } from "./Pet";
 import { openLeadChat } from "../nebula/leadCalls";
-import { Switch } from "./Settings";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -86,6 +86,7 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
               className="link-btn hint"
               onClick={() => {
                 saveLead(projectId, undefined);
+                void unguardLead(projectId);
                 flash(`${projectName} has no lead now${state === "running" ? "; its thread is still there to archive" : ""}`);
               }}
             >
@@ -95,20 +96,17 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
         </div>
         {lead && (
           <div className="card-row lead-acts">
-            <Switch
-              id={`lead-acts-${projectId}`}
-              on={lead.acts === true}
-              onChange={(on) => {
-                setLeadActs(projectId, lead, on);
-                flash(on ? `${projectName}'s lead can start and nudge threads` : `${projectName}'s lead's action lines are ignored now`);
+            <LevelPicker
+              id={`lead-level-${projectId}`}
+              level={levelOf(lead)}
+              onPick={(level) => {
+                setLeadLevel(projectId, lead, level);
+                flash(levelFlash(projectName, level));
               }}
             />
-            <label htmlFor={`lead-acts-${projectId}`} className="dialog-note card-flat">
-              Let the lead start and nudge threads
-            </label>
           </div>
         )}
-        {lead?.acts === true && (
+        {lead && levelOf(lead) >= 3 && (
           <div className="card-row">
             {/* Its own row, so it never wraps beside the switch. */}
             <label className="card-cap lead-max-cap">
@@ -182,13 +180,36 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
             : state === "stopped"
               ? "Its thread was archived or deleted, so it hears nothing. Restart starts a fresh one from its notes."
               : `It hears of every task here and answers their questions about facts and past decisions as ${leadName(projectName)}. ${
-                  lead?.acts === true
-                    ? "It starts and nudges threads itself, within Dispatch's caps, and asks you before it merges or archives."
-                    : "Anything it starts or follows up on opens for you to send."
-                }`}
+                  LEVELS[levelOf(lead) - 1].what
+                } It stays in this project: the app refuses anything it aims elsewhere.`}
         </span>
       </div>
     </div>
+  );
+}
+
+/** A project lead's level (leadLevel.ts), 1 to 4, with what the picked one
+ *  lets it do. The app refuses anything above it. */
+export function LevelPicker({ id, level, onPick, compact }: { id: string; level: LeadLevel; onPick: (level: LeadLevel) => void; compact?: boolean }) {
+  const info = LEVELS[level - 1];
+  return (
+    <span className={`lead-level${compact ? " is-compact" : ""}`}>
+      <select
+        id={id}
+        className="setting-input"
+        value={String(level)}
+        onChange={(e) => onPick(Number(e.target.value) as LeadLevel)}
+        aria-label="What the lead may do on its own"
+        title={compact ? info.what : undefined}
+      >
+        {LEVELS.map((l) => (
+          <option key={l.level} value={l.level}>
+            {l.level} · {l.name}
+          </option>
+        ))}
+      </select>
+      {!compact && <span className="dialog-note card-flat">{info.what}</span>}
+    </span>
   );
 }
 

@@ -41,7 +41,10 @@ import { leadState } from "../nebula/lead";
 import { ASK_LINE_TEMPLATE, countsText, DEFAULT_TOP_MODEL, TOP_LEAD_NAME, TOP_NOTES, type LogCounts } from "../nebula/leadAsk";
 import { answerCounts, defaultTopFolder, openAnswersLog, removeTopLead, setTopLeadModel, setTopLeadPet, startTopLead } from "../nebula/leadRunner";
 import { petOf } from "../nebula/leadChat";
-import { ModelPicker, PetPicker } from "./LeadCard";
+import { LevelPicker, ModelPicker, PetPicker } from "./LeadCard";
+import { useCards } from "../nebula/cards";
+import { levelOf } from "../nebula/leadLevel";
+import { levelFlash, setLeadLevel } from "../nebula/leadRunner";
 
 const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
 type Tab = (typeof TABS)[number];
@@ -703,6 +706,47 @@ function DispatchSettings() {
   );
 }
 
+/** Each project's lead and its level: what the app lets it do on its own. */
+function ProjectLeadLevels() {
+  const cards = useCards();
+  const { projects } = useAppState();
+  const rows = Object.entries(cards)
+    .flatMap(([id, c]) => (c.lead && projects[id] ? [{ id, name: projects[id].name, lead: c.lead }] : []))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-text">
+        <span className="setting-label">Project leads</span>
+        <span className="setting-hint">
+          What each project's lead may do on its own. Observatory refuses anything above its level, and keeps every lead to its own
+          project's folder, threads and worktrees.
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <span className="setting-hint">No project has a lead. Start one from a project's card.</span>
+      ) : (
+        <ul className="lead-levels" aria-label="Project leads' levels">
+          {rows.map((r) => (
+            <li key={r.id}>
+              <label htmlFor={`set-lead-level-${r.id}`} className="lead-levels-name">
+                {r.name}
+              </label>
+              <LevelPicker
+                id={`set-lead-level-${r.id}`}
+                level={levelOf(r.lead)}
+                onPick={(level) => {
+                  setLeadLevel(r.id, r.lead, level);
+                  flash(levelFlash(r.name, level));
+                }}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** The top lead over every project, today's answers from the leads, and
  *  the ask line for a CLAUDE.md (leadAsk.ts). */
 function LeadsSettings() {
@@ -841,6 +885,7 @@ function LeadsSettings() {
           )}
         </div>
       </div>
+      <ProjectLeadLevels />
       <div className="setting">
         <div className="setting-text">
           <span className="setting-label">Answers</span>

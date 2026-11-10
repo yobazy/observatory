@@ -163,7 +163,7 @@ function seedLeads() {
       if (l.project)
         saveLead(
           l.project,
-          { agentId: id, model: "sonnet", notes: `~/.config/observatory/leads/${id}.md`, ...(id === "lead0" ? { acts: true } : {}) },
+          { agentId: id, model: "sonnet", notes: `~/.config/observatory/leads/${id}.md`, ...(id === "lead0" ? { level: 3 as const } : {}) },
           draftCard({ files: [], isGitRepo: true }),
         );
   seedLeadWork();
