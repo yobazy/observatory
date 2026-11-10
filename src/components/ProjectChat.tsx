@@ -7,12 +7,15 @@ import { outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
 import { answerLeadAsk, setLeadActs, startedTasks } from "../nebula/leadRunner";
 import { chatItems, chatPreview, leadActivity, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
 import { enqueue } from "../nebula/queue";
+import { useLanded } from "../nebula/prwatch";
+import { answersSaid, answerText, readCard } from "../nebula/replycard";
 import { flash, getState, useAppState } from "../nebula/store";
 import { sessionKey } from "../nebula/usageData";
+import type { Entry } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
 import type { FrameName } from "../vendor/pixel-pets/frames.ts";
 import { PetSprite } from "./Pet";
-import { Md, useTranscript, Where } from "./Reader";
+import { Reply, useTranscript, Where } from "./Reader";
 import { Switch } from "./Settings";
 
 // Chat with a project (S29): the project's lead, as its pet, is the face of
@@ -20,6 +23,8 @@ import { Switch } from "./Settings";
 // terminal: your messages on the right, the lead's replies on the left in
 // its pet's colour, the app's [observatory] lines as small event lines, and
 // under a reply the tasks it started, live, and its asks with Yes and No.
+// A reply is set as the Read view sets one (a card with decisions to tap,
+// Needs you and its verdict, or prose), so the lead is answered the same way.
 
 const STEPS = ["Queued", "Running", "PR", "Merged"] as const;
 
@@ -133,6 +138,52 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     [entries, tasks, acts, lead.acts, lead.projectId, agent.id, state],
   );
 
+  // The latest reply while nothing you said follows it: its decisions take
+  // taps, sent with whatever you type.
+  const latest = useMemo(() => {
+    let n = -1;
+    for (const it of items) n = it.kind === "pet" ? it.n : it.kind === "me" ? -1 : n;
+    return n;
+  }, [items]);
+  const [tapped, setTapped] = useState<{ entry: number; picks: Record<number, string>; sent: boolean }>({ entry: -1, picks: {}, sent: false });
+  const picks = tapped.entry === latest ? tapped.picks : {};
+  const pick = (n: number, letter: string) => setTapped({ entry: latest, picks: { ...picks, [n]: picks[n] === letter ? "" : letter }, sent: false });
+  // What you answered each earlier reply with, read from your next message.
+  const answered = useMemo(() => {
+    const out: Record<number, Record<number, string>> = {};
+    let asked = -1;
+    for (const it of items) {
+      if (it.kind === "pet") asked = readCard(it.text).asks.length ? it.n : -1;
+      else if (it.kind === "me" && asked >= 0) {
+        out[asked] = answersSaid(it.text);
+        asked = -1;
+      }
+    }
+    return out;
+  }, [items]);
+  const latestText = useMemo(() => {
+    const it = items.find((x) => x.kind === "pet" && x.n === latest);
+    return it?.kind === "pet" ? it.text : undefined;
+  }, [items, latest]);
+  const latestVerdict = useMemo(() => (latestText ? readCard(latestText).verdict : null), [latestText]);
+  const landed = useLanded(wt?.path, latestVerdict);
+  const latestThread = useMemo(() => (entries && latest >= 0 ? { n: latest, entries } : undefined), [entries, latest]);
+  const prompted = agent.status === "needs_feedback";
+  const replyOf = (n: number): ReplyBits => {
+    if (n !== latest) return { live: false, sent: true, picks: answered[n] ?? {}, onPick: pick };
+    const gone = tapped.entry === latest && tapped.sent;
+    return { live: !gone && !prompted, sent: gone, picks, onPick: pick, landed, thread: latestThread };
+  };
+  // A PR named as "#75" links to it, in the project's repo.
+  const prUrl = useMemo(() => {
+    if (lead.projectId === null) return null;
+    const pr = Object.values(state.worktrees)
+      .filter((w) => w.project_id === lead.projectId)
+      .map((w) => state.prs[w.id])
+      .find((p) => p?.kind === "found");
+    return pr?.kind === "found" ? pr.pr.url : null;
+  }, [lead.projectId, state.worktrees, state.prs]);
+
   const queued = state.queue[agent.id]?.length ?? 0;
   const activity = leadActivity({ status: agent.status, queued, sending: sent.length });
   const working = activity === "working";
@@ -150,9 +201,12 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const words = input.current?.value.trim() ?? "";
+    const typed = input.current?.value.trim() ?? "";
+    const words = answerText(picks, typed);
     if (!words) return;
     input.current!.value = "";
+    const was = tapped;
+    if (Object.values(picks).some(Boolean)) setTapped({ entry: latest, picks, sent: true });
     pinned.current = true;
     const mine = { text: words, after: lastN };
     setSent((s) => [...s, mine]);
@@ -161,7 +215,8 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
       if (how === "queued") flash(`${lead.title} is busy; it gets your message when its turn ends.`);
     } catch (err) {
       setSent((s) => s.filter((m) => m !== mine));
-      input.current!.value = words;
+      setTapped(was);
+      input.current!.value = typed;
       flash(`Couldn't send it: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
@@ -212,11 +267,11 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
           pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
       >
-        <Where.Provider value={{ from: agent.id, root: wt?.path ?? "", prUrl: null, turnEndedAt: t?.turnEndedAt ?? null }}>
+        <Where.Provider value={{ from: agent.id, root: wt?.path ?? "", prUrl, turnEndedAt: t?.turnEndedAt ?? null, run: false }}>
           {!t && <p className="chat-empty">Reading the lead's thread…</p>}
           {t && !items.length && !sent.length && <p className="chat-empty">Nothing said yet. Say hello, or give it a task.</p>}
           {items.map((it) => (
-            <ChatLine key={it.key} item={it} lead={lead} day={days.get(it.key)} />
+            <ChatLine key={it.key} item={it} lead={lead} day={days.get(it.key)} reply={it.kind === "pet" ? replyOf(it.n) : undefined} />
           ))}
           {sent.map((m, i) => (
             <div key={`sent${i}`} className="chat-say is-me is-sending">
@@ -250,7 +305,13 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
       <form className="chat-compose" onSubmit={(e) => void submit(e)} autoComplete="off">
         <input
           ref={input}
-          placeholder={top ? "Ask about any project, or hand one some work" : `Ask ${lead.name}, or give it a task`}
+          placeholder={
+            Object.values(picks).some(Boolean)
+              ? "Add a note to your answers, or just Send"
+              : top
+                ? "Ask about any project, or hand one some work"
+                : `Ask ${lead.name}, or give it a task`
+          }
           aria-label={`Message ${lead.title}`}
           spellCheck
         />
@@ -262,7 +323,18 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
   );
 }
 
-function ChatLine({ item, lead, day }: { item: ChatItem; lead: LeadEntry; day: string | undefined }) {
+/** What a lead's reply needs to answer its decisions: whether it still takes
+ *  taps, what's picked, and for the latest, its thread and landed PRs. */
+type ReplyBits = {
+  live: boolean;
+  sent: boolean;
+  picks: Record<number, string>;
+  onPick: (n: number, letter: string) => void;
+  landed?: string | null;
+  thread?: { n: number; entries: Entry[] };
+};
+
+function ChatLine({ item, lead, day, reply }: { item: ChatItem; lead: LeadEntry; day: string | undefined; reply?: ReplyBits }) {
   const line = (() => {
     switch (item.kind) {
       case "me":
@@ -277,7 +349,7 @@ function ChatLine({ item, lead, day }: { item: ChatItem; lead: LeadEntry; day: s
             <span className="chat-say-pet" aria-hidden>
               <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={27} />
             </span>
-            <Md className="chat-bubble chat-md" text={item.text} />
+            {reply && <Reply text={item.text} from={lead.agentId} prose="chat-bubble chat-md" {...reply} />}
           </div>
         );
       case "event":
