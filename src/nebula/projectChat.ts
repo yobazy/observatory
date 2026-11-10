@@ -35,6 +35,23 @@ export type ChatItem =
    *  can: answered, asked again later, or overtaken (the PR merged). */
   | { kind: "ask"; key: string; n: number; at: number; ask: AskAction; done: string | null };
 
+/** The reply whose decisions take taps: the latest one since you last said
+ *  something that `asks` says has decisions, or else the latest reply. An
+ *  update landing after it (a task finished, a reply with nothing to
+ *  decide) leaves its decisions live. -1 when you spoke last. */
+export function liveReply(items: readonly ChatItem[], asks: (text: string) => boolean): number {
+  let latest = -1;
+  let asking = -1;
+  for (const it of items) {
+    if (it.kind === "me") latest = asking = -1;
+    else if (it.kind === "pet") {
+      latest = it.n;
+      if (asks(it.text)) asking = it.n;
+    }
+  }
+  return asking >= 0 ? asking : latest;
+}
+
 export interface ChatInput {
   leadId: string;
   /** The lead's started tasks (S28's records, with where each is now). */

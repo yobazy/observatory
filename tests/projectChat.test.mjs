@@ -12,7 +12,7 @@ function stubStorage() {
 }
 globalThis.localStorage = stubStorage();
 
-const { chatItems, chatPreview, eventText, leadActivity, sinceToday, taskStep } = await import('../src/nebula/projectChat.ts');
+const { chatItems, chatPreview, eventText, leadActivity, liveReply, sinceToday, taskStep } = await import('../src/nebula/projectChat.ts');
 const { withoutActions, askKey, outcomesOf } = await import('../src/nebula/leadActions.ts');
 const { callState, petTint, luminance, inkOn, solidTint, contrast, DARK_INK, LIGHT_INK, QUIET } = await import('../src/nebula/leadChat.ts');
 const { withoutLeads, actionRules, LINE_PREFIX } = await import('../src/nebula/lead.ts');
@@ -332,4 +332,18 @@ test("the lead's avatar shows on the first reply of a run only, like a messaging
   ];
   assert.deepEqual([...runStarts(items)], ['p1', 'p4', 'p6', 'p7', 'p9']);
   assert.deepEqual([...runStarts([])], []);
+});
+
+// ---- which reply's decisions take taps ----
+
+test("Given a reply with decisions and then an update without any, then the earlier reply's decisions still take taps", () => {
+  const pet = (n, text) => ({ kind: 'pet', key: `p${n}`, n, text, at: 0 });
+  const me = (text) => ({ kind: 'me', key: text, text, at: 0 });
+  const event = (text) => ({ kind: 'event', key: text, text, at: 0 });
+  const asks = (text) => text.includes('?');
+  assert.equal(liveReply([pet(1, 'Fix it now?'), event('Rebase finished'), pet(3, 'The rebase finished.')], asks), 1);
+  assert.equal(liveReply([pet(1, 'Fix it now?'), pet(2, 'Merge it too?')], asks), 2);
+  assert.equal(liveReply([pet(1, 'Fix it now?'), pet(2, 'Done.')], () => false), 2);
+  assert.equal(liveReply([pet(1, 'Fix it now?'), me('1 A')], asks), -1);
+  assert.equal(liveReply([pet(1, 'Fix it now?'), me('1 A'), pet(3, 'Started.')], asks), 3);
 });
