@@ -262,25 +262,26 @@ export const TOP_LEAD_NAME = "Lead";
  *  every app, so a lead another window started counts too (two windows on
  *  one daemon each forwarded the other's lead turns to their own lead, and
  *  the two leads answered each other in a loop). Any one of these is enough:
- *  - one of its recent prompts opens with a lead prompt's opening. That's
- *    the surest sign, but the daemon keeps only a thread's last 10 prompts,
- *    so it drops off once a lead has heard of 10 events;
- *  - one of them is an [observatory] line, which the app only types into
- *    leads;
  *  - it's named `Lead` or `Lead <its project>` in the project's main
- *    checkout, which a lead renames itself to first thing (answerRules()).
- *    The name alone isn't enough: tasks are called "Lead Chat Avatars".
+ *    checkout. The steadiest sign: a lead renames itself to that before
+ *    anything else (answerRules()), so it holds from the end of its first
+ *    turn on. The name alone isn't enough: tasks are called "Lead Chat
+ *    Avatars", and they run on branches of their own;
+ *  - one of its recent prompts is an [observatory] line, which the app only
+ *    types into leads;
+ *  - one opens with a lead prompt's opening. The daemon keeps only the last
+ *    10 prompts, and a starting prompt isn't always among them, so this is
+ *    a backstop, not the main sign.
  *  Openings, not contents: a task about leads quotes their prompts. */
 export function isLeadThread(
   a: { name: string; recent_prompts?: { text: string }[] | null },
   worktree: { is_main: boolean } | undefined,
   project: { name: string } | undefined,
 ): boolean {
-  const prompts = a.recent_prompts ?? [];
-  if (prompts.some((p) => [LEAD_OPENING, TOP_LEAD_OPENING, LINE_PREFIX].some((o) => p.text.trimStart().startsWith(o)))) return true;
-  if (!worktree?.is_main) return false;
   const name = oneLine(a.name).toLowerCase();
-  return name === TOP_LEAD_NAME.toLowerCase() || (!!project && name === leadName(project.name).toLowerCase());
+  if (worktree?.is_main && (name === TOP_LEAD_NAME.toLowerCase() || (!!project && name === leadName(project.name).toLowerCase()))) return true;
+  const openings = [LINE_PREFIX, LEAD_OPENING, TOP_LEAD_OPENING];
+  return (a.recent_prompts ?? []).some((p) => openings.some((o) => p.text.trimStart().startsWith(o)));
 }
 
 export type LeadState = "none" | "running" | "stopped";
