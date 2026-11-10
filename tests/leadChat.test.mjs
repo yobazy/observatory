@@ -74,29 +74,45 @@ test('the call state is right for an ASK_USER reply, an unread reply, and an ope
   const ask = { n: 7, text: 'Fix login finished.\nASK_USER: should a failed refresh go to /login?', at: 1 };
   const plain = { n: 7, text: 'All quiet.', at: 1 };
   // Asks you: calls with the number of questions, read or not.
-  assert.deepEqual(callState({ reply: ask, unseen: false, seen: 3 }), { calling: true, count: 1, why: 'ask' });
+  assert.deepEqual(callState({ reply: ask, unseen: false, seen: { n: 3, at: 0 } }), { calling: true, count: 1, why: 'ask' });
   assert.deepEqual(
     callState({ reply: { ...ask, text: `${ask.text}\nASK_USER: and keep returnTo?` }, unseen: true, seen: null }),
     { calling: true, count: 2, why: 'ask' },
   );
   // Unread: calls with one.
   assert.deepEqual(callState({ reply: plain, unseen: true, seen: null }), { calling: true, count: 1, why: 'unread' });
-  assert.deepEqual(callState({ reply: plain, unseen: true, seen: 6 }), { calling: true, count: 1, why: 'unread' });
+  assert.deepEqual(callState({ reply: plain, unseen: true, seen: { n: 6, at: 0 } }), { calling: true, count: 1, why: 'unread' });
   // Read and asking nothing: quiet.
   assert.deepEqual(callState({ reply: plain, unseen: false, seen: null }), QUIET);
   // Opened since that reply: quiet, even one that asks or is still unread.
-  assert.deepEqual(callState({ reply: ask, unseen: true, seen: 7 }), QUIET);
-  assert.deepEqual(callState({ reply: plain, unseen: true, seen: 9 }), QUIET);
+  assert.deepEqual(callState({ reply: ask, unseen: true, seen: { n: 7, at: 1 } }), QUIET);
+  assert.deepEqual(callState({ reply: plain, unseen: true, seen: { n: 9, at: 1 } }), QUIET);
   // No reply yet: quiet.
   assert.deepEqual(callState({ reply: null, unseen: true, seen: null }), QUIET);
 });
 
-test('opening a lead\'s chat is remembered, and never goes backwards', () => {
+test("opening a lead's chat is remembered by the reply's time, and never goes backwards", () => {
   assert.equal(seenInChat('lead1'), null);
-  markSeenInChat('lead1', 5);
-  assert.equal(seenInChat('lead1'), 5);
-  markSeenInChat('lead1', 3);
-  assert.equal(seenInChat('lead1'), 5);
+  markSeenInChat('lead1', 5, 500);
+  assert.deepEqual(seenInChat('lead1'), { n: 5, at: 500 });
+  markSeenInChat('lead1', 3, 300);
+  assert.deepEqual(seenInChat('lead1'), { n: 5, at: 500 });
+});
+
+test("Given a lead's session restarted (its entries numbered from 0 again), then a new reply calls even though its number is below the seen one", () => {
+  markSeenInChat('lead2', 40, 1000);
+  const seen = seenInChat('lead2');
+  // The restarted session's first reply: entry 2, said later.
+  const fresh = { n: 2, text: 'Back. Nothing new.', at: 2000 };
+  assert.deepEqual(callState({ reply: fresh, unseen: true, seen }), { calling: true, count: 1, why: 'unread' });
+  // Seen in the chat now: quiet, and the mark moved to the new session's reply.
+  markSeenInChat('lead2', fresh.n, fresh.at);
+  assert.deepEqual(seenInChat('lead2'), { n: 2, at: 2000 });
+  assert.deepEqual(callState({ reply: fresh, unseen: true, seen: seenInChat('lead2') }), QUIET);
+  // A mark saved before S29 (a bare number) still goes by entry number.
+  localStorage.setItem('observatory.leadChat.seen', JSON.stringify({ old: 7 }));
+  assert.deepEqual(seenInChat('old'), { n: 7 });
+  assert.deepEqual(callState({ reply: { n: 7, text: 'x', at: 9 }, unseen: true, seen: seenInChat('old') }), QUIET);
 });
 
 // ---- which leads ----

@@ -2,10 +2,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { useCards } from "../nebula/cards";
 import { dollars, costBySession } from "../nebula/budgetHold";
 import { markLeadSeen, noteReply, openLeadChat, openLeadTerminal, useChatLead, useLeadCalls, useLeadReply } from "../nebula/leadCalls";
-import { lastReply, petTint, QUIET, type LeadEntry } from "../nebula/leadChat";
-import { askKey, isAnswered, outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
+import { inkOn, lastReply, petTint, solidTint, QUIET, type LeadEntry } from "../nebula/leadChat";
+import { outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
 import { answerLeadAsk, setLeadActs, startedTasks } from "../nebula/leadRunner";
-import { chatItems, chatPreview, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
+import { chatItems, chatPreview, leadActivity, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
 import { enqueue } from "../nebula/queue";
 import { flash, getState, useAppState } from "../nebula/store";
 import { sessionKey } from "../nebula/usageData";
@@ -26,7 +26,11 @@ const STEPS = ["Queued", "Running", "PR", "Merged"] as const;
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** The tint a lead's row and chat are drawn in, as the `--t` they read. */
-const tintStyle = (lead: LeadEntry) => ({ "--t": petTint(lead.pet) }) as CSSProperties;
+const tintStyle = (lead: LeadEntry) => {
+  const t = petTint(lead.pet);
+  const solid = solidTint(t);
+  return { "--t": t, "--t-solid": solid, "--t-ink": inkOn(solid) } as CSSProperties;
+};
 
 /** A lead's chat row: at the top of its project's threads, or "All
  *  projects" at the top of the projects list for the top lead. */
@@ -35,13 +39,15 @@ export function ChatRow({ lead }: { lead: LeadEntry }) {
   const mine = useMemo(() => [lead], [lead]);
   const call = useLeadCalls(mine)[lead.agentId] ?? QUIET;
   const on = useChatLead()?.agentId === lead.agentId;
+  // Stuck on a prompt only its terminal can answer.
+  const prompt = useAppState().agents[lead.agentId]?.status === "needs_feedback";
   const top = lead.projectId === null;
   const name = top ? lead.name : `Chat with ${lead.name}`;
-  const why = call.why === "ask" ? `${call.count === 1 ? "A question" : `${call.count} questions`} for you` : call.why === "unread" ? "An unread reply" : null;
+  const why = prompt ? "Waiting on a prompt in its terminal" : call.why === "ask" ? `${call.count === 1 ? "A question" : `${call.count} questions`} for you` : call.why === "unread" ? "An unread reply" : null;
   return (
     <button
       type="button"
-      className={`chat-row${top ? " is-top" : ""}${call.calling ? " is-calling" : ""}${on ? " is-on" : ""}`}
+      className={`chat-row${top ? " is-top" : ""}${call.calling || prompt ? " is-calling" : ""}${on ? " is-on" : ""}`}
       style={tintStyle(lead)}
       onClick={() => openLeadChat(lead.agentId)}
       aria-current={on ? "page" : undefined}
@@ -54,10 +60,16 @@ export function ChatRow({ lead }: { lead: LeadEntry }) {
         <span className="chat-row-name">{name}</span>
         <span className="chat-row-sub">{chatPreview(reply?.text) || (top ? "Ask about any project" : `Ask ${lead.name}, or give it a task`)}</span>
       </span>
-      {call.calling && (
-        <span className="chat-badge" aria-label={why ?? undefined}>
-          {call.count}
+      {prompt ? (
+        <span className="chat-badge is-prompt" aria-label={why ?? undefined}>
+          !
         </span>
+      ) : (
+        call.calling && (
+          <span className="chat-badge" aria-label={why ?? undefined}>
+            {call.count}
+          </span>
+        )
       )}
     </button>
   );
@@ -86,9 +98,9 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     if (t) noteReply(agent.id, reply);
   }, [t, reply, agent.id]);
   useEffect(() => {
-    if (reply) markLeadSeen(getState().agents[agent.id] ?? agent, reply.n);
+    if (reply) markLeadSeen(getState().agents[agent.id] ?? agent, reply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reply?.n, agent.id]);
+  }, [reply?.n, reply?.at, agent.id]);
 
   // What you sent, shown at once, until the log has it.
   const [sent, setSent] = useState<{ text: string; after: number }[]>([]);
@@ -116,12 +128,14 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
         outcomes: lead.acts ? outcomesOf(agent.id, acts) : [],
         answered: (key) => acts.answered.includes(key),
         name: (id) => state.agents[id]?.name,
+        settled: (a) => settledWhy(a, lead.projectId, state),
       }),
-    [entries, tasks, acts, lead.acts, agent.id, state.agents],
+    [entries, tasks, acts, lead.acts, lead.projectId, agent.id, state],
   );
 
   const queued = state.queue[agent.id]?.length ?? 0;
-  const working = agent.status === "running" || queued > 0 || sent.length > 0;
+  const activity = leadActivity({ status: agent.status, queued, sending: sent.length });
+  const working = activity === "working";
 
   // Kept at the bottom as things land, unless you've scrolled up to read.
   const log = useRef<HTMLDivElement>(null);
@@ -209,6 +223,14 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
               <div className="chat-bubble">{m.text}</div>
             </div>
           ))}
+          {activity === "prompt" && (
+            <div className="chat-prompt" role="status">
+              <span>{lead.title} is waiting on a prompt in its terminal.</span>
+              <button type="button" className="btn chat-yes" onClick={() => openLeadTerminal(agent.id)}>
+                Open terminal
+              </button>
+            </div>
+          )}
           {working && (
             <div className="chat-say">
               <span className="chat-say-pet" aria-hidden>
@@ -263,7 +285,7 @@ function ChatLine({ item, lead, day }: { item: ChatItem; lead: LeadEntry; day: s
       case "task":
         return <TaskCard task={item.task} />;
       case "ask":
-        return <AskRow lead={lead} n={item.n} ask={item.ask} answered={item.answered} />;
+        return <AskRow lead={lead} n={item.n} ask={item.ask} done={item.done} />;
     }
   })();
   return (
@@ -299,12 +321,11 @@ function TaskCard({ task }: { task: ChatTask }) {
 
 /** An ASK line (S28) as a row: Yes merges or archives, No dismisses it,
  *  and the lead hears which. */
-function AskRow({ lead, n, ask, answered }: { lead: LeadEntry; n: number; ask: AskAction; answered: boolean }) {
+function AskRow({ lead, n, ask, done }: { lead: LeadEntry; n: number; ask: AskAction; done: string | null }) {
   const { agents } = useAppState();
   const [busy, setBusy] = useState(false);
   const thread = ask.what === "archive" ? (agents[ask.agentId]?.name ?? ask.agentId) : "";
   const what = ask.what === "merge" ? `Merge #${ask.pr}?` : `Archive ${thread}?`;
-  const done = answered || isAnswered(askKey(lead.agentId, n, ask));
   const answer = (yes: boolean) => {
     setBusy(true);
     answerLeadAsk(lead.agentId, n, ask, yes)
@@ -316,7 +337,7 @@ function AskRow({ lead, n, ask, answered }: { lead: LeadEntry; n: number; ask: A
     <div className={`chat-ask${done ? " is-answered" : ""}`}>
       <div className="chat-ask-q">
         {what}
-        <small>{done ? "Answered" : ask.why}</small>
+        <small>{done ?? ask.why}</small>
       </div>
       {!done && (
         <>
@@ -330,6 +351,20 @@ function AskRow({ lead, n, ask, answered }: { lead: LeadEntry; n: number; ask: A
       )}
     </div>
   );
+}
+
+/** Why an ask can't be answered any more, from what's happened since: its
+ *  PR merged or closed, or its thread archived or gone. */
+function settledWhy(a: AskAction, projectId: string | null, s: ReturnType<typeof getState>): string | null {
+  if (a.what === "archive") {
+    const t = s.agents[a.agentId];
+    return !t ? "That thread is gone" : t.archived ? "Archived" : null;
+  }
+  for (const w of Object.values(s.worktrees)) {
+    const p = w.project_id === projectId ? s.prs[w.id] : undefined;
+    if (p?.kind === "found" && p.pr.number === a.pr && (p.pr.state === "merged" || p.pr.state === "closed")) return `#${a.pr} is ${p.pr.state}`;
+  }
+  return null;
 }
 
 /** A "Today" / "Yesterday" / date line before the first item of each day. */

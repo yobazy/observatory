@@ -6,8 +6,8 @@
 // the card's four steps, the chat row's one-line preview, and today's cost.
 // ProjectChat.tsx draws it. Kept free of the app so its tests run under
 // plain Node; value imports name their .ts files for that.
-import { LINE_PREFIX } from "./lead.ts";
-import { askKey, withoutActions, type AskAction, type Outcome, type StartedState } from "./leadActions.ts";
+import { LINE_PREFIX, RULES_END } from "./lead.ts";
+import { actionName, askKey, withoutActions, type AskAction, type Outcome, type StartedState } from "./leadActions.ts";
 import { plainLine } from "./leadChat.ts";
 import type { Entry } from "./transcript";
 import type { UsageReport } from "./usageData";
@@ -30,7 +30,9 @@ export type ChatItem =
   | { kind: "event"; key: string; text: string; at: number }
   | { kind: "pet"; key: string; n: number; text: string; at: number }
   | { kind: "task"; key: string; task: ChatTask }
-  | { kind: "ask"; key: string; n: number; ask: AskAction; answered: boolean };
+  /** `done` says why an ask can't be answered any more, or null while it
+   *  can: answered, asked again later, or overtaken (the PR merged). */
+  | { kind: "ask"; key: string; n: number; ask: AskAction; done: string | null };
 
 export interface ChatInput {
   leadId: string;
@@ -42,6 +44,9 @@ export interface ChatInput {
   answered?: (key: string) => boolean;
   /** A thread's title, for "Nudged Fix login". */
   name?: (agentId: string) => string | undefined;
+  /** Why an ask is overtaken by what's happened since ("#12 is merged",
+   *  "That thread is archived"), or null while it still stands. */
+  settled?: (ask: AskAction) => string | null;
 }
 
 type ChatEntry = Pick<Entry, "n" | "kind" | "text" | "at">;
@@ -135,7 +140,7 @@ export function taskStep(t: Pick<ChatTask, "label" | "checks">): { step: 0 | 1 |
  *  "Started"/"Queued" lines for a task with a card are left out: the card
  *  says so. */
 export function chatItems(entries: readonly ChatEntry[], input: ChatInput): ChatItem[] {
-  const { leadId, tasks = [], outcomes = [], answered = () => false, name } = input;
+  const { leadId, tasks = [], outcomes = [], answered = () => false, name, settled = () => null } = input;
   const sorted = [...entries].sort((a, b) => a.n - b.n);
   const carded = new Set(tasks.map((t) => t.branch));
   // Which reply each task goes under: its own, else the last before it.
@@ -148,6 +153,21 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
     else under.set(n, [...(under.get(n) ?? []), t]);
   }
   const asksOf = new Map(outcomes.map((o) => [o.n, o.asks]));
+  // An ask is one question however often it's asked: answered once, every
+  // row asking it is; asked again, only the latest row stands.
+  const answeredNames = new Set<string>();
+  const lastAsked = new Map<string, number>();
+  for (const o of outcomes)
+    for (const a of o.asks) {
+      if (answered(askKey(leadId, o.n, a))) answeredNames.add(actionName(a));
+      lastAsked.set(actionName(a), Math.max(lastAsked.get(actionName(a)) ?? -1, o.n));
+    }
+  const doneWhy = (n: number, a: AskAction): string | null => {
+    if (answeredNames.has(actionName(a))) return "Answered";
+    const over = settled(a);
+    if (over) return over;
+    return (lastAsked.get(actionName(a)) ?? n) > n ? "Asked again below" : null;
+  };
 
   const out: ChatItem[] = [];
   for (const e of sorted) {
@@ -157,7 +177,18 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
       const text = e.text.trim();
       if (!text) continue;
       if (text.startsWith(LINE_PREFIX)) {
+        // The rules sent when actions are turned on are hidden, like the
+        // starting prompt: their example lines aren't events.
+        let rules = false;
         text.split("\n").forEach((line, i) => {
+          if (rules) {
+            if (line.trim().endsWith(RULES_END)) rules = false;
+            return;
+          }
+          if (line.startsWith(`${LINE_PREFIX}actions are on.`)) {
+            rules = !line.trim().endsWith(RULES_END);
+            return;
+          }
           if (!line.startsWith(LINE_PREFIX)) return;
           const said = eventText(line, name);
           const started = /^(?:Started|Queued) (\S+?):?(?: |$)/.exec(said);
@@ -171,11 +202,16 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
       for (const t of under.get(e.n) ?? []) out.push({ kind: "task", key: `t${t.taskId}`, task: t });
       for (const a of asksOf.get(e.n) ?? []) {
         const key = askKey(leadId, e.n, a);
-        out.push({ kind: "ask", key: `a${key}`, n: e.n, ask: a, answered: answered(key) });
+        out.push({ kind: "ask", key: `a${key}`, n: e.n, ask: a, done: doneWhy(e.n, a) });
       }
     } else if (e.kind === "stopped") out.push({ kind: "event", key: `s${e.n}`, text: "Stopped", at: e.at });
   }
-  for (const t of loose) out.push({ kind: "task", key: `t${t.taskId}`, task: t });
+  // A task with no reply before it (the lead's session was restarted
+  // since) goes where its time puts it.
+  for (const t of loose) {
+    const at = out.findIndex((it) => "at" in it && it.at * 1000 > t.at);
+    out.splice(at < 0 ? out.length : at, 0, { kind: "task", key: `t${t.taskId}`, task: t });
+  }
   return out;
 }
 
@@ -196,4 +232,13 @@ export function sinceToday(report: UsageReport | null, now = new Date()): UsageR
   if (!report) return null;
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
   return { ...report, buckets: report.buckets.filter((b) => b.hour >= start) };
+}
+
+/** What the lead is doing, for the foot of its chat: waiting on a prompt
+ *  in its terminal (a permission, a choice), which only the terminal can
+ *  answer; working on a turn (or with your message on its way); or at rest. */
+export function leadActivity(o: { status: string; queued: number; sending: number }): "prompt" | "working" | "idle" {
+  if (o.status === "needs_feedback") return "prompt";
+  if (o.status === "running" || o.queued > 0 || o.sending > 0) return "working";
+  return "idle";
 }

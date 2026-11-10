@@ -12,10 +12,10 @@ function stubStorage() {
 }
 globalThis.localStorage = stubStorage();
 
-const { chatItems, chatPreview, eventText, sinceToday, taskStep } = await import('../src/nebula/projectChat.ts');
+const { chatItems, chatPreview, eventText, leadActivity, sinceToday, taskStep } = await import('../src/nebula/projectChat.ts');
 const { withoutActions, askKey, outcomesOf } = await import('../src/nebula/leadActions.ts');
-const { callState, petTint, luminance } = await import('../src/nebula/leadChat.ts');
-const { withoutLeads } = await import('../src/nebula/lead.ts');
+const { callState, petTint, luminance, inkOn, solidTint, contrast, DARK_INK, LIGHT_INK, QUIET } = await import('../src/nebula/leadChat.ts');
+const { withoutLeads, actionRules, LINE_PREFIX } = await import('../src/nebula/lead.ts');
 const { COATS } = await import('../src/vendor/pixel-pets/frames.ts');
 const { draftCard, reloadCards } = await import('../src/nebula/cards.ts');
 const store = await import('../src/nebula/store.ts');
@@ -94,10 +94,59 @@ test('Given started tasks and asks, then each shows under the reply that caused 
   assert.deepEqual(items.filter((i) => i.kind === 'task').map((i) => i.task.taskId), ['t1', 't2', 't3']);
   // The card says fix-a started and fix-b queued; a branch with no card keeps its line.
   assert.deepEqual(items.filter((i) => i.kind === 'event').map((i) => i.text), ['Started other']);
-  assert.equal(items[7].answered, false);
+  assert.equal(items[7].done, null);
   assert.equal(items[7].n, 4);
   answered.add(askKey('lead', 4, ask));
-  assert.equal(build()[7].answered, true);
+  assert.equal(build()[7].done, 'Answered');
+});
+
+test('Given an ask for the same PR in two replies, then only the latest stands; once either is answered, or the PR merged, neither does', () => {
+  const t = entries(
+    ['you', 'start prompt', 100],
+    ['claude', 'Green.\nASK merge #12: you asked for it', 200],
+    ['claude', 'Still green.\nASK merge #12: still waiting\nASK archive a1: it said safe to close', 300],
+  );
+  const merge = (why) => ({ kind: 'ask', what: 'merge', pr: 12, why });
+  const archive = { kind: 'ask', what: 'archive', agentId: 'a1', why: 'it said safe to close' };
+  const outcomes = [
+    { n: 1, lines: [], asks: [merge('you asked for it')] },
+    { n: 2, lines: [], asks: [merge('still waiting'), archive] },
+  ];
+  const done = (opts = {}) => chatItems(t, { leadId: 'lead', outcomes, ...opts }).filter((i) => i.kind === 'ask').map((i) => i.done);
+  assert.deepEqual(done(), ['Asked again below', null, null]);
+  // Answering the older row answers the question: the newer row too.
+  const answered = new Set([askKey('lead', 1, merge('you asked for it'))]);
+  assert.deepEqual(done({ answered: (k) => answered.has(k) }), ['Answered', 'Answered', null]);
+  // The PR merged or the thread archived since: overtaken.
+  const settled = (a) => (a.what === 'merge' ? '#12 is merged' : 'Archived');
+  assert.deepEqual(done({ settled }), ['#12 is merged', '#12 is merged', 'Archived']);
+});
+
+test("Given the rules sent when a lead's actions are turned on, then the chat hides them, and events around them still show", () => {
+  const rules = `${LINE_PREFIX}actions are on. ${actionRules(2)}`;
+  assert.ok(rules.includes(`${LINE_PREFIX}from the top lead: <brief>`), 'the rules have an example line that looks like an event');
+  const t = entries(
+    ['you', 'start prompt'],
+    ['you', rules],
+    ['you', `${LINE_PREFIX}finished: Fix login on fix-login (agent a1): done\n${rules}\n${LINE_PREFIX}CI passed #4: Fix login on fix-login (agent a1): every check passed`],
+  );
+  const items = chatItems(t, { leadId: 'lead' });
+  assert.deepEqual(items.map((i) => i.text), ['Fix login finished', 'CI passed on #4']);
+  assert.ok(!items.some((i) => i.kind === 'me'));
+});
+
+test('Given a lead waiting on a prompt, then the chat shows it waiting on its terminal rather than working', () => {
+  assert.equal(leadActivity({ status: 'needs_feedback', queued: 1, sending: 1 }), 'prompt');
+  assert.equal(leadActivity({ status: 'running', queued: 0, sending: 0 }), 'working');
+  assert.equal(leadActivity({ status: 'finished', queued: 1, sending: 0 }), 'working');
+  assert.equal(leadActivity({ status: 'finished', queued: 0, sending: 1 }), 'working');
+  assert.equal(leadActivity({ status: 'finished', queued: 0, sending: 0 }), 'idle');
+});
+
+test('Given a task with no reply before it (the session restarted), then it goes where its time puts it, not last', () => {
+  const t = entries(['you', 'start prompt', 100], ['you', 'hello', 200], ['claude', 'hi', 400]);
+  const items = chatItems(t, { leadId: 'lead', tasks: [{ taskId: 'old', branch: 'x', at: 300_000, label: 'merged' }] });
+  assert.deepEqual(kinds(items), ['me', 'task', 'pet']);
 });
 
 test('Given a task in each state, then its card has the right step of Queued, Running, PR and Merged', () => {
@@ -133,10 +182,19 @@ test("Given every outcome a lead's replies had, then outcomesOf() lists them in 
 });
 
 test("Given an ASK line in a lead's latest reply, then its chat row calls with it counted, until the chat is opened", () => {
-  const reply = { n: 9, text: 'Every check passed.\nASK merge #41: green, you asked for it', at: 1 };
-  assert.deepEqual(callState({ reply, unseen: false, seen: 4, actions: true }), { calling: true, count: 1, why: 'ask' });
+  const reply = { n: 9, text: 'Every check passed.\nASK merge #41: green, you asked for it', at: 50 };
+  assert.deepEqual(callState({ reply, unseen: false, seen: { n: 4, at: 10 }, actions: true }), { calling: true, count: 1, why: 'ask' });
   // Opening the chat marks reply 9 seen.
-  assert.equal(callState({ reply, unseen: false, seen: 9, actions: true }).calling, false);
+  assert.equal(callState({ reply, unseen: false, seen: { n: 9, at: 50 }, actions: true }).calling, false);
+});
+
+test('Given an ASK line the app refused or one already answered, then it does not count toward the badge', () => {
+  const reply = { n: 9, text: 'Done.\nASK merge #99: green', at: 50 };
+  // The app took no ask from this reply (no open PR #99): nothing to answer.
+  assert.deepEqual(callState({ reply, unseen: false, seen: null, actions: true, asks: 0 }), QUIET);
+  assert.deepEqual(callState({ reply, unseen: true, seen: null, actions: true, asks: 0 }), { calling: true, count: 1, why: 'unread' });
+  // An ASK_USER line still counts alongside the open asks.
+  assert.deepEqual(callState({ reply: { ...reply, text: `${reply.text}\nASK_USER: which one?` }, unseen: false, seen: null, actions: true, asks: 1 }), { calling: true, count: 2, why: 'ask' });
 });
 
 // ---- the pet's colour ----
@@ -154,6 +212,24 @@ test("Given a pet, then its tint is its coat's base colour from pixel-pets, and 
     }
   const black = petTint({ kind: 'cat', coat: 'black' });
   assert.ok(luminance(black) >= 0.08 || black === COATS.cat.find((c) => c.id === 'black').O);
+});
+
+test("Given a tint, then the words on it are dark on a pale coat and white on a dark one, whichever reads better", () => {
+  assert.equal(inkOn('#d6d6d6'), DARK_INK);
+  assert.equal(inkOn('#F7F7F2'), DARK_INK);
+  assert.equal(inkOn('#E0B36A'), DARK_INK);
+  assert.equal(inkOn('#1F1F26'), LIGHT_INK);
+  assert.equal(inkOn('#525E6B'), LIGHT_INK);
+  // A mid tone neither ink reads well on is lightened for the button.
+  assert.ok(contrast('#6E7C8C', inkOn('#6E7C8C')) < 4.5);
+  assert.notEqual(solidTint('#6E7C8C'), '#6E7C8C');
+  assert.equal(solidTint('#E0B36A'), '#E0B36A');
+  // Every pet's Yes, Send and badge read at 4.5:1 or better.
+  for (const [kind, coats] of Object.entries(COATS))
+    for (const c of coats) {
+      const solid = solidTint(petTint({ kind, coat: c.id }));
+      assert.ok(contrast(solid, inkOn(solid)) >= 4.5, `${kind}/${c.id}: ${solid} on ${inkOn(solid)}`);
+    }
 });
 
 // ---- the lead's thread, hidden ----

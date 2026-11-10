@@ -8,8 +8,8 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { allCards, useCards } from "./cards";
 import { isPreview, send } from "./client";
-import { callState, laterSeen, lastReply, leadsOf, markSeenInChat, seenInChat, type Call, type LeadEntry, type LeadReply } from "./leadChat";
-import { readTo } from "./readmark";
+import { callState, lastReply, leadsOf, markSeenInChat, seenInChat, type Call, type LeadEntry, type LeadReply } from "./leadChat";
+import { askKey, isAnswered, leadActs, useLeadActs } from "./leadActions";
 import { getState, setState, subscribe, useAppState, type State } from "./store";
 import type { Transcript } from "./transcript";
 import type { Agent } from "./types";
@@ -87,10 +87,10 @@ export function useIsLead(agentId: string | undefined): boolean {
   return useLeads().some((l) => l.agentId === agentId);
 }
 
-/** You've seen `agentId`'s reply `n`: its call stops, and nebula hears it's
+/** You've seen `agentId`'s reply: its call stops, and nebula hears it's
  *  read, as it does when you look at the thread. */
-export function markLeadSeen(agent: Agent, n: number | null) {
-  if (n !== null) markSeenInChat(agent.id, n);
+export function markLeadSeen(agent: Agent, reply: LeadReply | null) {
+  if (reply) markSeenInChat(agent.id, reply.n, reply.at);
   if (agent.unseen) void send("MarkAgentSeen", { id: agent.id }).catch(() => {});
   notify();
 }
@@ -108,13 +108,17 @@ const leadsIn = (s: Pick<State, "agents" | "projects" | "prefs">, cards = allCar
 
 function callsFor(leads: LeadEntry[], agents: State["agents"]): Record<string, Call> {
   const out: Record<string, Call> = {};
-  for (const l of leads)
-    out[l.agentId] = callState({
-      reply: replies[l.agentId] ?? null,
-      unseen: !!agents[l.agentId]?.unseen,
-      seen: laterSeen(seenInChat(l.agentId), readTo(l.agentId)),
-      actions: l.acts,
-    });
+  const acts = leadActs();
+  for (const l of leads) {
+    const reply = replies[l.agentId] ?? null;
+    // The reply's ASK lines the app took and you haven't answered: one it
+    // refused (no such PR, another project's thread) doesn't call you.
+    const outcome = acts.outcomes[l.agentId];
+    const asks = l.acts && reply && outcome?.n === reply.n ? outcome.asks.filter((a) => !isAnswered(askKey(l.agentId, reply.n, a))).length : undefined;
+    // Seen in its chat only: a lead's Read view mark counts entries, which a
+    // restarted session numbers from 0 again.
+    out[l.agentId] = callState({ reply, unseen: !!agents[l.agentId]?.unseen, seen: seenInChat(l.agentId), actions: l.acts, asks });
+  }
   return out;
 }
 
@@ -129,8 +133,10 @@ export function useLeads(): LeadEntry[] {
 export function useLeadCalls(leads: LeadEntry[]): Record<string, Call> {
   const v = useSyncExternalStore(watch, () => version);
   const { agents } = useAppState();
+  // An ask answered stops counting.
+  const acts = useLeadActs();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => callsFor(leads, agents), [leads, agents, v]);
+  return useMemo(() => callsFor(leads, agents), [leads, agents, v, acts]);
 }
 
 /** Mount once: reads a lead's latest reply when its thread's status moves,

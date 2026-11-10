@@ -87,6 +87,38 @@ export function petTint(p: LeadPet): string {
   }) ?? c.O;
 }
 
+/** The ink for words on a tint (a button, a badge): the app's dark ink or
+ *  white, whichever has the higher contrast against it (WCAG's ratio), so a
+ *  pale coat's button gets dark words. */
+export const DARK_INK = "#121726";
+export const LIGHT_INK = "#ffffff";
+export function inkOn(tint: string): string {
+  const l = luminance(tint);
+  const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  return ratio(l, luminance(DARK_INK)) >= ratio(l, 1) ? DARK_INK : LIGHT_INK;
+}
+
+/** WCAG's contrast ratio between two colours. */
+export function contrast(a: string, b: string): number {
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/** A tint to fill a button or badge with: the tint itself when its ink
+ *  reads at 4.5:1 or better, else the tint lightened toward white until
+ *  dark ink does (a mid grey-blue coat, say). */
+export function solidTint(tint: string): string {
+  if (contrast(tint, inkOn(tint)) >= 4.5) return tint;
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(tint.trim());
+  if (!m) return tint;
+  const rgb = m.slice(1).map((h) => parseInt(h, 16));
+  for (let k = 0.05; k <= 1; k += 0.05) {
+    const hex = `#${rgb.map((c) => Math.round(c + (255 - c) * k).toString(16).padStart(2, "0")).join("")}`;
+    if (contrast(hex, DARK_INK) >= 4.5) return hex;
+  }
+  return "#ffffff";
+}
+
 export const petKey = (p: LeadPet) => `${p.kind}:${p.coat}`;
 
 export function petFromKey(key: string): LeadPet | null {
@@ -149,14 +181,32 @@ export interface Call {
 
 export const QUIET: Call = { calling: false, count: 0, why: null };
 
+/** The last reply of a lead you saw in its chat: its entry and when it was
+ *  said. A restarted session numbers its entries from 0 again, so a reply
+ *  is seen by its time when that's known, not by its number alone. */
+export interface Seen {
+  n: number;
+  /** Unix seconds; missing on a mark saved before S29. */
+  at?: number;
+}
+
+/** Whether `seen` covers `reply`: said no later than the reply you saw.
+ *  An old mark without a time goes by entry number. */
+export function seenCovers(seen: Seen | null, reply: LeadReply): boolean {
+  if (!seen) return false;
+  return seen.at !== undefined ? reply.at <= seen.at : reply.n <= seen.n;
+}
+
 /** Whether a lead has something for you: its latest reply asks you
- *  (`ASK_USER:`), or it's unread, since you last opened it here or in the
- *  Read view (`seen`, the last entry you saw). */
-export function callState(o: { reply: LeadReply | null; unseen: boolean; seen: number | null; actions?: boolean }): Call {
+ *  (`ASK_USER:`, or an ASK line), or it's unread, since you last opened its
+ *  chat (`seen`). `asks`, when given, is how many of the reply's ASK lines
+ *  are still open (the app took them, and they aren't answered), in place
+ *  of counting the lines in its text. */
+export function callState(o: { reply: LeadReply | null; unseen: boolean; seen: Seen | null; actions?: boolean; asks?: number }): Call {
   const { reply } = o;
   if (!reply) return QUIET;
-  if (o.seen !== null && reply.n <= o.seen) return QUIET;
-  const asks = askCount(reply.text, o.actions);
+  if (seenCovers(o.seen, reply)) return QUIET;
+  const asks = o.asks !== undefined ? askCount(reply.text) + o.asks : askCount(reply.text, o.actions);
   if (asks > 0) return { calling: true, count: asks, why: "ask" };
   if (o.unseen) return { calling: true, count: 1, why: "unread" };
   return QUIET;
@@ -215,7 +265,7 @@ export function leadsOf(
 
 const SEEN_KEY = "observatory.leadChat.seen";
 
-function loadSeen(): Record<string, number> {
+function loadSeen(): Record<string, unknown> {
   try {
     const raw = JSON.parse(localStorage.getItem(SEEN_KEY) ?? "{}");
     return raw && typeof raw === "object" ? raw : {};
@@ -224,22 +274,27 @@ function loadSeen(): Record<string, number> {
   }
 }
 
-/** The last entry of `agentId`'s thread you saw in the dialogue, or null. */
-export function seenInChat(agentId: string): number | null {
-  const n = loadSeen()[agentId];
-  return typeof n === "number" ? n : null;
+/** The last reply of `agentId`'s thread you saw in its chat, or null. A
+ *  mark saved before S29 is a bare entry number. */
+export function seenInChat(agentId: string): Seen | null {
+  const v = loadSeen()[agentId];
+  if (typeof v === "number") return { n: v };
+  if (v && typeof v === "object" && typeof (v as Seen).n === "number")
+    return typeof (v as Seen).at === "number" ? { n: (v as Seen).n, at: (v as Seen).at } : { n: (v as Seen).n };
+  return null;
 }
 
-export function markSeenInChat(agentId: string, n: number) {
+/** You saw reply `n`, said at `at`: kept unless a later reply was seen, so
+ *  it never goes backwards, and a restarted session's new replies (its
+ *  numbers from 0 again, its times later) still call. */
+export function markSeenInChat(agentId: string, n: number, at: number) {
   try {
     const all = loadSeen();
-    if ((all[agentId] ?? -1) >= n) return;
-    all[agentId] = n;
+    const was = seenInChat(agentId);
+    if (was?.at !== undefined && was.at >= at) return;
+    all[agentId] = { n, at };
     localStorage.setItem(SEEN_KEY, JSON.stringify(all));
   } catch {
     // Without storage a lead calls again next launch.
   }
 }
-
-/** The later of two "last seen" entries, either of which may be unknown. */
-export const laterSeen = (a: number | null, b: number | null): number | null => (a === null ? b : b === null ? a : Math.max(a, b));
