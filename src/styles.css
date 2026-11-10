@@ -9750,6 +9750,19 @@ button.board-main:hover .board-text {
   max-width: 100%;
   overflow-x: auto;
 }
+/* A reply written as a card is the Read view's card, in the pet's tint,
+   with room for its decisions. */
+.chat-say:has(> .rd-card) {
+  max-width: min(92%, 760px);
+}
+.chat-say > .rd-card {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 18px 14px;
+  border-color: color-mix(in oklab, var(--t) 28%, transparent);
+  border-radius: 18px 18px 18px 4px;
+  background: color-mix(in oklab, var(--t) 8%, var(--panel));
+}
 .chat-say.is-me {
   align-self: flex-end;
   max-width: 70%;

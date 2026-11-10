@@ -113,7 +113,15 @@ export const toHtml = (md: string, inline = false) =>
 
 /** What a reply's paths and "#75"s are read against: the thread they're
  *  from, its checkout, and any PR of its project, for the repo's address. */
-export const Where = createContext<{ from: string; root: string; prUrl: string | null; turnEndedAt: number | null }>({
+export const Where = createContext<{
+  from: string;
+  root: string;
+  prUrl: string | null;
+  turnEndedAt: number | null;
+  /** Whether command blocks get a Run, as "! cmd"; the project chat's lead
+   *  runs nothing typed at its prompt. */
+  run?: boolean;
+}>({
   from: "",
   root: "",
   prUrl: null,
@@ -181,7 +189,7 @@ export function Md({ text, className = "" }: { text: string; className?: string 
     if (el.current) highlightUnder(el.current);
     const added: HTMLElement[] = [];
     const watching: (() => void)[] = [];
-    const runs = getState().agents[where.from]?.kind === "claude";
+    const runs = where.run !== false && getState().agents[where.from]?.kind === "claude";
     for (const pre of el.current?.querySelectorAll("pre") ?? []) {
       const code = pre.querySelector("code") ?? pre;
       const body = code.textContent?.replace(/\n$/, "") ?? "";
@@ -226,7 +234,7 @@ export function Md({ text, className = "" }: { text: string; className?: string 
       added.forEach((b) => b.remove());
       el.current?.querySelectorAll("pre.is-command").forEach((p) => p.classList.remove("is-command"));
     };
-  }, [html, where.from]);
+  }, [html, where.from, where.run]);
   // A table scrolls sideways when it's wide, and its columns drag to resize.
   useEffect(() => (el.current ? fitTables(el.current) : undefined), [html]);
   // A code span that names a file on disk opens it; "#75" goes to that PR.
@@ -565,7 +573,9 @@ function More({ card, from, pair }: { card: Card; from: string; pair: [string, s
   );
 }
 
-function Reply(props: {
+/** A reply as the Read view sets it: a card when it's written as one, else
+ *  prose. The project chat draws its lead's replies with it too. */
+export function Reply(props: {
   ship?: Ship | null;
   text: string;
   from: string;
@@ -578,14 +588,16 @@ function Reply(props: {
   /** The thread up to it, for what earlier replies said about the
    *  decisions it asks again. */
   thread?: { n: number; entries: Entry[] };
+  /** Classes for a prose reply's text, which isn't a card. */
+  prose?: string;
 }) {
-  const { thread, ...rest } = props;
+  const { thread, prose, ...rest } = props;
   const card = useMemo(
     () => (thread ? withBefore(readCard(props.text), thread.entries, thread.n) : readCard(props.text)),
     [props.text, thread],
   );
   const pair = useMemo(() => beforeAfter(card.images, props.text), [card.images, props.text]);
-  return isCard(card) ? <CardReply card={card} pair={pair} {...rest} /> : <Md text={props.text} />;
+  return isCard(card) ? <CardReply card={card} pair={pair} {...rest} /> : <Md className={prose} text={props.text} />;
 }
 
 /** What a step changed, or how it failed: a failure shows at once, a
