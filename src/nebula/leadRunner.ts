@@ -392,14 +392,14 @@ function projectLead(leadId: string): { projectId: string; lead: CardLead } | nu
 }
 
 /** The lead's started tasks with where each is now. */
-export function startedTasks(projectId: string, s: Pick<State, "agents" | "worktrees" | "prs"> = getState()) {
+export function startedTasks(projectId: string, s: Pick<State, "agents" | "worktrees" | "prs" | "loaded"> = getState()) {
   const batches = allBatches();
   return tasksOf(projectId).map((rec) => {
     const task = batches.find((b) => b.id === rec.batchId)?.tasks.find((t) => t.id === rec.taskId);
     const agentId = rec.agentId ?? task?.agentId;
     const agent = agentId ? s.agents[agentId] : undefined;
     const p = agent ? s.prs[agent.worktree_id] : undefined;
-    return { rec, agent, ...startedState(task, agent, p?.kind === "found" ? p.pr : null) };
+    return { rec, agent, ...startedState(task, agent, p?.kind === "found" ? p.pr : null, { loaded: s.loaded }) };
   });
 }
 

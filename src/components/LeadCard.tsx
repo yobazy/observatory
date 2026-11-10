@@ -26,6 +26,7 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
   const [model, setModel] = useState(lead?.model || DEFAULT_LEAD_MODEL);
   const [notes, setNotes] = useState(lead?.notes || defaultNotes(projectName));
   const [busy, setBusy] = useState(false);
+  const [maxDraft, setMaxDraft] = useState<string | null>(null);
   const agent = lead ? agents[lead.agentId] : undefined;
   useLeadActs();
   const started = lead ? startedTasks(projectId, app) : [];
@@ -117,8 +118,18 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
                 min={1}
                 max={9}
                 className="lead-max"
-                value={lead.maxTasks ?? DEFAULT_MAX_TASKS}
-                onChange={(e) => setLeadMaxTasks(projectId, lead, Number(e.target.value))}
+                value={maxDraft ?? String(lead.maxTasks ?? DEFAULT_MAX_TASKS)}
+                // Empty while you type; a whole 1 to 9 is saved on Enter or
+                // leaving the field, anything else goes back to what was saved.
+                onChange={(e) => setMaxDraft(e.target.value)}
+                onBlur={() => {
+                  const n = Number(maxDraft);
+                  if (maxDraft !== null && Number.isInteger(n) && n >= 1 && n <= 9) setLeadMaxTasks(projectId, lead, n);
+                  setMaxDraft(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
                 aria-label="Tasks the lead may run at once"
               />
               at once
