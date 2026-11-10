@@ -24,6 +24,7 @@ import {
   eventLine,
   eventNeed,
   carryUnknown,
+  isLeadThread,
   leadEvents,
   prOf,
   leadName,
@@ -87,14 +88,15 @@ import type { Agent } from "./types";
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Each thread as the leads watch it. */
-export function snapshot(s: Pick<State, "agents" | "worktrees" | "prs">, stuck: StuckEntries, reviews: ReviewRecords = {}): Snapshot {
+export function snapshot(s: Pick<State, "agents" | "worktrees" | "prs" | "projects">, stuck: StuckEntries, reviews: ReviewRecords = {}): Snapshot {
   const out: Snapshot = {};
   for (const a of Object.values(s.agents)) {
     const pr = s.prs[a.worktree_id];
     const raised = stuck[a.id]?.raised;
+    const wt = s.worktrees[a.worktree_id];
     out[a.id] = {
       id: a.id,
-      projectId: s.worktrees[a.worktree_id]?.project_id ?? null,
+      projectId: wt?.project_id ?? null,
       status: a.status,
       archived: a.archived,
       failed: raised ? `${raised.kind}:${raised.mark}` : null,
@@ -102,6 +104,7 @@ export function snapshot(s: Pick<State, "agents" | "worktrees" | "prs">, stuck: 
       pr: prOf(pr),
       ...ciOf(pr),
       safe: safeMark(a),
+      lead: isLeadThread(a, wt, wt ? s.projects[wt.project_id] : undefined),
     };
   }
   return out;
