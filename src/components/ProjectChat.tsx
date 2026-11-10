@@ -306,7 +306,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
         <input
           ref={input}
           placeholder={
-            Object.values(picks).some(Boolean)
+            !tapped.sent && Object.values(picks).some(Boolean)
               ? "Add a note to your answers, or just Send"
               : top
                 ? "Ask about any project, or hand one some work"
