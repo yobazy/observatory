@@ -5,7 +5,7 @@ import { markLeadSeen, noteReply, openLeadChat, openLeadTerminal, useChatLead, u
 import { lastReply, QUIET, type FaceFrame, type LeadEntry } from "../nebula/leadChat";
 import { outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
 import { answerLeadAsk, setLeadActs, startedTasks } from "../nebula/leadRunner";
-import { chatItems, chatPreview, leadActivity, runStarts, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
+import { chatItems, chatPreview, leadActivity, liveReply, runStarts, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
 import { enqueue } from "../nebula/queue";
 import { useLanded } from "../nebula/prwatch";
 import { answersSaid, answerText, readCard } from "../nebula/replycard";
@@ -165,15 +165,18 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     for (const it of items) n = it.kind === "pet" ? it.n : it.kind === "me" ? -1 : n;
     return n;
   }, [items]);
+  // The reply whose decisions take taps; a later update without any leaves
+  // them live.
+  const live = useMemo(() => liveReply(items, (text) => readCard(text).asks.length > 0), [items]);
   const [tapped, setTapped] = useState<{ entry: number; picks: Record<number, string>; sent: boolean }>({ entry: -1, picks: {}, sent: false });
-  const picks = tapped.entry === latest ? tapped.picks : {};
-  const pick = (n: number, letter: string) => setTapped({ entry: latest, picks: { ...picks, [n]: picks[n] === letter ? "" : letter }, sent: false });
+  const picks = tapped.entry === live ? tapped.picks : {};
+  const pick = (n: number, letter: string) => setTapped({ entry: live, picks: { ...picks, [n]: picks[n] === letter ? "" : letter }, sent: false });
   // What you answered each earlier reply with, read from your next message.
   const answered = useMemo(() => {
     const out: Record<number, Record<number, string>> = {};
     let asked = -1;
     for (const it of items) {
-      if (it.kind === "pet") asked = readCard(it.text).asks.length ? it.n : -1;
+      if (it.kind === "pet") asked = readCard(it.text).asks.length ? it.n : asked;
       else if (it.kind === "me" && asked >= 0) {
         out[asked] = answersSaid(it.text);
         asked = -1;
@@ -188,11 +191,13 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
   const latestVerdict = useMemo(() => (latestText ? readCard(latestText).verdict : null), [latestText]);
   const landed = useLanded(wt?.path, latestVerdict);
   const latestThread = useMemo(() => (entries && latest >= 0 ? { n: latest, entries } : undefined), [entries, latest]);
+  const liveThread = useMemo(() => (entries && live >= 0 ? { n: live, entries } : undefined), [entries, live]);
   const prompted = agent.status === "needs_feedback";
   const replyOf = (n: number): ReplyBits => {
-    if (n !== latest) return { live: false, sent: true, picks: answered[n] ?? {}, onPick: pick };
-    const gone = tapped.entry === latest && tapped.sent;
-    return { live: !gone && !prompted, sent: gone, picks, onPick: pick, landed, thread: latestThread };
+    const own = n === latest ? { landed, thread: latestThread } : {};
+    if (n !== live) return { live: false, sent: true, picks: answered[n] ?? {}, onPick: pick, ...own };
+    const gone = tapped.entry === live && tapped.sent;
+    return { live: !gone && !prompted, sent: gone, picks, onPick: pick, ...own, thread: liveThread };
   };
   // A PR named as "#75" links to it, in the project's repo.
   const prUrl = useMemo(() => {
@@ -226,7 +231,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     if (!words) return;
     input.current!.value = "";
     const was = tapped;
-    if (Object.values(picks).some(Boolean)) setTapped({ entry: latest, picks, sent: true });
+    if (Object.values(picks).some(Boolean)) setTapped({ entry: live, picks, sent: true });
     pinned.current = true;
     const mine = { text: words, after: lastN };
     setSent((s) => [...s, mine]);

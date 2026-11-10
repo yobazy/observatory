@@ -126,7 +126,19 @@ const LEADS: Record<string, { project: string | null; said: string[]; chat?: Sai
       "Sequential Cart Sync finished and opened PR #61. Sync applied every update with `Promise.all`, so two tabs raced; now a worker applies one update at a time:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\nThe tests pass, and I've written it into my notes. Search Facets is still waiting on review, and Invoice Webhooks is working.\n\nASK_USER: should a cart sync that fails three times stop and tell you, or keep retrying in the background? Nothing in the notes says.\n\nASK merge #128: the e2e fix is pushed, and you asked for this",
     ],
   },
-  lead1: { project: "p1", said: ["All quiet. Lighthouse Fixes merged yesterday, and the hero redesign is waiting on you for a permission prompt."] },
+  // A decision, then an update landing after it: its buttons still take taps.
+  lead1: {
+    project: "p1",
+    chat: [
+      { you: "Why is the hero so slow to paint?", ago: 30 },
+      {
+        said: "The hero image is 2.4 MB and isn't lazy-loaded.\n\n**Needs you**\n\n1. Shrink it now?  A START a task to serve it as AVIF at 1600px · B later\n\n🟠 Keep open: decision 1 is waiting on you.",
+        ago: 29,
+      },
+      { you: "[observatory] finished: Lighthouse Fixes on main", ago: 5 },
+    ],
+    said: ["Lighthouse Fixes finished and merged. The hero redesign is waiting on you for a permission prompt.\n\n🟠 Keep open: the hero image decision is waiting on you."],
+  },
   lead4: {
     project: "p4",
     said: [
