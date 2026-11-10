@@ -249,8 +249,8 @@ export function projectRoots(projectId: string, s: Pick<State, "projects" | "wor
 }
 
 /** Put the lead's guard in its main checkout (lead_guard.rs): a hook that
- *  runs only in the lead's session and keeps it to its project's folders
- *  and its notes. A failure is shown, not thrown: the app's own checks on
+ *  runs only in the lead's session and keeps it to its project's folders,
+ *  its notes and your notes folder. A failure is shown, not thrown: the app's own checks on
  *  what the lead does still hold. */
 async function guardLead(projectId: string, lead: CardLead) {
   if (isPreview()) return;
@@ -260,7 +260,8 @@ async function guardLead(projectId: string, lead: CardLead) {
   await invoke("lead_guard_install", {
     checkout: main.path,
     agentId: lead.agentId,
-    roots: projectRoots(projectId, s),
+    // Your notes folder too, to read (never write): leads cite vault notes.
+    roots: [...projectRoots(projectId, s), ...(s.prefs.notesFolder ? [s.prefs.notesFolder] : [])],
     notes: lead.notes,
     level: levelOf(lead),
   }).catch((e) => flash(`Couldn't keep the lead to its project: ${errText(e)}`, 6000));
