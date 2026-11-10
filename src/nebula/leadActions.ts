@@ -352,8 +352,11 @@ export async function answerAsk(key: string, ask: AskAction, yes: boolean, deps:
 }
 
 /** An ask's key: the lead, the reply and the line, so a later reply asking
- *  the same thing is a new ask. */
-export const askKey = (leadId: string, n: number, a: AskAction) => `${leadId}|${n}|${actionName(a)}`;
+ *  the same thing is a new ask. The reply is its entry and its time (`at`,
+ *  S29): a restarted session numbers its entries from 0 again, so an entry
+ *  alone could name an old reply. Keys from before S29 have no time. */
+export const askKey = (leadId: string, n: number, a: AskAction, at?: number) =>
+  `${leadId}|${at === undefined ? n : `${n}@${at}`}|${actionName(a)}`;
 
 // ---- lead-started tasks ----
 
@@ -368,6 +371,9 @@ export interface LeadTask {
   /** The lead's reply whose START it was (S29: the chat shows its card
    *  under that reply). Missing on tasks started before S29. */
   n?: number;
+  /** That reply's time (Unix seconds): with `n`, it names the reply even
+   *  after a restart numbers entries from 0 again. */
+  replyAt?: number;
   agentId?: string;
   /** Its START has been reported back (started, or refused once its
    *  launch failed). */
@@ -415,6 +421,9 @@ export interface Nudge {
  *  "Started fix-clipping", and the asks still to answer. */
 export interface Outcome {
   n: number;
+  /** The reply's time (Unix seconds), so a restarted session's reply with
+   *  the same entry number isn't taken for it. Missing before S29. */
+  at?: number;
   lines: string[];
   asks: AskAction[];
 }
@@ -504,13 +513,13 @@ const markAnswered = (key: string) => updateLeadActs((s) => ({ answered: [...s.a
 /** A reply acted on: nothing in it runs again. */
 export const markActed = (leadId: string, n: number) => updateLeadActs((s) => ({ acted: { ...s.acted, [leadId]: n } }));
 
-/** What each of a lead's replies made happen, oldest first: the history,
- *  and its latest outcome (kept before S29 without a history). */
+/** What each of a lead's replies made happen, in the order they came: the
+ *  history, and its latest outcome (kept before S29 without a history). */
 export function outcomesOf(leadId: string, s: LeadActs = leadActs()): Outcome[] {
-  const out = s.history.filter((o) => o.leadId === leadId).map(({ n, lines, asks }) => ({ n, lines, asks }));
+  const out: Outcome[] = s.history.filter((o) => o.leadId === leadId).map(({ leadId: _l, ...o }) => o);
   const last = s.outcomes[leadId];
-  if (last && !out.some((o) => o.n === last.n)) out.push(last);
-  return out.sort((a, b) => a.n - b.n);
+  if (last && !out.some((o) => o.n === last.n && o.at === last.at)) out.push(last);
+  return out;
 }
 
 /** The lead's tasks, newest first. Counted by project, so a restarted lead

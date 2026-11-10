@@ -186,7 +186,8 @@ function seedLeads() {
  *  its ask: two tasks off a Dispatch batch already taken off the board,
  *  each reply already acted on, so the preview never runs them again. */
 function seedLeadWork() {
-  if (leadActs().tasks.length) return;
+  // Seeded once; an older preview's records, from before replies had times, again.
+  if (leadActs().tasks.some((t) => t.replyAt !== undefined)) return;
   const at = (ago: number) => now - ago * min;
   const task = (id: string, agentId: string, text: string, ago: number) =>
     ({ id, sourceItemIds: [], text, target: "project", projectId: "p0", confidence: 1, planCheckpoint: false, context: [], state: "launched", lane: null, agentId, launchedAt: at(ago) }) as unknown as BatchTask;
@@ -202,19 +203,22 @@ function seedLeadWork() {
   const ask = { kind: "ask" as const, what: "merge" as const, pr: 128, why: "the e2e fix is pushed, and you asked for this" };
   // The entry numbers of the replies in lead0's chat, from leadTranscript().
   const reply = { facets: 2, cart: 6, nudge: 8, last: 10 };
+  // And their times, as leadTranscript() gives them.
+  const said = (ago: number) => Math.round(now / 1000) - ago * 60;
+  const when = { facets: said(60 * 7), cart: said(40), nudge: said(19), last: Math.round((now - 3 * min) / 1000) };
   updateLeadActs(() => ({
     acted: { lead0: reply.last, leadtop: 4 },
     tasks: [
-      { leadId: "lead0", projectId: "p0", batchId: "mock-lead-batch", taskId: "mlt1", branch: "search-facets", at: at(60 * 7), n: reply.facets, agentId: "a12", told: true },
-      { leadId: "lead0", projectId: "p0", batchId: "mock-lead-batch", taskId: "mlt2", branch: "cart-sync", at: at(40), n: reply.cart, agentId: "a2", told: true },
+      { leadId: "lead0", projectId: "p0", batchId: "mock-lead-batch", taskId: "mlt1", branch: "search-facets", at: at(60 * 7), n: reply.facets, replyAt: when.facets, agentId: "a12", told: true },
+      { leadId: "lead0", projectId: "p0", batchId: "mock-lead-batch", taskId: "mlt2", branch: "cart-sync", at: at(40), n: reply.cart, replyAt: when.cart, agentId: "a2", told: true },
     ],
     history: [
-      { leadId: "lead0", n: reply.facets, lines: ["Started search-facets"], asks: [] },
-      { leadId: "lead0", n: reply.cart, lines: ["Started cart-sync"], asks: [] },
-      { leadId: "lead0", n: reply.nudge, lines: ["Nudged Sequential Cart Sync"], asks: [] },
-      { leadId: "lead0", n: reply.last, lines: [], asks: [ask] },
+      { leadId: "lead0", n: reply.facets, at: when.facets, lines: ["Started search-facets"], asks: [] },
+      { leadId: "lead0", n: reply.cart, at: when.cart, lines: ["Started cart-sync"], asks: [] },
+      { leadId: "lead0", n: reply.nudge, at: when.nudge, lines: ["Nudged Sequential Cart Sync"], asks: [] },
+      { leadId: "lead0", n: reply.last, at: when.last, lines: [], asks: [ask] },
     ],
-    outcomes: { lead0: { n: reply.last, lines: [], asks: [ask] } },
+    outcomes: { lead0: { n: reply.last, at: when.last, lines: [], asks: [ask] } },
   }));
 }
 

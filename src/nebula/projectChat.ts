@@ -18,8 +18,9 @@ export interface ChatTask {
   branch: string;
   /** When it was started (ms). */
   at: number;
-  /** The reply whose START it was, when known. */
+  /** The reply whose START it was, when known: its entry and its time. */
   n?: number;
+  replyAt?: number;
   label: StartedState;
   /** Its PR's checks, while it has one open. */
   checks?: { state: string; failing: string[] } | null;
@@ -32,7 +33,7 @@ export type ChatItem =
   | { kind: "task"; key: string; task: ChatTask }
   /** `done` says why an ask can't be answered any more, or null while it
    *  can: answered, asked again later, or overtaken (the PR merged). */
-  | { kind: "ask"; key: string; n: number; ask: AskAction; done: string | null };
+  | { kind: "ask"; key: string; n: number; at: number; ask: AskAction; done: string | null };
 
 export interface ChatInput {
   leadId: string;
@@ -148,25 +149,32 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
   const under = new Map<number, ChatTask[]>();
   const loose: ChatTask[] = [];
   for (const t of [...tasks].sort((a, b) => a.at - b.at)) {
-    const n = t.n !== undefined && replies.some((r) => r.n === t.n) ? t.n : [...replies].reverse().find((r) => r.at * 1000 <= t.at)?.n;
+    // Its reply by entry and time; a record from before S29 (no time), or
+    // one whose reply is gone, goes by when it started.
+    const own = t.n !== undefined && t.replyAt !== undefined && replies.some((r) => r.n === t.n && r.at === t.replyAt);
+    const n = own ? t.n : [...replies].reverse().find((r) => r.at * 1000 <= t.at)?.n;
     if (n === undefined) loose.push(t);
     else under.set(n, [...(under.get(n) ?? []), t]);
   }
-  const asksOf = new Map(outcomes.map((o) => [o.n, o.asks]));
+  // A reply's asks, by its entry and time: an outcome from a session since
+  // restarted can't land on a new reply with the same number. One from
+  // before S29 has no time and isn't placed.
+  const replyKey = (n: number, at: number) => `${n}@${at}`;
+  const asksOf = new Map(outcomes.flatMap((o) => (o.at === undefined ? [] : [[replyKey(o.n, o.at), o.asks] as const])));
   // An ask is one question however often it's asked: answered once, every
   // row asking it is; asked again, only the latest row stands.
   const answeredNames = new Set<string>();
   const lastAsked = new Map<string, number>();
   for (const o of outcomes)
     for (const a of o.asks) {
-      if (answered(askKey(leadId, o.n, a))) answeredNames.add(actionName(a));
-      lastAsked.set(actionName(a), Math.max(lastAsked.get(actionName(a)) ?? -1, o.n));
+      if (answered(askKey(leadId, o.n, a, o.at))) answeredNames.add(actionName(a));
+      if (o.at !== undefined) lastAsked.set(actionName(a), Math.max(lastAsked.get(actionName(a)) ?? -1, o.at));
     }
-  const doneWhy = (n: number, a: AskAction): string | null => {
+  const doneWhy = (at: number, a: AskAction): string | null => {
     if (answeredNames.has(actionName(a))) return "Answered";
     const over = settled(a);
     if (over) return over;
-    return (lastAsked.get(actionName(a)) ?? n) > n ? "Asked again below" : null;
+    return (lastAsked.get(actionName(a)) ?? at) > at ? "Asked again below" : null;
   };
 
   const out: ChatItem[] = [];
@@ -186,6 +194,8 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
             return;
           }
           if (line.startsWith(`${LINE_PREFIX}actions are on.`)) {
+            // The switch turned on is news; the rules after it aren't.
+            out.push({ kind: "event", key: `e${e.n}.${i}`, text: eventText(`${LINE_PREFIX}actions are on`), at: e.at });
             rules = !line.trim().endsWith(RULES_END);
             return;
           }
@@ -200,9 +210,9 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
       const text = withoutActions(e.text);
       if (text) out.push({ kind: "pet", key: `p${e.n}`, n: e.n, text, at: e.at });
       for (const t of under.get(e.n) ?? []) out.push({ kind: "task", key: `t${t.taskId}`, task: t });
-      for (const a of asksOf.get(e.n) ?? []) {
-        const key = askKey(leadId, e.n, a);
-        out.push({ kind: "ask", key: `a${key}`, n: e.n, ask: a, done: doneWhy(e.n, a) });
+      for (const a of asksOf.get(replyKey(e.n, e.at)) ?? []) {
+        const key = askKey(leadId, e.n, a, e.at);
+        out.push({ kind: "ask", key: `a${key}`, n: e.n, at: e.at, ask: a, done: doneWhy(e.at, a) });
       }
     } else if (e.kind === "stopped") out.push({ kind: "event", key: `s${e.n}`, text: "Stopped", at: e.at });
   }

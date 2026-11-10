@@ -81,14 +81,14 @@ test('Given started tasks and asks, then each shows under the reply that caused 
     ['claude', 'Both are green.\nASK merge #12: you asked for it', 300],
   );
   const tasks = [
-    { taskId: 't1', branch: 'fix-a', at: 211_000, n: 2, label: 'PR #12', checks: { state: 'passing', failing: [] } },
-    { taskId: 't2', branch: 'fix-b', at: 212_000, n: 2, label: 'queued' },
+    { taskId: 't1', branch: 'fix-a', at: 211_000, n: 2, replyAt: 210, label: 'PR #12', checks: { state: 'passing', failing: [] } },
+    { taskId: 't2', branch: 'fix-b', at: 212_000, n: 2, replyAt: 210, label: 'queued' },
     // From before S29, with no reply number: under the last reply before it started.
     { taskId: 't3', branch: 'fix-c', at: 305_000, label: 'running' },
   ];
   const ask = { kind: 'ask', what: 'merge', pr: 12, why: 'you asked for it' };
   const answered = new Set();
-  const build = () => chatItems(t, { leadId: 'lead', tasks, outcomes: [{ n: 4, lines: [], asks: [ask] }], answered: (k) => answered.has(k) });
+  const build = () => chatItems(t, { leadId: 'lead', tasks, outcomes: [{ n: 4, at: 300, lines: [], asks: [ask] }], answered: (k) => answered.has(k) });
   const items = build();
   assert.deepEqual(kinds(items), ['me', 'pet', 'task', 'task', 'event', 'pet', 'task', 'ask']);
   assert.deepEqual(items.filter((i) => i.kind === 'task').map((i) => i.task.taskId), ['t1', 't2', 't3']);
@@ -96,7 +96,7 @@ test('Given started tasks and asks, then each shows under the reply that caused 
   assert.deepEqual(items.filter((i) => i.kind === 'event').map((i) => i.text), ['Started other']);
   assert.equal(items[7].done, null);
   assert.equal(items[7].n, 4);
-  answered.add(askKey('lead', 4, ask));
+  answered.add(askKey('lead', 4, ask, 300));
   assert.equal(build()[7].done, 'Answered');
 });
 
@@ -109,13 +109,13 @@ test('Given an ask for the same PR in two replies, then only the latest stands; 
   const merge = (why) => ({ kind: 'ask', what: 'merge', pr: 12, why });
   const archive = { kind: 'ask', what: 'archive', agentId: 'a1', why: 'it said safe to close' };
   const outcomes = [
-    { n: 1, lines: [], asks: [merge('you asked for it')] },
-    { n: 2, lines: [], asks: [merge('still waiting'), archive] },
+    { n: 1, at: 200, lines: [], asks: [merge('you asked for it')] },
+    { n: 2, at: 300, lines: [], asks: [merge('still waiting'), archive] },
   ];
   const done = (opts = {}) => chatItems(t, { leadId: 'lead', outcomes, ...opts }).filter((i) => i.kind === 'ask').map((i) => i.done);
   assert.deepEqual(done(), ['Asked again below', null, null]);
   // Answering the older row answers the question: the newer row too.
-  const answered = new Set([askKey('lead', 1, merge('you asked for it'))]);
+  const answered = new Set([askKey('lead', 1, merge('you asked for it'), 200)]);
   assert.deepEqual(done({ answered: (k) => answered.has(k) }), ['Answered', 'Answered', null]);
   // The PR merged or the thread archived since: overtaken.
   const settled = (a) => (a.what === 'merge' ? '#12 is merged' : 'Archived');
@@ -131,7 +131,14 @@ test("Given the rules sent when a lead's actions are turned on, then the chat hi
     ['you', `${LINE_PREFIX}finished: Fix login on fix-login (agent a1): done\n${rules}\n${LINE_PREFIX}CI passed #4: Fix login on fix-login (agent a1): every check passed`],
   );
   const items = chatItems(t, { leadId: 'lead' });
-  assert.deepEqual(items.map((i) => i.text), ['Fix login finished', 'CI passed on #4']);
+  // The switch turning on still shows, once per time it was sent; its rules don't.
+  assert.deepEqual(items.map((i) => i.text), [
+    'Starting and nudging threads is on',
+    'Fix login finished',
+    'Starting and nudging threads is on',
+    'CI passed on #4',
+  ]);
+  assert.ok(!items.some((i) => /top lead|<brief>/.test(i.text)));
   assert.ok(!items.some((i) => i.kind === 'me'));
 });
 
@@ -141,6 +148,39 @@ test('Given a lead waiting on a prompt, then the chat shows it waiting on its te
   assert.equal(leadActivity({ status: 'finished', queued: 1, sending: 0 }), 'working');
   assert.equal(leadActivity({ status: 'finished', queued: 0, sending: 1 }), 'working');
   assert.equal(leadActivity({ status: 'finished', queued: 0, sending: 0 }), 'idle');
+});
+
+test("Given a lead restarted, so a new reply has an old reply's entry number, then the old reply's asks and tasks don't land on it", () => {
+  // The new session: entry 2 is a reply said at 900. The old session's
+  // entry 2 (said at 500) asked to merge #7 and started old-branch.
+  const t = entries(['you', 'start prompt', 800], ['you', 'Hello again', 850], ['claude', 'Back. Nothing new.', 900]);
+  const ask = { kind: 'ask', what: 'merge', pr: 7, why: 'green' };
+  const items = chatItems(t, {
+    leadId: 'lead',
+    outcomes: [{ n: 2, at: 500, lines: [], asks: [ask] }],
+    tasks: [{ taskId: 'old', branch: 'old-branch', at: 501_000, n: 2, replyAt: 500, label: 'merged' }],
+  });
+  assert.ok(!items.some((i) => i.kind === 'ask'), "the old reply's ask isn't under the new one");
+  // The old task goes by its time: before anything in the new session.
+  assert.deepEqual(kinds(items), ['task', 'me', 'pet']);
+  // The same reply, same time: its ask shows, keyed by entry and time.
+  const now = chatItems(t, { leadId: 'lead', outcomes: [{ n: 2, at: 900, lines: [], asks: [ask] }] });
+  assert.equal(now.find((i) => i.kind === 'ask').key, `a${askKey('lead', 2, ask, 900)}`);
+  assert.notEqual(askKey('lead', 2, ask, 900), askKey('lead', 2, ask, 500));
+  // A record from before S29 (no times): its task goes by time, its outcome isn't placed.
+  const legacy = chatItems(t, { leadId: 'lead', outcomes: [{ n: 2, lines: [], asks: [ask] }], tasks: [{ taskId: 'l', branch: 'l', at: 950_000, n: 2, label: 'running' }] });
+  assert.deepEqual(kinds(legacy), ['me', 'pet', 'task']);
+});
+
+test("Given outcomes from before and after a restart with the same entry number, then outcomesOf() keeps both, in the order they came", () => {
+  const s = {
+    history: [
+      { leadId: 'l1', n: 2, at: 500, lines: [], asks: [] },
+      { leadId: 'l1', n: 2, at: 900, lines: [], asks: [] },
+    ],
+    outcomes: { l1: { n: 2, at: 900, lines: [], asks: [] } },
+  };
+  assert.deepEqual(outcomesOf('l1', s).map((o) => [o.n, o.at]), [[2, 500], [2, 900]]);
 });
 
 test('Given a task with no reply before it (the session restarted), then it goes where its time puts it, not last', () => {

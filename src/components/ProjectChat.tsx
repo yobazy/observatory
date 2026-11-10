@@ -115,7 +115,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     return startedTasks(lead.projectId, state).map(({ rec, agent: a, label }) => {
       const p = a ? state.prs[a.worktree_id] : undefined;
       const open = p?.kind === "found" && (p.pr.state === "open" || p.pr.state === "draft") ? p.pr : null;
-      return { taskId: rec.taskId, branch: rec.branch, at: rec.at, n: rec.n, label, checks: open ? { state: open.checks, failing: open.failing } : null };
+      return { taskId: rec.taskId, branch: rec.branch, at: rec.at, n: rec.n, replyAt: rec.replyAt, label, checks: open ? { state: open.checks, failing: open.failing } : null };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.projectId, state.agents, state.prs, state.worktrees, acts]);
@@ -285,7 +285,7 @@ function ChatLine({ item, lead, day }: { item: ChatItem; lead: LeadEntry; day: s
       case "task":
         return <TaskCard task={item.task} />;
       case "ask":
-        return <AskRow lead={lead} n={item.n} ask={item.ask} done={item.done} />;
+        return <AskRow lead={lead} n={item.n} at={item.at} ask={item.ask} done={item.done} />;
     }
   })();
   return (
@@ -321,14 +321,14 @@ function TaskCard({ task }: { task: ChatTask }) {
 
 /** An ASK line (S28) as a row: Yes merges or archives, No dismisses it,
  *  and the lead hears which. */
-function AskRow({ lead, n, ask, done }: { lead: LeadEntry; n: number; ask: AskAction; done: string | null }) {
+function AskRow({ lead, n, at, ask, done }: { lead: LeadEntry; n: number; at: number; ask: AskAction; done: string | null }) {
   const { agents } = useAppState();
   const [busy, setBusy] = useState(false);
   const thread = ask.what === "archive" ? (agents[ask.agentId]?.name ?? ask.agentId) : "";
   const what = ask.what === "merge" ? `Merge #${ask.pr}?` : `Archive ${thread}?`;
   const answer = (yes: boolean) => {
     setBusy(true);
-    answerLeadAsk(lead.agentId, n, ask, yes)
+    answerLeadAsk(lead.agentId, n, ask, yes, at)
       .then((line) => line && yes && flash(ask.what === "merge" ? `Merged #${ask.pr}` : `Archived ${thread}`))
       .catch((e) => flash(`Couldn't ${ask.what}: ${e instanceof Error ? e.message : String(e)}`))
       .finally(() => setBusy(false));

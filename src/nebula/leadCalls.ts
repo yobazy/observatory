@@ -114,7 +114,8 @@ function callsFor(leads: LeadEntry[], agents: State["agents"]): Record<string, C
     // The reply's ASK lines the app took and you haven't answered: one it
     // refused (no such PR, another project's thread) doesn't call you.
     const outcome = acts.outcomes[l.agentId];
-    const asks = l.acts && reply && outcome?.n === reply.n ? outcome.asks.filter((a) => !isAnswered(askKey(l.agentId, reply.n, a))).length : undefined;
+    const mine = !!reply && outcome?.n === reply.n && (outcome.at === undefined || outcome.at === reply.at);
+    const asks = l.acts && reply && mine ? outcome!.asks.filter((a) => !isAnswered(askKey(l.agentId, reply.n, a, outcome!.at))).length : undefined;
     // Seen in its chat only: a lead's Read view mark counts entries, which a
     // restarted session numbers from 0 again.
     out[l.agentId] = callState({ reply, unseen: !!agents[l.agentId]?.unseen, seen: seenInChat(l.agentId), actions: l.acts, asks });
