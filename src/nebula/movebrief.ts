@@ -21,6 +21,10 @@ export interface MoveFrom {
   prompts: string[];
   /** Its conversation (transcript.ts), when the app can read one. */
   entries?: Entry[] | null;
+  /** Why it's being picked up elsewhere, and the brief's last line: a move
+   *  to another project unless said otherwise (a parked thread, park.ts). */
+  why?: string;
+  close?: string;
 }
 
 const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
@@ -46,7 +50,7 @@ export function moveBrief(from: MoveFrom): string {
   ];
 
   const parts = [
-    `This continues “${from.thread}”, a thread in ${from.project} (branch ${from.branch}, ${tilde(from.path)}), moved here because the work belongs in this project. That thread still has the whole conversation.`,
+    `This continues “${from.thread}”, a thread in ${from.project} (branch ${from.branch}, ${tilde(from.path)}), ${from.why ?? "moved here because the work belongs in this project"}. That thread still has the whole conversation.`,
   ];
   if (asks.length) {
     const shown = asks.slice(-MAX_ASKS);
@@ -59,6 +63,6 @@ export function moveBrief(from: MoveFrom): string {
   }
   if (lastSaid) parts.push(`Where it got to, in its last words:\n${clip(lastSaid, MAX_SAID).replace(/^/gm, "> ")}`);
   if (files.length) parts.push(`Files it changed there:\n${files.map((f) => `- ${f}`).join("\n")}`);
-  parts.push("Pick up from there, in this project.");
+  parts.push(from.close ?? "Pick up from there, in this project.");
   return parts.join("\n\n");
 }

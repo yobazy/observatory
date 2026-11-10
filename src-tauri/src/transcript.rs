@@ -796,4 +796,70 @@ mod tests {
         );
         assert!(r.entries[2].steps.iter().all(|s| s.ok == Some(true)));
     }
+
+    /// Whether what you said reads as a fixture's `expect` wants: `you`, every
+    /// message in order, or `youContains`, words some message holds.
+    fn says(expect: &serde_json::Value, you: &[&str]) -> bool {
+        if let Some(want) = expect.get("you").and_then(|v| v.as_array()) {
+            return want
+                .iter()
+                .map(|w| w.as_str())
+                .eq(you.iter().map(|y| Some(*y)));
+        }
+        let parts = expect["youContains"]
+            .as_array()
+            .expect("you or youContains");
+        parts.iter().all(|p| {
+            you.iter()
+                .any(|y| y.contains(p.as_str().unwrap_or("\u{0}")))
+        })
+    }
+
+    /// Marked moments whose bug was in reading the log, replayed from
+    /// tests/fixtures/moments (its README says how to add one). A fixture
+    /// with `todo` is a bug still live: it has to keep failing until fixed.
+    #[test]
+    fn marked_moments_read_as_they_should() {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/moments");
+        let mut ran = 0;
+        for file in std::fs::read_dir(&dir).expect("the fixtures folder") {
+            let path = file.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let fx: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let todo = fx.get("todo").is_some();
+            let checks = fx["checks"].as_array().expect("checks");
+            for c in checks.iter().filter(|c| c["reads"] == "transcript") {
+                let lines: Vec<String> = c["input"]["log"]
+                    .as_array()
+                    .expect("a log")
+                    .iter()
+                    .map(|l| l.to_string())
+                    .collect();
+                let r = read(&lines.iter().map(String::as_str).collect::<Vec<_>>());
+                let you: Vec<&str> = r
+                    .entries
+                    .iter()
+                    .filter(|e| e.kind == "you")
+                    .map(|e| e.text.as_str())
+                    .collect();
+                let fixed = says(&c["expect"], &you);
+                assert!(
+                    fixed != todo,
+                    "{}: you said {you:?}{}",
+                    path.display(),
+                    if todo {
+                        ", so it's fixed: take \"todo\" out of the fixture"
+                    } else {
+                        ""
+                    }
+                );
+                ran += 1;
+            }
+        }
+        assert!(ran > 0, "no transcript fixtures in {}", dir.display());
+    }
 }

@@ -1,0 +1,24 @@
+{
+  "moment": "2026-11-09T23-41-14-769Z",
+  "family": "choices",
+  "note": "Decisions arent buttons in the reader",
+  "fixedBy": "Read a card's decisions under \"**Needs you.** sentence\", with each pick written all in bold",
+  "source": "thread.json: the finished reply's Needs you, cut to 4 of its 16 decisions and with the topics made neutral. The heading was \"**Needs you.** My pick is in bold…\" (a full stop, not a colon), so no decision was read at all; each pick was then bolded whole, \"**A text**\", which left \"**\" on its label, and one closed its bold before a sentence: \"**B text**. Depends on 2.\"",
+  "checks": [
+    {
+      "reads": "card",
+      "input": {
+        "text": "**The research is done.**\n\n✅ research done · 🟠 4 decisions waiting on you\n\n**Needs you.** My pick is in bold. You can say \"all picks\", or just the ones you'd change.\n1. App id (it can't change after the first upload): A keep `app.example` · **B a new id under your domain**. Depends on 2.\n2. Domain: **A buy one now** · B stay on the private network for now\n3. Store name: **A \"Example: Home Inventory\"** · B \"Example - Your Things\" · C something else\n4. Hosting: A your own server (free) · **B a small proxy, about €6 a month** · C a cloud server\n\nDetails:\n- Everything is in `docs/research/` on branch `research`.\n\n🟠 Keep open: waiting on the 4 decisions"
+      },
+      "expect": {
+        "asks": [
+          { "n": 1, "letters": "AB", "labels": ["keep `app.example`", "a new id under your domain"] },
+          { "n": 2, "letters": "AB", "labels": ["buy one now", "stay on the private network for now"] },
+          { "n": 3, "letters": "ABC", "labels": ["\"Example: Home Inventory\"", "\"Example - Your Things\"", "something else"] },
+          { "n": 4, "letters": "ABC", "labels": ["your own server (free)", "a small proxy, about €6 a month", "a cloud server"] }
+        ],
+        "verdict": "wait"
+      }
+    }
+  ]
+}

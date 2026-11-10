@@ -16,6 +16,17 @@ export interface Chip {
 export interface Option {
   letter: string;
   label: string;
+  /** Written all in bold, "**A today**": the reply's own pick. */
+  bold?: boolean;
+}
+
+/** "**A today**" bolds the whole option, letter and label, to mark it as the
+ *  pick; the label read after the letter then ends in the closing bold. */
+function boldWhole(written: string, letter: string, label: string): Option | null {
+  const mark = /^(\*\*|__)/.exec(written.trim())?.[1];
+  if (!mark || !label.endsWith(mark) || label.slice(0, -2).includes(mark)) return null;
+  const inner = label.slice(0, -2).trim();
+  return inner ? { letter, label: inner, bold: true } : null;
 }
 
 /** One numbered decision: "2. Ship today?  A today · B Monday". */
@@ -23,6 +34,9 @@ export interface Ask {
   n: number;
   text: string;
   options: Option[];
+  /** What an earlier reply said about the same question that this one
+   *  leaves out: a decision asked again tends to lose its why. */
+  before?: string;
 }
 
 export interface Card {
@@ -76,6 +90,10 @@ const OPTION_LINE = /^\s*(?:[-*]\s+)?(\*\*|__)?([A-Z])(\s*\([^)]*\))?(\s*[:.)·�
 
 function readOptionLine(line: string): Option | null {
   const m = OPTION_LINE.exec(line);
+  if (m?.[1] && !m[5]) {
+    const whole = boldWhole(line.replace(/^\s*[-*]\s+/, ""), m[2], m[7].trim());
+    if (whole) return m[3] ? { ...whole, label: `${m[3].trim()} ${whole.label}` } : whole;
+  }
   // A bullet marks it as an option too: "  - A today".
   const bulleted = /^\s*[-*]\s/.test(line);
   if (!m || (m[1] ?? "") !== (m[5] ?? "") || !(m[1] || m[4] || m[6] || bulleted)) return null;
@@ -122,20 +140,24 @@ function sentenceEnd(s: string): number {
 /** "Ship today?  A today · B Monday" into the question and its options,
  *  lettered from A in order. No options when it doesn't read that way. */
 export function readAsk(n: number, line: string): Ask {
+  let lastWritten = "";
   const optionsFrom = (at: number): Option[] | null => {
-    const options = splitDots(
+    const parts = splitDots(
       line
         .slice(at)
         // "A · today" separates the letter with a dot too; make it "A: today"
         // so splitting on the dots between options leaves it whole.
         .replace(/(^|\s)((?:\*\*|__)?[A-Z](?:\*\*|__)?)\s+·\s+/g, "$1$2: "),
-    )
-      .map((p, i) => {
-        const got = OPTION.exec(p.trim());
-        if (!got || got[1] !== String.fromCharCode(65 + i)) return null;
-        const aside = got[2]?.trim();
-        return { letter: got[1], label: aside ? `${aside} ${got[3].trim()}` : got[3].trim() };
-      });
+    );
+    lastWritten = parts[parts.length - 1] ?? "";
+    const options = parts.map((p, i) => {
+      const got = OPTION.exec(p.trim());
+      if (!got || got[1] !== String.fromCharCode(65 + i)) return null;
+      const aside = got[2]?.trim();
+      const whole = boldWhole(p, got[1], got[3].trim());
+      if (whole) return aside ? { ...whole, label: `${aside} ${whole.label}` } : whole;
+      return { letter: got[1], label: aside ? `${aside} ${got[3].trim()}` : got[3].trim() };
+    });
     return options.length >= 2 && options.every(Boolean) ? (options as Option[]) : null;
   };
   // Every "A" that could start the options; the convention puts two spaces
@@ -156,6 +178,9 @@ export function readAsk(n: number, line: string): Ask {
   if (end > 0) {
     text += ` ${last.label.slice(end).trim()}`;
     last.label = last.label.slice(0, end - 1).trim();
+    // "**B Monday**. Depends on 1." closes its bold before the sentence.
+    const whole = !last.bold && boldWhole(lastWritten, last.letter, last.label);
+    if (whole) Object.assign(last, whole);
   }
   return { n, text, options };
 }
@@ -183,9 +208,10 @@ function labelFrom(text: string, letter: string): string {
   return quote ? quote[1] : m[1].replace(/([.!?])\s.*$/, "$1");
 }
 
-const SECTION = /^\s*(?:#{1,4}\s*)?(?:\*\*|__)?\s*(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?[\s:*_]*$/i;
-// "**Needs you:** nothing tonight." starts the section and says it too.
-const SECTION_INLINE = /^\s*(?:\*\*|__)(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?:?(?:\*\*|__):?\s+(\S.*)$/i;
+const SECTION = /^\s*(?:#{1,4}\s*)?(?:\*\*|__)?\s*(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?[\s:.*_]*$/i;
+// "**Needs you:** nothing tonight." starts the section and says it too, as
+// does "**Needs you.** My pick is in bold."
+const SECTION_INLINE = /^\s*(?:\*\*|__)(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?[:.]?(?:\*\*|__)[:.]?\s+(\S.*)$/i;
 // The close verdict a reply ends on, once its bold is gone, also as a bullet.
 const VERDICT = /^\s*(?:[-*]\s+)?(✅|🟠|🔴)\uFE0F?\s*((?:Safe to close|Keep open|Don['’]t close|Do not close)\b.*)$/u;
 
@@ -327,7 +353,11 @@ export function readCard(text: string): Card {
       lined.set(open, [...(lined.get(open) ?? []), line]);
       listed.get(open)?.lines.push(line);
     } else if (open && /^\s{2,}\S/.test(line)) {
-      open.text += ` ${line.trim()}`;
+      // The options can sit together on the indented line under the
+      // question: "   A x (recommended) · B y · C z".
+      const joined = open.options.length ? null : readAsk(open.n, `${open.text}  ${line.trim()}`);
+      if (joined?.options.length) Object.assign(open, joined);
+      else open.text += ` ${line.trim()}`;
       listed.get(open)?.lines.push(line);
     } else {
       if (line.trim()) {
@@ -453,7 +483,7 @@ export function typedAnswers(card: Card | null, text: string): { picks: Record<n
 
 /** The answers a card recommends, for the reply box to offer: what follows
  *  "I'd pick" (or "I'd go with", "I recommend"), else each question's
- *  "(recommended)" option. Empty when it recommends nothing. */
+ *  "(recommended)" or all-bold option. Empty when it recommends nothing. */
 export function suggested(card: Card): Record<number, string> {
   const said = /\bI(?:'d| would)?\s+(?:pick|go with|recommend|lean(?: towards?)?)\s+(.+)/i.exec(`${card.asksNote}\n${card.body}`);
   const picked = said ? answersIn(said[1].replace(/\*\*|__/g, "")) : {};
@@ -467,8 +497,12 @@ export function suggested(card: Card): Record<number, string> {
       out[a.n] = own[1];
       continue;
     }
-    const rec = a.options.find((o) => /^\(recommended\)/i.test(o.label) || /\(recommended\)\s*$/i.test(o.label));
+    // "(recommended)", also with a reason after it: "(recommended; ships now)".
+    const rec = a.options.find((o) => /^\(recommended[;,:)]/i.test(o.label) || /\(recommended(?:[;,:][^)]*)?\)\s*$/i.test(o.label));
     if (rec) out[a.n] = rec.letter;
+    // "**B Monday**": the one option written all in bold.
+    const bold = a.options.filter((o) => o.bold);
+    if (!rec && bold.length === 1) out[a.n] = bold[0].letter;
   }
   return out;
 }
@@ -583,6 +617,54 @@ export interface Pending {
   earlier: ReturnType<typeof openDecisions>;
 }
 
+/** The question an ask is about, to know it again when a later reply asks
+ *  it in fewer words: its bold lead, else its first sentence. */
+const BOLD_LEAD = /^\s*(?:\*\*|__)(.+?)(?:\*\*|__)/;
+const afterLead = (text: string) => text.replace(BOLD_LEAD, "");
+
+function askKey(text: string): string {
+  const bold = BOLD_LEAD.exec(text);
+  const lead = bold ? bold[1] : (/^.*?[?.!:](?=\s|$)/.exec(text.trim())?.[0] ?? text);
+  return lead.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+const sentences = (text: string) =>
+  text
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.?!])\s+(?=[A-Z*_`"“(])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+const bare = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** The latest reply's decisions, each with what earlier replies said about
+ *  the same question that it no longer does: the reason it's being asked,
+ *  dropped as the question is asked again and again. The first time it was
+ *  asked is where the why usually is; later askings add only where things
+ *  stand. */
+export function withBefore(card: Card, entries: { n: number; kind: string; text: string }[], n: number): Card {
+  if (!card.asks.length) return card;
+  const earlier = entries.filter((e) => e.kind === "claude" && e.n < n).map((e) => readCard(e.text).asks);
+  const asks = card.asks.map((a) => {
+    const key = askKey(a.text);
+    if (!key) return a;
+    const now = bare(a.text);
+    for (const list of earlier)
+      for (const b of list) {
+        if (askKey(b.text) !== key) continue;
+        // Past the question itself, which this one says already, and any
+        // options it wrote out on a line of their own.
+        const extra = sentences(afterLead(b.text))
+          .slice(BOLD_LEAD.test(b.text) ? 0 : 1)
+          .filter((s) => !/^(?:\*\*|__)?A\b.*·\s*(?:\*\*|__)?B\b/.test(s))
+          .filter((s) => bare(s).length >= 12 && !now.includes(bare(s)));
+        if (extra.length) return { ...a, before: extra.join(" ") };
+      }
+    return a;
+  });
+  return { ...card, asks };
+}
+
 /** What a thread is waiting on you to decide: its latest reply, when that
  *  has a Needs you and nothing you said came after it, with any decisions
  *  left open before it. Earlier ones alone count only while the latest
@@ -592,10 +674,43 @@ export function pendingCard(entries: { n: number; kind: string; text: string }[]
   const last = [...entries].reverse().find((e) => e.kind === "claude" || e.kind === "you");
   if (!last || last.kind !== "claude") return null;
   const card = readCard(last.text);
-  const earlier = openDecisions(entries, last.n);
-  const asking = card.asks.length > 0 || !!card.asksNote;
   const open = card.verdict?.tone === "wait" || card.verdict?.tone === "bad";
-  if (!asking && !(earlier.length && open)) return null;
-  const asked = [...entries].reverse().find((e) => e.kind === "you" && e.n < last.n)?.text ?? "";
-  return { n: last.n, card, asked, earlier };
+  // A reply that says it's safe to close has moved past what was asked before.
+  const earlier = card.verdict?.tone === "done" ? [] : openDecisions(entries, last.n);
+  if (!asksYou(card) && !(earlier.length && open)) return null;
+  return { n: last.n, card: withBefore(card, entries, last.n), asked: askedBefore(entries, last.n), earlier };
+}
+
+/** What set a turn off: the last thing you said before entry `n` that
+ *  wasn't only answers to decisions. */
+export function askedBefore(entries: { n: number; kind: string; text: string }[], n: number): string {
+  return [...entries].reverse().find((e) => e.kind === "you" && e.n < n && !onlyAnswers(e.text))?.text ?? "";
+}
+
+/** What a thread stopped on to ask in its terminal: what you asked, and
+ *  the last thing it said before the prompt came up. */
+export function promptContext(entries: { n: number; kind: string; text: string }[]): { asked: string; said: string } {
+  const asked = [...entries].reverse().find((e) => e.kind === "you" && !onlyAnswers(e.text));
+  // Only what it said since you last spoke: the card you just answered
+  // isn't where it stands now.
+  const lastYou = [...entries].reverse().find((e) => e.kind === "you")?.n ?? -1;
+  const said = [...entries].reverse().find((e) => e.kind === "claude" && e.n > lastYou);
+  return { asked: asked?.text ?? "", said: said?.text ?? "" };
+}
+
+/** The card itself asks you something: numbered decisions, or a Needs
+ *  you note on a card that isn't finished ("Needs you: Nothing." isn't). */
+export const asksYou = (card: Card) => card.asks.length > 0 || (!emptyNote(card.asksNote) && card.verdict?.tone !== "done");
+
+/** A Needs you that says there's nothing: "Nothing.", "- None", "n/a". */
+export const emptyNote = (note: string) => !note.trim() || /^[-*•\s]*(nothing|none|n\/a|—|-)[\s.!:;)—-]*$/i.test(note.trim());
+
+/** A message that only answers decisions: "1 A, 2 B", or lines said
+ *  against earlier replies. */
+function onlyAnswers(text: string): boolean {
+  const rest = text
+    .replace(/^About your reply that starts ".+": [^\n]+$/gm, "")
+    .replace(/\b\d{1,2}\s*[A-Za-z]\b/g, "")
+    .replace(/\band\b|[,.;&\s]/gi, "");
+  return !rest && text.trim() !== "";
 }

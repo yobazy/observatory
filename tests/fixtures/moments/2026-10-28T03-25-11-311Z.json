@@ -1,0 +1,41 @@
+{
+  "moment": "2026-10-28T03-25-11-311Z",
+  "family": "queue",
+  "note": "i selected an answer and sent it but it just queued it up it's not clear what it wants me to do to continue",
+  "fixedBy": "#92 Send a queued reply to a sleeping thread when that thread is on screen",
+  "source": "thread.json's latest reply (turn ended 03:23:38) and the two taps on option A at 03:25:07–09. The daemon had put the Done thread to sleep (alive false), which the moment's state doesn't record; #92's notes say so.",
+  "checks": [
+    {
+      "reads": "card",
+      "input": {
+        "text": "**The new look isn't in your app yet: it's still in the open PR #84**\n\n🟠 waiting on you\n\n**Needs you**\n\n1. How do you want to see it?  A merge #84 and ship it as v0.10.0, so the installed app gets it · B run a dev build from the `redesign` worktree first so you can try it out, then decide · C both: try it now, merge after\n\n**Details**\n- #84 passes CI, can be merged and isn't a draft.\n\n**🟠 Keep open: waiting on your answer to 1**"
+      },
+      "expect": {
+        "asks": [
+          {
+            "n": 1,
+            "letters": "ABC"
+          }
+        ],
+        "verdict": "wait"
+      }
+    },
+    {
+      "reads": "queue",
+      "input": {
+        "agent": {
+          "status": "finished",
+          "status_changed_at": "2026-10-28T03:23:38Z",
+          "alive": false
+        },
+        "sends": {},
+        "onScreen": true,
+        "now": "2026-10-28T03:25:09.915Z"
+      },
+      "expect": {
+        "hold": null,
+        "canSendNow": true
+      }
+    }
+  ]
+}

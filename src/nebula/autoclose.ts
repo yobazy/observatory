@@ -31,6 +31,8 @@ export interface CloseOptions {
    *  way: one back from the archive at that same rest was brought back on
    *  purpose, so it stays until it works again. */
   closedAt?: Record<string, number>;
+  /** Project leads' threads (lead.ts): a project's chat, never closed. */
+  leads?: Set<string>;
 }
 
 /** Whether a thread is the kind whose log the app reads, at rest long
@@ -39,6 +41,7 @@ export interface CloseOptions {
 export function mayClose(s: CloseState, a: Agent, now: number, o: CloseOptions = {}): boolean {
   if (a.archived || a.status !== "finished" || !a.session_id) return false;
   if (a.kind !== "claude" && a.kind !== "codex") return false;
+  if (o.leads?.has(a.id)) return false;
   if (now - a.status_changed_at < (o.after ?? CLOSE_AFTER_MS)) return false;
   if (o.closedAt?.[a.id] === a.status_changed_at) return false;
   const sel = s.selectedSession;

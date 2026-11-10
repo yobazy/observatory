@@ -4,7 +4,9 @@
 // once per status change (verdicts.ts), so later sweeps read almost nothing.
 import { useEffect } from "react";
 import { request } from "./client";
+import { allCards } from "./cards";
 import { draftFor } from "./drafts";
+import { leadIds } from "./lead";
 import { flash, getState, subscribe } from "./store";
 import { loadPrefs } from "./theme";
 import { logUse } from "./uselog";
@@ -66,7 +68,7 @@ async function sweep(after: number): Promise<boolean> {
   sweeping = true;
   try {
     const now = Date.now();
-    const o = { after, hasDraft, closedAt: loadClosed() };
+    const o = { after, hasDraft, closedAt: loadClosed(), leads: leadIds(allCards(), s.prefs.topLead) };
     for (const a of candidates(s, now, o)) await readTurn(a);
     // The prefs file as well as what's in memory: a pin either one has, or
     // the switch turned off in either, keeps the thread.

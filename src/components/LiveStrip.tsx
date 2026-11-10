@@ -1,7 +1,7 @@
 // The eyepiece row: every thread that's moving or waiting on you, across
 // projects, as its plate. You can see what's live without opening anything,
 // and click a lens to open its thread.
-import { projectOfWorktree, useAppState } from "../nebula/store";
+import { projectOfWorktree, threadAgents, useAppState } from "../nebula/store";
 import { statusLabel } from "../nebula/status";
 import { liveThreads } from "../nebula/live";
 import { ThreadPlate, plateTone } from "./Plate";
@@ -12,7 +12,7 @@ const MAX = 12;
 
 export function LiveStrip({ current }: { current: string | undefined }) {
   const state = useAppState();
-  const live = liveThreads(Object.values(state.agents));
+  const live = liveThreads(threadAgents(state));
   if (live.length === 0) return null;
   const shown = live.slice(0, MAX);
   return (

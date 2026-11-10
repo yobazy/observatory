@@ -4,6 +4,7 @@ import {
   cardFor,
   clearHome,
   draftCard,
+  draftChecks,
   homeCard,
   isFolderKey,
   saveCard,
@@ -15,6 +16,7 @@ import {
 } from "../nebula/cards";
 import { flash, getState } from "../nebula/store";
 import { Switch } from "./Settings";
+import { LeadSection } from "./LeadCard";
 
 /** Which card to edit: a project's (keyed by its id), or a plain folder's
  *  Home card (`folder:<path>`). `makeHome` opens it flagged as Home. */
@@ -49,6 +51,10 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
   const [kinds, setKinds] = useState(saved?.taskKinds.join(", ") ?? "");
   // As typed, so the field can be cleared on the way to a new number.
   const [cap, setCap] = useState(String(saved?.concurrency ?? 1));
+  const [budget, setBudget] = useState(saved?.dailyBudget ? String(saved.dailyBudget) : "");
+  // One command per line. A card saved before checks existed gets its draft
+  // once the folder is read.
+  const [checks, setChecks] = useState(saved?.checks?.join("\n") ?? "");
   const [sources, setSources] = useState<CardSources | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const first = useRef<HTMLTextAreaElement>(null);
@@ -56,6 +62,7 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
   const redraft = (draft: ProjectCard) => {
     setCard((c) => ({ ...(c ?? draft), description: draft.description, skills: draft.skills, skillNotes: draft.skillNotes }));
     setSkills(draft.skills.join(", "));
+    setChecks((draft.checks ?? []).join("\n"));
   };
 
   // Read the folder every time: a saved card needs to know whether
@@ -66,8 +73,10 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
       .then((s) => {
         if (!live) return;
         setSources(s);
+        if (saved && !saved.checks) setChecks(draftChecks(s.files).join("\n"));
         if (!saved) {
           const draft = draftCard(s);
+          setChecks((draft.checks ?? []).join("\n"));
           setCard(target.makeHome ? { ...withPolicy(draft, s.isGitRepo ? draft.policy : "shared"), isHome: true } : draft);
           setSkills(draft.skills.join(", "));
         }
@@ -109,6 +118,13 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
       skillNotes: Object.fromEntries(Object.entries(card.skillNotes).filter(([k]) => names.includes(k))),
       taskKinds: splitList(kinds),
       homeFolder: card.isHome ? folder : null,
+      dailyBudget: Number(budget) > 0 ? Number(budget) : undefined,
+      // Started or stopped from this dialog meanwhile: as saved, not as opened.
+      lead: cardFor(cardKey)?.lead,
+      checks: checks
+        .split("\n")
+        .map((c) => c.trim())
+        .filter(Boolean),
     };
     saveCard(cardKey, next);
     flash(next.isHome ? `${target.name} is Home` : `Saved ${target.name}'s card`);
@@ -214,6 +230,21 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
                   : "This folder isn't a git repo, so tasks run in it side by side."}
             </p>
 
+            {canIsolate && (
+              <div className="field">
+                <label htmlFor="card-push">Push</label>
+                <div className="card-row">
+                  <Switch id="card-push" on={card.pushAfterTurn} onChange={(on) => setCard({ ...card, pushAfterTurn: on })} />
+                  <span className="dialog-note card-flat">Push the branch after every turn</span>
+                </div>
+              </div>
+            )}
+            {canIsolate && card.pushAfterTurn && (
+              <p className="dialog-note card-indent">
+                Fast-forward only, never forced. Only commits go, and never the main branch.
+              </p>
+            )}
+
             <div className="field">
               <label htmlFor="card-home">Home</label>
               {folderHome ? (
@@ -226,6 +257,56 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
               )}
             </div>
             {takingHome && <p className="dialog-note card-indent">Home moves here from {homeName ?? "another project"}.</p>}
+
+            {!folderHome && (
+              <div className="field">
+                <label htmlFor="card-budget">Daily budget</label>
+                <div className="card-row">
+                  <span className="budget-input">
+                    $
+                    <input
+                      id="card-budget"
+                      type="number"
+                      min={0}
+                      step={5}
+                      inputMode="decimal"
+                      value={budget}
+                      onChange={(e) => setBudget(e.target.value)}
+                      placeholder="none"
+                      aria-label="Daily budget in dollars"
+                    />
+                  </span>
+                  <span className="dialog-note card-flat">Past this today, its Dispatch tasks wait. Running ones carry on.</span>
+                </div>
+              </div>
+            )}
+
+            {!folderHome && (
+              <div className="field field-top">
+                <label htmlFor="card-checks">Checks</label>
+                <div className="card-stack">
+                  <textarea
+                    id="card-checks"
+                    className="task-box card-checks"
+                    rows={2}
+                    value={checks}
+                    onChange={(e) => setChecks(e.target.value)}
+                    placeholder="npm test"
+                    spellCheck={false}
+                  />
+                  <div className="card-row">
+                    <Switch id="card-review" on={card.reviewOff !== true} onChange={(on) => setCard({ ...card, reviewOff: on ? undefined : true })} />
+                    <span className="dialog-note card-flat">
+                      Check finished work before it shows as done: these run in the checkout, one per line, then a read-only reviewer reads the result (Settings › Check before done).
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!folderHome && getState().projects[cardKey] && (
+              <LeadSection projectId={cardKey} projectName={target.name} base={card} />
+            )}
 
             {card.isHome && (
               <div className="field field-top">

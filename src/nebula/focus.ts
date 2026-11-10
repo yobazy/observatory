@@ -3,7 +3,7 @@
 // across launches, since which session you were looking at is known only to
 // this app.
 import { useEffect } from "react";
-import { getState, setState, subscribe, type State } from "./store";
+import { getState, setState, subscribe, threadAgents, type State } from "./store";
 import { sameSession, type SessionRef } from "./types";
 
 const KEY = "observatory.lastSessions";
@@ -41,7 +41,7 @@ export function sessionFor(s: State, projectId: string, last: Record<string, Ses
     if (!archived) return remembered;
   }
   const inProject = (worktreeId: string) => s.worktrees[worktreeId]?.project_id === projectId;
-  const agent = Object.values(s.agents)
+  const agent = threadAgents(s)
     .filter((a) => !a.archived && inProject(a.worktree_id))
     .sort((a, b) => b.status_changed_at - a.status_changed_at)[0];
   if (agent) return { Agent: agent.id };

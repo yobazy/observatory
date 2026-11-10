@@ -55,6 +55,13 @@ test('a pinned thread stays', () => {
   assert.deepEqual(closable(s, now, all(safe)), ['b']);
 });
 
+test('a project lead\'s thread stays, and is never read', () => {
+  const s = state([agent('a'), agent('b')]);
+  const o = { leads: new Set(['a']) };
+  assert.deepEqual(closable(s, now, all(safe), o), ['b']);
+  assert.deepEqual(candidates(s, now, o).map((a) => a.id), ['b']);
+});
+
 test('the thread you have open stays', () => {
   const s = state([agent('a'), agent('b')], { selectedSession: { Agent: 'a' } });
   assert.deepEqual(closable(s, now, all(safe)), ['b']);

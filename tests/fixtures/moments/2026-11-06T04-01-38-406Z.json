@@ -1,0 +1,28 @@
+{
+  "moment": "2026-11-06T04-01-38-406Z",
+  "family": "queue",
+  "note": "sometimes i have sub-agents working and in the terminal i can normally just keep talking with the regular agent but in the reader it's not evident that that's what's happening and when i send a message, it just queues it up",
+  "fixedBy": "#148 Keep talking to a thread from the Read view while its subagents work",
+  "source": "thread.json: your prompt at 22:18:50 and the reply that ended the turn at 22:19:14, with the thread still running for its subagents at the moment (it was taken back from the queue then). When it went running and when the log marked the turn ended are taken from those two entries.",
+  "checks": [
+    {
+      "reads": "queue",
+      "input": {
+        "agent": {
+          "status": "running",
+          "status_changed_at": "2026-11-05T22:18:50Z",
+          "alive": true
+        },
+        "turnEndedAt": "2026-11-05T22:19:14Z",
+        "sends": {},
+        "onScreen": true,
+        "now": "2026-11-06T04:01:26.846Z"
+      },
+      "expect": {
+        "held": true,
+        "canSendNow": true,
+        "hold": "not ready"
+      }
+    }
+  ]
+}

@@ -24,6 +24,7 @@ import { ProjectIcon, useProjectColorStyle, useProjectMenu } from "./ProjectIcon
 import { FlagGlyph, FollowUps, PriorityMark } from "./Organize";
 import { UncommittedEntry } from "./Uncommitted";
 import { IdeasEntry } from "./Ideas";
+import { ParkNotice } from "./Park";
 import { InboxEntry } from "./Inbox";
 import { createFolder, deleteFolder, moveFolder, moveInFolder, moveProject, moveToFolder, renameFolder, shiftFolder, toggleFolder } from "../nebula/organize";
 import { allTags, cleanTag, layout, matches, type ProjectFolder } from "../nebula/folders";
@@ -33,6 +34,10 @@ import { ContextMenu, type MenuItem } from "./Menu";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
 import { reorderKey, useReorder, type DropInto } from "./useReorder";
 import { useBatches } from "../nebula/batch";
+import { openLeadChat, useLeadCalls, useLeads } from "../nebula/leadCalls";
+import { petLabel, QUIET, type Call, type LeadEntry } from "../nebula/leadChat";
+import { PetSprite } from "./Pet";
+import { ChatRow } from "./ProjectChat";
 import { useRecentCount, useVisits } from "../nebula/recent";
 import { RECENT_COUNTS, recentProjects, type RecentCount } from "../nebula/recentList";
 
@@ -273,6 +278,7 @@ export function Sidebar({
         )}
 
         <AwayDigest onOpen={selectAgent} />
+        <ParkNotice />
         <FollowUps />
         <div className="side-entries">
           <UncommittedEntry />
@@ -308,6 +314,8 @@ export function Sidebar({
             +
           </button>
         </div>
+
+        <TopLeadRow />
 
         <div className="project-search has-toggle">
           <input
@@ -724,6 +732,7 @@ function ProjectRow({
         <ProjectIcon project={project} />
         <span className="project-name">{project.name}</span>
         <PriorityMark priority={prefs.projectPriorities?.[project.repo_path]} />
+        <LeadMark projectId={project.id} />
         {live && <span className="live-dot" title="Dev server running" aria-label="Dev server running" />}
         <span className="project-meta">
           <LoadMeter projectId={project.id} />
@@ -755,6 +764,45 @@ function ProjectRow({
       </span>
     </button>
   );
+}
+
+/** The pet a project's running lead is (S27), after its name: it hops
+ *  with a count when the lead has something for you, and a click opens
+ *  the project's chat (S29). Inside the row's button, so it's a span; the
+ *  pet in the project's header reaches it by keyboard. */
+function LeadMark({ projectId }: { projectId: string }) {
+  const leads = useLeads();
+  const lead = leads.find((l) => l.projectId === projectId);
+  const mine = useMemo(() => (lead ? [lead] : []), [lead]);
+  const calls = useLeadCalls(mine);
+  if (!lead) return null;
+  const call = calls[lead.agentId] ?? QUIET;
+  return (
+    <span
+      className={`lead-pet${call.calling ? " is-calling" : ""}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        openLeadChat(lead.agentId);
+      }}
+      title={`${leadTitle(lead, call)}\nClick to chat with it.`}
+      aria-label={leadTitle(lead, call)}
+      role="img"
+    >
+      <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={27} />
+      {call.calling && <span className="lead-badge">{call.count}</span>}
+    </span>
+  );
+}
+
+const leadTitle = (lead: LeadEntry, call: Call) =>
+  `${lead.title}${lead.model ? ` (${lead.model})` : ""}: ${petLabel(lead.pet).toLowerCase()}. ${
+    call.why === "ask" ? `It has ${call.count === 1 ? "a question" : `${call.count} questions`} for you.` : call.why === "unread" ? "It has an unread reply." : "Nothing new."
+  }`;
+
+/** The top lead's chat, "All projects", at the top of the projects list. */
+function TopLeadRow() {
+  const top = useLeads().find((l) => l.projectId === null);
+  return top ? <ChatRow lead={top} /> : null;
 }
 
 function LinkDot() {

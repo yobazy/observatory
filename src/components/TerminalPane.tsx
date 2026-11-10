@@ -29,6 +29,7 @@ import { useLanded } from "../nebula/prwatch";
 import { ThreadPlate } from "./Plate";
 import { currentWell, onWellChange } from "../nebula/sky";
 import { LiveStrip } from "./LiveStrip";
+import { openLeadChat, useIsLead } from "../nebula/leadCalls";
 
 const THEME = {
   // The eyepiece well's color (styles.css .pane-body::before): --term, darkened.
@@ -100,6 +101,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
   const verdict = useVerdict(agent);
   const landed = useLanded(agent ? state.worktrees[agent.worktree_id]?.path : undefined, verdict);
   const tab = session && "Terminal" in session ? state.terminals[session.Terminal] : undefined;
+  // A lead's raw session (S29), opened from its chat: a way back to it.
+  const lead = useIsLead(agent?.id);
   const exists = !!(agent || tab);
 
   const host = useRef<HTMLDivElement>(null);
@@ -185,6 +188,17 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     t.loadAddon(new Unicode11Addon());
     t.unicode.activeVersion = "11";
 
+    // The scrollbar stays faint while the pointer is only resting on the
+    // terminal, and firms up while you scroll (styles.css, .is-scrolling).
+    const el = host.current;
+    let still: ReturnType<typeof setTimeout> | undefined;
+    const scrolling = () => {
+      el?.classList.add("is-scrolling");
+      clearTimeout(still);
+      still = setTimeout(() => el?.classList.remove("is-scrolling"), 900);
+    };
+    el?.addEventListener("wheel", scrolling, { passive: true, capture: true });
+
     // Shift+Enter is a newline in Claude Code and friends: send ESC CR
     // (what their terminal setup maps it to) instead of a bare CR.
     t.attachCustomKeyEventHandler((e) => {
@@ -196,6 +210,7 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
       if (e.metaKey && !e.altKey && !e.ctrlKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
         if (e.type === "keydown") {
           e.preventDefault();
+          scrolling();
           const up = e.key === "ArrowUp";
           if (e.shiftKey) {
             if (up) t.scrollToTop();
@@ -262,6 +277,8 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
     return () => {
       disposed = true;
       observer.disconnect();
+      clearTimeout(still);
+      el?.removeEventListener("wheel", scrolling, { capture: true });
       window.removeEventListener("observatory:slid", onSlid);
       unlink();
       files.current?.dispose();
@@ -400,6 +417,11 @@ export function TerminalPane({ onNewTask }: { onNewTask: () => void }) {
             </span>
           </div>
           <div className="pane-actions">
+            {lead && agent && (
+              <button className="btn btn-primary" onClick={() => openLeadChat(agent.id)} title="Back to the lead's chat">
+                Chat
+              </button>
+            )}
             {canRead && summaryHidden && (
               <button className="btn btn-sm btn-rare" onClick={() => setTurnLineHidden(false)} title="Show what the latest turn did, above the terminal">
                 Summary

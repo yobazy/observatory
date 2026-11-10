@@ -5,6 +5,8 @@ import type { UsageReport } from "./usage";
 import type { AutomationsReport, Watches } from "./automations";
 import type { DesktopPrefs } from "./theme";
 import { byPriority, rank } from "./priority.ts";
+import { allCards } from "./cards.ts";
+import { leadIds, withoutLeads } from "./lead.ts";
 import type { PrState } from "./prs";
 import type { Queued } from "./queue";
 import type { FanOut } from "./fanout";
@@ -101,6 +103,9 @@ export interface State {
   /** A tag looked for across projects: the sidebar's "#tag" filter, or one
    *  picked in ⌘K. A project opened meanwhile turns its chip on. */
   tagFilter: string | null;
+  /** The session last opened from the triage queue (triage.ts), with its
+   *  label then, for the usage log's `queue.open`. */
+  queueOpened: { agent: string; label: string; at: number } | null;
 }
 
 function loadFanOuts(): Record<string, FanOut> {
@@ -154,6 +159,7 @@ let state: State = {
   fileOpened: {},
   comments: {},
   tagFilter: null,
+  queueOpened: null,
   theme: "default",
   prefs: {},
   mode: "dark",
@@ -325,10 +331,19 @@ export function urgency(a: Agent): number {
   return 3;
 }
 
+/** Every lead's thread, the top lead's too (S17, S26). */
+export const leadThreads = (s: Pick<State, "prefs">): Set<string> => leadIds(allCards(), s.prefs?.topLead);
+
+/** Every thread but the leads': a lead is its project's chat (S29), so it's
+ *  never listed or counted as a thread. Archived ones too. */
+export function threadAgents(s: Pick<State, "agents" | "prefs">): Agent[] {
+  return withoutLeads(Object.values(s.agents), leadThreads(s));
+}
+
 /** A branch's tasks: those pinned (dragged into place) first, in their
  *  order, then the rest by priority, then urgency. */
 export function worktreeAgents(s: State, worktreeId: string, archived = false): Agent[] {
-  const auto = Object.values(s.agents)
+  const auto = threadAgents(s)
     .filter((a) => a.worktree_id === worktreeId && a.archived === archived)
     .sort(
       (a, b) =>
@@ -352,11 +367,11 @@ export function projectAgents(s: State, projectId: string): Agent[] {
       .filter((w) => w.project_id === projectId)
       .map((w) => w.id),
   );
-  return Object.values(s.agents).filter((a) => !a.archived && wts.has(a.worktree_id));
+  return threadAgents(s).filter((a) => !a.archived && wts.has(a.worktree_id));
 }
 
 export function waitingAgents(s: State): Agent[] {
-  return Object.values(s.agents)
+  return threadAgents(s)
     .filter((a) => !a.archived && a.status === "needs_feedback")
     .sort(
       (a, b) =>

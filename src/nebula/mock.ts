@@ -9,6 +9,9 @@ import type { State } from "./store";
 import type { ThreadEdit } from "./threadfiles";
 import type { Step as TurnStep, Turn } from "./turnsummary";
 import type { Entry as TranscriptEntry, Transcript } from "./transcript";
+import { allCards, draftCard, saveLead } from "./cards";
+import { reloadBatches, type Batch, type BatchTask } from "./batch";
+import { leadActs, updateLeadActs } from "./leadActions";
 
 const now = Date.now();
 const min = 60_000;
@@ -92,7 +95,132 @@ const agents: Agent[] = [
   agent("a10", "wm3", "Weekly Invoice Job", "terminated", 45, ["generate the weekly invoice batch"]),
   agent("a12", "w3", "Search Facets", "finished", 60 * 5, ["add size and color facets to search"]),
   agent("a11", "w0", "Old Spike", "finished", 60 * 24 * 6, ["spike on an image CDN"], { archived: true }),
+  // The leads (S17, S26), so the sidebar shows their pets and one calls you.
+  agent("lead0", "w0", "Lead storefront", "finished", 3, ["[observatory] finished: Sequential Cart Sync on cart-sync"], { model: "sonnet" }),
+  agent("lead1", "wm0", "Lead marketing-site", "finished", 40, ["[observatory] finished: Lighthouse Fixes on main"], { model: "sonnet" }),
+  agent("lead4", "wm3", "Lead billing-api", "finished", 8, ["[observatory] failed: Weekly Invoice Job on main"], { model: "sonnet", unseen: true }),
+  agent("leadtop", "wm5", "Lead", "finished", 15, ["[observatory] leads: Lead storefront, Lead marketing-site, Lead billing-api"], { model: "opus" }),
 ];
+
+/** Each mock lead's project and its chat (S29): what was said to it, by
+ *  you or by the app, and what it said, after its starting prompt. */
+type Said = { you: string; ago: number } | { said: string; ago: number };
+const LEADS: Record<string, { project: string | null; said: string[]; chat?: Said[] }> = {
+  lead0: {
+    project: "p0",
+    chat: [
+      { you: "Add size and color facets to search, and open a PR when it's green.", ago: 60 * 7 },
+      {
+        said: "Starting that on a new branch. The brief points it at `src/search/facets.ts`, says what done looks like, and tells it to run `npm test` before it opens the PR.\n\nSTART search-facets: Add size and color facets to the search page. They live in src/search/facets.ts. Done is both facets filtering results, with tests. Run npm run build && npm test, then open a PR.",
+        ago: 60 * 7,
+      },
+      { you: "[observatory] started search-facets (agent a12)", ago: 60 * 7 - 1 },
+      { you: "[observatory] PR merged #121: Search Facets on search-facets (agent a12): merged", ago: 60 * 5 },
+      { you: "Cart sync races when two tabs are open. Make it apply one update at a time.", ago: 40 },
+      { said: "On it. The new thread is on `cart-sync`, and I'll keep an eye on its checks.\n\nSTART cart-sync: Make cart sync apply one update at a time; two tabs race in src/cart/sync.ts. Done is a test with two tabs. Run the checks, then open a PR.", ago: 40 },
+      { you: "[observatory] started cart-sync (agent a2)\n[observatory] CI failed #128: Sequential Cart Sync on cart-sync (agent a2): e2e", ago: 20 },
+      { said: "The cart-sync thread's `e2e` check failed on the two-tab test. I've told it to run the e2e suite and push the fix.\n\nNUDGE a2: CI failed on e2e. Run npm run e2e, fix the two-tab test and push.", ago: 19 },
+      { you: "[observatory] nudged a2\n[observatory] finished: Sequential Cart Sync on cart-sync (agent a2): Needs review of the redirect", ago: 4 },
+    ],
+    said: [
+      "Sequential Cart Sync finished and opened PR #61. Sync applied every update with `Promise.all`, so two tabs raced; now a worker applies one update at a time:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\nThe tests pass, and I've written it into my notes. Search Facets is still waiting on review, and Invoice Webhooks is working.\n\nASK_USER: should a cart sync that fails three times stop and tell you, or keep retrying in the background? Nothing in the notes says.\n\nASK merge #128: the e2e fix is pushed, and you asked for this",
+    ],
+  },
+  lead1: { project: "p1", said: ["All quiet. Lighthouse Fixes merged yesterday, and the hero redesign is waiting on you for a permission prompt."] },
+  lead4: {
+    project: "p4",
+    said: [
+      "Weekly Invoice Job stopped with an error: the batch hit a rate limit at invoice 214. I've noted it. It needs a retry with a smaller batch, which I can start for you to send.",
+    ],
+  },
+  leadtop: {
+    project: null,
+    chat: [
+      { you: "[observatory] leads: Lead storefront (/Users/dev/storefront), Lead marketing-site (/Users/dev/marketing-site), Lead billing-api (/Users/dev/billing-api)", ago: 60 * 9 },
+      { said: "Morning. Three leads are running, six tasks are open, and two things are waiting on you. storefront has a question about failed cart syncs.", ago: 60 * 9 - 1 },
+      { you: "Spend tonight on billing-api: the weekly invoice job should retry in smaller batches.", ago: 50 },
+      { said: "Passed to the billing-api lead. It will start a thread for it and ask you before anything merges.\n\nPASS billing-api: Make the weekly invoice job retry in batches of 50 when it hits a rate limit.", ago: 50 },
+      { you: "[observatory] passed to Lead billing-api", ago: 49 },
+    ],
+    said: [],
+  },
+};
+
+/** What you said to a mock lead and what it answered, after the canned start. */
+const leadTalk: Record<string, { you: string; said: string; at: number }[]> = {};
+const typedTo: Record<string, string> = {};
+
+const LEAD_ANSWERS = [
+  "Got it. I've written that into my notes, so I won't ask again, and I'll tell the next task that runs into it.",
+  "That's in the project's CLAUDE.md under Checks: npm run build, then npm test. Source: CLAUDE.md, line 12.",
+  "Nothing new since this morning. Ask me where something lives and I'll find it.",
+];
+
+/** The mock leads on their cards and in Settings, unless you've set your own. */
+function seedLeads() {
+  if (!Object.values(allCards()).some((c) => c.lead))
+    for (const [id, l] of Object.entries(LEADS))
+      if (l.project)
+        saveLead(
+          l.project,
+          { agentId: id, model: "sonnet", notes: `~/.config/observatory/leads/${id}.md`, ...(id === "lead0" ? { acts: true } : {}) },
+          draftCard({ files: [], isGitRepo: true }),
+        );
+  seedLeadWork();
+  const topLead = { agentId: "leadtop", model: "opus", notes: "~/.config/observatory/leads/top.md", path: "/Users/dev" };
+  try {
+    const saved = JSON.parse(localStorage.getItem("observatory.prefs") ?? "{}");
+    if (!("topLead" in saved)) localStorage.setItem("observatory.prefs", JSON.stringify({ ...saved, topLead }));
+  } catch {
+    // The preview without storage has no top lead.
+  }
+  // The prefs may have loaded already, or may load after this.
+  const apply = () => {
+    if (!getState().prefs.topLead) setState((st) => ({ prefs: { ...st.prefs, topLead } }));
+  };
+  apply();
+  setTimeout(apply, 500);
+}
+
+/** What storefront's lead started (S28), for its chat's task cards and
+ *  its ask: two tasks off a Dispatch batch already taken off the board,
+ *  each reply already acted on, so the preview never runs them again. */
+function seedLeadWork() {
+  // Seeded once; an older preview's records, from before replies had times, again.
+  if (leadActs().tasks.some((t) => t.replyAt !== undefined)) return;
+  const at = (ago: number) => now - ago * min;
+  const task = (id: string, agentId: string, text: string, ago: number) =>
+    ({ id, sourceItemIds: [], text, target: "project", projectId: "p0", confidence: 1, planCheckpoint: false, context: [], state: "launched", lane: null, agentId, launchedAt: at(ago) }) as unknown as BatchTask;
+  try {
+    const saved = JSON.parse(localStorage.getItem("observatory.dispatch.batches") ?? "{}");
+    const batches = Array.isArray(saved.batches) ? saved.batches : [];
+    const mine: Batch = { id: "mock-lead-batch", at: at(60 * 7), dismissed: true, tasks: [task("mlt1", "a12", "Add size and color facets", 60 * 7), task("mlt2", "a2", "Apply cart updates one at a time", 40)] };
+    localStorage.setItem("observatory.dispatch.batches", JSON.stringify({ batches: [...batches.filter((b: Batch) => b.id !== mine.id), mine] }));
+    reloadBatches();
+  } catch {
+    // The preview without storage shows the lead's chat without its tasks.
+  }
+  const ask = { kind: "ask" as const, what: "merge" as const, pr: 128, why: "the e2e fix is pushed, and you asked for this" };
+  // The entry numbers of the replies in lead0's chat, from leadTranscript().
+  const reply = { facets: 2, cart: 6, nudge: 8, last: 10 };
+  // And their times, as leadTranscript() gives them.
+  const said = (ago: number) => Math.round(now / 1000) - ago * 60;
+  const when = { facets: said(60 * 7), cart: said(40), nudge: said(19), last: Math.round((now - 3 * min) / 1000) };
+  updateLeadActs(() => ({
+    acted: { lead0: reply.last, leadtop: 4 },
+    tasks: [
+      { leadId: "lead0", projectId: "p0", batchId: "mock-lead-batch", taskId: "mlt1", branch: "search-facets", at: at(60 * 7), n: reply.facets, replyAt: when.facets, agentId: "a12", told: true },
+      { leadId: "lead0", projectId: "p0", batchId: "mock-lead-batch", taskId: "mlt2", branch: "cart-sync", at: at(40), n: reply.cart, replyAt: when.cart, agentId: "a2", told: true },
+    ],
+    history: [
+      { leadId: "lead0", n: reply.facets, at: when.facets, lines: ["Started search-facets"], asks: [] },
+      { leadId: "lead0", n: reply.cart, at: when.cart, lines: ["Started cart-sync"], asks: [] },
+      { leadId: "lead0", n: reply.nudge, at: when.nudge, lines: ["Nudged Sequential Cart Sync"], asks: [] },
+      { leadId: "lead0", n: reply.last, at: when.last, lines: [], asks: [ask] },
+    ],
+    outcomes: { lead0: { n: reply.last, at: when.last, lines: [], asks: [ask] } },
+  }));
+}
 
 const DEMO = [
   "\x1b[38;5;111m╭──────────────────────────────────────────────╮\x1b[0m",
@@ -231,6 +359,7 @@ export function startMock(handlers: Map<string, PtyHandler>) {
     epoch: 1,
     snapshots: 1,
   });
+  seedLeads();
   // Answer every attach with the canned screen.
   let runSeq = 0;
   return (variant: string, body: Record<string, unknown> | undefined): EntityId | { error: string } | null | void => {
@@ -303,9 +432,18 @@ export function startMock(handlers: Map<string, PtyHandler>) {
       const id = (body.session as { Agent: string }).Agent;
       const cur = getState().agents[id];
       const picked = cur?.status === "needs_feedback" && /^\d$/.test(String(body.data));
+      // A lead answers what was typed to it, when its turn ends.
+      if (LEADS[id] && body.data !== "\r") typedTo[id] = String(body.data).replace(/\x1b\[20[01]~/g, "");
       if (cur && cur.status !== "running" && (body.data === "\r" || picked)) {
         setState((s) => ({ agents: { ...s.agents, [id]: { ...cur, status: "running", status_changed_at: Date.now() } } }));
-        turnEnds(id, "finished", 6_000 + Math.random() * 4_000);
+        const ms = 6_000 + Math.random() * 4_000;
+        if (LEADS[id] && typedTo[id]) {
+          const talk = (leadTalk[id] ??= []);
+          const you = typedTo[id];
+          delete typedTo[id];
+          setTimeout(() => talk.push({ you, said: LEAD_ANSWERS[talk.length % LEAD_ANSWERS.length], at: Math.round(Date.now() / 1000) }), ms - 200);
+        }
+        turnEnds(id, "finished", ms);
       }
       return null;
     }
@@ -700,12 +838,50 @@ export function mockTurn(s: State, agentId: string): Turn | null {
     said: "⌘K opens a menu of orders, filtered as you type. Merged as #12.",
     saidEnd: "⌘K opens a menu of orders, filtered as you type. Merged as #12.\n\n**✅ Safe to close.** Nothing left in this thread.",
   };
+  // A thread going round the same failing build, for the queue's stuck flag.
+  const fail = (ago: number, line: number) => ({
+    ...step("Bash", "npm run build", false, "Build the app", ago),
+    error: `Exit code 2\nsrc/search/facets.ts(${line},14): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Facet'.`,
+  });
+  turns.a12 = {
+    prompt: "add size and color facets to search",
+    started: now - 6 * 3600,
+    last: now - 5 * 3600,
+    steps: [
+      step("Edit", `${root}/src/search/facets.ts`),
+      fail(5.8 * 3600, 41),
+      step("Edit", `${root}/src/search/facets.ts`),
+      fail(5.5 * 3600, 42),
+      step("Edit", `${root}/src/search/facets.ts`),
+      fail(5.1 * 3600, 44),
+    ],
+    said: "The build still fails on the facet type. I'll try another approach.",
+  };
   const t = turns[agentId];
   return t ? { ...t, number: agentId === "a3" ? 3 : 1, dropped: 0, interrupted: false } : null;
 }
 
+/** A mock lead's thread: its start, what it said, and anything you've said to it since. */
+function leadTranscript(s: State, agentId: string): Transcript {
+  const a = s.agents[agentId];
+  const at = Math.round((a?.status_changed_at ?? now) / 1000);
+  const entries: TranscriptEntry[] = [];
+  const add = (kind: TranscriptEntry["kind"], text: string, when = at) => entries.push({ n: entries.length, kind, text, at: when, steps: [] });
+  const lead = LEADS[agentId];
+  add("you", `You're the lead for ${lead.project ? (s.projects[lead.project]?.name ?? "this project") : "every project"}. Your notes live in ~/.config/observatory/leads/${agentId}.md.`, at - 60 * 60 * 10);
+  for (const c of lead.chat ?? []) add("you" in c ? "you" : "claude", "you" in c ? c.you : c.said, Math.round(now / 1000) - c.ago * 60);
+  if (!lead.chat) add("you", a?.recent_prompts[0]?.text ?? "[observatory] leads: ready");
+  for (const said of lead.said) add("claude", said);
+  for (const t of leadTalk[agentId] ?? []) {
+    add("you", t.you, t.at);
+    add("claude", t.said, t.at);
+  }
+  return { entries, dropped: 0 };
+}
+
 /** The reader's conversation, made from the demo's latest turns. */
 export function mockTranscript(s: State, agentId: string): Transcript | null {
+  if (LEADS[agentId]) return leadTranscript(s, agentId);
   const turn = mockTurn(s, agentId);
   if (!turn) return null;
   const entries: TranscriptEntry[] = [];
@@ -740,4 +916,17 @@ export function mockTranscript(s: State, agentId: string): Transcript | null {
       (agentId === "a3" ? "**🟠 Keep open:** the branch isn't pushed." : "**✅ Safe to close.** Nothing left in this thread."),
   );
   return { entries, dropped: 0 };
+}
+
+/** The leads' answers log (leadAsk.ts) as the preview has it: a few of
+ *  today's answers, one passed to you, and one from yesterday. */
+export function mockAnswersLog(now: Date): string {
+  const at = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * 3600_000).toISOString().replace(/\.\d+Z$/, "Z");
+  const today = Math.min(now.getHours() + now.getMinutes() / 60, 6) / 4;
+  return [
+    `${at(26)} Lead shop "Fix login" Q: which auth library? A: next-auth, per CLAUDE.md src: CLAUDE.md`,
+    `${at(today * 3)} Lead shop "Add facets" Q: where do search facets live? A: src/search/facets.ts src: README.md`,
+    `${at(today * 2)} Lead "Docs pass" Q: how does api deploy? A: fly deploy from main, by CI src: ~/code/api/README.md`,
+    `${at(today)} Lead shop "Add facets" Q: size facet first or color? A: ASK_USER: Should the size facet or the color facet ship first? src: ASK_USER`,
+  ].join("\n");
 }

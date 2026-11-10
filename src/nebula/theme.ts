@@ -115,16 +115,58 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   /** The agent CLI that suggests them; unset is a cheap model, "off" is off
    *  (nextprompts.ts). */
   suggestCommand?: string;
-  /** Sessions Dispatch runs at once, across batches (batch.ts); 4 when unset. */
+  /** The triage queue's model pass (triage.ts); off unless true, since each
+   *  pass over changed threads is a model call. */
+  triageOn?: boolean;
+  /** The agent CLI triage runs through, headless (router.rs); unset is a
+   *  cheap model (DEFAULT_TRIAGE_COMMAND). */
+  triageCommand?: string;
+  /** Days a thread sits unchanged before it's labelled stale; 3 when unset. */
+  triageStaleDays?: number;
+  /** Dollars one session may spend before the queue flags it stuck, at 85%
+   *  (stuck.ts); $10 when unset. A Dispatch task can set its own. */
+  taskBudget?: number;
+  /** The check before "done" (review.ts): a finished turn's changes are
+   *  checked by a read-only reviewer; off unless true, since each review is
+   *  a model call and runs the project's checks. */
+  reviewOn?: boolean;
+  /** The reviewer CLI, run headless in the checkout (review.rs); unset is
+   *  Claude in plan mode (DEFAULT_REVIEW_COMMAND). */
+  reviewCommand?: string;
+  /** Sessions working at once, however they were started; Dispatch's tasks
+   *  and New task's queue wait past it (batch.ts); 4 when unset. */
   dispatchCap?: number;
   /** Archive a finished thread whose last reply said ✅ Safe to close once
    *  it has sat a day (autoclose.ts); on unless turned off. */
   autoCloseSafe?: boolean;
+  /** Park threads idle past `parkDays` in Ideas, their sessions archived
+   *  (park.ts); off unless true. */
+  parkOn?: boolean;
+  /** Days a thread sits unchanged before it's parked; 3 when unset. */
+  parkDays?: number;
+  /** You OK'd the first list of threads to park: later ones park on their own. */
+  parkConfirmed?: boolean;
+  /** Threads kept out of parking (unticked, resumed, undone), by agent id:
+   *  their last change then. A newer change lets them park again. */
+  parkKeep?: Record<string, number>;
+  /** The top lead (leadAsk.ts): one thread over every project that
+   *  answers other threads' questions and passes one about a project to its
+   *  lead. Off unless started from Settings; `path` is the folder it runs in. */
+  topLead?: TopLead;
   /** Note what you do in the app to a file on this Mac (uselog.ts); off unless on. */
   keepUseLog?: boolean;
   /** Label prefixes of the launchd agents the Automations view lists
    *  (automations.ts); unset is every prefix not from Apple, Google, Adobe or Valve. */
   automationLabels?: string[];
+}
+
+export interface TopLead {
+  agentId: string;
+  model: string;
+  notes: string;
+  path?: string;
+  /** Its pixel-pets animal (S27, leadChat.ts); unset is the jaguar. */
+  pet?: { kind: string; coat: string };
 }
 
 export type ProjectIconChoice = { kind: "emoji"; value: string } | { kind: "image"; value: string };
@@ -140,7 +182,13 @@ export async function loadPrefs(): Promise<DesktopPrefs> {
   return invoke<DesktopPrefs>("read_desktop_prefs").catch(() => ({}));
 }
 
+/** Save the prefs. desktop.json keeps any key not sent (one this build
+ *  doesn't know, or that hadn't loaded yet); a key cleared here, set to
+ *  undefined or left out where the last prefs had it, is named so it goes. */
 export async function savePrefs(prefs: DesktopPrefs): Promise<void> {
+  const last = getState().prefs as Record<string, unknown>;
+  const next = prefs as Record<string, unknown>;
+  const removed = Object.keys({ ...last, ...next }).filter((k) => next[k] === undefined);
   setState({ prefs });
   if (isPreview()) {
     try {
@@ -150,7 +198,7 @@ export async function savePrefs(prefs: DesktopPrefs): Promise<void> {
     }
     return;
   }
-  await invoke("write_desktop_prefs", { prefs });
+  await invoke("write_desktop_prefs", { prefs, removed });
 }
 
 const media = () => window.matchMedia("(prefers-color-scheme: light)");

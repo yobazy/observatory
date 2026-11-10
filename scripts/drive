@@ -13,16 +13,32 @@ Start the app with `scripts/sandbox.sh up` (or `app`), then:
   scripts/drive open /abs/file ...     open files in the preview
   scripts/drive click "Follow up"      click a control by its label or text
   scripts/drive click Open --nth 1     the second of several that match
+  scripts/drive menu "demo-api"        right-click it, for its menu (--nth too)
   scripts/drive type "hello" --into Reply   fill a field (else the focused one)
   scripts/drive key cmd+shift+m        press keys: esc, enter, cmd+k, ...
   scripts/drive wait "Done" [--timeout 30]  until the window shows that text
   scripts/drive replay MOMENT_DIR      put a marked moment back on screen
+  scripts/drive run STEPS [--shots DIR]  every step in a file (or - for stdin)
 
 Prints the answer (JSON for structures) and exits 1 with the error on failure.
+
+`run` takes one command per line, written as you'd write it after
+`scripts/drive`, and stops at the first that fails. `#` starts a comment. In a
+run, `shot NAME` saves DIR/01-NAME.png, numbered in order, so a check is one
+call that leaves its before and after pictures in one folder:
+
+  scripts/drive run - <<'STEPS'
+  select "Fix login"
+  shot before
+  click "Follow up"
+  wait "Sent"
+  shot after
+  STEPS
 """
 import argparse
 import json
 import os
+import shlex
 import socket
 import sys
 import time
@@ -61,8 +77,12 @@ def shot(out=None):
     return call({"cmd": "shot", "out": str(path)})
 
 
-def main():
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+class Failed(Exception):
+    pass
+
+
+def parser():
+    p = argparse.ArgumentParser(prog="scripts/drive", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("state")
     sub.add_parser("text")
@@ -71,9 +91,10 @@ def main():
     sub.add_parser("select").add_argument("thread")
     sub.add_parser("pane").add_argument("mode", choices=["read", "terminal"])
     sub.add_parser("open").add_argument("paths", nargs="+")
-    c = sub.add_parser("click")
-    c.add_argument("text")
-    c.add_argument("--nth", type=int)
+    for name in ("click", "menu"):
+        c = sub.add_parser(name)
+        c.add_argument("text")
+        c.add_argument("--nth", type=int)
     t = sub.add_parser("type")
     t.add_argument("text")
     t.add_argument("--into")
@@ -83,40 +104,54 @@ def main():
     w.add_argument("--timeout", type=float, default=30)
     r = sub.add_parser("replay")
     r.add_argument("moment")
-    a = p.parse_args()
+    n = sub.add_parser("run")
+    n.add_argument("steps", help="a file of steps, or - for stdin")
+    n.add_argument("--shots", help="where a run's screenshots go (default: a new folder beside the other shots)")
+    return p
 
+
+def do(a, shots=None, counter=None):
+    """One command, its answer returned. In a run, `shots` is the run's
+    folder and `counter` numbers the screenshots taken into it."""
     if a.cmd == "shot":
-        show(shot(a.out))
-    elif a.cmd in ("state", "text"):
-        show(call({"cmd": a.cmd}))
-    elif a.cmd == "view":
-        show(call({"cmd": "view", "view": a.view}))
-    elif a.cmd == "select":
-        show(call({"cmd": "select", "thread": a.thread}))
-    elif a.cmd == "pane":
-        show(call({"cmd": "pane", "mode": a.mode}))
-    elif a.cmd == "open":
-        show(call({"cmd": "open", "paths": [str(Path(x).expanduser().resolve()) for x in a.paths]}))
-    elif a.cmd == "click":
-        req = {"cmd": "click", "text": a.text}
+        out = a.out
+        if shots is not None:
+            counter[0] += 1
+            name = Path(out).name if out else "shot"
+            if not name.endswith(".png"):
+                name += ".png"
+            out = shots / f"{counter[0]:02d}-{name}"
+        return shot(out)
+    if a.cmd in ("state", "text"):
+        return call({"cmd": a.cmd})
+    if a.cmd == "view":
+        return call({"cmd": "view", "view": a.view})
+    if a.cmd == "select":
+        return call({"cmd": "select", "thread": a.thread})
+    if a.cmd == "pane":
+        return call({"cmd": "pane", "mode": a.mode})
+    if a.cmd == "open":
+        return call({"cmd": "open", "paths": [str(Path(x).expanduser().resolve()) for x in a.paths]})
+    if a.cmd in ("click", "menu"):
+        req = {"cmd": a.cmd, "text": a.text}
         if a.nth is not None:
             req["nth"] = a.nth
-        show(call(req))
-    elif a.cmd == "type":
+        return call(req)
+    if a.cmd == "type":
         req = {"cmd": "type", "text": a.text}
         if a.into:
             req["into"] = a.into
-        show(call(req))
-    elif a.cmd == "key":
-        show(call({"cmd": "key", "keys": a.keys}))
-    elif a.cmd == "wait":
+        return call(req)
+    if a.cmd == "key":
+        return call({"cmd": "key", "keys": a.keys})
+    if a.cmd == "wait":
         end = time.time() + a.timeout
         while a.text.lower() not in call({"cmd": "text"}).lower():
             if time.time() > end:
                 sys.exit(f'"{a.text}" didn\'t show in {a.timeout:g}s')
             time.sleep(0.5)
-        print(f'"{a.text}" is showing')
-    elif a.cmd == "replay":
+        return f'"{a.text}" is showing'
+    if a.cmd == "replay":
         d = Path(a.moment).expanduser()
         moment = json.loads((d / "moment.json").read_text())
         thread_file = d / "thread.json"
@@ -125,8 +160,67 @@ def main():
         done["note"] = moment.get("note")
         if not thread:
             done["warning"] = "this moment has no thread.json (marked before replays could carry one), so the reader shows the sandbox thread"
-        show(done)
+        return done
+    if a.cmd == "run":
+        return run(a)
+    raise Failed(f"unknown command {a.cmd}")
 
+
+def short(value):
+    """An answer on one line, for a run's log."""
+    text = value if isinstance(value, str) else json.dumps(value)
+    text = " ".join(text.split())
+    return text if len(text) <= 160 else text[:157] + "..."
+
+
+def run(a):
+    source = sys.stdin.read() if a.steps == "-" else Path(a.steps).expanduser().read_text()
+    steps = []
+    for number, line in enumerate(source.splitlines(), 1):
+        try:
+            words = shlex.split(line, comments=True)
+        except ValueError as e:
+            sys.exit(f"line {number}: {e}")
+        if words:
+            steps.append((number, line.strip(), words))
+    # Check every line before doing any, so a typo on line 9 doesn't leave the
+    # app half driven.
+    p = parser()
+
+    def refuse(message):
+        raise Failed(message)
+
+    for sub in p._subparsers._group_actions[0].choices.values():
+        sub.error = refuse
+    p.error = refuse
+    parsed = []
+    for number, text, words in steps:
+        if words[0] == "run":
+            sys.exit(f"line {number}: a run can't start another run")
+        try:
+            parsed.append((number, text, p.parse_args(words)))
+        except Failed as e:
+            sys.exit(f"line {number}: can't read `{text}`: {e}")
+    shots = Path(a.shots).resolve() if a.shots else SHOTS / time.strftime("run-%Y%m%d-%H%M%S")
+    shots.mkdir(parents=True, exist_ok=True)
+    counter = [0]
+    log = []
+    for number, text, step in parsed:
+        try:
+            answer = do(step, shots, counter)
+        except SystemExit as e:
+            log.append(f"✗ {text}: {e.code}")
+            print("\n".join(log))
+            sys.exit(f"stopped at line {number}; screenshots so far in {shots}")
+        log.append(f"✓ {text}" + ("" if answer is None else f" → {short(answer)}"))
+    log.append(f"{len(parsed)} steps done; screenshots in {shots}" if counter[0] else f"{len(parsed)} steps done")
+    return "\n".join(log)
+
+
+def main():
+    answer = do(parser().parse_args())
+    if answer is not None:
+        show(answer)
 
 if __name__ == "__main__":
     main()

@@ -55,6 +55,26 @@ export function readTurn(agent: Agent): Promise<unknown> {
   return line;
 }
 
+/** Like verdictOf, but undefined while a thread at rest hasn't been read
+ *  yet (S28's `safe to close` waits for it), and null for one not at rest. */
+export function verdictKnown(agent: Agent): Chip | null | undefined {
+  if (!readable(agent)) return null;
+  const got = known.get(agent.id);
+  return got?.key === keyOf(agent) ? got.verdict : undefined;
+}
+
+/** Read a thread's verdict when it comes to rest, without a view showing
+ *  it (S28: a lead hears when a thread says ✅ Safe to close). */
+export const checkVerdict = (agent: Agent) => check(agent);
+
+/** Wait for a verdict read; listeners hear each one. */
+export function onVerdicts(l: () => void) {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+}
+
 function check(agent: Agent) {
   if (!readable(agent) || known.get(agent.id)?.key === keyOf(agent) || queued.has(agent.id)) return;
   queued.add(agent.id);
