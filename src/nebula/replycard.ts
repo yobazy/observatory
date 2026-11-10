@@ -16,6 +16,17 @@ export interface Chip {
 export interface Option {
   letter: string;
   label: string;
+  /** Written all in bold, "**A today**": the reply's own pick. */
+  bold?: boolean;
+}
+
+/** "**A today**" bolds the whole option, letter and label, to mark it as the
+ *  pick; the label read after the letter then ends in the closing bold. */
+function boldWhole(written: string, letter: string, label: string): Option | null {
+  const mark = /^(\*\*|__)/.exec(written.trim())?.[1];
+  if (!mark || !label.endsWith(mark) || label.slice(0, -2).includes(mark)) return null;
+  const inner = label.slice(0, -2).trim();
+  return inner ? { letter, label: inner, bold: true } : null;
 }
 
 /** One numbered decision: "2. Ship today?  A today · B Monday". */
@@ -79,6 +90,10 @@ const OPTION_LINE = /^\s*(?:[-*]\s+)?(\*\*|__)?([A-Z])(\s*\([^)]*\))?(\s*[:.)·�
 
 function readOptionLine(line: string): Option | null {
   const m = OPTION_LINE.exec(line);
+  if (m?.[1] && !m[5]) {
+    const whole = boldWhole(line.replace(/^\s*[-*]\s+/, ""), m[2], m[7].trim());
+    if (whole) return m[3] ? { ...whole, label: `${m[3].trim()} ${whole.label}` } : whole;
+  }
   // A bullet marks it as an option too: "  - A today".
   const bulleted = /^\s*[-*]\s/.test(line);
   if (!m || (m[1] ?? "") !== (m[5] ?? "") || !(m[1] || m[4] || m[6] || bulleted)) return null;
@@ -125,20 +140,24 @@ function sentenceEnd(s: string): number {
 /** "Ship today?  A today · B Monday" into the question and its options,
  *  lettered from A in order. No options when it doesn't read that way. */
 export function readAsk(n: number, line: string): Ask {
+  let lastWritten = "";
   const optionsFrom = (at: number): Option[] | null => {
-    const options = splitDots(
+    const parts = splitDots(
       line
         .slice(at)
         // "A · today" separates the letter with a dot too; make it "A: today"
         // so splitting on the dots between options leaves it whole.
         .replace(/(^|\s)((?:\*\*|__)?[A-Z](?:\*\*|__)?)\s+·\s+/g, "$1$2: "),
-    )
-      .map((p, i) => {
-        const got = OPTION.exec(p.trim());
-        if (!got || got[1] !== String.fromCharCode(65 + i)) return null;
-        const aside = got[2]?.trim();
-        return { letter: got[1], label: aside ? `${aside} ${got[3].trim()}` : got[3].trim() };
-      });
+    );
+    lastWritten = parts[parts.length - 1] ?? "";
+    const options = parts.map((p, i) => {
+      const got = OPTION.exec(p.trim());
+      if (!got || got[1] !== String.fromCharCode(65 + i)) return null;
+      const aside = got[2]?.trim();
+      const whole = boldWhole(p, got[1], got[3].trim());
+      if (whole) return aside ? { ...whole, label: `${aside} ${whole.label}` } : whole;
+      return { letter: got[1], label: aside ? `${aside} ${got[3].trim()}` : got[3].trim() };
+    });
     return options.length >= 2 && options.every(Boolean) ? (options as Option[]) : null;
   };
   // Every "A" that could start the options; the convention puts two spaces
@@ -159,6 +178,9 @@ export function readAsk(n: number, line: string): Ask {
   if (end > 0) {
     text += ` ${last.label.slice(end).trim()}`;
     last.label = last.label.slice(0, end - 1).trim();
+    // "**B Monday**. Depends on 1." closes its bold before the sentence.
+    const whole = !last.bold && boldWhole(lastWritten, last.letter, last.label);
+    if (whole) Object.assign(last, whole);
   }
   return { n, text, options };
 }
@@ -186,9 +208,10 @@ function labelFrom(text: string, letter: string): string {
   return quote ? quote[1] : m[1].replace(/([.!?])\s.*$/, "$1");
 }
 
-const SECTION = /^\s*(?:#{1,4}\s*)?(?:\*\*|__)?\s*(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?[\s:*_]*$/i;
-// "**Needs you:** nothing tonight." starts the section and says it too.
-const SECTION_INLINE = /^\s*(?:\*\*|__)(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?:?(?:\*\*|__):?\s+(\S.*)$/i;
+const SECTION = /^\s*(?:#{1,4}\s*)?(?:\*\*|__)?\s*(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?[\s:.*_]*$/i;
+// "**Needs you:** nothing tonight." starts the section and says it too, as
+// does "**Needs you.** My pick is in bold."
+const SECTION_INLINE = /^\s*(?:\*\*|__)(Needs you|Decisions?|Details)(?:\s*\([^)]*\))?[:.]?(?:\*\*|__)[:.]?\s+(\S.*)$/i;
 // The close verdict a reply ends on, once its bold is gone, also as a bullet.
 const VERDICT = /^\s*(?:[-*]\s+)?(✅|🟠|🔴)\uFE0F?\s*((?:Safe to close|Keep open|Don['’]t close|Do not close)\b.*)$/u;
 
@@ -460,7 +483,7 @@ export function typedAnswers(card: Card | null, text: string): { picks: Record<n
 
 /** The answers a card recommends, for the reply box to offer: what follows
  *  "I'd pick" (or "I'd go with", "I recommend"), else each question's
- *  "(recommended)" option. Empty when it recommends nothing. */
+ *  "(recommended)" or all-bold option. Empty when it recommends nothing. */
 export function suggested(card: Card): Record<number, string> {
   const said = /\bI(?:'d| would)?\s+(?:pick|go with|recommend|lean(?: towards?)?)\s+(.+)/i.exec(`${card.asksNote}\n${card.body}`);
   const picked = said ? answersIn(said[1].replace(/\*\*|__/g, "")) : {};
@@ -477,6 +500,9 @@ export function suggested(card: Card): Record<number, string> {
     // "(recommended)", also with a reason after it: "(recommended; ships now)".
     const rec = a.options.find((o) => /^\(recommended[;,:)]/i.test(o.label) || /\(recommended(?:[;,:][^)]*)?\)\s*$/i.test(o.label));
     if (rec) out[a.n] = rec.letter;
+    // "**B Monday**": the one option written all in bold.
+    const bold = a.options.filter((o) => o.bold);
+    if (!rec && bold.length === 1) out[a.n] = bold[0].letter;
   }
   return out;
 }

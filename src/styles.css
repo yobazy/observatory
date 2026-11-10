@@ -2849,6 +2849,47 @@ td.task-last {
   color: var(--text);
   font-weight: 600;
 }
+/* Search in Settings: the box over the tabs, each tab's match count, and
+   every tab's matching rows under its name (settingsSearch.ts). */
+.settings-tabs .settings-search {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 10px;
+}
+.settings-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-tab.is-empty {
+  color: var(--faint);
+}
+.settings-tab-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.settings-found + .settings-found {
+  margin-top: 22px;
+}
+.settings-found-tab {
+  margin: 12px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.settings-found-tab .link-btn {
+  font: inherit;
+  color: var(--text);
+}
+.settings-pane [data-search-hidden] {
+  display: none;
+}
+::highlight(settings-search) {
+  background-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: inherit;
+}
 .settings-pane {
   overflow-y: auto;
   padding: 12px 28px 32px;
