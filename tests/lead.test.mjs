@@ -19,6 +19,7 @@ const {
   deliver,
   eventLine,
   eventNeed,
+  isLeadThread,
   leadEvents,
   leadIds,
   leadPrompt,
@@ -34,6 +35,7 @@ const {
   leadModelOptions,
   MAX_LINE,
 } = await import('../src/nebula/lead.ts');
+const { topLeadPrompt } = await import('../src/nebula/leadAsk.ts');
 const { cardFor, draftCard, reloadCards, saveLead } = await import('../src/nebula/cards.ts');
 const { parseFollowUp, linkAction } = await import('../src/nebula/handoff.ts');
 
@@ -75,6 +77,49 @@ test("Given a change to the lead's own thread, or to a thread in another project
   // Another project's lead hearing of its own threads isn't this one's business.
   const both = leadEvents(before, after, { ...LEADS, p2: 'lead2' });
   assert.deepEqual(both.map((e) => [e.leadId, e.threadId]), [['lead2', 'b1'], ['lead2', 'b1']]);
+});
+
+// What the daemon keeps of a prompt: one line, at most 200 characters.
+const kept = (text) => ({ text: text.replace(/\s+/g, ' ').trim().slice(0, 200), submitted_at: 1 });
+const MAIN = { is_main: true };
+const BRANCH = { is_main: false };
+const PROJECT = { name: 'observatory' };
+// This app knows only its own lead (lead1); the other window's isn't in LEADS.
+const otherApp = (over) => [thread('x1', { lead: true, ...over }), thread('x1', { lead: true, status: 'finished', ...over })];
+
+test("Given another window's project lead on the same daemon, then it's a lead and its turns make no events for this app's lead", () => {
+  const prompt = kept(leadPrompt({ project: 'observatory', path: '/code/observatory', notes: '~/n.md' }));
+  // Just started: only its first prompt, and nebula's default name.
+  assert.equal(isLeadThread({ name: 'Agent 4', recent_prompts: [prompt] }, MAIN, PROJECT), true);
+  // Later: renamed itself, and its first prompt has dropped out of the last 10.
+  const events = Array.from({ length: 10 }, (_, i) => kept(`[observatory] finished: Task ${i} on t${i} (agent a${i}): done`));
+  assert.equal(isLeadThread({ name: 'Lead observatory', recent_prompts: events }, MAIN, PROJECT), true);
+  // Renamed, and you've typed 10 prompts into its chat since: the name in the main checkout.
+  const chat = Array.from({ length: 10 }, (_, i) => kept(`what's next ${i}?`));
+  assert.equal(isLeadThread({ name: 'lead Observatory', recent_prompts: chat }, MAIN, PROJECT), true);
+  // Renamed by you, but still hearing events: the [observatory] lines.
+  assert.equal(isLeadThread({ name: 'My lead', recent_prompts: events }, MAIN, PROJECT), true);
+  const [before, after] = otherApp();
+  assert.deepEqual(leadEvents(snap(before), snap(after), LEADS), []);
+});
+
+test("Given another window's top lead on the same daemon, then it's a lead and makes no events", () => {
+  const prompt = kept(topLeadPrompt({ path: '/code/observatory', notes: '~/top.md', leads: [], projects: [] }));
+  assert.equal(isLeadThread({ name: 'Agent 2', recent_prompts: [prompt] }, MAIN, PROJECT), true);
+  assert.equal(isLeadThread({ name: 'Lead', recent_prompts: [] }, MAIN, PROJECT), true);
+  const [before, after] = otherApp({ status: 'needs_feedback' });
+  assert.deepEqual(leadEvents(snap(before), snap({ ...after, pr: 9 }), LEADS), []);
+});
+
+test("Given a normal task named 'Lead Something', even one whose prompt quotes a lead's, then it isn't a lead and still makes events", () => {
+  const prompt = kept("Bug: a thread whose first prompt starts with 'You are the lead for the project' should be skipped");
+  assert.equal(isLeadThread({ name: 'Lead Chat Avatars', recent_prompts: [prompt] }, BRANCH, PROJECT), false);
+  // Even in the main checkout: only `Lead` or `Lead <its project>` counts there.
+  assert.equal(isLeadThread({ name: 'Lead Permission Levels', recent_prompts: [] }, MAIN, PROJECT), false);
+  // A lead's name off the main checkout isn't one.
+  assert.equal(isLeadThread({ name: 'Lead observatory', recent_prompts: [] }, BRANCH, PROJECT), false);
+  const kinds = leadEvents(snap(thread('t1', { lead: false })), snap(thread('t1', { lead: false, status: 'finished' })), LEADS).map((e) => e.kind);
+  assert.deepEqual(kinds, ['finished']);
 });
 
 test('Given an event, eventLine() reads `[observatory] finished: Fix login on fix-login (agent a1): Needs review of the redirect`, at most 300 characters', () => {

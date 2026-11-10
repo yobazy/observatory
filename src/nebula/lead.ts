@@ -33,6 +33,9 @@ export interface ThreadState {
   /** A mark of the turn whose verdict chip (verdictOf()) is ✅: null when the
    *  thread isn't at rest saying so, undefined while its reply is unread. */
   safe?: string | null;
+  /** A lead's thread, project or top, whichever app started it
+   *  (isLeadThread()): it never makes events. */
+  lead?: boolean;
 }
 
 /** A worktree's PR lookup (prs.ts) as the lead counts it: its open or draft
@@ -103,7 +106,7 @@ export interface LeadEvent {
 
 /** What changed between two polls, as events for the leads that hear of
  *  them. A thread seen for the first time makes none (it's the baseline),
- *  nor does a lead's own thread, an archived one, or one in a project
+ *  nor does any lead's thread (this app's, or one marked `lead`), an archived one, or one in a project
  *  without a running lead. The same state seen twice makes nothing new. */
 export function leadEvents(before: Snapshot, after: Snapshot, leads: Leads): LeadEvent[] {
   const leadIds = new Set(Object.values(leads));
@@ -111,7 +114,7 @@ export function leadEvents(before: Snapshot, after: Snapshot, leads: Leads): Lea
   for (const t of Object.values(after)) {
     const was = before[t.id];
     const leadId = t.projectId ? leads[t.projectId] : undefined;
-    if (!was || !leadId || !t.projectId || leadIds.has(t.id) || t.archived) continue;
+    if (!was || !leadId || !t.projectId || leadIds.has(t.id) || t.lead || t.archived) continue;
     const add = (kind: LeadEventKind, more: Partial<LeadEvent> = {}) =>
       out.push({ kind, threadId: t.id, projectId: t.projectId!, leadId, ...more });
     if (was.status === "running" && t.status === "finished") add("finished");
@@ -246,6 +249,42 @@ export function defaultNotes(project: string): string {
 export const leadName = (project: string) => `Lead ${oneLine(project)}`;
 
 
+/** How a project lead's prompt opens (leadPrompt()), and the top lead's
+ *  (topLeadPrompt(), leadAsk.ts). */
+export const LEAD_OPENING = "You are the lead for the project ";
+export const TOP_LEAD_OPENING = "You are the top lead (";
+
+/** The top lead's thread name: what `nebula ask Lead` finds. nebula matches
+ *  a name exactly (any case) before it tries fuzzy matches, so `Lead` is
+ *  never confused with `Lead <project>`. */
+export const TOP_LEAD_NAME = "Lead";
+
+/** Whether a thread is a lead, project or top, from what the daemon tells
+ *  every app, so a lead another window started counts too (two windows on
+ *  one daemon each forwarded the other's lead turns to their own lead, and
+ *  the two leads answered each other in a loop). Any one of these is enough:
+ *  - it's named `Lead` or `Lead <its project>` in the project's main
+ *    checkout. The steadiest sign: a lead renames itself to that before
+ *    anything else (answerRules()), so it holds from the end of its first
+ *    turn on. The name alone isn't enough: tasks are called "Lead Chat
+ *    Avatars", and they run on branches of their own;
+ *  - one of its recent prompts is an [observatory] line, which the app only
+ *    types into leads;
+ *  - one opens with a lead prompt's opening. The daemon keeps only the last
+ *    10 prompts, and a starting prompt isn't always among them, so this is
+ *    a backstop, not the main sign.
+ *  Openings, not contents: a task about leads quotes their prompts. */
+export function isLeadThread(
+  a: { name: string; recent_prompts?: { text: string }[] | null },
+  worktree: { is_main: boolean } | undefined,
+  project: { name: string } | undefined,
+): boolean {
+  const name = oneLine(a.name).toLowerCase();
+  if (worktree?.is_main && (name === TOP_LEAD_NAME.toLowerCase() || (!!project && name === leadName(project.name).toLowerCase()))) return true;
+  const openings = [LINE_PREFIX, LEAD_OPENING, TOP_LEAD_OPENING];
+  return (a.recent_prompts ?? []).some((p) => openings.some((o) => p.text.trimStart().startsWith(o)));
+}
+
 export type LeadState = "none" | "running" | "stopped";
 
 /** Whether a card's lead is there to hear events: stopped once its thread
@@ -355,7 +394,7 @@ export const levelLine = (level: LeadLevel, maxTasks: number) =>
  *  how it answers other threads' questions). */
 export function leadPrompt(p: LeadPromptInput, extra: string[] = []): string {
   const sections = [
-    `You are the lead for the project ${p.project} (${p.path}). You hold the thread of this project across its tasks, so I don't have to. You don't do the tasks yourself: other threads do, and Observatory tells you about them.`,
+    `${LEAD_OPENING}${p.project} (${p.path}). You hold the thread of this project across its tasks, so I don't have to. You don't do the tasks yourself: other threads do, and Observatory tells you about them.`,
     STAY_IN(p.project, p.path),
     `Your notes live in ${p.notes}, outside the repo. Create the file (and its folder) if it isn't there, and read it now. Keep it current: what each task is for, what finished, what failed and why, open PRs, decisions I made, and what should happen next. Keep it short enough to reread.`,
     `Observatory sends you one line per event, several at once when they piled up while you were busy:

@@ -315,3 +315,21 @@ test("Given a usage report, then sinceToday() keeps only today's hours", () => {
   assert.deepEqual(sinceToday(report, now).buckets.map((b) => b.hour), [today]);
   assert.equal(sinceToday(null, now), null);
 });
+
+test("the lead's avatar shows on the first reply of a run only, like a messaging app", async () => {
+  const { runStarts } = await import('../src/nebula/projectChat.ts');
+  const pet = (n, at) => ({ kind: 'pet', key: `p${n}`, n, text: 'hi', at });
+  const items = [
+    pet(1, 100),
+    pet(2, 160),
+    { kind: 'me', key: 'm3', text: 'ok', at: 200 },
+    pet(4, 220),
+    { kind: 'event', key: 'e5', text: 'CI failed', at: 230 },
+    pet(6, 240),
+    pet(7, 240 + 11 * 60),
+    { kind: 'task', key: 't8', task: { taskId: 'x', branch: 'b', at: 0 } },
+    pet(9, 2000),
+  ];
+  assert.deepEqual([...runStarts(items)], ['p1', 'p4', 'p6', 'p7', 'p9']);
+  assert.deepEqual([...runStarts([])], []);
+});
