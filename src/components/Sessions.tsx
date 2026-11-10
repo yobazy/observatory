@@ -42,7 +42,7 @@ import { Plate, ThreadPlate } from "./Plate";
 import { LooseRows } from "./LooseSand";
 import { warmth } from "../nebula/warmth";
 import { useLeads } from "../nebula/leadCalls";
-import { ChatRow } from "./ProjectChat";
+import { LeadPetButton } from "./ProjectChat";
 
 /** Re-render once a minute so relative times stay honest. */
 function useMinuteTick() {
@@ -231,6 +231,7 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
           <ProjectIdeas repo={project.repo_path} />
         </div>
         <div className="sessions-actions">
+          <ProjectLeadPet projectId={project.id} />
           <button className="icon-btn" title="Hide tasks (⌥⌘B)" aria-label="Hide tasks" onClick={onHide}>
             <PanelGlyph />
           </button>
@@ -252,8 +253,6 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
           </button>
         </div>
       )}
-
-      <ProjectChatRow projectId={project.id} />
 
       {/* Before the project has a tag, only the link to make some. */}
       <div className="thread-chips" role="group" aria-label="Show threads tagged">
@@ -931,15 +930,12 @@ function ShellGlyph() {
   );
 }
 
-/** The project's chat (S29): its lead, as its pet, above its threads. A
- *  project without a running lead has none; its card has Start a lead. */
-function ProjectChatRow({ projectId }: { projectId: string }) {
+/** The project's lead (S29), as its pet in the header: a click opens the
+ *  project's chat. A project without a running lead has none; its card
+ *  has Start a lead. */
+function ProjectLeadPet({ projectId }: { projectId: string }) {
   const lead = useLeads().find((l) => l.projectId === projectId);
-  return lead ? (
-    <div className="sessions-chat">
-      <ChatRow lead={lead} />
-    </div>
-  ) : null;
+  return lead ? <LeadPetButton lead={lead} /> : null;
 }
 
 /** The project's plate: moved by every prompt across its threads, and

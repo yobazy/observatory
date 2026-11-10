@@ -9587,8 +9587,49 @@ button.board-main:hover .board-text {
   width: calc(100% - 20px);
   margin: 0 10px 6px;
 }
-.sessions-chat {
-  margin: 10px 10px 0;
+/* The project's lead in its header (LeadPetButton): the pet alone, with
+   a dot in its coat colour when it has something for you. */
+.lead-pet-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  line-height: 0;
+  cursor: pointer;
+}
+.lead-pet-btn svg {
+  image-rendering: pixelated;
+}
+.lead-pet-btn:hover,
+.lead-pet-btn.is-on {
+  background: color-mix(in oklab, var(--t) 16%, transparent);
+}
+.lead-pet-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.lead-pet-btn.is-calling svg {
+  animation: lead-hop 0.9s steps(2) infinite;
+}
+.lead-pet-dot {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--t-solid, var(--t));
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.lead-pet-dot.is-prompt {
+  background: var(--st-waiting);
 }
 .chat-row-pet {
   display: inline-flex;
@@ -9969,6 +10010,7 @@ button.board-main:hover .board-text {
 }
 @media (prefers-reduced-motion: reduce) {
   .chat-row.is-calling .chat-row-pet svg,
+  .lead-pet-btn.is-calling svg,
   .chat-typing i {
     animation: none;
   }
