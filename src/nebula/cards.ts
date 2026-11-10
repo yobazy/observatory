@@ -67,6 +67,10 @@ export interface CardLead {
   acts?: boolean;
   /** Its started tasks that may run at once; unset is DEFAULT_MAX_TASKS. */
   maxTasks?: number;
+  /** How it talks ("dry and brief"), and your instructions to it, both put
+   *  in its prompt after the app's rules (lead.ts voiceSection()). */
+  personality?: string;
+  instructions?: string;
 }
 
 /** A file a card is drafted from, its path relative to the project root. */
@@ -302,6 +306,8 @@ function leadOf(x: unknown): CardLead | null {
     ...(l.pet && typeof l.pet.kind === "string" && typeof l.pet.coat === "string" ? { pet: { kind: l.pet.kind, coat: l.pet.coat } } : {}),
     ...(l.level === 1 || l.level === 2 || l.level === 3 || l.level === 4 ? { level: l.level } : l.acts === true ? { acts: true } : {}),
     ...(typeof l.maxTasks === "number" && Number.isFinite(l.maxTasks) && l.maxTasks >= 1 ? { maxTasks: Math.floor(l.maxTasks) } : {}),
+    ...(typeof l.personality === "string" && l.personality.trim() ? { personality: l.personality } : {}),
+    ...(typeof l.instructions === "string" && l.instructions.trim() ? { instructions: l.instructions } : {}),
   };
 }
 

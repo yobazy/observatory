@@ -9444,6 +9444,57 @@ button.board-main:hover .board-text {
   max-width: 220px;
 }
 
+/* A lead's personality and instructions (LeadVoiceFields). */
+.lead-voice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 10px;
+}
+.lead-voice-cap {
+  padding-top: 5px;
+}
+.lead-voice .setting-input.lead-voice-line {
+  width: 100%;
+}
+.lead-voice-presets {
+  grid-column: 2;
+  margin-top: -2px;
+}
+.lead-voice-presets .chip {
+  padding: 2px 10px;
+  font-size: 12px;
+}
+.lead-voice-text {
+  width: 100%;
+  min-height: 62px;
+  resize: vertical;
+  padding: 6px 10px;
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: inherit;
+  font: inherit;
+  line-height: 1.4;
+  outline: none;
+  user-select: text;
+}
+.lead-voice-text:focus {
+  border-color: var(--accent);
+}
+.lead-voice-help {
+  grid-column: 1 / -1;
+}
+.lead-voice-project {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.lead-voice-name {
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lead-pet.is-calling svg {
     animation: none;
@@ -9587,8 +9638,49 @@ button.board-main:hover .board-text {
   width: calc(100% - 20px);
   margin: 0 10px 6px;
 }
-.sessions-chat {
-  margin: 10px 10px 0;
+/* The project's lead in its header (LeadPetButton): the pet alone, with
+   a dot in its coat colour when it has something for you. */
+.lead-pet-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  line-height: 0;
+  cursor: pointer;
+}
+.lead-pet-btn svg {
+  image-rendering: pixelated;
+}
+.lead-pet-btn:hover,
+.lead-pet-btn.is-on {
+  background: color-mix(in oklab, var(--t) 16%, transparent);
+}
+.lead-pet-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.lead-pet-btn.is-calling svg {
+  animation: lead-hop 0.9s steps(2) infinite;
+}
+.lead-pet-dot {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--t-solid, var(--t));
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.lead-pet-dot.is-prompt {
+  background: var(--st-waiting);
 }
 .chat-row-pet {
   display: inline-flex;
@@ -9642,6 +9734,7 @@ button.board-main:hover .board-text {
   background: var(--panel);
 }
 .chat-head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -9680,6 +9773,24 @@ button.board-main:hover .board-text {
 }
 .chat-meta .chat-raw {
   font-size: 12px;
+}
+.chat-voice {
+  position: absolute;
+  top: calc(100% - 6px);
+  right: 22px;
+  z-index: 5;
+  display: grid;
+  gap: 10px;
+  width: min(460px, calc(100% - 44px));
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+  font-size: 13px;
+}
+.chat-voice-done {
+  justify-self: end;
 }
 .chat-acts {
   display: flex;
@@ -9969,6 +10080,7 @@ button.board-main:hover .board-text {
 }
 @media (prefers-reduced-motion: reduce) {
   .chat-row.is-calling .chat-row-pet svg,
+  .lead-pet-btn.is-calling svg,
   .chat-typing i {
     animation: none;
   }

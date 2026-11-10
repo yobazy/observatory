@@ -41,7 +41,7 @@ import { leadState } from "../nebula/lead";
 import { ASK_LINE_TEMPLATE, countsText, DEFAULT_TOP_MODEL, TOP_LEAD_NAME, TOP_NOTES, type LogCounts } from "../nebula/leadAsk";
 import { answerCounts, defaultTopFolder, openAnswersLog, removeTopLead, setTopLeadModel, setTopLeadPet, startTopLead } from "../nebula/leadRunner";
 import { petOf } from "../nebula/leadChat";
-import { LevelPicker, ModelPicker, PetPicker } from "./LeadCard";
+import { LeadVoiceFields, LevelPicker, ModelPicker, PetPicker, VOICE_HELP } from "./LeadCard";
 import { useCards } from "../nebula/cards";
 import { levelOf } from "../nebula/leadLevel";
 import { levelFlash, setLeadLevel } from "../nebula/leadRunner";
@@ -886,6 +886,7 @@ function LeadsSettings() {
         </div>
       </div>
       <ProjectLeadLevels />
+      <ProjectLeadsVoice />
       <div className="setting">
         <div className="setting-text">
           <span className="setting-label">Answers</span>
@@ -928,6 +929,33 @@ function LeadsSettings() {
         </div>
       </div>
     </Group>
+  );
+}
+
+/** Each project lead's personality and instructions (also in its chat's
+ *  header and its project's card). */
+function ProjectLeadsVoice() {
+  const cards = useCards();
+  const { projects } = useAppState();
+  const leads = Object.entries(cards)
+    .flatMap(([id, c]) => (c.lead && projects[id] ? [{ id, name: projects[id].name, lead: c.lead }] : []))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-text">
+        <span className="setting-label">Project leads' personality and instructions</span>
+        <span className="setting-hint">
+          {VOICE_HELP}
+          {leads.length ? "" : " Start a lead from a project's card to set them."}
+        </span>
+      </div>
+      {leads.map((l) => (
+        <div key={l.id} className="lead-voice-project">
+          <span className="lead-voice-name">{l.name}</span>
+          <LeadVoiceFields projectId={l.id} projectName={l.name} lead={l.lead} help={false} />
+        </div>
+      ))}
+    </div>
   );
 }
 

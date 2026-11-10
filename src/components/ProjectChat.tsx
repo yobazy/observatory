@@ -17,7 +17,7 @@ import type { Agent } from "../nebula/types";
 import type { FrameName } from "../vendor/pixel-pets/frames.ts";
 import { PetSprite } from "./Pet";
 import { Reply, useTranscript, Where } from "./Reader";
-import { LevelPicker } from "./LeadCard";
+import { LeadVoiceFields, LevelPicker } from "./LeadCard";
 
 // Chat with a project (S29): the project's lead, as its pet, is the face of
 // the project. Its thread shows here as a chat, not in the Read view or the
@@ -77,6 +77,32 @@ export function ChatRow({ lead }: { lead: LeadEntry }) {
           </span>
         )
       )}
+    </button>
+  );
+}
+
+/** A project's lead as a small pet in its header, with a dot when it has
+ *  something for you (a new reply, an open ask, or a prompt only its
+ *  terminal can answer). A click opens its chat, as ⌘L does. */
+export function LeadPetButton({ lead }: { lead: LeadEntry }) {
+  const mine = useMemo(() => [lead], [lead]);
+  const call = useLeadCalls(mine)[lead.agentId] ?? QUIET;
+  const on = useChatLead()?.agentId === lead.agentId;
+  const prompt = useAppState().agents[lead.agentId]?.status === "needs_feedback";
+  const why = prompt ? "Waiting on a prompt in its terminal" : call.why === "ask" ? `${call.count === 1 ? "A question" : `${call.count} questions`} for you` : call.why === "unread" ? "An unread reply" : null;
+  const label = `Chat with ${lead.name}${why ? `: ${why.toLowerCase()}` : ""}`;
+  return (
+    <button
+      type="button"
+      className={`lead-pet-btn${call.calling || prompt ? " is-calling" : ""}${on ? " is-on" : ""}`}
+      style={tintStyle(lead)}
+      onClick={() => openLeadChat(lead.agentId)}
+      aria-label={label}
+      aria-pressed={on}
+      title={`${label} (⌘L)${lead.model ? `\nThe project's lead, on ${lead.model}.` : ""}`}
+    >
+      <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={26} />
+      {(call.calling || prompt) && <span className={`lead-pet-dot${prompt ? " is-prompt" : ""}`} aria-hidden />}
     </button>
   );
 }
@@ -227,6 +253,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
   const frame = useBlink(!reduced, working ? "lookUp" : "sit");
   const top = lead.projectId === null;
   const days = dayLabels(items);
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   return (
     <section className="chat" style={tintStyle(lead)} aria-label={top ? "Chat with every project's top lead" : `Chat with ${lead.name}`}>
@@ -243,6 +270,20 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
             <button type="button" className="link-btn chat-raw" onClick={() => openLeadTerminal(agent.id)} title="The lead's raw session, as a thread's terminal">
               Open terminal
             </button>
+            {!top && card && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="link-btn chat-raw"
+                  aria-expanded={voiceOpen}
+                  onClick={() => setVoiceOpen((o) => !o)}
+                  title="How the lead talks, and your instructions to it"
+                >
+                  Personality{card.personality ? `: ${card.personality.length > 40 ? `${card.personality.slice(0, 39)}…` : card.personality}` : ""}
+                </button>
+              </>
+            )}
           </p>
         </div>
         {!top && card && lead.projectId && (
@@ -258,6 +299,14 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
               }}
             />
           </label>
+        )}
+        {voiceOpen && !top && card && lead.projectId && (
+          <div className="chat-voice" role="dialog" aria-label={`${lead.name}'s personality and instructions`} onKeyDown={(e) => e.key === "Escape" && setVoiceOpen(false)}>
+            <LeadVoiceFields projectId={lead.projectId} projectName={lead.name} lead={card} />
+            <button type="button" className="link-btn chat-voice-done" onClick={() => setVoiceOpen(false)}>
+              Done
+            </button>
+          </div>
         )}
       </header>
       <div
