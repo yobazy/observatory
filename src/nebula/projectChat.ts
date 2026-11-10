@@ -6,7 +6,7 @@
 // the card's four steps, the chat row's one-line preview, and today's cost.
 // ProjectChat.tsx draws it. Kept free of the app so its tests run under
 // plain Node; value imports name their .ts files for that.
-import { LINE_PREFIX, RULES_END } from "./lead.ts";
+import { LINE_PREFIX, RULES_END, VOICE_END } from "./lead.ts";
 import { actionName, askKey, withoutActions, type AskAction, type Outcome, type StartedState } from "./leadActions.ts";
 import { plainLine } from "./leadChat.ts";
 import type { Entry } from "./transcript";
@@ -103,6 +103,10 @@ export function eventText(line: string, name: (agentId: string) => string | unde
   if ((m = body.match(/^the user (merged|archived) (\S+) \(your ASK\)$/))) return `You ${m[1]} ${m[1] === "archived" ? thread(m[2]) : m[2]}`;
   if ((m = body.match(/^the user said no to (merging|archiving) (\S+)$/))) return `You said no to ${m[1]} ${m[1] === "archiving" ? thread(m[2]) : m[2]}`;
   if ((m = body.match(/^couldn't (merge|archive) (\S+): (.*)$/))) return `Couldn't ${m[1]} ${m[1] === "archive" ? thread(m[2]) : m[2]}: ${m[3]}`;
+  if ((m = body.match(/^your personality changed to: (.*?)\. Talk this way/))) return `Personality: ${m[1]}`;
+  if (body.startsWith("your personality was cleared")) return "Personality cleared";
+  if (body.startsWith("your instructions changed")) return "Instructions changed";
+  if (body.startsWith("your instructions were cleared")) return "Instructions cleared";
   if (/^actions are on\b/.test(body)) return "Starting and nudging threads is on";
   if (body === "actions are off") return "Starting and nudging threads is off";
   if ((m = body.match(/^from the top lead: (.*)$/))) return `From the top lead: ${m[1]}`;
@@ -188,9 +192,21 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
         // The rules sent when actions are turned on are hidden, like the
         // starting prompt: their example lines aren't events.
         let rules = false;
+        let voice = false;
         text.split("\n").forEach((line, i) => {
           if (rules) {
             if (line.trim().endsWith(RULES_END)) rules = false;
+            return;
+          }
+          // Your new instructions, sent after their event line, are yours
+          // to read in Settings, not events, whatever their lines say.
+          if (voice) {
+            if (line.trim() === VOICE_END) voice = false;
+            return;
+          }
+          if (line.startsWith(`${LINE_PREFIX}your instructions changed.`)) {
+            out.push({ kind: "event", key: `e${e.n}.${i}`, text: eventText(line), at: e.at });
+            voice = true;
             return;
           }
           if (line.startsWith(`${LINE_PREFIX}actions are on.`)) {

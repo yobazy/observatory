@@ -1,13 +1,13 @@
-import { useState } from "react";
-import { saveLead, useCards, type ProjectCard } from "../nebula/cards";
+import { useEffect, useState } from "react";
+import { saveLead, useCards, type CardLead, type ProjectCard } from "../nebula/cards";
 import { dollars } from "../nebula/budgetHold";
 import { useSessionCosts } from "../nebula/budget";
-import { DEFAULT_LEAD_MODEL, defaultNotes, leadModelOptions, leadName, leadState } from "../nebula/lead";
-import { setLeadActs, setLeadMaxTasks, setLeadModel, startedTasks, startProjectLead } from "../nebula/leadRunner";
+import { DEFAULT_LEAD_MODEL, defaultNotes, leadModelOptions, leadName, leadState, MAX_INSTRUCTIONS, MAX_PERSONALITY } from "../nebula/lead";
+import { setLeadActs, setLeadMaxTasks, setLeadModel, setLeadVoice, startedTasks, startProjectLead } from "../nebula/leadRunner";
 import { DEFAULT_MAX_TASKS, useLeadActs } from "../nebula/leadActions";
 import { sessionKey } from "../nebula/usageData";
 import { flash, setState, useAppState } from "../nebula/store";
-import { PET_CHOICES, petFromKey, petKey, petOf, type LeadPet } from "../nebula/leadChat";
+import { PET_CHOICES, personalityPresets, petFromKey, petKey, petOf, type LeadPet } from "../nebula/leadChat";
 import { PetSprite } from "./Pet";
 import { openLeadChat } from "../nebula/leadCalls";
 import { Switch } from "./Settings";
@@ -166,6 +166,7 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
             }}
           />
         )}
+        {lead && <LeadVoiceFields projectId={projectId} projectName={projectName} lead={lead} />}
         <label className="card-cap lead-notes">
           notes
           <input
@@ -240,5 +241,85 @@ export function PetPicker({ pet, label, onPick }: { pet: LeadPet; label: string;
         ))}
       </select>
     </label>
+  );
+}
+
+/** What Settings and the chat say about a lead's personality and
+ *  instructions: where they go, and that they can't override the app. */
+export const VOICE_HELP =
+  "Both go in the lead's prompt after the app's own rules: its notes file, how it handles events, what it may do, and which project it leads. Those come first and can't be overridden. A change takes effect on the lead's next start; a running lead is also told the new text now.";
+
+/** A project lead's personality (a line, with presets that suit its pet)
+ *  and your instructions to it. Each is saved when you leave it. */
+export function LeadVoiceFields({ projectId, projectName, lead, help = true }: { projectId: string; projectName: string; lead: CardLead; help?: boolean }) {
+  const { agents } = useAppState();
+  const running = leadState(lead, agents) === "running";
+  const pet = petOf(lead, projectName);
+  const [personality, setPersonality] = useState(lead.personality ?? "");
+  const [instructions, setInstructions] = useState(lead.instructions ?? "");
+  // Changed from another place (the chat, or Settings): show what's saved.
+  useEffect(() => setPersonality(lead.personality ?? ""), [lead.personality]);
+  useEffect(() => setInstructions(lead.instructions ?? ""), [lead.instructions]);
+  const save = (what: "personality" | "instructions", text: string) => {
+    if (!setLeadVoice(projectId, lead, what, text)) return;
+    flash(
+      running
+        ? `Told ${leadName(projectName)} its new ${what}, which it keeps on its next start too`
+        : `${projectName}'s lead gets its new ${what} when it next starts`,
+    );
+  };
+  const id = `lead-voice-${projectId}`;
+  return (
+    <div className="lead-voice">
+      <label className="card-cap lead-voice-cap" htmlFor={`${id}-p`}>
+        personality
+      </label>
+      <input
+        id={`${id}-p`}
+        className="setting-input lead-voice-line"
+        value={personality}
+        maxLength={MAX_PERSONALITY}
+        placeholder="How it talks, e.g. dry and brief"
+        spellCheck={false}
+        onChange={(e) => setPersonality(e.target.value)}
+        onBlur={() => save("personality", personality)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+      />
+      <div className="chips lead-voice-presets" role="group" aria-label={`Personalities that suit a ${pet.kind}`}>
+        {personalityPresets(pet.kind).map((p) => (
+          <button
+            key={p}
+            type="button"
+            className={`chip${p === personality.trim() ? " is-on" : ""}`}
+            aria-pressed={p === personality.trim()}
+            onClick={() => {
+              setPersonality(p);
+              save("personality", p);
+            }}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+      <label className="card-cap lead-voice-cap" htmlFor={`${id}-i`}>
+        instructions
+      </label>
+      <textarea
+        id={`${id}-i`}
+        className="lead-voice-text"
+        rows={3}
+        value={instructions}
+        maxLength={MAX_INSTRUCTIONS}
+        placeholder={"Added to its prompt, e.g.\nalways run checks on the pc\nnever touch the release"}
+        onChange={(e) => setInstructions(e.target.value)}
+        onBlur={() => save("instructions", instructions)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && e.metaKey) e.currentTarget.blur();
+        }}
+      />
+      {help && <span className="dialog-note lead-voice-help">{VOICE_HELP}</span>}
+    </div>
   );
 }

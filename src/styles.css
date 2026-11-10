@@ -9444,6 +9444,57 @@ button.board-main:hover .board-text {
   max-width: 220px;
 }
 
+/* A lead's personality and instructions (LeadVoiceFields). */
+.lead-voice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 10px;
+}
+.lead-voice-cap {
+  padding-top: 5px;
+}
+.lead-voice .setting-input.lead-voice-line {
+  width: 100%;
+}
+.lead-voice-presets {
+  grid-column: 2;
+  margin-top: -2px;
+}
+.lead-voice-presets .chip {
+  padding: 2px 10px;
+  font-size: 12px;
+}
+.lead-voice-text {
+  width: 100%;
+  min-height: 62px;
+  resize: vertical;
+  padding: 6px 10px;
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: inherit;
+  font: inherit;
+  line-height: 1.4;
+  outline: none;
+  user-select: text;
+}
+.lead-voice-text:focus {
+  border-color: var(--accent);
+}
+.lead-voice-help {
+  grid-column: 1 / -1;
+}
+.lead-voice-project {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.lead-voice-name {
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lead-pet.is-calling svg {
     animation: none;
@@ -9683,6 +9734,7 @@ button.board-main:hover .board-text {
   background: var(--panel);
 }
 .chat-head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -9721,6 +9773,24 @@ button.board-main:hover .board-text {
 }
 .chat-meta .chat-raw {
   font-size: 12px;
+}
+.chat-voice {
+  position: absolute;
+  top: calc(100% - 6px);
+  right: 22px;
+  z-index: 5;
+  display: grid;
+  gap: 10px;
+  width: min(460px, calc(100% - 44px));
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+  font-size: 13px;
+}
+.chat-voice-done {
+  justify-self: end;
 }
 .chat-acts {
   display: flex;
