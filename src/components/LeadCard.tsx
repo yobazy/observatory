@@ -264,7 +264,7 @@ export function LeadVoiceFields({ projectId, projectName, lead, help = true }: {
     if (!setLeadVoice(projectId, lead, what, text)) return;
     flash(
       running
-        ? `Told ${leadName(projectName)} its new ${what}, and saved it for its next start`
+        ? `Told ${leadName(projectName)} its new ${what}, which it keeps on its next start too`
         : `${projectName}'s lead gets its new ${what} when it next starts`,
     );
   };
