@@ -9819,8 +9819,11 @@ button.board-main:hover .board-text {
   flex: none;
   width: 30px;
 }
+.chat-say.is-pet .chat-bubble {
+  border-radius: 4px 14px 14px 14px;
+}
 .chat-say.is-more .chat-bubble {
-  border-top-left-radius: 4px;
+  border-radius: 14px;
 }
 .chat-bubble {
   min-width: 0;

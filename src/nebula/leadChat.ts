@@ -148,7 +148,7 @@ export interface FaceBox {
   size: number;
 }
 
-const CAT_FACE: FaceBox = { x: 6, y: -1, size: 15 };
+const CAT_FACE: FaceBox = { x: 6, y: -1.5, size: 15 };
 export const FACE: Record<CritterKind, FaceBox> = {
   cat: CAT_FACE,
   leopard: CAT_FACE,
@@ -158,7 +158,7 @@ export const FACE: Record<CritterKind, FaceBox> = {
   // Seen from the side: its head, with the front of its shell.
   turtle: { x: 16.5, y: 6.5, size: 11 },
   // All face: its eyes sit on top, so the box is wide.
-  frog: { x: 3.5, y: -3.5, size: 20 },
+  frog: { x: 3.5, y: -4.5, size: 20 },
 };
 
 /** The frames an avatar can show: the face is where `sit` has it in both. */
