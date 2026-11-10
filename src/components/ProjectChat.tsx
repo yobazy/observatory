@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useCards } from "../nebula/cards";
 import { dollars, costBySession } from "../nebula/budgetHold";
 import { markLeadSeen, noteReply, openLeadChat, openLeadTerminal, useChatLead, useLeadCalls, useLeadReply } from "../nebula/leadCalls";
-import { inkOn, lastReply, petTint, solidTint, QUIET, type LeadEntry } from "../nebula/leadChat";
+import { lastReply, QUIET, type FaceFrame, type LeadEntry } from "../nebula/leadChat";
 import { outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
 import { answerLeadAsk, setLeadActs, startedTasks } from "../nebula/leadRunner";
-import { chatItems, chatPreview, leadActivity, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
+import { chatItems, chatPreview, leadActivity, runStarts, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
 import { enqueue } from "../nebula/queue";
 import { useLanded } from "../nebula/prwatch";
 import { answersSaid, answerText, readCard } from "../nebula/replycard";
@@ -13,16 +13,15 @@ import { flash, getState, useAppState } from "../nebula/store";
 import { sessionKey } from "../nebula/usageData";
 import type { Entry } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
-import type { FrameName } from "../vendor/pixel-pets/frames.ts";
-import { PetSprite } from "./Pet";
+import { avatarStatusLabel, LeadAvatar, tintVars, type AvatarStatus } from "./LeadAvatar";
 import { Reply, useTranscript, Where } from "./Reader";
 import { Switch } from "./Settings";
 import { LeadVoiceFields } from "./LeadCard";
 
-// Chat with a project (S29): the project's lead, as its pet, is the face of
+// Chat with a project (S29): the project's lead is a pet, and the face of
 // the project. Its thread shows here as a chat, not in the Read view or the
-// terminal: your messages on the right, the lead's replies on the left in
-// its pet's colour, the app's [observatory] lines as small event lines, and
+// terminal: your messages on the right, its replies on the left in its
+// colour, its round face (S30) beside the first of each run, the app's [observatory] lines as small event lines, and
 // under a reply the tasks it started, live, and its asks with Yes and No.
 // A reply is set as the Read view sets one (a card with decisions to tap,
 // Needs you and its verdict, or prose), so the lead is answered the same way.
@@ -32,11 +31,7 @@ const STEPS = ["Queued", "Running", "PR", "Merged"] as const;
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** The tint a lead's row and chat are drawn in, as the `--t` they read. */
-const tintStyle = (lead: LeadEntry) => {
-  const t = petTint(lead.pet);
-  const solid = solidTint(t);
-  return { "--t": t, "--t-solid": solid, "--t-ink": inkOn(solid) } as CSSProperties;
-};
+const tintStyle = (lead: LeadEntry) => tintVars(lead.pet);
 
 /** A lead's chat row: at the top of its project's threads, or "All
  *  projects" at the top of the projects list for the top lead. */
@@ -57,11 +52,9 @@ export function ChatRow({ lead }: { lead: LeadEntry }) {
       style={tintStyle(lead)}
       onClick={() => openLeadChat(lead.agentId)}
       aria-current={on ? "page" : undefined}
-      title={`${name}: the ${top ? "top lead, over every project" : "project's lead"}${lead.model ? ` (${lead.model})` : ""}.${why ? ` ${why}.` : ""}`}
+      title={`${name}: ${top ? "the top lead, over every project" : `${lead.name}'s lead`}${lead.model ? ` (${lead.model})` : ""}.${why ? ` ${why}.` : ""}`}
     >
-      <span className="chat-row-pet" aria-hidden>
-        <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={30} />
-      </span>
+      <LeadAvatar pet={lead.pet} size={32} className="chat-row-pet" />
       <span className="chat-row-txt">
         <span className="chat-row-name">{name}</span>
         <span className="chat-row-sub">{chatPreview(reply?.text) || (top ? "Ask about any project" : `Ask ${lead.name}, or give it a task`)}</span>
@@ -81,7 +74,7 @@ export function ChatRow({ lead }: { lead: LeadEntry }) {
   );
 }
 
-/** A project's lead as a small pet in its header, with a dot when it has
+/** A project's lead as its face (S30) in the project's header, with a dot when it has
  *  something for you (a new reply, an open ask, or a prompt only its
  *  terminal can answer). A click opens its chat, as ⌘L does. */
 export function LeadPetButton({ lead }: { lead: LeadEntry }) {
@@ -101,7 +94,7 @@ export function LeadPetButton({ lead }: { lead: LeadEntry }) {
       aria-pressed={on}
       title={`${label} (⌘L)${lead.model ? `\nThe project's lead, on ${lead.model}.` : ""}`}
     >
-      <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={26} />
+      <LeadAvatar pet={lead.pet} size={26} />
       {(call.calling || prompt) && <span className={`lead-pet-dot${prompt ? " is-prompt" : ""}`} aria-hidden />}
     </button>
   );
@@ -250,19 +243,23 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
 
   const costs = useMemo(() => costBySession(sinceToday(state.usage)), [state.usage]);
   const cost = agent.session_id ? (costs.get(sessionKey(agent.kind, agent.session_id)) ?? 0) : 0;
-  const frame = useBlink(!reduced, working ? "lookUp" : "sit");
+  const frame = useBlink(!reduced);
   const top = lead.projectId === null;
   const days = dayLabels(items);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const starts = useMemo(() => runStarts(items), [items]);
+  const lastIsPet = items.length > 0 && items[items.length - 1].kind === "pet" && !sent.length;
+  const status: AvatarStatus = activity === "prompt" || items.some((it) => it.kind === "ask" && !it.done) ? "calling" : working ? "working" : "idle";
 
   return (
     <section className="chat" style={tintStyle(lead)} aria-label={top ? "Chat with every project's top lead" : `Chat with ${lead.name}`}>
       <header className="chat-head" data-tauri-drag-region>
-        <span className="chat-head-pet" aria-hidden>
-          <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} frame={frame} width={81} />
-        </span>
+        <LeadAvatar pet={lead.pet} size={52} frame={frame} status={status} className="chat-head-pet" />
         <div className="chat-head-text" data-tauri-drag-region>
-          <h1>{lead.name}</h1>
+          <h1>
+            {lead.name}
+            <span className="sr-only">, {avatarStatusLabel(status).toLowerCase()}</span>
+          </h1>
           <p className="chat-meta">
             <b>{top ? "Top lead" : "Lead"}</b>
             {lead.model ? ` · ${lead.model}` : ""} · {dollars(cost)} today
@@ -321,7 +318,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
           {!t && <p className="chat-empty">Reading the lead's thread…</p>}
           {t && !items.length && !sent.length && <p className="chat-empty">Nothing said yet. Say hello, or give it a task.</p>}
           {items.map((it) => (
-            <ChatLine key={it.key} item={it} lead={lead} day={days.get(it.key)} reply={it.kind === "pet" ? replyOf(it.n) : undefined} />
+            <ChatLine key={it.key} item={it} lead={lead} day={days.get(it.key)} first={starts.has(it.key)} reply={it.kind === "pet" ? replyOf(it.n) : undefined} />
           ))}
           {sent.map((m, i) => (
             <div key={`sent${i}`} className="chat-say is-me is-sending">
@@ -337,10 +334,8 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
             </div>
           )}
           {working && (
-            <div className="chat-say">
-              <span className="chat-say-pet" aria-hidden>
-                <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={27} />
-              </span>
+            <div className={`chat-say is-pet${lastIsPet ? " is-more" : ""}`}>
+              <SayAvatar lead={lead} first={!lastIsPet} />
               <div className="chat-bubble">
                 <span className="chat-typing" aria-label={`${lead.title} is working`}>
                   <i />
@@ -384,7 +379,13 @@ type ReplyBits = {
   thread?: { n: number; entries: Entry[] };
 };
 
-function ChatLine({ item, lead, day, reply }: { item: ChatItem; lead: LeadEntry; day: string | undefined; reply?: ReplyBits }) {
+/** The lead's face beside the first reply of a run; the space it takes
+ *  beside the rest, so their bubbles line up. */
+function SayAvatar({ lead, first }: { lead: LeadEntry; first: boolean }) {
+  return first ? <LeadAvatar pet={lead.pet} size={30} className="chat-say-pet" /> : <span className="chat-say-pet is-gap" aria-hidden />;
+}
+
+function ChatLine({ item, lead, day, first, reply }: { item: ChatItem; lead: LeadEntry; day: string | undefined; first: boolean; reply?: ReplyBits }) {
   const line = (() => {
     switch (item.kind) {
       case "me":
@@ -395,10 +396,8 @@ function ChatLine({ item, lead, day, reply }: { item: ChatItem; lead: LeadEntry;
         );
       case "pet":
         return (
-          <div className="chat-say">
-            <span className="chat-say-pet" aria-hidden>
-              <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={27} />
-            </span>
+          <div className={`chat-say is-pet${first ? "" : " is-more"}`}>
+            <SayAvatar lead={lead} first={first} />
             {reply && <Reply text={item.text} from={lead.agentId} prose="chat-bubble chat-md" {...reply} />}
           </div>
         );
@@ -506,8 +505,8 @@ function dayLabels(items: ChatItem[], now = new Date()): Map<string, string> {
   return out;
 }
 
-/** The pet's frame: `base`, with a blink now and then. */
-function useBlink(on: boolean, base: FrameName): FrameName {
+/** The face's frame: sitting, with a blink now and then. */
+function useBlink(on: boolean): FaceFrame {
   const [blink, setBlink] = useState(false);
   useEffect(() => {
     if (!on) return;
@@ -530,5 +529,5 @@ function useBlink(on: boolean, base: FrameName): FrameName {
       setBlink(false);
     };
   }, [on]);
-  return blink && base === "sit" ? "blink" : base;
+  return blink ? "blink" : "sit";
 }

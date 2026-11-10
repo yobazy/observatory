@@ -139,3 +139,33 @@ test('the running leads, the top lead first, with their pets', () => {
   // What each one's chat is called (S29).
   assert.deepEqual(got.map((l) => l.name), [ALL_PROJECTS, 'billing-api', 'storefront']);
 });
+
+// ---- the avatar ----
+
+test("every pet's avatar keeps its eyes inside the circle, centred", async () => {
+  const { FACE, faceRows } = await import('../src/nebula/leadChat.ts');
+  for (const kind of Object.keys(COATS)) {
+    const box = FACE[kind];
+    const r = box.size / 2;
+    const cx = box.x + r;
+    const cy = box.y + r;
+    const rows = faceRows(kind);
+    const eyes = [];
+    rows.forEach((row, y) => [...row].forEach((c, x) => c === 'K' && eyes.push([x, y])));
+    assert.ok(eyes.length > 0, `${kind} has eyes`);
+    // Each eye pixel's far corner sits within the circle.
+    for (const [x, y] of eyes) {
+      const dx = Math.max(Math.abs(x - cx), Math.abs(x + 1 - cx));
+      const dy = Math.max(Math.abs(y - cy), Math.abs(y + 1 - cy));
+      assert.ok(Math.hypot(dx, dy) <= r, `${kind}'s eye at ${x},${y} is inside its avatar`);
+    }
+    // The face's middle is the circle's middle, give or take a pixel and a half.
+    const ex = eyes.reduce((a, [x]) => a + x + 0.5, 0) / eyes.length;
+    assert.ok(Math.abs(ex - cx) <= 1.5, `${kind}'s eyes are centred (${ex} vs ${cx})`);
+  }
+});
+
+test('an avatar blinks with the same box: its face stays where sit has it', async () => {
+  const { faceRows } = await import('../src/nebula/leadChat.ts');
+  for (const kind of Object.keys(COATS)) assert.equal(faceRows(kind, 'blink').length, faceRows(kind, 'sit').length);
+});

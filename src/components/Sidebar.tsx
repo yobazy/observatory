@@ -36,7 +36,7 @@ import { reorderKey, useReorder, type DropInto } from "./useReorder";
 import { useBatches } from "../nebula/batch";
 import { openLeadChat, useLeadCalls, useLeads } from "../nebula/leadCalls";
 import { petLabel, QUIET, type Call, type LeadEntry } from "../nebula/leadChat";
-import { PetSprite } from "./Pet";
+import { LeadAvatar } from "./LeadAvatar";
 import { ChatRow } from "./ProjectChat";
 import { useRecentCount, useVisits } from "../nebula/recent";
 import { RECENT_COUNTS, recentProjects, type RecentCount } from "../nebula/recentList";
@@ -766,7 +766,7 @@ function ProjectRow({
   );
 }
 
-/** The pet a project's running lead is (S27), after its name: it hops
+/** A project's running lead, after its name: its face (S30), which hops
  *  with a count when the lead has something for you, and a click opens
  *  the project's chat (S29). Inside the row's button, so it's a span; the
  *  pet in the project's header reaches it by keyboard. */
@@ -788,7 +788,7 @@ function LeadMark({ projectId }: { projectId: string }) {
       aria-label={leadTitle(lead, call)}
       role="img"
     >
-      <PetSprite kind={lead.pet.kind} coat={lead.pet.coat} width={27} />
+      <LeadAvatar pet={lead.pet} size={20} />
       {call.calling && <span className="lead-badge">{call.count}</span>}
     </span>
   );

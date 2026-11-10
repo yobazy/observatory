@@ -805,7 +805,7 @@ function LeadsSettings() {
           <div className="setting-inline top-lead-fields">
             <PetPicker
               pet={petOf(top, null)}
-              label="The top lead's animal"
+              label="What the top lead looks like"
               onPick={(pet) => void setTopLeadPet(top, pet).then(() => flash(`The top lead is a ${pet.kind} now`))}
             />
           </div>
