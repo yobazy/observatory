@@ -268,3 +268,20 @@ export function leadActivity(o: { status: string; queued: number; sending: numbe
   if (o.status === "running" || o.queued > 0 || o.sending > 0) return "working";
   return "idle";
 }
+
+/** How long the lead can go quiet between replies and still be in one run. */
+export const RUN_GAP_S = 10 * 60;
+
+/** The keys of the lead's replies that start a run, as a messaging app
+ *  groups them: the avatar shows beside these only. Anything else in
+ *  between (your message, an event, a task card, an ask), or a gap of more
+ *  than ten minutes, ends a run. */
+export function runStarts(items: readonly ChatItem[]): Set<string> {
+  const out = new Set<string>();
+  let prev: ChatItem | null = null;
+  for (const it of items) {
+    if (it.kind === "pet" && !(prev?.kind === "pet" && it.at - prev.at <= RUN_GAP_S)) out.add(it.key);
+    prev = it;
+  }
+  return out;
+}

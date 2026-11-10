@@ -8,7 +8,7 @@ import { DEFAULT_MAX_TASKS, useLeadActs } from "../nebula/leadActions";
 import { sessionKey } from "../nebula/usageData";
 import { flash, setState, useAppState } from "../nebula/store";
 import { PET_CHOICES, personalityPresets, petFromKey, petKey, petOf, type LeadPet } from "../nebula/leadChat";
-import { PetSprite } from "./Pet";
+import { LeadAvatar } from "./LeadAvatar";
 import { openLeadChat } from "../nebula/leadCalls";
 import { Switch } from "./Settings";
 
@@ -159,7 +159,7 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
         {lead && (
           <PetPicker
             pet={petOf(lead, projectName)}
-            label="The lead's animal"
+            label="What the lead looks like"
             onPick={(pet) => {
               saveLead(projectId, { ...lead, pet });
               flash(`${projectName}'s lead is a ${pet.kind} now`);
@@ -212,16 +212,14 @@ export function ModelPicker({ model, label, onPick }: { model: string; label: st
   );
 }
 
-/** Which pixel-pets animal a lead is (S27): what its pet looks like in the
- *  sidebar and when you talk to it. */
+/** Which pixel-pets animal a lead is (S27): its face in the sidebar and
+ *  its chat (S30). */
 export function PetPicker({ pet, label, onPick }: { pet: LeadPet; label: string; onPick: (pet: LeadPet) => void }) {
   const kinds = [...new Set(PET_CHOICES.map((c) => c.kind))];
   return (
     <label className="card-cap lead-pet-pick">
-      pet
-      <span className="lead-pet" aria-hidden>
-        <PetSprite kind={pet.kind} coat={pet.coat} width={34} />
-      </span>
+      looks like
+      <LeadAvatar pet={pet} size={34} />
       <select
         value={petKey(pet)}
         onChange={(e) => {

@@ -4,7 +4,7 @@
 // colour its chat is tinted with, the lead's latest reply, whether a lead is
 // calling you, and what you've seen. Kept free of the app so its tests run
 // under plain Node.
-import { COATS, coatFor, type CritterKind } from "../vendor/pixel-pets/frames.ts";
+import { COATS, coatFor, FRAMES, type CritterKind } from "../vendor/pixel-pets/frames.ts";
 import { ASK_USER } from "./leadAsk.ts";
 import { askLines } from "./leadActions.ts";
 import type { Entry } from "./transcript";
@@ -133,6 +133,39 @@ export function solidTint(tint: string): string {
   }
   return "#ffffff";
 }
+
+// ---- the avatar ----
+
+/** The square of a pet's `sit` frame its round avatar shows, in the
+ *  frame's pixels: its face, close up, with a little chest under it. The
+ *  circle is the square's inscribed circle, so each box is sized to keep
+ *  the eyes, ears and cheeks inside it. Big cats are drawn from the cat's
+ *  frames, so they share its box. The box may run past the frame's edge;
+ *  that part is the tint. */
+export interface FaceBox {
+  x: number;
+  y: number;
+  size: number;
+}
+
+const CAT_FACE: FaceBox = { x: 6, y: -1.5, size: 15 };
+export const FACE: Record<CritterKind, FaceBox> = {
+  cat: CAT_FACE,
+  leopard: CAT_FACE,
+  bobcat: CAT_FACE,
+  jaguar: CAT_FACE,
+  dog: { x: 5, y: -1.5, size: 15 },
+  // Seen from the side: its head, with the front of its shell.
+  turtle: { x: 16.5, y: 6.5, size: 11 },
+  // All face: its eyes sit on top, so the box is wide.
+  frog: { x: 3.5, y: -4.5, size: 20 },
+};
+
+/** The frames an avatar can show: the face is where `sit` has it in both. */
+export type FaceFrame = "sit" | "blink";
+
+/** The rows of `kind`'s `frame`, for its avatar. */
+export const faceRows = (kind: CritterKind, frame: FaceFrame = "sit") => FRAMES[kind][frame];
 
 export const petKey = (p: LeadPet) => `${p.kind}:${p.coat}`;
 
