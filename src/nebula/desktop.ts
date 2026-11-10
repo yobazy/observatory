@@ -6,7 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isPreview } from "./client";
-import { flash, getState, projectOfWorktree, subscribe, waitingAgents } from "./store";
+import { flash, getState, projectOfWorktree, subscribe, threadAgents, waitingAgents } from "./store";
 
 export const QUICK_CAPTURE_DEFAULT = "Control+Alt+N";
 
@@ -29,7 +29,7 @@ function trayState() {
     id: a.id,
     label: `${a.name} · ${projectOfWorktree(s, a.worktree_id)?.name ?? ""}`,
   }));
-  const working = Object.values(s.agents).filter((a) => !a.archived && a.status === "running").length;
+  const working = threadAgents(s).filter((a) => !a.archived && a.status === "running").length;
   return { waiting, working };
 }
 

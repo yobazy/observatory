@@ -72,6 +72,24 @@ export function parseActions(text: string): LeadAction[] {
   return out;
 }
 
+/** Whether a line (outside a code fence) is an action line parseActions()
+ *  would read, well-formed or not: the chat (S29) leaves them out of the
+ *  lead's words. */
+const ACTION_LINE = /^(?:START \S+|NUDGE \S+|ASK (?:merge|archive) \S+|PASS [^:]+):/;
+
+/** A reply without its action lines, for the chat's bubble: the lines a
+ *  code fence holds stay, as parseActions() leaves them too. */
+export function withoutActions(text: string): string {
+  const out: string[] = [];
+  let fenced = false;
+  for (const raw of text.replace(/\r\n?/g, "\n").split("\n")) {
+    if (FENCE.test(raw)) fenced = !fenced;
+    else if (!fenced && ACTION_LINE.test(raw.replace(LEAD_IN, ""))) continue;
+    out.push(raw);
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** How many of a reply's lines ask you something (for the pet's call). */
 export const askLines = (text: string) => parseActions(text).filter((a) => a.kind === "ask").length;
 
@@ -347,6 +365,9 @@ export interface LeadTask {
   taskId: string;
   branch: string;
   at: number;
+  /** The lead's reply whose START it was (S29: the chat shows its card
+   *  under that reply). Missing on tasks started before S29. */
+  n?: number;
   agentId?: string;
   /** Its START has been reported back (started, or refused once its
    *  launch failed). */
@@ -394,13 +415,16 @@ export interface LeadActs {
   /** Asks answered, by askKey(). */
   answered: string[];
   outcomes: Record<string, Outcome>;
+  /** Every reply's outcome, oldest first (S29: the chat shows each under
+   *  its reply, not only the latest). */
+  history: (Outcome & { leadId: string })[];
   /** Leads told their actions are off, since they were last turned on. */
   toldOff: string[];
   tasks: LeadTask[];
 }
 
 const KEY = "observatory.leadActions";
-const EMPTY: LeadActs = { acted: {}, nudges: [], answered: [], outcomes: {}, toldOff: [], tasks: [] };
+const EMPTY: LeadActs = { acted: {}, nudges: [], answered: [], outcomes: {}, history: [], toldOff: [], tasks: [] };
 /** Asks and nudges kept: enough for the hour and for the dialogue. */
 const KEEP = 200;
 
@@ -415,6 +439,7 @@ function load(): LeadActs {
       nudges: arr<Nudge>(raw.nudges).filter((n) => n && typeof n.agentId === "string" && typeof n.at === "number"),
       answered: arr<string>(raw.answered).filter((s) => typeof s === "string"),
       outcomes: raw.outcomes && typeof raw.outcomes === "object" ? raw.outcomes : {},
+      history: arr<Outcome & { leadId: string }>(raw.history).filter((o) => o && typeof o.leadId === "string" && typeof o.n === "number"),
       toldOff: arr<string>(raw.toldOff).filter((s) => typeof s === "string"),
       tasks: arr<LeadTask>(raw.tasks).filter((t) => t && typeof t.taskId === "string" && typeof t.leadId === "string"),
     };
@@ -442,6 +467,7 @@ export function updateLeadActs(f: (s: LeadActs) => Partial<LeadActs>) {
   next.nudges = next.nudges.slice(-KEEP);
   next.answered = next.answered.slice(-KEEP);
   next.tasks = next.tasks.slice(-KEEP);
+  next.history = next.history.slice(-KEEP);
   state = next;
   try {
     localStorage.setItem(KEY, JSON.stringify(next));
@@ -466,6 +492,15 @@ const markAnswered = (key: string) => updateLeadActs((s) => ({ answered: [...s.a
 
 /** A reply acted on: nothing in it runs again. */
 export const markActed = (leadId: string, n: number) => updateLeadActs((s) => ({ acted: { ...s.acted, [leadId]: n } }));
+
+/** What each of a lead's replies made happen, oldest first: the history,
+ *  and its latest outcome (kept before S29 without a history). */
+export function outcomesOf(leadId: string, s: LeadActs = leadActs()): Outcome[] {
+  const out = s.history.filter((o) => o.leadId === leadId).map(({ n, lines, asks }) => ({ n, lines, asks }));
+  const last = s.outcomes[leadId];
+  if (last && !out.some((o) => o.n === last.n)) out.push(last);
+  return out.sort((a, b) => a.n - b.n);
+}
 
 /** The lead's tasks, newest first. Counted by project, so a restarted lead
  *  keeps its cap and its list. */

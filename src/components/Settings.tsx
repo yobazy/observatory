@@ -25,6 +25,7 @@ import { ACCENTS, MODES, resolvedMode, savePrefs, themeName } from "../nebula/th
 import { LINE_HEIGHTS, SIZE_MAX, SIZE_MIN, TERM_FONTS, termFont } from "../nebula/termfont";
 import { HANDOFF_INSTRUCTION } from "../nebula/handoff";
 import { sortedProjects } from "../nebula/store";
+import { openLeadChat } from "../nebula/leadCalls";
 import { QUICK_CAPTURE_CHOICES, QUICK_CAPTURE_DEFAULT } from "../nebula/desktop";
 import { play } from "../nebula/delight";
 import { chosenEditor, useEditors } from "./Editor";
@@ -723,9 +724,9 @@ function LeadsSettings() {
           {state === "running" && agent && (
             <button
               className="link-btn"
-              onClick={() => setState({ view: "sessions", selectedSession: { Agent: agent.id } })}
+              onClick={() => openLeadChat(agent.id)}
             >
-              Open {agent.name}
+              Open its chat
             </button>
           )}
           <button
@@ -1441,7 +1442,6 @@ const SHORTCUTS: [string, string][] = [
   ["⌘P", "Filter projects"],
   ["⌘1 – ⌘9", "Jump to a project"],
   ["⌘J", "Next in the triage queue, or the next session waiting on you"],
-  ["⌘L", "Talk to the lead calling you, or else the top lead"],
   ["⌘I", "Write an idea down for later"],
   ["⇧⌘I", "Ideas: everything written down to start later"],
   ["⌘U", "Agent usage"],

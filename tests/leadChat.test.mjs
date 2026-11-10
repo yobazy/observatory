@@ -13,20 +13,15 @@ function stubStorage() {
 globalThis.localStorage = stubStorage();
 
 const {
+  ALL_PROJECTS,
   callState,
   defaultPet,
   lastReply,
   leadsOf,
   markSeenInChat,
-  pages,
-  paragraphs,
   petOf,
-  readViewLine,
   seenInChat,
-  shortcutTarget,
-  talkPhase,
   validPet,
-  wrap,
   TOP_PET,
   QUIET,
 } = await import('../src/nebula/leadChat.ts');
@@ -64,82 +59,6 @@ test("the top lead's default is a big cat", () => {
   assert.deepEqual(validPet({ kind: 'cat', coat: 'plaid' }), { kind: 'cat', coat: 'orange' });
 });
 
-// ---- paging ----
-
-const prose =
-  'Fix login redirect finished and opened PR #61. The middleware was dropping returnTo when it refreshed the cookie, so people landed on the home page. ' +
-  'I added a test for it and all 42 pass. Nothing else in the project changed, and the branch is pushed.\n\n' +
-  'Next I would like to look at the token refresh, which has the same shape of bug in another place.';
-
-const words = (s) => s.split(/\s+/).filter(Boolean);
-
-test('paging splits prose into pages that fit and never splits a word', () => {
-  const box = { cols: 40, rows: 3 };
-  const got = pages(prose, box);
-  assert.ok(got.length > 1, 'long prose takes more than one page');
-  for (const p of got) {
-    const lines = p.split('\n').flatMap((para) => wrap(para, box.cols));
-    assert.ok(lines.length <= box.rows, `"${p}" is ${lines.length} lines`);
-    for (const l of lines) assert.ok(l.length <= box.cols, `"${l}" is wider than the box`);
-  }
-  // Every word, whole and in order, once.
-  assert.deepEqual(words(got.join(' ')), words(prose));
-  // A paragraph starts on its own line.
-  assert.ok(got.some((p) => p.includes('\nNext') || p.startsWith('Next')));
-  // A word longer than a line gets a line to itself, uncut.
-  const long = 'see /Users/dev/code/storefront-worktrees/cart-sync/src/cart/sync.ts now';
-  const cut = pages(long, { cols: 20, rows: 3 });
-  assert.deepEqual(words(cut.join(' ')), words(long));
-  assert.ok(cut.join(' ').includes('/Users/dev/code/storefront-worktrees/cart-sync/src/cart/sync.ts'));
-  // Short prose is one page; nothing is none.
-  assert.deepEqual(pages('All quiet.', box), ['All quiet.']);
-  assert.deepEqual(pages('', box), []);
-});
-
-test('code, table and list blocks are replaced by the Read view line', () => {
-  const md = [
-    'Sync applied every update with `Promise.all`, so they **raced**.',
-    '',
-    '```ts',
-    'for (const update of pending) {',
-    '  await this.apply(update);',
-    '}',
-    '```',
-    '',
-    '| Pick | File | Change |',
-    '|---|---|---|',
-    '| 1 | `src/cart/sync.ts` | one at a time |',
-    '| 2 | `src/cart/retry.ts` | back off |',
-    '',
-    '- one',
-    '- two',
-    '- three',
-    '- four',
-    '- five',
-    '',
-    'Two choices:',
-    '1. Fix it with a queue?',
-    '2. Keep the old sync?',
-    '',
-    'ASK_USER: should a failed refresh go to /login?',
-  ].join('\n');
-  assert.deepEqual(paragraphs(md), [
-    'Sync applied every update with Promise.all, so they raced.',
-    readViewLine('code'),
-    readViewLine('table'),
-    readViewLine('list'),
-    'Two choices:',
-    '1. Fix it with a queue?',
-    '2. Keep the old sync?',
-    'ASK_USER: should a failed refresh go to /login?',
-  ]);
-  assert.equal(readViewLine('code'), '(code, see Read view)');
-  const said = pages(md, { cols: 60, rows: 3 }).join('\n');
-  assert.ok(!said.includes('await this.apply'), 'no code in the box');
-  assert.ok(!said.includes('retry.ts'), 'no table in the box');
-  assert.ok(!said.includes('five'), 'no long list in the box');
-});
-
 // ---- calling ----
 
 const entries = (...texts) => texts.map(([kind, text], n) => ({ n, kind, text, at: 1000 + n, steps: [] }));
@@ -172,7 +91,7 @@ test('the call state is right for an ASK_USER reply, an unread reply, and an ope
   assert.deepEqual(callState({ reply: null, unseen: true, seen: null }), QUIET);
 });
 
-test('opening a lead in the dialogue is remembered, and never goes backwards', () => {
+test('opening a lead\'s chat is remembered, and never goes backwards', () => {
   assert.equal(seenInChat('lead1'), null);
   markSeenInChat('lead1', 5);
   assert.equal(seenInChat('lead1'), 5);
@@ -180,7 +99,7 @@ test('opening a lead in the dialogue is remembered, and never goes backwards', (
   assert.equal(seenInChat('lead1'), 5);
 });
 
-// ---- ⌘L ----
+// ---- which leads ----
 
 const agents = { top: { archived: false }, la: { archived: false }, lb: { archived: false }, gone: { archived: true } };
 const projects = { pa: { name: 'storefront' }, pb: { name: 'billing-api' }, pc: { name: 'old' } };
@@ -201,31 +120,6 @@ test('the running leads, the top lead first, with their pets', () => {
   assert.deepEqual(got[0].pet, TOP_PET);
   assert.deepEqual(got[1].pet, { kind: 'turtle', coat: 'sea' });
   assert.deepEqual(got[2].pet, defaultPet('storefront'));
-});
-
-test("⌘L's target picks the calling lead first, otherwise the top lead", () => {
-  const leads = leadsOf(cards, topLead, agents, projects);
-  const ask = { calling: true, count: 1, why: 'ask' };
-  const unread = { calling: true, count: 1, why: 'unread' };
-  assert.equal(shortcutTarget(leads, { la: ask }), 'la');
-  // A question outranks an unread reply, wherever it is in the list.
-  assert.equal(shortcutTarget(leads, { lb: unread, la: ask }), 'la');
-  assert.equal(shortcutTarget(leads, { la: unread }), 'la');
-  // Nobody calling: the top lead.
-  assert.equal(shortcutTarget(leads, { la: QUIET, lb: QUIET }), 'top');
-  assert.equal(shortcutTarget(leads, {}), 'top');
-  // No top lead and nobody calling: nothing to open.
-  assert.equal(shortcutTarget(leadsOf(cards, null, agents, projects), {}), null);
-});
-
-test('the closed dialogue renders nothing; it is only drawn while open or sliding', () => {
-  // Never opened, and after the slide away ends: nothing to draw.
-  assert.equal(talkPhase(null, null, false), 'closed');
-  assert.equal(talkPhase(null, null, true), 'closed');
-  // Asked for, before the first frame up: sliding in.
-  assert.equal(talkPhase('la', 'la', false), 'sliding');
-  assert.equal(talkPhase('la', 'la', true), 'open');
-  // Closed but still sliding away; or another lead asked for meanwhile.
-  assert.equal(talkPhase(null, 'la', false), 'sliding');
-  assert.equal(talkPhase('lb', 'la', true), 'sliding');
+  // What each one's chat is called (S29).
+  assert.deepEqual(got.map((l) => l.name), [ALL_PROJECTS, 'billing-api', 'storefront']);
 });

@@ -458,7 +458,7 @@ async function act(leadId: string, projectId: string, lead: CardLead, n: number,
     context,
     start: (branch, brief) => {
       const batch = queueNewTask({ text: brief, projectId, branch }, allCards());
-      const rec: LeadTask = { leadId, projectId, batchId: batch.id, taskId: batch.tasks[0].id, branch, at: Date.now() };
+      const rec: LeadTask = { leadId, projectId, batchId: batch.id, taskId: batch.tasks[0].id, branch, at: Date.now(), n };
       updateLeadActs((x) => ({ tasks: [...x.tasks, rec] }));
       void import("./batchRunner").then((m) => m.kickBatches());
       const s = getState();
@@ -474,7 +474,8 @@ async function act(leadId: string, projectId: string, lead: CardLead, n: number,
     },
     name: (agentId) => getState().agents[agentId]?.name ?? agentId,
   });
-  updateLeadActs((x) => ({ outcomes: { ...x.outcomes, [leadId]: { n, lines: done.lines, asks: done.asks } } }));
+  const outcome = { n, lines: done.lines, asks: done.asks };
+  updateLeadActs((x) => ({ outcomes: { ...x.outcomes, [leadId]: outcome }, history: [...x.history, { ...outcome, leadId }] }));
   await tell(leadId, done.reports.map(reportLine));
 }
 

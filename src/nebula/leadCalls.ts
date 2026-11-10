@@ -1,15 +1,16 @@
-// The app side of S27 (leadChat.ts is the pure side): each running lead's
-// latest reply, read from its thread's log when its status moves, so its pet
-// can call you; which lead's dialogue is open; and marking a lead seen when
-// you open it. The reply comes from the same `thread_transcript` read the
-// Read view uses, never a parse of its own.
+// The app side of S27 and S29 (leadChat.ts and projectChat.ts are the pure
+// side): each running lead's latest reply, read from its thread's log when
+// its status moves, so its pet can call you and its chat row has a line;
+// which lead's chat is open; and marking a lead seen when you open it. The
+// reply comes from the same `thread_transcript` read the Read view uses,
+// never a parse of its own.
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { allCards, useCards } from "./cards";
 import { isPreview, send } from "./client";
-import { callState, laterSeen, lastReply, leadsOf, markSeenInChat, seenInChat, shortcutTarget, type Call, type LeadEntry, type LeadReply } from "./leadChat";
+import { callState, laterSeen, lastReply, leadsOf, markSeenInChat, seenInChat, type Call, type LeadEntry, type LeadReply } from "./leadChat";
 import { readTo } from "./readmark";
-import { getState, subscribe, useAppState, type State } from "./store";
+import { getState, setState, subscribe, useAppState, type State } from "./store";
 import type { Transcript } from "./transcript";
 import type { Agent } from "./types";
 
@@ -27,10 +28,11 @@ const watch = (l: () => void) => {
 
 /** Each lead's latest reply, by its thread's id. */
 let replies: Record<string, LeadReply | null> = {};
-/** The lead whose dialogue is open. */
-let open: string | null = null;
+/** The lead whose raw terminal you asked for ("Open terminal" in its
+ *  chat), in place of its chat, until its chat is opened again. */
+let terminal: string | null = null;
 
-/** A lead's latest reply as the dialogue just read it. */
+/** A lead's latest reply as last read (the chat, or a status change). */
 export function noteReply(agentId: string, reply: LeadReply | null) {
   const was = replies[agentId];
   if (was === reply || (was && reply && was.n === reply.n && was.text === reply.text)) return;
@@ -42,21 +44,48 @@ export function noteReply(agentId: string, reply: LeadReply | null) {
  *  (S28: the runner acts on it once its turn has ended). */
 export const latestReply = (agentId: string): LeadReply | null | undefined => replies[agentId];
 
-/** Called on every change here: a reply read, the dialogue opened or closed. */
+/** A lead's latest reply as last read, kept current, for its chat row. */
+export function useLeadReply(agentId: string): LeadReply | null {
+  return useSyncExternalStore(watch, () => replies[agentId] ?? null);
+}
+
+/** Called on every change here: a reply read, a chat or terminal opened. */
 export const watchLeadCalls = watch;
 
+/** Open a lead's chat (S29): its thread selected, shown as the chat. A
+ *  project's lead brings its project up; the top lead leaves the project
+ *  list where it is. */
 export function openLeadChat(agentId: string) {
-  open = agentId;
+  terminal = null;
+  notify();
+  const s = getState();
+  const projectId = s.worktrees[s.agents[agentId]?.worktree_id ?? ""]?.project_id;
+  const top = s.prefs.topLead?.agentId === agentId;
+  setState({ view: "sessions", selectedSession: { Agent: agentId }, ...(!top && projectId ? { selectedProject: projectId } : {}) });
+}
+
+/** "Open terminal" in a lead's chat: its raw session, until the chat is
+ *  opened again. */
+export function openLeadTerminal(agentId: string) {
+  terminal = agentId;
   notify();
 }
 
-export function closeLeadChat() {
-  if (open === null) return;
-  open = null;
-  notify();
+/** The lead whose chat is open: the selected thread when it's a running
+ *  lead and its terminal wasn't asked for. */
+export function useChatLead(): LeadEntry | null {
+  const leads = useLeads();
+  const sel = useAppState().selectedSession;
+  const raw = useSyncExternalStore(watch, () => terminal);
+  const id = sel && "Agent" in sel ? sel.Agent : null;
+  if (!id || id === raw) return null;
+  return leads.find((l) => l.agentId === id) ?? null;
 }
 
-export const useOpenLead = () => useSyncExternalStore(watch, () => open);
+/** Whether `agentId` is a running lead, so its terminal offers its chat. */
+export function useIsLead(agentId: string | undefined): boolean {
+  return useLeads().some((l) => l.agentId === agentId);
+}
 
 /** You've seen `agentId`'s reply `n`: its call stops, and nebula hears it's
  *  read, as it does when you look at the thread. */
@@ -102,13 +131,6 @@ export function useLeadCalls(leads: LeadEntry[]): Record<string, Call> {
   const { agents } = useAppState();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => callsFor(leads, agents), [leads, agents, v]);
-}
-
-/** The lead ⌘L opens now: one calling you, else the top lead. */
-export function shortcutLead(): string | null {
-  const s = getState();
-  const leads = leadsIn(s);
-  return shortcutTarget(leads, callsFor(leads, s.agents));
 }
 
 /** Mount once: reads a lead's latest reply when its thread's status moves,

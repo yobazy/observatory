@@ -9,6 +9,7 @@ import { sessionKey } from "../nebula/usageData";
 import { flash, setState, useAppState } from "../nebula/store";
 import { PET_CHOICES, petFromKey, petKey, petOf, type LeadPet } from "../nebula/leadChat";
 import { PetSprite } from "./Pet";
+import { openLeadChat } from "../nebula/leadCalls";
 import { Switch } from "./Settings";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -53,14 +54,8 @@ export function LeadSection({ projectId, projectName, base }: { projectId: strin
             <span className={`lead-mark${state === "stopped" ? " is-stopped" : ""}`}>{state === "running" ? "Lead" : "Lead stopped"}</span>
             {state === "running" && agent && (
               <>
-                <button
-                  type="button"
-                  className="link-btn"
-                  onClick={() =>
-                    setState({ view: "sessions", selectedProject: projectId, selectedSession: { Agent: agent.id } })
-                  }
-                >
-                  Open {agent.name}
+                <button type="button" className="link-btn" onClick={() => openLeadChat(agent.id)}>
+                  Open its chat
                 </button>
                 <span className="dialog-note card-flat">{dollars(agent.session_id ? (costs.get(sessionKey(agent.kind, agent.session_id)) ?? 0) : 0)} so far</span>
               </>

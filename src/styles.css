@@ -9372,8 +9372,7 @@ button.board-main:hover .board-text {
 .lead-pet svg {
   image-rendering: pixelated;
 }
-.lead-pet.is-calling svg,
-.top-lead-row.is-calling .lead-pet svg {
+.lead-pet.is-calling svg {
   animation: lead-hop 0.9s steps(2) infinite;
 }
 @keyframes lead-hop {
@@ -9400,262 +9399,12 @@ button.board-main:hover .board-text {
   top: -5px;
   right: -9px;
 }
-.top-lead-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: calc(100% - 20px);
-  margin: 0 10px 6px;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: var(--r-md);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.top-lead-row:hover {
-  background: var(--raised);
-}
-.top-lead-row:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.top-lead-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 550;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.top-lead-sub {
-  display: block;
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--faint);
-}
 .card-cap.lead-pet-pick select {
   max-width: 220px;
 }
 
-/* The dialogue: paper and ink in every mode, like a game's text box. */
-.talk {
-  --box: #fbf7ec;
-  --box-ink: #23263a;
-  --box-shade: #d9d1bd;
-  --pixel: "Pixelify Sans", "DotGothic16", ui-monospace, Menlo, monospace;
-  --talk: "DotGothic16", "Pixelify Sans", ui-monospace, Menlo, monospace;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 18;
-  height: 250px;
-  display: flex;
-  align-items: flex-end;
-  padding: 0 18px 16px;
-  pointer-events: none;
-  /* The pet and box slide up from below the window: clipped here, so the
-     slide never adds scroll area to the page. */
-  overflow: clip;
-}
-.talk::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgb(5 7 14 / 0.75), transparent);
-  opacity: 0;
-  transition: opacity 0.25s;
-}
-.talk.is-open::before {
-  opacity: 1;
-}
-.talk-pet {
-  position: relative;
-  z-index: 1;
-  flex: none;
-  width: 216px;
-  height: 144px;
-  margin-right: -14px;
-  line-height: 0;
-  transform: translateY(170px);
-  transition: transform 0.38s cubic-bezier(0.2, 1.3, 0.4, 1);
-}
-.talk.is-open .talk-pet {
-  transform: none;
-}
-.talk-pet svg {
-  image-rendering: pixelated;
-}
-.talk-pet.is-speaking svg {
-  animation: talk-bob 0.26s steps(2) infinite;
-}
-@keyframes talk-bob {
-  50% {
-    transform: translateY(-3px);
-  }
-}
-.talk-box {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-width: 0;
-  max-width: 880px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 22px 20px 12px;
-  background: var(--box);
-  color: var(--box-ink);
-  border: 3px solid var(--box-ink);
-  border-radius: 6px;
-  box-shadow:
-    inset 0 -4px 0 var(--box-shade),
-    0 6px 0 rgb(0 0 0 / 0.35);
-  pointer-events: auto;
-  transform: translateY(260px);
-  transition: transform 0.32s 0.08s cubic-bezier(0.2, 1.2, 0.4, 1);
-}
-.talk.is-open .talk-box {
-  transform: none;
-}
-.talk-plate {
-  position: absolute;
-  top: -17px;
-  left: 14px;
-  padding: 3px 10px 4px;
-  border-radius: 4px;
-  background: var(--box-ink);
-  color: var(--box);
-  font: 700 14px var(--pixel);
-  letter-spacing: 0.02em;
-}
-.talk-plate small {
-  margin-left: 6px;
-  font-size: inherit;
-  font-weight: 500;
-  opacity: 0.7;
-}
-.talk-close {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  border: 0;
-  background: none;
-  color: var(--box-ink);
-  font: 700 14px var(--pixel);
-  opacity: 0.55;
-  cursor: pointer;
-}
-.talk-close:hover {
-  opacity: 1;
-}
-.talk-say {
-  min-height: 78px;
-  /* Room for the page's ▼ at the end of its last line. */
-  padding-right: 22px;
-  font: 18px/1.45 var(--talk);
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-  cursor: pointer;
-  user-select: text;
-}
-.talk-you {
-  opacity: 0.6;
-}
-.talk-ask {
-  padding: 0 4px;
-  background: #ffe2a8;
-  color: inherit;
-}
-.talk-more {
-  position: absolute;
-  right: 18px;
-  bottom: 58px;
-  font: 16px var(--pixel);
-  animation: talk-blink 1s steps(1) infinite;
-}
-@keyframes talk-blink {
-  50% {
-    opacity: 0;
-  }
-}
-.talk-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 9px;
-  border-top: 2px dashed var(--box-shade);
-}
-.talk-foot input {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 2px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--box-ink);
-  font: 16px var(--talk);
-}
-.talk-foot input::placeholder {
-  color: #8b8776;
-}
-.talk-btn {
-  padding: 5px 10px;
-  border: 0;
-  border-radius: 4px;
-  background: var(--box-ink);
-  color: var(--box);
-  font: 700 13px var(--pixel);
-  cursor: pointer;
-}
-.talk-btn.is-quiet {
-  border: 2px solid var(--box-shade);
-  background: transparent;
-  color: var(--box-ink);
-}
-.talk-btn.is-quiet.is-hint {
-  border-color: var(--box-ink);
-}
-.talk-btn:focus-visible,
-.talk-close:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.talk-page {
-  font: 12px var(--pixel);
-  opacity: 0.55;
-}
-@media (max-width: 700px) {
-  .talk {
-    height: 300px;
-    flex-direction: column;
-    align-items: stretch;
-    padding: 0 8px 10px;
-  }
-  .talk-pet {
-    width: 120px;
-    height: 80px;
-    margin: 0 0 -6px 6px;
-  }
-  .talk-pet svg {
-    width: 120px;
-    height: 80px;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .talk::before,
-  .talk-pet,
-  .talk-box {
-    transition: none;
-  }
-  .lead-pet.is-calling svg,
-  .top-lead-row.is-calling .lead-pet svg,
-  .talk-pet.is-speaking svg,
-  .talk-more {
+  .lead-pet.is-calling svg {
     animation: none;
   }
 }
@@ -9764,33 +9513,394 @@ button.board-main:hover .board-text {
   color: var(--st-error);
 }
 
-/* Under a lead's reply in the dialogue (S28): what the reply started or
-   nudged, and its asks with Yes and No. */
-.talk-acts {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font: 14px/1.35 var(--talk);
-}
-.talk-did {
-  opacity: 0.7;
-}
-.talk-asks {
+
+/* Chat with a project (S29, ProjectChat.tsx): each lead is its project's
+   chat, drawn in its pet's coat colour (`--t`, petTint()). The row sits
+   above the project's threads, or at the top of the projects list for the
+   top lead; the chat takes the terminal column's place. */
+.chat-row {
+  --pixel: "Pixelify Sans", ui-monospace, Menlo, monospace;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--t) 9%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--t) 22%, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.talk-asks > span {
+.chat-row:hover,
+.chat-row.is-on {
+  background: color-mix(in oklab, var(--t) 18%, transparent);
+}
+.chat-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.chat-row.is-top {
+  width: calc(100% - 20px);
+  margin: 0 10px 6px;
+}
+.sessions-chat {
+  margin: 10px 10px 0;
+}
+.chat-row-pet {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
+}
+.chat-row-pet svg {
+  image-rendering: pixelated;
+}
+.chat-row.is-calling .chat-row-pet svg {
+  animation: lead-hop 0.9s steps(2) infinite;
+}
+.chat-row-txt {
   flex: 1;
   min-width: 0;
+}
+.chat-row-name,
+.chat-row-sub {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-row-name {
+  font: 500 13px var(--pixel);
+  letter-spacing: 0.01em;
+  color: color-mix(in oklab, var(--t) 55%, var(--text));
+}
+.chat-row-sub {
+  font-size: 11px;
+  color: var(--faint);
+}
+.chat-badge {
+  flex: none;
+  min-width: 16px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--t);
+  color: var(--accent-ink);
+  font: 700 10px/1.3 var(--ui);
+  text-align: center;
+}
+
+.chat {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--panel);
+}
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 58px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--t) 12%, transparent), transparent), var(--night);
+}
+.chat-head-pet {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
+}
+.chat-head-pet svg {
+  image-rendering: pixelated;
+}
+.chat-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.chat-head h1 {
+  margin: 0;
+  font: 600 19px var(--display);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+.chat-meta b {
+  font-weight: 600;
+  color: color-mix(in oklab, var(--t) 60%, var(--text));
+}
+.chat-meta .chat-raw {
+  font-size: 12px;
+}
+.chat-acts {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px;
+}
+.chat-empty {
+  align-self: center;
+  margin: auto 0;
+  color: var(--faint);
+  font-size: 13px;
+}
+.chat-day {
+  align-self: center;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.chat-say {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: 78%;
+}
+.chat-say-pet {
+  display: inline-flex;
+  flex: none;
+  margin-bottom: 4px;
+  line-height: 0;
+}
+.chat-say-pet svg {
+  image-rendering: pixelated;
+}
+.chat-bubble {
+  min-width: 0;
+  padding: 10px 13px;
+  border: 1px solid color-mix(in oklab, var(--t) 28%, transparent);
+  border-radius: 14px 14px 14px 4px;
+  background: color-mix(in oklab, var(--t) 14%, var(--raised));
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.chat-bubble.chat-md {
+  padding: 10px 13px;
+}
+.chat-md > :first-child {
+  margin-top: 0;
+}
+.chat-md > :last-child {
+  margin-bottom: 0;
+}
+.chat-md pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.chat-say.is-me {
+  align-self: flex-end;
+  max-width: 70%;
+}
+.chat-say.is-me .chat-bubble {
+  border-color: transparent;
+  border-radius: 14px 14px 4px 14px;
+  background: color-mix(in oklab, var(--st-running) 14%, var(--raised));
+  white-space: pre-wrap;
+}
+.chat-say.is-sending .chat-bubble {
+  opacity: 0.7;
+}
+.chat-event {
+  align-self: center;
+  max-width: 80%;
+  font-size: 12px;
+  color: var(--faint);
+  text-align: center;
+}
+.chat-typing {
+  display: inline-flex;
+  gap: 3px;
+}
+.chat-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: chat-dots 1s infinite;
+}
+.chat-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.chat-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes chat-dots {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Work the lead started, under the reply that started it, on four steps. */
+.chat-task {
+  display: grid;
+  gap: 8px;
+  max-width: 460px;
+  margin-left: 37px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--night);
+}
+.chat-task-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.chat-task-line code {
+  font: 12px var(--mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.talk-asks .talk-btn {
-  padding: 2px 9px;
+.chat-task-state {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--st-running);
+}
+.chat-task.is-done .chat-task-state {
+  color: var(--st-done);
+}
+.chat-task.is-bad .chat-task-state {
+  color: var(--st-error);
+}
+.chat-task.is-quiet .chat-task-state {
+  color: var(--faint);
+}
+.chat-steps,
+.chat-step-labels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.chat-steps span {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background 0.4s;
+}
+.chat-steps span.is-on {
+  background: var(--st-running);
+}
+.chat-task.is-done .chat-steps span {
+  background: var(--st-done);
+}
+.chat-task.is-bad .chat-steps span.is-on:has(+ span:not(.is-on)) {
+  background: var(--st-error);
+}
+.chat-task.is-quiet .chat-steps span.is-on {
+  background: var(--faint);
+}
+.chat-step-labels {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* An ASK line (S28) as a dashed row with Yes and No. */
+.chat-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: 460px;
+  margin-left: 37px;
+  padding: 10px 12px;
+  border: 1px dashed color-mix(in oklab, var(--t) 50%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--t) 7%, transparent);
+}
+.chat-ask.is-answered {
+  opacity: 0.7;
+}
+.chat-ask-q {
+  flex: 1;
+  min-width: 180px;
+  font-size: 13px;
+}
+.chat-ask-q small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.btn.chat-yes,
+.btn.chat-send {
+  border-color: transparent;
+  background: var(--t);
+  color: var(--accent-ink);
+}
+
+.chat-compose {
+  display: flex;
+  gap: 8px;
+  padding: 12px 22px 16px;
+  border-top: 1px solid var(--line);
+}
+.chat-compose input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text);
+  font: 13.5px var(--ui);
+}
+.chat-compose input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--t) 60%, transparent);
+}
+@media (max-width: 720px) {
+  .chat-say,
+  .chat-say.is-me {
+    max-width: 92%;
+  }
+  .chat-task,
+  .chat-ask {
+    margin-left: 0;
+  }
+  .chat-head {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+  .chat-log {
+    padding: 14px;
+  }
+  .chat-compose {
+    padding: 10px 14px 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-row.is-calling .chat-row-pet svg,
+  .chat-typing i {
+    animation: none;
+  }
+  .chat-steps span {
+    transition: none;
+  }
 }

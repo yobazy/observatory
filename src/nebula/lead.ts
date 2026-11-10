@@ -273,6 +273,12 @@ export function leadIds(cards: Cards, top?: { agentId: string } | null): Set<str
   return ids;
 }
 
+/** Threads without the leads' (S29): a lead is its project's chat, not a
+ *  thread, so lists and counts of threads leave it out. */
+export function withoutLeads<T extends { id: string }>(threads: Iterable<T>, leads: ReadonlySet<string>): T[] {
+  return [...threads].filter((t) => !leads.has(t.id));
+}
+
 export interface LeadPromptInput {
   project: string;
   /** The project's main checkout, where the lead runs. */
