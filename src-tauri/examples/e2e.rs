@@ -150,11 +150,29 @@ async fn main() -> R<()> {
         json!({"RenameAgent": {"req_id": 3, "id": agent, "name": "E2E Renamed"}}),
     )
     .await?;
+    // The renamed row carries its prompts: every app tells a lead's thread by
+    // the prompt it started with (isLeadThread(), lead.ts).
+    let mut seen = (None, false);
     until(&mut s, 5, |v| {
-        (v.pointer("/Ack/req_id")? == 3).then_some(())
+        if let Some(a) = v.pointer("/EntityUpserted/entity/Agent") {
+            if a.get("id")? == agent.as_str() && a.get("name")? == "E2E Renamed" {
+                seen.0 = Some(a.get("recent_prompts")?.clone());
+            }
+        }
+        if v.pointer("/Ack/req_id") == Some(&json!(3)) {
+            seen.1 = true;
+        }
+        (seen.0.is_some() && seen.1).then_some(())
     })
     .await?;
-    println!("ok   RenameAgent");
+    let prompts = seen.0.unwrap_or_default();
+    assert!(
+        prompts
+            .as_array()
+            .is_some_and(|p| p.iter().any(|e| e["text"] == "hello from e2e")),
+        "the starting prompt isn't in recent_prompts: {prompts}"
+    );
+    println!("ok   RenameAgent, and its row keeps the starting prompt");
     send(&mut s, json!({"ArchiveAgent": {"req_id": 4, "id": agent}})).await?;
     until(&mut s, 5, |v| {
         (v.pointer("/Ack/req_id")? == 4).then_some(())

@@ -7,13 +7,10 @@
 // rules a lead's prompt gets, the top lead's prompt and its roster line, and
 // counting the answers log. leadRunner.ts wires it to the app. Kept free of
 // the app so its tests run under plain Node.
-import { deliver, LEADS_DIR, leadName, leadState, LINE_PREFIX, type LeadQueue, type Leads } from "./lead.ts";
+import { deliver, LEADS_DIR, leadName, leadState, LINE_PREFIX, TOP_LEAD_NAME, TOP_LEAD_OPENING, type LeadQueue, type Leads } from "./lead.ts";
 import type { CardLead, Cards } from "./cards";
 
-/** The top lead's thread name: what `nebula ask Lead` finds. nebula matches
- *  a name exactly (any case) before it tries fuzzy matches, so `Lead` is
- *  never confused with `Lead <project>`. */
-export const TOP_LEAD_NAME = "Lead";
+export { TOP_LEAD_NAME } from "./lead.ts";
 export const ASK_USER = "ASK_USER:";
 export const ANSWERS_LOG = `${LEADS_DIR}/answers.log`;
 export const TOP_NOTES = `${LEADS_DIR}/top.md`;
@@ -156,7 +153,7 @@ export function topLeadPrompt(p: TopLeadInput): string {
   const projects = p.projects.length ? p.projects.map((e) => `- ${e.name}: ${e.path}`).join("\n") : "- none";
   const vault = p.vault ? `the Obsidian vault at ${p.vault}` : "my Obsidian vault, if you find one";
   const sections = [
-    `You are the top lead (${p.path}). You know every project, so threads in one project can learn how another one works without guessing, and I only hear about real decisions. You don't do tasks yourself.`,
+    `${TOP_LEAD_OPENING}${p.path}). You know every project, so threads in one project can learn how another one works without guessing, and I only hear about real decisions. You don't do tasks yourself.`,
     `Your notes live in ${p.notes}. Create the file (and its folder) if it isn't there, and read it now. Keep in it what you learn about each project and every decision I made that you hear of. Keep it short enough to reread.`,
     `Projects with a lead, by the name you ask them by and their path:
 ${leads}
