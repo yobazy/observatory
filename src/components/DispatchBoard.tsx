@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { QuickAnswer } from "./QuickAnswer";
-import { TriageQueue } from "./TriageQueue";
+import { TriageActions, TriageChip, TriageHint, TriageNeed, TriageQueue, useTriageQueue } from "./TriageQueue";
 import { TaskBudget } from "./TaskBudget";
 import { selectAgent } from "./Sidebar";
 import { openLink } from "./Run";
@@ -19,6 +19,7 @@ import {
   checkOffTask,
   dismissBatch,
   retryTask,
+  undismissBatch,
   startAnyway,
   updateTask,
   useBatches,
@@ -32,13 +33,16 @@ import {
   boardRows,
   clearableBatches,
   groupRows,
+  hiddenByDismiss,
   redirectPrompt,
+  taskBody,
   taskTitle,
   type Group,
   type Phase,
   type Row,
 } from "../nebula/board";
 import type { Agent } from "../nebula/types";
+import type { QueueRow } from "../nebula/triage";
 import { reviewNote, useReviews } from "../nebula/review";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -67,7 +71,8 @@ function statusText(r: Row, s: State, h: Holds): string {
   if (holdOn(r.task, h)) return "Held by budget";
   if (r.phase === "working" && r.agent && (s.queue[r.agent.id]?.length ?? 0) > 0) return "Queued";
   if (r.phase === "working" && !r.agent) return "Starting…";
-  if (r.agent && (r.phase === "waiting" || r.phase === "working" || r.phase === "finished" || r.phase === "stopped"))
+  if (r.phase === "finished") return "Finished";
+  if (r.agent && (r.phase === "waiting" || r.phase === "working" || r.phase === "stopped"))
     return statusLabel(r.agent);
   return PHASE_LABEL[r.phase] ?? r.phase;
 }
@@ -87,17 +92,25 @@ function targetText(t: BatchTask, agent: Agent | undefined, s: State): string {
 
 /** Phases a row's status chip is coloured for: waiting on you, gone wrong,
  *  under way; the rest are quiet. */
-function tone(p: Phase, held: boolean): "wait" | "error" | "run" | "quiet" {
+function tone(p: Phase, held: boolean): "wait" | "error" | "run" | "ok" | "quiet" {
   if (held || p === "plan" || p === "waiting") return "wait";
   if (p === "failed" || p === "blocked" || p === "stopped") return "error";
   if (p === "working" || p === "launching") return "run";
+  if (p === "finished") return "ok";
   return "quiet";
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** Every dispatched task, in sections: what needs you, what's running,
- *  what's up next and what's done. */
+/** When a row's task last moved: its session's last status change once
+ *  that's settled, else when it launched. */
+function rowSince(r: Row, batches: Batch[]): number {
+  if (r.agent && r.agent.status !== "running") return r.agent.archived ? r.agent.archived_at || r.agent.status_changed_at : r.agent.status_changed_at;
+  return r.task.launchedAt ?? batches.find((b) => b.id === r.batchId)?.at ?? Date.now();
+}
+
+/** Every dispatched task, in sections: what needs you, what to review,
+ *  what's running, what's up next and what's done. */
 export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
   const state = useAppState();
   const batches = useBatches();
@@ -110,22 +123,41 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
   const groups = useMemo(() => groupRows(rows, (r) => !!holdOn(r.task, holds)), [rows, holds]);
   const clearable = useMemo(() => clearableBatches(rows), [rows]);
   const heldLine = useMemo(() => holdSummary(live.flatMap((b) => b.tasks), holds), [live, holds]);
-  // Sessions already on the board aren't listed again under other threads.
+  // A session on the board shows its triage label, need and actions on its
+  // own row; the triage section lists only the other threads.
+  const queue = useTriageQueue();
+  const triageOf = useMemo(() => {
+    const m = new Map<string, QueueRow>();
+    for (const r of [...queue.rows, ...queue.stale]) m.set(r.id, r);
+    return m;
+  }, [queue]);
   const onBoard = useMemo(() => new Set(rows.map((r) => r.agent?.id).filter((x): x is string => !!x)), [rows]);
+  const otherRows = queue.rows.filter((r) => !onBoard.has(r.id));
+  const otherStale = queue.stale.filter((r) => !onBoard.has(r.id));
+  const showTriage = rows.length === 0 || otherRows.length > 0 || otherStale.length > 0;
   const count = (g: Group) => groups.find((x) => x.key === g)?.rows.length ?? 0;
+  const needs = count("needs");
   const summary = [
-    count("needs") && `${count("needs")} ${count("needs") === 1 ? "needs" : "need"} you`,
+    needs && `${needs} ${needs === 1 ? "needs" : "need"} you${heldLine ? ` (${heldLine})` : ""}`,
+    count("review") && `${count("review")} to review`,
     count("running") && `${count("running")} running`,
     count("next") && `${count("next")} up next`,
     count("done") && `${count("done")} done`,
-    heldLine,
   ]
     .filter(Boolean)
     .join(", ");
   const settledLeft = live.filter(
     (b) => !clearable.includes(b.id) && batchSummary(b.tasks, state.agents, queued).settled,
   );
-  const triage = <TriageQueue title={rows.length ? "Other threads" : "What needs you"} exclude={onBoard} />;
+  const clearDone = () => {
+    const ids = [...clearable];
+    ids.forEach(dismissBatch);
+    const n = rows.filter((r) => ids.includes(r.batchId)).length;
+    flash(`Cleared ${plural(n, "done task")}`, 6000, { label: "Undo", run: () => ids.forEach(undismissBatch) });
+  };
+  const triage = showTriage && (
+    <TriageQueue title={rows.length ? "Other threads" : "What needs you"} rows={otherRows} stale={otherStale} />
+  );
 
   return (
     <section className="usage board" aria-labelledby="board-title">
@@ -139,7 +171,7 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
             To-do list
           </button>
           <button className="btn btn-sm" onClick={() => setState({ view: "sessions" })} title="Back to sessions (Esc)">
-            Done
+            Close
           </button>
         </div>
       </header>
@@ -165,7 +197,7 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
                   {g.key === "done" && clearable.length > 0 && (
                     <button
                       className="link-btn"
-                      onClick={() => clearable.forEach(dismissBatch)}
+                      onClick={clearDone}
                       title={`Take the ${plural(clearable.length, "batch", "batches")} whose every task is done off the board`}
                     >
                       Clear done
@@ -174,44 +206,65 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
                 </div>
                 <ul className="board-rows" aria-label={g.label}>
                   {g.rows.map((r) => (
-                    <BoardRow key={r.task.id} row={r} state={state} holds={holds} compact={g.key === "done"} />
+                    <BoardRow
+                      key={r.task.id}
+                      row={r}
+                      state={state}
+                      holds={holds}
+                      compact={g.key === "done" || g.key === "review"}
+                      since={g.key === "done" || g.key === "review" ? rowSince(r, live) : undefined}
+                      triage={r.agent ? triageOf.get(r.agent.id) : undefined}
+                    />
                   ))}
                 </ul>
-                {g.key === "done" && <Batches batches={settledLeft} />}
+                {g.key === "done" && <Batches batches={settledLeft} rows={rows} />}
               </section>
               {g.key === "needs" && triage}
             </Fragment>
           ))
         )}
-        {rows.length > 0 && count("done") === 0 && <Batches batches={settledLeft} />}
+        {rows.length > 0 && count("done") === 0 && <Batches batches={settledLeft} rows={rows} />}
+        {!showTriage && <TriageHint />}
       </div>
     </section>
   );
 }
 
 /** Settled batches with something besides done tasks left in them, which
- *  Clear done leaves: each can still be dismissed as a whole. */
-function Batches({ batches }: { batches: Batch[] }) {
-  const { agents, queue } = useAppState();
+ *  Clear done leaves. Each can still be dismissed as a whole, once you've
+ *  confirmed what that hides. */
+function Batches({ batches, rows }: { batches: Batch[]; rows: Row[] }) {
+  const [asking, setAsking] = useState<string | null>(null);
   if (!batches.length) return null;
   return (
     <ul className="board-batches" aria-label="Settled batches">
       {batches.map((b) => {
-        const s = batchSummary(b.tasks, agents, (id) => queue[id]?.length ?? 0);
+        const hides = hiddenByDismiss(rows, b.id);
+        const when = relativeTime(b.at) === "now" ? "just now" : `${relativeTime(b.at)} ago`;
         return (
           <li key={b.id}>
             <span>
-              Batch from {relativeTime(b.at) === "now" ? "just now" : `${relativeTime(b.at)} ago`}:{" "}
-              {plural(b.tasks.length, "task")}
-              {s.text && `, ${s.text}`}
+              Batch from {when}: {plural(b.tasks.length, "task")}
             </span>
-            <button
-              className="link-btn"
-              onClick={() => dismissBatch(b.id)}
-              title="Take all of this batch's tasks off the board; its unchecked items can be routed again"
-            >
-              Dismiss batch
-            </button>
+            {asking === b.id ? (
+              <span className="board-confirm" role="group" aria-label="Dismiss this batch?">
+                <span>Hide {hides} too?</span>
+                <button className="btn btn-sm" onClick={() => dismissBatch(b.id)}>
+                  Dismiss batch
+                </button>
+                <button className="link-btn" onClick={() => setAsking(null)}>
+                  Keep
+                </button>
+              </span>
+            ) : (
+              <button
+                className="link-btn"
+                onClick={() => (hides ? setAsking(b.id) : dismissBatch(b.id))}
+                title="Take all of this batch's tasks off the board; its unchecked items can be routed again"
+              >
+                Dismiss batch{hides && ` (hides ${hides})`}
+              </button>
+            )}
           </li>
         );
       })}
@@ -219,14 +272,31 @@ function Batches({ batches }: { batches: Batch[] }) {
   );
 }
 
-function BoardRow({ row, state, holds, compact }: { row: Row; state: State; holds: Holds; compact: boolean }) {
+function BoardRow({
+  row,
+  state,
+  holds,
+  compact,
+  since,
+  triage,
+}: {
+  row: Row;
+  state: State;
+  holds: Holds;
+  compact: boolean;
+  since?: number;
+  triage?: QueueRow;
+}) {
   const { task: t, agent, phase, batchId } = row;
   const open = agent ? () => selectAgent(agent) : undefined;
   const checkable = CHECKABLE.has(phase) || (t.target === "you" && phase === "blocked" && !agent);
   const held = !!holdOn(t, holds);
   const dot = agent && !agent.archived ? `dot-${agent.status}` : `dot-${phase}`;
   const title = taskTitle(t.text, agent?.name);
-  const body = !compact && t.text.trim() !== title ? t.text.trim() : null;
+  const body = compact ? null : taskBody(t.text, title);
+  // The board's own row already asks what a decision label would.
+  const sameAsk = triage?.label === "decision" && (phase === "waiting" || phase === "plan");
+  const inNeeds = phase === "plan" || phase === "waiting" || phase === "failed" || phase === "blocked" || phase === "stopped" || held;
   return (
     <li className={`board-row is-${phase}${compact ? " is-compact" : ""}`}>
       <div className="board-line">
@@ -242,7 +312,13 @@ function BoardRow({ row, state, holds, compact }: { row: Row; state: State; hold
         )}
         {compact && agent && <Changes agent={agent} state={state} compact />}
         <span className="board-target">{targetText(t, agent, state)}</span>
+        {since !== undefined && (
+          <span className="board-since" title={new Date(since).toLocaleString()}>
+            {relativeTime(since)}
+          </span>
+        )}
         <span className={`board-chip is-${tone(phase, held)}`}>{statusText(row, state, holds)}</span>
+        {triage && !sameAsk && <TriageChip row={triage} />}
         {checkable &&
           (t.done ? (
             <button
@@ -255,7 +331,7 @@ function BoardRow({ row, state, holds, compact }: { row: Row; state: State; hold
             </button>
           ) : (
             <button
-              className="link-btn board-check"
+              className={inNeeds ? "btn btn-sm" : "link-btn board-check"}
               onClick={() => checkOffTask(batchId, t.id, true)}
               aria-label={`Check off ${title}`}
               title="Mark it done: its items in the to-do list are checked too"
@@ -263,8 +339,10 @@ function BoardRow({ row, state, holds, compact }: { row: Row; state: State; hold
               Check off
             </button>
           ))}
+        {triage && agent && !sameAsk && <TriageActions row={triage} agent={agent} />}
       </div>
-      {body && <Prompt text={body} />}
+      {body && <Prompt text={body} title={title} lines={inNeeds ? 1 : 2} />}
+      {triage && agent && <TriageNeed row={triage} agent={agent} />}
       {!compact && (
         <>
           {t.state === "launched" && t.past && t.note && t.note !== "queued" && <p className="board-note">{t.note}</p>}
@@ -284,8 +362,8 @@ function BoardRow({ row, state, holds, compact }: { row: Row; state: State; hold
   );
 }
 
-/** A task's whole text under its title, two lines until opened. */
-function Prompt({ text }: { text: string }) {
+/** A task's text under its title, `lines` lines until opened. */
+function Prompt({ text, title, lines }: { text: string; title: string; lines: number }) {
   const ref = useRef<HTMLParagraphElement>(null);
   const [open, setOpen] = useState(false);
   const [clipped, setClipped] = useState(false);
@@ -299,14 +377,20 @@ function Prompt({ text }: { text: string }) {
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [text, open]);
+  }, [text, open, lines]);
   return (
     <div className="board-prompt-wrap">
-      <p id={id} ref={ref} className={`board-prompt${open ? " is-open" : ""}`}>
+      <p id={id} ref={ref} className={`board-prompt${open ? " is-open" : ""}`} style={{ WebkitLineClamp: lines }}>
         {text}
       </p>
       {(clipped || open) && (
-        <button className="link-btn board-more" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+        <button
+          className="link-btn board-more"
+          aria-expanded={open}
+          aria-controls={id}
+          aria-label={open ? `Show less of ${title}` : `Show all of ${title}`}
+          onClick={() => setOpen(!open)}
+        >
           {open ? "Less" : "More"}
         </button>
       )}
@@ -359,7 +443,7 @@ function RowDetail({ row, holds }: { row: Row; holds: Holds }) {
   }
   if (!agent) return null;
   if (phase === "plan") return <PlanCheckpoint batchId={batchId} task={t} agent={agent} />;
-  if (phase === "waiting") return <QuickAnswer agent={agent} onOpen={() => selectAgent(agent)} />;
+  if (phase === "waiting") return <QuickAnswer agent={agent} onOpen={() => selectAgent(agent)} compact />;
   // A running line and a diff stat go in the row's foot, beside its budget.
   return null;
 }
@@ -457,6 +541,7 @@ function PlanCheckpoint({ batchId, task, agent }: { batchId: string; task: Batch
   const [screen, setScreen] = useState<string[] | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [full, setFull] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -516,7 +601,16 @@ function PlanCheckpoint({ batchId, task, agent }: { batchId: string; task: Batch
 
   return (
     <div className="qa board-plan" role="group" aria-label={`${agent.name}'s plan`}>
-      {screen && screen.length > 0 && <pre className="qa-tail">{screen.join("\n")}</pre>}
+      {screen && screen.length > 0 && (
+        <div className="board-plan-screen">
+          <pre className="qa-tail">{(full ? screen : screen.slice(-2)).join("\n")}</pre>
+          {screen.length > 2 && (
+            <button className="link-btn board-more" aria-expanded={full} onClick={() => setFull(!full)}>
+              {full ? "Less" : "Show screen"}
+            </button>
+          )}
+        </div>
+      )}
       <div className="board-plan-actions">
         <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => void approve()}>
           Approve

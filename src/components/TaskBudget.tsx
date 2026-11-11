@@ -24,6 +24,8 @@ export function TaskBudget({ batchId, task, agent }: { batchId: string; task: Ba
     resettleStuck();
   };
   const near = !!spend && spend.cost >= budget * NEAR;
+  // Nothing spent yet and no budget of its own: nothing to say on the row.
+  if (!spend && !task.budget && !editing) return null;
   return (
     <p className="board-note task-budget">
       <span className={near ? "is-near" : undefined}>

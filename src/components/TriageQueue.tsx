@@ -20,33 +20,57 @@ export function openQueued(row: QueueRow) {
   selectAgent(agent);
 }
 
-/** The triage queue, on the Dispatch board: every open session with what it
- *  needs from you, the ones that need you most first. `exclude`: sessions
- *  the board lists already, under its own tasks. */
-export function TriageQueue({ title = "What needs you", exclude }: { title?: string; exclude?: Set<string> }) {
-  const state = useAppState();
+/** The triage queue: every open session with what it needs from you, the
+ *  ones that need you most first, and the stale ones. */
+export function useTriageQueue(): { rows: QueueRow[]; stale: QueueRow[] } {
+  const { agents, limits, git } = useAppState();
   const { records, acks } = useTriage();
   const stuck = useStuck();
-  const status = useTriageStatus();
   const reviews = useReviews();
-  const { agents, limits, git } = state;
-  const queue = useMemo(
+  return useMemo(
     () => queueOf({ agents, limits, git }, records, acks, reviews.records, stuck),
     [agents, limits, git, records, acks, reviews.records, stuck],
   );
-  const rows = exclude ? queue.rows.filter((r) => !exclude.has(r.id)) : queue.rows;
-  const stale = exclude ? queue.stale.filter((r) => !exclude.has(r.id)) : queue.stale;
-  const on = state.prefs.triageOn === true;
-  const error = status.result?.errors[0];
+}
 
+/** Where triage stands, and its one control: Triage now, or Turn on. */
+function useTriageHint() {
+  const state = useAppState();
+  const status = useTriageStatus();
+  const on = state.prefs.triageOn === true;
   const sub = !on
-    ? "Triage is off, so only threads waiting on you show here."
+    ? "Triage is off, so only threads waiting on you show up."
     : status.running
       ? "Reading the threads that changed…"
       : status.at
         ? `Read ${relativeTime(status.at) === "now" ? "just now" : `${relativeTime(status.at)} ago`}${status.result?.calls ? `, ${status.result.sent} thread${status.result.sent === 1 ? "" : "s"} in ${status.result.calls} call${status.result.calls === 1 ? "" : "s"}` : ""}`
         : "Waiting for the first read";
+  const control = on ? (
+    <button className="link-btn" disabled={status.running} onClick={() => void triageNow()} title="Read the threads that changed since their last read now">
+      Triage now
+    </button>
+  ) : (
+    <button className="link-btn" onClick={() => setState({ view: "settings" })} title="Settings › Dispatch › Triage queue">
+      Turn on in Settings
+    </button>
+  );
+  return { sub, control, error: status.result?.errors[0] };
+}
 
+/** Triage's state as a quiet line, for when its section isn't shown. */
+export function TriageHint() {
+  const { sub, control, error } = useTriageHint();
+  return (
+    <p className="board-hint">
+      <span>{error ? `Couldn't triage: ${error}` : sub}</span> {control}
+    </p>
+  );
+}
+
+/** The triage queue's section on the Dispatch board: the threads it lists
+ *  that the board doesn't already show under a task. */
+export function TriageQueue({ title, rows, stale }: { title: string; rows: QueueRow[]; stale: QueueRow[] }) {
+  const { sub, control, error } = useTriageHint();
   return (
     <section className="board-group triage" aria-labelledby="triage-title">
       <div className="board-group-head">
@@ -55,19 +79,11 @@ export function TriageQueue({ title = "What needs you", exclude }: { title?: str
           {rows.length > 0 && <span className="board-group-count">{rows.length}</span>}
         </h2>
         <span className="triage-sub">{sub}</span>
-        {on ? (
-          <button className="link-btn" disabled={status.running} onClick={() => void triageNow()} title="Read the threads that changed since their last read now">
-            Triage now
-          </button>
-        ) : (
-          <button className="link-btn" onClick={() => setState({ view: "settings" })} title="Settings › Dispatch › Triage queue">
-            Turn on in Settings
-          </button>
-        )}
+        {control}
       </div>
       {error && <p className="triage-error">Couldn't triage: {error}</p>}
       {rows.length === 0 ? (
-        <p className="triage-empty">{exclude?.size ? "Nothing else needs you right now." : "Nothing needs you right now."}</p>
+        <p className="triage-empty">Nothing needs you right now.</p>
       ) : (
         <ul className="board-rows" aria-label="Triage queue">
           {rows.map((r) => (
@@ -91,7 +107,7 @@ export function TriageQueue({ title = "What needs you", exclude }: { title?: str
   );
 }
 
-/** Each label's dot, in the board rows' colours. */
+/** Each label's dot and chip tone, in the board rows' colours. */
 const LABEL_DOT: Record<QueueRow["label"], string> = {
   decision: "dot-needs_feedback",
   stuck: "dot-failed",
@@ -99,14 +115,27 @@ const LABEL_DOT: Record<QueueRow["label"], string> = {
   checked: "dot-finished",
   stale: "dot-pending",
 };
+export const LABEL_TONE: Record<QueueRow["label"], string> = {
+  decision: "wait",
+  stuck: "error",
+  review: "run",
+  checked: "ok",
+  stale: "quiet",
+};
 
-function TriageRow({ row }: { row: QueueRow }) {
-  const state = useAppState();
+/** A triage label as a chip. */
+export function TriageChip({ row }: { row: QueueRow }) {
+  return (
+    <span className={`board-chip is-${LABEL_TONE[row.label]}`} title={row.need || undefined}>
+      {LABEL_TEXT[row.label]}
+    </span>
+  );
+}
+
+/** What a triage row offers: a stuck session's Open and Stop, a checked
+ *  one's Archive, and Got it. */
+export function TriageActions({ row, agent }: { row: QueueRow; agent: Agent }) {
   const [busy, setBusy] = useState(false);
-  const agent = state.agents[row.id];
-  if (!agent) return null;
-  const project = projectOfWorktree(state, agent.worktree_id)?.name ?? "";
-  const branch = state.worktrees[agent.worktree_id]?.branch;
   const gotIt = () => {
     if (row.label === "stuck") putDownStuck(agent.id);
     acknowledge(agent.id, ackState(agent));
@@ -123,6 +152,37 @@ function TriageRow({ row }: { row: QueueRow }) {
     }
   };
   return (
+    <div className="triage-actions">
+      {row.label === "stuck" && <StuckActions agent={agent} onOpen={() => openQueued(row)} />}
+      {row.label === "checked" && (
+        <button className="btn btn-sm" disabled={busy} onClick={() => void archive()} title="Archive this thread">
+          Archive
+        </button>
+      )}
+      <button className="btn btn-sm" onClick={gotIt} title="Take it out of the queue until it changes again">
+        Got it
+      </button>
+    </div>
+  );
+}
+
+/** What triage says the thread needs, and a stuck one's Redirect. */
+export function TriageNeed({ row, agent }: { row: QueueRow; agent: Agent }) {
+  return (
+    <>
+      {row.need && <p className="board-note">{row.need}</p>}
+      {row.label === "stuck" && <Redirect agent={agent} />}
+    </>
+  );
+}
+
+function TriageRow({ row }: { row: QueueRow }) {
+  const state = useAppState();
+  const agent = state.agents[row.id];
+  if (!agent) return null;
+  const project = projectOfWorktree(state, agent.worktree_id)?.name ?? "";
+  const branch = state.worktrees[agent.worktree_id]?.branch;
+  return (
     <li className={`board-row triage-row is-${row.label}`}>
       <div className="board-line">
         <span className={`sdot ${LABEL_DOT[row.label]}`} aria-hidden />
@@ -133,21 +193,10 @@ function TriageRow({ row }: { row: QueueRow }) {
         <span className="board-since" title="How long it's waited">
           {relativeTime(row.since)}
         </span>
-        <span className={`board-chip triage-label is-${row.label}`}>{LABEL_TEXT[row.label]}</span>
-        <div className="triage-actions">
-          {row.label === "stuck" && <StuckActions agent={agent} onOpen={() => openQueued(row)} />}
-          {row.label === "checked" && (
-            <button className="btn btn-sm" disabled={busy} onClick={() => void archive()} title="Archive this thread">
-              Archive
-            </button>
-          )}
-          <button className="btn btn-sm" onClick={gotIt} title="Take it out of the queue until it changes again">
-            Got it
-          </button>
-        </div>
+        <TriageChip row={row} />
+        <TriageActions row={row} agent={agent} />
       </div>
-      {row.need && <p className="board-note">{row.need}</p>}
-      {row.label === "stuck" && <Redirect agent={agent} />}
+      <TriageNeed row={row} agent={agent} />
     </li>
   );
 }

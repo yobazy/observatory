@@ -161,19 +161,21 @@ export function boardRows(
 /** The board's sections, in the order it lists them:
  *  - needs: won't move until you act (a plan, a question, a failure, a
  *    block, a session that stopped, a task a budget holds).
+ *  - review: its session finished its turn, and nobody has checked it off.
  *  - running: a session is on it, or its launch is out.
  *  - next: waiting for a slot, or on your own list.
- *  - done: finished, archived, gone, cancelled or checked off. */
-export type Group = "needs" | "running" | "next" | "done";
+ *  - done: checked off, archived, gone or cancelled. */
+export type Group = "needs" | "review" | "running" | "next" | "done";
 
 export const GROUP_LABEL: Record<Group, string> = {
   needs: "Needs you",
+  review: "To review",
   running: "Running",
   next: "Up next",
   done: "Done",
 };
 
-const GROUP_ORDER: Group[] = ["needs", "running", "next", "done"];
+const GROUP_ORDER: Group[] = ["needs", "review", "running", "next", "done"];
 
 /** Which section a row is listed in. `held`: a budget holds the task, so
  *  it waits on you rather than on a slot. */
@@ -185,6 +187,8 @@ export function groupOf(p: Phase, held = false): Group {
     case "blocked":
     case "stopped":
       return "needs";
+    case "finished":
+      return "review";
     case "working":
     case "launching":
       return "running";
@@ -211,9 +215,10 @@ export function groupRows(rows: Row[], held: (r: Row) => boolean = () => false):
   return GROUP_ORDER.filter((g) => by.get(g)!.length).map((g) => ({ key: g, label: GROUP_LABEL[g], rows: by.get(g)! }));
 }
 
-/** Batches whose every task is done, which Clear done takes off the board.
- *  A batch with anything left (a failure, a task on your list) stays: it
- *  dismisses as a whole, and that would hide what's left. */
+/** Batches whose every task is done (checked off, archived, gone or
+ *  cancelled), which Clear done takes off the board. A batch with anything
+ *  left (a failure, a finished turn nobody looked at, a task on your list)
+ *  stays: it dismisses as a whole, and that would hide what's left. */
 export function clearableBatches(rows: Row[]): string[] {
   const left = new Set<string>();
   const seen: string[] = [];
@@ -222,6 +227,27 @@ export function clearableBatches(rows: Row[]): string[] {
     if (groupOf(r.phase) !== "done") left.add(r.batchId);
   }
   return seen.filter((id) => !left.has(id));
+}
+
+/** What dismissing a batch would hide besides its done tasks:
+ *  "1 failed, 1 blocked", or "" when nothing is. */
+export function hiddenByDismiss(rows: Row[], batchId: string): string {
+  const n = new Map<string, number>();
+  for (const r of rows) {
+    if (r.batchId !== batchId || groupOf(r.phase) === "done") continue;
+    const what = r.phase === "finished" ? "to review" : r.phase === "listed" ? "on your list" : r.phase === "plan" || r.phase === "waiting" ? "waiting on you" : r.phase;
+    n.set(what, (n.get(what) ?? 0) + 1);
+  }
+  return [...n].map(([what, k]) => `${k} ${what}`).join(", ");
+}
+
+/** What goes under a row's title: the task's whole text when the title is
+ *  its session's name or was clipped, else what's left after the title;
+ *  null when that's nothing. */
+export function taskBody(text: string, title: string): string | null {
+  const t = text.trim();
+  if (title.endsWith("…") || !t.startsWith(title)) return t || null;
+  return t.slice(title.length).trim() || null;
 }
 
 /** A row's title: its session's name when it has one, else the task's

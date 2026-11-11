@@ -335,13 +335,13 @@ function seedBoard() {
       }),
       task("mbm3", "Generate the weekly invoice batch", launched("a10", 60 * 5, "p4")),
       task("mbm4", "Add exponential backoff when a cart sync fails", launched("a3", 60 * 5)),
+      task("mbm5", LONG_TASK, launched("a12", 60 * 5)),
     ],
   };
   const yesterday: Batch = {
     id: "mock-board-yesterday",
     at: at(60 * 26),
     tasks: [
-      task("mby1", LONG_TASK, launched("a12", 60 * 26)),
       task("mby2", "Add a cmd+k menu for orders", { ...launched("a8", 60 * 26, "p2"), done: true }),
       task("mby3", "Spike on an image CDN", launched("a11", 60 * 26)),
       task("mby4", "Try lazy-loading the reviews widget", launched("a-gone", 60 * 26, "p1")),

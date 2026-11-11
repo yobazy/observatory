@@ -15,6 +15,7 @@ export function QuickAnswer({
   onOpen,
   onPicked,
   every = POLL_MS,
+  compact = false,
 }: {
   agent: Agent;
   onOpen: () => void;
@@ -22,6 +23,9 @@ export function QuickAnswer({
   onPicked?: () => void;
   /** How often to read its screen. */
   every?: number;
+  /** One line: the question and its choices side by side, the screen
+   *  behind Show screen (the Dispatch board's rows). */
+  compact?: boolean;
 }) {
   // undefined while the first read is out; null when there's no live
   // terminal to read.
@@ -91,6 +95,36 @@ export function QuickAnswer({
     );
 
   const q = findQuestion(screen);
+  const screenBox = (lines: string[]) => (
+    <details className="qa-screen">
+      <summary>Show screen</summary>
+      <pre className="qa-tail">{lines.join("\n")}</pre>
+    </details>
+  );
+  if (q && compact) {
+    return (
+      <div className="qa qa-compact" role="group" aria-label={`Answer ${agent.name}`}>
+        <div className="qa-line">
+          {q.prompt && <span className="qa-prompt">{q.prompt}</span>}
+          <div className="qa-choices">
+            {q.choices.map((c) => (
+              <button
+                key={c.key}
+                className={`qa-choice${c.selected ? " is-current" : ""}`}
+                disabled={busy}
+                aria-pressed={c.checked}
+                onClick={() => void pick(q, c)}
+                title={c.note ? `${c.label}: ${c.note}` : c.label}
+              >
+                <ChoiceText choice={c} />
+              </button>
+            ))}
+          </div>
+        </div>
+        {screenBox(q.detail?.length ? q.detail : lastRows(screen, 8))}
+      </div>
+    );
+  }
   if (q) {
     return (
       <div className="qa" role="group" aria-label={`Answer ${agent.name}`}>
@@ -117,6 +151,18 @@ export function QuickAnswer({
 
   // A picker that couldn't be read: a typed reply's Enter would pick
   // whatever row is current, so send you to the terminal instead.
+  if (looksLikePicker(screen) && compact)
+    return (
+      <div className="qa qa-compact" role="group" aria-label={agent.name}>
+        <p className="qa-muted">
+          It's showing a menu this can't read.{" "}
+          <button className="link-btn" onClick={onOpen} title="A reply typed here could pick the highlighted choice, so answer in its terminal">
+            Open it to answer
+          </button>
+        </p>
+        {screenBox(lastRows(screen, 8))}
+      </div>
+    );
   if (looksLikePicker(screen))
     return (
       <div className="qa" role="group" aria-label={agent.name}>
@@ -131,8 +177,8 @@ export function QuickAnswer({
     );
 
   return (
-    <div className="qa" role="group" aria-label={`Reply to ${agent.name}`}>
-      <pre className="qa-tail">{lastRows(screen, 5).join("\n")}</pre>
+    <div className={`qa${compact ? " qa-compact" : ""}`} role="group" aria-label={`Reply to ${agent.name}`}>
+      {!compact && <pre className="qa-tail">{lastRows(screen, 5).join("\n")}</pre>}
       <form
         className="qa-reply"
         onSubmit={(e) => {
@@ -152,6 +198,7 @@ export function QuickAnswer({
           Send
         </button>
       </form>
+      {compact && screenBox(lastRows(screen, 8))}
     </div>
   );
 }

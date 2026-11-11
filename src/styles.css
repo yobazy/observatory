@@ -7304,8 +7304,84 @@ button.board-main:hover .board-title {
   color: var(--st-running);
   border-color: color-mix(in srgb, var(--st-running) 50%, var(--line));
 }
+.board-chip.is-ok {
+  color: var(--st-done);
+  border-color: color-mix(in srgb, var(--st-done) 50%, var(--line));
+}
 .board-chip.is-quiet {
   color: var(--faint);
+}
+.board-hint {
+  margin: 0;
+  color: var(--faint);
+  font-size: 12px;
+}
+.board-hint .link-btn {
+  font-size: 12px;
+}
+.board-confirm {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+}
+.board-plan-screen {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.board-plan-screen .qa-tail {
+  flex: 1;
+  min-width: 0;
+  white-space: pre;
+  overflow-x: auto;
+  max-height: none;
+}
+/* QuickAnswer on a board row: the question and its choices on one line,
+   the screen behind Show screen. */
+.qa.qa-compact {
+  gap: 4px;
+}
+.qa-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.qa-compact .qa-prompt {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.qa-compact .qa-choices {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.qa-compact .qa-choice {
+  padding: 1px 7px;
+  max-width: 260px;
+}
+.qa-screen summary {
+  cursor: pointer;
+  width: max-content;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+.qa-screen summary:hover {
+  color: var(--accent);
+}
+.qa-screen .qa-tail {
+  margin-top: 4px;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  max-height: none;
 }
 .board-check {
   flex: none;
@@ -7463,22 +7539,6 @@ button.board-main:hover .board-title {
 }
 .triage-row.is-stuck {
   border-color: color-mix(in srgb, var(--st-error) 45%, var(--line));
-}
-.triage-label.is-decision {
-  color: var(--st-waiting);
-  border-color: color-mix(in srgb, var(--st-waiting) 50%, var(--line));
-}
-.triage-label.is-stuck {
-  color: var(--st-error);
-  border-color: color-mix(in srgb, var(--st-error) 50%, var(--line));
-}
-.triage-label.is-review {
-  color: var(--st-running);
-  border-color: color-mix(in srgb, var(--st-running) 50%, var(--line));
-}
-.triage-label.is-checked {
-  color: var(--st-done);
-  border-color: color-mix(in srgb, var(--st-done) 50%, var(--line));
 }
 .triage-actions {
   display: flex;
