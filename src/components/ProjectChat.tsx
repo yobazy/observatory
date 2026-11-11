@@ -7,6 +7,7 @@ import { outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
 import { answerLeadAsk, setLeadActs, startedTasks } from "../nebula/leadRunner";
 import { chatItems, chatPreview, leadActivity, liveReply, runStarts, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
 import { enqueue } from "../nebula/queue";
+import { answer, findQuestion, readScreen, type Choice, type Question } from "../nebula/screen";
 import { useLanded } from "../nebula/prwatch";
 import { answersSaid, answerText, readCard } from "../nebula/replycard";
 import { flash, getState, useAppState } from "../nebula/store";
@@ -209,8 +210,24 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     return pr?.kind === "found" ? pr.pr.url : null;
   }, [lead.projectId, state.worktrees, state.prs]);
 
+  // A lead that hasn't said anything yet may be stuck before its first turn,
+  // on a question its hooks can't report: whether to trust a new folder.
+  const screenAsk = useScreenAsk(agent, agent.status === "running" && !items.some((it) => it.kind === "pet"));
+  const [answering, setAnswering] = useState(false);
+  const pickOnScreen = async (q: Question, c: Choice) => {
+    setAnswering(true);
+    try {
+      await answer(agent, q, c);
+      flash(`Answered ${lead.title}: ${c.label}`);
+    } catch (err) {
+      flash(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTimeout(() => setAnswering(false), 800);
+    }
+  };
+
   const queued = state.queue[agent.id]?.length ?? 0;
-  const activity = leadActivity({ status: agent.status, queued, sending: sent.length });
+  const activity = leadActivity({ status: agent.status, queued, sending: sent.length, onScreen: !!screenAsk });
   const working = activity === "working";
 
   // Kept at the bottom as things land, unless you've scrolled up to read.
@@ -320,8 +337,8 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
         }}
       >
         <Where.Provider value={{ from: agent.id, root: wt?.path ?? "", prUrl, turnEndedAt: t?.turnEndedAt ?? null, run: false }}>
-          {!t && <p className="chat-empty">Reading the lead's thread…</p>}
-          {t && !items.length && !sent.length && <p className="chat-empty">Nothing said yet. Say hello, or give it a task.</p>}
+          {!t && !screenAsk && <p className="chat-empty">Reading the lead's thread…</p>}
+          {t && !screenAsk && !items.length && !sent.length && <p className="chat-empty">Nothing said yet. Say hello, or give it a task.</p>}
           {items.map((it) => (
             <ChatLine key={it.key} item={it} lead={lead} day={days.get(it.key)} first={starts.has(it.key)} reply={it.kind === "pet" ? replyOf(it.n) : undefined} />
           ))}
@@ -330,7 +347,23 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
               <div className="chat-bubble">{m.text}</div>
             </div>
           ))}
-          {activity === "prompt" && (
+          {screenAsk && (
+            <div className="chat-prompt is-asking" role="group" aria-label={`Answer ${lead.title}`}>
+              <span>{lead.title} is waiting on this in its terminal before it starts:</span>
+              {screenAsk.prompt && <p className="qa-prompt">{screenAsk.prompt}</p>}
+              <div className="qa-choices">
+                {screenAsk.choices.map((c) => (
+                  <button key={c.key} type="button" className={`qa-choice${c.selected ? " is-current" : ""}`} disabled={answering} onClick={() => void pickOnScreen(screenAsk, c)}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="link-btn" onClick={() => openLeadTerminal(agent.id)}>
+                Open terminal
+              </button>
+            </div>
+          )}
+          {activity === "prompt" && !screenAsk && (
             <div className="chat-prompt" role="status">
               <span>{lead.title} is waiting on a prompt in its terminal.</span>
               <button type="button" className="btn chat-yes" onClick={() => openLeadTerminal(agent.id)}>
@@ -535,4 +568,37 @@ function useBlink(on: boolean): FaceFrame {
     };
   }, [on]);
   return blink ? "blink" : "sit";
+}
+
+const SCREEN_MS = 2_000;
+
+/** The question on the lead's screen while `on`, read every couple of
+ *  seconds; null when there's none. */
+function useScreenAsk(agent: Agent, on: boolean): Question | null {
+  const [q, setQ] = useState<Question | null>(null);
+  useEffect(() => {
+    if (!on || !agent.alive) {
+      setQ(null);
+      return;
+    }
+    let live = true;
+    let timer: ReturnType<typeof setTimeout>;
+    // Each read waits for the last, so a slow daemon can't pile them up.
+    const read = async () => {
+      if (!document.hidden) {
+        const lines = await readScreen(agent).catch(() => null);
+        if (!live) return;
+        setQ(lines ? findQuestion(lines) : null);
+      }
+      timer = setTimeout(read, SCREEN_MS);
+    };
+    void read();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+    // Re-reading on every agent update would restart the poll each time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.id, agent.alive, on]);
+  return q;
 }
