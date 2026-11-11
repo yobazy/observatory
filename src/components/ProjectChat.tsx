@@ -6,7 +6,7 @@ import { lastReply, QUIET, type FaceFrame, type LeadEntry } from "../nebula/lead
 import { outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
 import { answerLeadAsk, levelFlash, setLeadLevel, startedTasks } from "../nebula/leadRunner";
 import { levelOf } from "../nebula/leadLevel";
-import { chatItems, chatPreview, leadActivity, liveReply, runStarts, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
+import { chatItems, chatPreview, leadActivity, liveReply, runStarts, sinceToday, splitAsks, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
 import { enqueue } from "../nebula/queue";
 import { answer, findQuestion, readScreen, type Choice, type Question } from "../nebula/screen";
 import { useLanded } from "../nebula/prwatch";
@@ -16,7 +16,7 @@ import { sessionKey } from "../nebula/usageData";
 import type { Entry } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
 import { avatarStatusLabel, LeadAvatar, tintVars, type AvatarStatus } from "./LeadAvatar";
-import { Reply, useTranscript, Where } from "./Reader";
+import { Md, Reply, useTranscript, Where } from "./Reader";
 import { LeadVoiceFields, LevelPicker } from "./LeadCard";
 
 // Chat with a project (S29): the project's lead is a pet, and the face of
@@ -252,6 +252,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     pinned.current = true;
     const mine = { text: words, after: lastN };
     setSent((s) => [...s, mine]);
+    setAnsweringQ(null);
     try {
       const how = await enqueue(getState().agents[agent.id] ?? agent, words, { stay: true, turnEndedAt: t?.turnEndedAt });
       if (how === "queued") flash(`${lead.title} is busy; it gets your message when its turn ends.`);
@@ -271,7 +272,15 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const starts = useMemo(() => runStarts(items), [items]);
   const lastIsPet = items.length > 0 && items[items.length - 1].kind === "pet" && !sent.length;
-  const status: AvatarStatus = activity === "prompt" || items.some((it) => it.kind === "ask" && !it.done) ? "calling" : working ? "working" : "idle";
+  // A question the lead passed on to you in its latest reply, unanswered.
+  const openAsk = latestText !== undefined && !sent.length && splitAsks(latestText).asks.length > 0;
+  const status: AvatarStatus = activity === "prompt" || openAsk || items.some((it) => it.kind === "ask" && !it.done) ? "calling" : working ? "working" : "idle";
+  // Answer on a lead's question: the box says what you're answering.
+  const [answeringQ, setAnsweringQ] = useState<string | null>(null);
+  const answerAsk = (q: string) => {
+    setAnsweringQ(q);
+    input.current?.focus();
+  };
 
   return (
     <section className="chat" style={tintStyle(lead)} aria-label={top ? "Chat with every project's top lead" : `Chat with ${lead.name}`}>
@@ -341,7 +350,15 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
           {!t && !screenAsk && <p className="chat-empty">Reading the lead's thread…</p>}
           {t && !screenAsk && !items.length && !sent.length && <p className="chat-empty">Nothing said yet. Say hello, or give it a task.</p>}
           {items.map((it) => (
-            <ChatLine key={it.key} item={it} lead={lead} day={days.get(it.key)} first={starts.has(it.key)} reply={it.kind === "pet" ? replyOf(it.n) : undefined} />
+            <ChatLine
+              key={it.key}
+              item={it}
+              lead={lead}
+              day={days.get(it.key)}
+              first={starts.has(it.key)}
+              reply={it.kind === "pet" ? replyOf(it.n) : undefined}
+              onAnswer={it.kind === "pet" && it.n === latest && !sent.length ? answerAsk : undefined}
+            />
           ))}
           {sent.map((m, i) => (
             <div key={`sent${i}`} className="chat-say is-me is-sending">
@@ -390,7 +407,9 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
         <input
           ref={input}
           placeholder={
-            !tapped.sent && Object.values(picks).some(Boolean)
+            answeringQ && openAsk
+              ? `Your answer: ${answeringQ}`
+              : !tapped.sent && Object.values(picks).some(Boolean)
               ? "Add a note to your answers, or just Send"
               : top
                 ? "Ask about any project, or hand one some work"
@@ -424,7 +443,22 @@ function SayAvatar({ lead, first }: { lead: LeadEntry; first: boolean }) {
   return first ? <LeadAvatar pet={lead.pet} size={30} className="chat-say-pet" /> : <span className="chat-say-pet is-gap" aria-hidden />;
 }
 
-function ChatLine({ item, lead, day, first, reply }: { item: ChatItem; lead: LeadEntry; day: string | undefined; first: boolean; reply?: ReplyBits }) {
+function ChatLine({
+  item,
+  lead,
+  day,
+  first,
+  reply,
+  onAnswer,
+}: {
+  item: ChatItem;
+  lead: LeadEntry;
+  day: string | undefined;
+  first: boolean;
+  reply?: ReplyBits;
+  /** Its questions for you are still open: answering one focuses the box. */
+  onAnswer?: (question: string) => void;
+}) {
   const line = (() => {
     switch (item.kind) {
       case "me":
@@ -433,13 +467,33 @@ function ChatLine({ item, lead, day, first, reply }: { item: ChatItem; lead: Lea
             <div className="chat-bubble">{item.text}</div>
           </div>
         );
-      case "pet":
+      case "pet": {
+        const { body, asks } = splitAsks(item.text);
         return (
-          <div className={`chat-say is-pet${first ? "" : " is-more"}`}>
-            <SayAvatar lead={lead} first={first} />
-            {reply && <Reply text={item.text} from={lead.agentId} prose="chat-bubble chat-md" {...reply} />}
-          </div>
+          <>
+            {body && (
+              <div className={`chat-say is-pet${first ? "" : " is-more"}`}>
+                <SayAvatar lead={lead} first={first} />
+                {reply && <Reply text={body} from={lead.agentId} prose="chat-bubble chat-md" {...reply} />}
+              </div>
+            )}
+            {asks.map((q, i) => (
+              <div key={i} className={`chat-say is-pet${!body && !i && first ? "" : " is-more"}`}>
+                <SayAvatar lead={lead} first={!body && !i && first} />
+                <div className={`chat-bubble chat-question${onAnswer ? " is-open" : ""}`}>
+                  <span className="chat-question-label">{onAnswer ? "Asks you" : "Asked you"}</span>
+                  <Md text={q} className="chat-md" />
+                  {onAnswer && (
+                    <button type="button" className="btn btn-sm chat-question-answer" onClick={() => onAnswer(q)}>
+                      Answer
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </>
         );
+      }
       case "event":
         return <div className="chat-event">{item.text}</div>;
       case "task":
