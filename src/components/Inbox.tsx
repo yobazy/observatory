@@ -8,6 +8,7 @@ import type { Agent } from "../nebula/types";
 import { useOverlayKeys } from "./Overlay";
 import { AskText, CardReply, Md, Where, toHtml } from "./Reader";
 import { QuickAnswer } from "./QuickAnswer";
+import { NO_ANSWER, backLines, firstQuestion, outgoing, pickedWords, recommendedFor, type Answer } from "../nebula/inboxAnswers";
 
 const keyOf = (w: Waiting) => `${w.agent.id}:${w.prompt ? `p${w.agent.status_changed_at}` : w.n}`;
 
@@ -37,7 +38,10 @@ const ACTION_KEYS = new Set(["J", "K", "R", "E", "O", "L"]);
 const editable = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
 
 /** Decisions (⌥⌘J): every thread whose latest reply asks you to decide
- *  something, as its card, to answer one after another without opening each. */
+ *  something, to answer one after another without opening each. The queue
+ *  sits on the left, one line a thread; the card it's on fills the right.
+ *  What you pick on a card stays while you move between them, so several
+ *  can be answered and sent together. */
 export function InboxView() {
   const state = useAppState();
   const head = useRef<HTMLDivElement>(null);
@@ -61,6 +65,10 @@ export function InboxView() {
   const [, bump] = useState(0);
   const list = all.filter((w) => !later.has(keyOf(w)));
   const putOff = all.filter((w) => later.has(keyOf(w)));
+  // Each card's picks and typing, by card, so moving away keeps them.
+  const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  const answerOf = (w: Waiting) => answers[keyOf(w)] ?? NO_ANSWER;
+  const setAnswer = (k: string, f: (a: Answer) => Answer) => setAnswers((s) => ({ ...s, [k]: f(s[k] ?? NO_ANSWER) }));
   // The card keys go to: the one you moved to, or whichever took the place
   // of one that just left.
   const [focusKey, setFocusKey] = useState<string | null>(null);
@@ -73,10 +81,74 @@ export function InboxView() {
   const handler = useRef<KeyHandler | null>(null);
   // The focused card sets it again as it renders below.
   handler.current = null;
-  const body = useRef<HTMLDivElement>(null);
+  const rail = useRef<HTMLElement>(null);
+  const pane = useRef<HTMLDivElement>(null);
   const moveTo = (k: string) => {
     setFocusKey(k);
-    requestAnimationFrame(() => body.current?.querySelector(`[data-key="${CSS.escape(k)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    requestAnimationFrame(() => rail.current?.querySelector(`[data-key="${CSS.escape(k)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+  };
+  // A new card starts at its top.
+  useLayoutEffect(() => {
+    pane.current?.scrollTo({ top: 0 });
+  }, [focus]);
+  // Cards whose answer is on its way, so neither Send nor Send all sends it
+  // again while the first is still out.
+  const inFlight = useRef(new Set<string>());
+  const claim = (k: string) => {
+    if (inFlight.current.has(k)) return false;
+    inFlight.current.add(k);
+    return true;
+  };
+  const release = (k: string) => inFlight.current.delete(k);
+  // Cards with an answer ready to go, for sending together. Not the ones put
+  // off with Later: that's what Later is for.
+  const ready = list.flatMap((w) => {
+    if (leaving.some((l) => keyOf(l.w) === keyOf(w)) || inFlight.current.has(keyOf(w))) return [];
+    const text = w.prompt ? "" : outgoing(w.earlier, answerOf(w));
+    return text ? [{ w, text }] : [];
+  });
+  // The ones whose reply recommends something you haven't started on.
+  const recommendable = list.filter(
+    (w) => !w.prompt && w.card && !leaving.some((l) => keyOf(l.w) === keyOf(w)) && Object.keys(recommendedFor(w.card, answerOf(w))).length,
+  );
+  const pickRecommended = () => {
+    for (const w of recommendable)
+      setAnswer(keyOf(w), (a) => {
+        const rec = recommendedFor(w.card!, a);
+        return Object.keys(rec).length ? { ...a, picks: rec } : a;
+      });
+    flash(recommendable.length === 1 ? "Picked what 1 thread recommends" : `Picked what ${recommendable.length} threads recommend`);
+  };
+  const [sendingAll, setSendingAll] = useState(false);
+  const sendAll = async () => {
+    if (sendingAll) return;
+    const go = ready.filter(({ w }) => claim(keyOf(w)));
+    if (!go.length) return;
+    setSendingAll(true);
+    const got = await Promise.all(
+      go.map(({ w, text }) =>
+        enqueue(w.agent, text, { stay: true })
+          .then(
+            (how) => {
+              answered(w.agent, how === "queued");
+              return keyOf(w);
+            },
+            () => null,
+          )
+          .finally(() => release(keyOf(w))),
+      ),
+    );
+    setSendingAll(false);
+    const ok = got.filter((k): k is string => !!k);
+    setSent((s) => new Set([...s, ...ok]));
+    const failed = go.length - ok.length;
+    const left = `${failed === 1 ? "its answer is" : "their answers are"} still here`;
+    flash(
+      !ok.length
+        ? `Couldn't send ${failed === 1 ? "the answer" : `any of the ${failed} answers`}; ${left}`
+        : `Sent ${ok.length === 1 ? "1 answer" : `${ok.length} answers`}${failed ? `. ${failed} couldn't go; ${left}` : ""}`,
+      failed ? 6000 : undefined,
+    );
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -94,6 +166,10 @@ export function InboxView() {
       if (e.key === "j" || e.key === "ArrowDown" || e.key === "k" || e.key === "ArrowUp") {
         const next = live[Math.max(0, Math.min(live.length - 1, i + (e.key === "j" || e.key === "ArrowDown" ? 1 : -1)))];
         if (next) moveTo(keyOf(next));
+      } else if (e.key === "Enter" && e.shiftKey) {
+        void sendAll();
+      } else if (e.key === "R" && e.shiftKey) {
+        if (recommendable.length) pickRecommended();
       } else if (!handler.current?.(e)) return;
       e.preventDefault();
     };
@@ -106,10 +182,16 @@ export function InboxView() {
     later: later.has(keyOf(w)),
     onLater: () => {
       if (later.has(keyOf(w))) later.delete(keyOf(w));
-      else later.add(keyOf(w));
+      else {
+        later.add(keyOf(w));
+        // Put off: on to the card that takes its place, not after it.
+        if (keyOf(w) === focus) setFocusKey(null);
+      }
       bump((n) => n + 1);
     },
   });
+  // The pane shows the focused card, and any on their way out above it.
+  const inPane = [...list, ...putOff].filter((w) => keyOf(w) === focus || leaving.some((l) => keyOf(l.w) === keyOf(w)));
 
   return (
     <section className="usage inbox" aria-labelledby="inbox-title">
@@ -127,7 +209,7 @@ export function InboxView() {
         <div className="usage-controls" ref={head}>
           {live.length > 0 && (
             <p className="inbox-keys" aria-label="Keys">
-              <kbd>j</kbd> <kbd>k</kbd> move · <kbd>1</kbd> <kbd>a</kbd> pick · <kbd>r</kbd> recommended · <kbd>↵</kbd> send · <kbd>e</kbd> reply · <kbd>l</kbd>{" "}
+              <kbd>j</kbd> <kbd>k</kbd> move · <kbd>1</kbd> <kbd>a</kbd> pick · <kbd>r</kbd> recommended · <kbd>↵</kbd> send · <kbd>⇧↵</kbd> send all · <kbd>e</kbd> reply · <kbd>l</kbd>{" "}
               later · <kbd>o</kbd> open
             </p>
           )}
@@ -136,49 +218,163 @@ export function InboxView() {
           </button>
         </div>
       </header>
-      <div className="usage-body inbox-body" ref={body}>
-        <Moving waiting={found} />
-        {[...list, ...putOff].map((w, i) => {
-          const k = keyOf(w);
-          const isLeaving = leaving.some((l) => keyOf(l.w) === k);
-          const wt = state.worktrees[w.agent.worktree_id];
-          const project = state.projects[wt?.project_id ?? ""]?.name ?? "";
-          const branch = wt?.branch ?? "";
-          const first = i === list.length && putOff.length > 0;
-          const keys = keysFor(w);
-          const item = w.prompt ? (
-            <PromptItem key={k} waiting={w} project={project} branch={branch} root={wt?.path ?? ""} keys={keys} onFocus={() => setFocusKey(k)} />
-          ) : (
-            <InboxItem
-              key={k}
-              keys={keys}
-              onFocus={() => setFocusKey(k)}
-              waiting={w as Waiting & { card: Card }}
-              project={project}
-              branch={branch}
-              root={wt?.path ?? ""}
-              leaving={isLeaving}
-              onSent={(animate) => {
-                if (animate) setLeaving((ls) => [...ls, { w, at: i }]);
-                else setSent((s) => new Set(s).add(k));
-              }}
-              onGone={() => {
-                setSent((s) => new Set(s).add(k));
-                setLeaving((ls) => ls.filter((l) => keyOf(l.w) !== k));
-              }}
-            />
-          );
-          return first
-            ? [
-                <h2 key="later" className="inbox-later-head">
-                  Later · {putOff.length}
-                </h2>,
-                item,
-              ]
-            : item;
-        })}
+      <div className="usage-body inbox-body">
+        {live.length > 0 && (
+          <nav className="inbox-rail" ref={rail} aria-label="Waiting threads">
+            <div className="inbox-rail-actions">
+              <button
+                className="btn btn-sm"
+                disabled={!recommendable.length}
+                onClick={pickRecommended}
+                title="On every card you haven't started, pick what its reply recommends (⇧R). Nothing is sent until you send it"
+              >
+                Pick recommended{recommendable.length ? ` · ${recommendable.length}` : ""}
+              </button>
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={!ready.length || sendingAll}
+                onClick={() => void sendAll()}
+                title="Send every card's answer at once (⇧↵)"
+              >
+                {sendingAll ? "Sending…" : ready.length > 1 ? `Send ${ready.length}` : "Send all"}
+              </button>
+            </div>
+            {[...list, ...putOff].map((w, i) => {
+              const k = keyOf(w);
+              if (leaving.some((l) => keyOf(l.w) === k)) return null;
+              const row = (
+                <RailRow
+                  key={k}
+                  k={k}
+                  waiting={w}
+                  project={state.projects[state.worktrees[w.agent.worktree_id]?.project_id ?? ""]?.name ?? ""}
+                  answer={answerOf(w)}
+                  on={k === focus}
+                  isLater={later.has(k)}
+                  onPick={() => moveTo(k)}
+                />
+              );
+              return i === list.length && putOff.length > 0
+                ? [
+                    <h2 key="later" className="inbox-later-head">
+                      Later · {putOff.length}
+                    </h2>,
+                    row,
+                  ]
+                : row;
+            })}
+          </nav>
+        )}
+        <div className="inbox-pane" ref={pane}>
+          <Moving waiting={found} />
+          {inPane.map((w) => {
+            const k = keyOf(w);
+            const isLeaving = leaving.some((l) => keyOf(l.w) === k);
+            const wt = state.worktrees[w.agent.worktree_id];
+            const project = state.projects[wt?.project_id ?? ""]?.name ?? "";
+            const branch = wt?.branch ?? "";
+            const keys = keysFor(w);
+            return w.prompt ? (
+              <PromptItem key={k} waiting={w} project={project} branch={branch} root={wt?.path ?? ""} keys={keys} onFocus={() => setFocusKey(k)} />
+            ) : (
+              <InboxItem
+                key={k}
+                keys={keys}
+                onFocus={() => setFocusKey(k)}
+                waiting={w as Waiting & { card: Card }}
+                project={project}
+                branch={branch}
+                root={wt?.path ?? ""}
+                leaving={isLeaving}
+                answer={answerOf(w)}
+                onAnswer={(f) => setAnswer(k, f)}
+                claim={() => claim(k)}
+                release={() => release(k)}
+                onSendAll={() => void sendAll()}
+                onSent={(animate) => {
+                  const idx = all.findIndex((x) => keyOf(x) === k);
+                  if (animate) setLeaving((ls) => [...ls, { w, at: idx }]);
+                  else setSent((s) => new Set(s).add(k));
+                }}
+                onGone={() => {
+                  setSent((s) => new Set(s).add(k));
+                  setLeaving((ls) => ls.filter((l) => keyOf(l.w) !== k));
+                }}
+              />
+            );
+          })}
+          {found !== null && !live.length && <p className="inbox-empty">Nothing waits on you. Threads you answer here show above as they move on.</p>}
+        </div>
       </div>
     </section>
+  );
+}
+
+/** What a thread stopped on a prompt is about, for its queue row: the
+ *  headline of what it said this turn, else what you asked it. */
+function promptLine(said: string, asked: string): string {
+  const head = said ? (readCard(said).headline ?? said.split("\n").find((l) => l.trim()) ?? "") : "";
+  const text = (head || (asked.trim() === CATCH_UP ? "" : asked)).replace(/(\*\*|__|`)/g, "").replace(/\s+/g, " ").trim();
+  return text || "A choice in its terminal";
+}
+
+/** One waiting thread in the queue: its name, its first question, and
+ *  what you've picked on it so far. */
+function RailRow({
+  k,
+  waiting,
+  project,
+  answer,
+  on,
+  isLater,
+  onPick,
+}: {
+  k: string;
+  waiting: Waiting;
+  project: string;
+  answer: Answer;
+  on: boolean;
+  isLater: boolean;
+  onPick: () => void;
+}) {
+  const { agent, card, prompt } = waiting;
+  const q = firstQuestion(card);
+  const said = prompt ? "" : pickedWords(card, answer);
+  const asks = card?.asks.length ?? 0;
+  const about = useMemo(() => (prompt ? promptLine(waiting.said, waiting.asked) : ""), [prompt, waiting.said, waiting.asked]);
+  const line = prompt
+    ? about
+    : q
+      ? q.text
+      : waiting.earlier.length
+        ? "Decisions left open earlier"
+        : (card?.asksNote.split("\n").find((l) => l.trim()) ?? "Waits on your reply").replace(/(\*\*|__|`)/g, "");
+  return (
+    <button
+      className={`inbox-row${on ? " is-on" : ""}${isLater ? " is-later" : ""}`}
+      data-key={k}
+      aria-current={on || undefined}
+      onClick={onPick}
+      // Tabbing to a row shows its card; a click leaves the keys on the card.
+      onFocus={onPick}
+      onMouseDown={(e) => e.preventDefault()}
+      title={q && q.more ? `${q.text}\n…and ${q.more} more` : line}
+    >
+      <span className="inbox-row-top">
+        <span className="inbox-row-name">{agent.name}</span>
+        {agent.status_changed_at > 0 && <span className="inbox-row-age">{relativeTime(agent.status_changed_at)}</span>}
+      </span>
+      <span className="inbox-row-q">{line}</span>
+      {said && <span className="inbox-row-said" aria-label={`Your answer: ${said}`}>→ {said}</span>}
+      <span className="inbox-row-meta">
+        {project && <span>{project}</span>}
+        {prompt ? (
+          <span className="inbox-row-tag is-prompt">terminal</span>
+        ) : said ? null : asks > 1 ? (
+          <span className="inbox-row-tag">{asks} decisions</span>
+        ) : null}
+      </span>
+    </button>
   );
 }
 
@@ -190,6 +386,11 @@ function InboxItem({
   branch,
   root,
   leaving,
+  answer,
+  onAnswer,
+  claim,
+  release,
+  onSendAll,
   onSent,
   onGone,
 }: {
@@ -201,33 +402,37 @@ function InboxItem({
   /** Its checkout, for the paths its reply names. */
   root: string;
   leaving: boolean;
+  /** What you've picked and typed on it, kept by the list. */
+  answer: Answer;
+  onAnswer: (f: (a: Answer) => Answer) => void;
+  /** Marks it on its way, false when it already is; `release` once it's gone or failed. */
+  claim: () => boolean;
+  release: () => void;
+  /** ⇧↵ in its reply box: every card's answer, this one's too. */
+  onSendAll: () => void;
   /** Answered; `animate` when it should slide away rather than just go. */
   onSent: (animate: boolean) => void;
   /** Its slide away has ended. */
   onGone: () => void;
 }) {
   const { agent, card, asked } = waiting;
-  const [picks, setPicks] = useState<Record<number, string>>({});
-  const [draft, setDraft] = useState("");
-  // Taps on decisions earlier replies left open, by reply then decision.
-  const [back, setBack] = useState<Record<number, Record<number, string>>>({});
+  const { picks, draft, back } = answer;
+  const setDraft = (draft: string) => onAnswer((a) => ({ ...a, draft }));
+  const setPicks = (picks: Record<number, string>) => onAnswer((a) => ({ ...a, picks }));
+  const setBack = (f: (b: Answer["back"]) => Answer["back"]) => onAnswer((a) => ({ ...a, back: f(a.back) }));
   const [away, setAway] = useState<Set<number>>(new Set());
   const earlier = waiting.earlier.filter((d) => !away.has(d.entry));
   const earlierCount = earlier.reduce((k, d) => k + d.asks.length, 0);
   const typed = typedAnswers(card, draft);
   const shown = { ...typed.picks, ...Object.fromEntries(Object.entries(picks).filter(([, l]) => l)) };
   const recommended = useMemo(() => suggested(card), [card]);
-  // Each earlier reply's answers said against it, as the Read view does.
-  const backLines = earlier
-    .map((d) => [d.quote, answerText(back[d.entry] ?? {}, "")] as const)
-    .filter(([, said]) => said)
-    .map(([quote, said]) => `About your reply that starts "${quote}": ${said}`);
+  const backSaid = backLines(earlier, answer);
   // Answers to earlier replies keep a paragraph of their own, as in the Read view.
-  const outgoing = [answerText(picks, draft), backLines.join("\n")].filter(Boolean).join("\n\n");
+  const text = outgoing(earlier, answer);
   // Answering only earlier replies sends the thread off with its latest
   // decisions unsaid, and it won't wait here for them again.
-  const latestLeft = backLines.length > 0 && card.asks.some((a) => a.options.length) && !answerText(picks, draft);
-  const ghost = !draft && !answerText(picks, "") && !backLines.length ? answerText(recommended, "") : "";
+  const latestLeft = backSaid.length > 0 && card.asks.some((a) => a.options.length) && !answerText(picks, draft);
+  const ghost = !draft && !answerText(picks, "") && !backSaid.length ? answerText(recommended, "") : "";
   const self = useRef<HTMLElement>(null);
   // Answered: the card slides away and its space closes, then it leaves the
   // list. You stay here for the next one.
@@ -240,20 +445,22 @@ function InboxItem({
     onSent(animate);
   };
   const send = async () => {
-    if (!outgoing || leaving) return;
+    if (!text || leaving || !claim()) return;
     try {
-      const how = await enqueue(agent, outgoing, { stay: true });
+      const how = await enqueue(agent, text, { stay: true });
       flash(how === "queued" ? `Queued for ${agent.name}` : `Sent to ${agent.name}`);
       answered(agent, how === "queued");
       leave();
     } catch {
       flash(`Couldn't send to ${agent.name}. Your answer is still here.`, 6000);
+    } finally {
+      release();
     }
   };
   const pick = (n: number, letter: string) => {
-    const base = Object.keys(typed.picks).length ? { ...typed.picks, ...picks } : picks;
-    if (Object.keys(typed.picks).length) setDraft(typed.rest);
-    setPicks({ ...base, [n]: base[n] === letter ? "" : letter });
+    const fromBox = Object.keys(typed.picks).length > 0;
+    const base = fromBox ? { ...typed.picks, ...picks } : picks;
+    onAnswer((a) => ({ ...a, draft: fromBox ? typed.rest : a.draft, picks: { ...base, [n]: base[n] === letter ? "" : letter } }));
   };
   // A number, then a letter, picks that option: "2" "b". With one question
   // the letter alone does.
@@ -314,8 +521,8 @@ function InboxItem({
         <details className="inbox-earlier" open={!asksYou(card)}>
           <summary>
             {earlierCount === 1 ? "1 decision left open earlier" : `${earlierCount} decisions left open earlier`}
-            {backLines.length > 0 && (
-              <span className="inbox-earlier-picked"> · {backLines.length === 1 ? "answering 1 reply" : `answering ${backLines.length} replies`}</span>
+            {backSaid.length > 0 && (
+              <span className="inbox-earlier-picked"> · {backSaid.length === 1 ? "answering 1 reply" : `answering ${backSaid.length} replies`}</span>
             )}
           </summary>
           {earlier.map((d) => (
@@ -402,11 +609,12 @@ function InboxItem({
               setPicks(recommended);
             } else if (e.key === "Enter" && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              void send();
+              if (e.shiftKey) onSendAll();
+              else void send();
             }
           }}
         />
-        <button className="btn btn-primary" disabled={!outgoing} onClick={() => void send()}>
+        <button className="btn btn-primary" disabled={!text} onClick={() => void send()}>
           Send
         </button>
       </div>

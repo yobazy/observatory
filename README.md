@@ -62,7 +62,10 @@ it would do without changing anything, and `--help` lists the other options.
 - **Waiting on you**: every session blocked on a permission prompt or a question, across all
   projects. `⌘J` cycles through them, and you get a macOS notification and a dock badge. A
   permission prompt's choices show as buttons above the terminal, so you can answer without
-  reaching for the keyboard. **Decisions** (`⌥⌘J`) lists every open question in one place.
+  reaching for the keyboard. **Decisions** (`⌥⌘J`) lists every open question in one place:
+  a queue on the left, one card at a time on the right. Your picks stay as you move between
+  cards, **Pick recommended** (`⇧R`) takes each reply's own recommendation, and **Send**
+  (`⇧↵`) answers them all at once.
 - **While you were away**: turns that finished while you weren't looking, with a line on what
   each did (tests passed, files edited). A finished task stays under Follow up until you reply,
   archive it or tick it off.
