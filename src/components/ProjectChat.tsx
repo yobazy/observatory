@@ -11,7 +11,7 @@ import { enqueue } from "../nebula/queue";
 import { answer, findQuestion, readScreen, type Choice, type Question } from "../nebula/screen";
 import { useLanded } from "../nebula/prwatch";
 import { answersSaid, answerText, readCard } from "../nebula/replycard";
-import { flash, getState, useAppState } from "../nebula/store";
+import { flash, getState, setState, useAppState } from "../nebula/store";
 import { sessionKey } from "../nebula/usageData";
 import type { Entry } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
@@ -141,7 +141,16 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     return startedTasks(lead.projectId, state).map(({ rec, agent: a, label }) => {
       const p = a ? state.prs[a.worktree_id] : undefined;
       const open = p?.kind === "found" && (p.pr.state === "open" || p.pr.state === "draft") ? p.pr : null;
-      return { taskId: rec.taskId, branch: rec.branch, at: rec.at, n: rec.n, replyAt: rec.replyAt, label, checks: open ? { state: open.checks, failing: open.failing } : null };
+      return {
+        taskId: rec.taskId,
+        branch: rec.branch,
+        at: rec.at,
+        n: rec.n,
+        replyAt: rec.replyAt,
+        label,
+        checks: open ? { state: open.checks, failing: open.failing } : null,
+        agentId: a && !a.archived ? a.id : undefined,
+      };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.projectId, state.agents, state.prs, state.worktrees, acts]);
@@ -495,7 +504,7 @@ function ChatLine({
         );
       }
       case "event":
-        return <div className="chat-event">{item.text}</div>;
+        return <EventLine text={item.text} thread={item.thread} />;
       case "task":
         return <TaskCard task={item.task} />;
       case "ask":
@@ -510,6 +519,26 @@ function ChatLine({
   );
 }
 
+/** Open a thread the lead talks about; the lead's face above the threads
+ *  comes back to the chat. */
+function openThread(agentId: string) {
+  setState((s) => {
+    const a = s.agents[agentId];
+    return a ? { selectedProject: s.worktrees[a.worktree_id]?.project_id ?? s.selectedProject, selectedSession: { Agent: a.id } } : {};
+  });
+}
+
+/** An [observatory] line; one about a thread that's still around opens it. */
+function EventLine({ text, thread }: { text: string; thread?: string }) {
+  const agent = useAppState().agents[thread ?? ""];
+  if (!agent || agent.archived) return <div className="chat-event">{text}</div>;
+  return (
+    <button type="button" className="chat-event is-link" onClick={() => openThread(agent.id)} title={`Open ${agent.name}`}>
+      {text}
+    </button>
+  );
+}
+
 /** A task the lead started, on the four steps: Queued, Running, PR, Merged. */
 function TaskCard({ task }: { task: ChatTask }) {
   const { step, text, tone } = taskStep(task);
@@ -518,6 +547,11 @@ function TaskCard({ task }: { task: ChatTask }) {
       <div className="chat-task-line">
         Started <code>{task.branch}</code>
         <span className="chat-task-state">{text}</span>
+        {task.agentId && (
+          <button type="button" className="link-btn chat-task-open" onClick={() => openThread(task.agentId!)} title="Open its thread">
+            Open
+          </button>
+        )}
       </div>
       <div className="chat-steps" aria-hidden>
         {STEPS.map((s, i) => (

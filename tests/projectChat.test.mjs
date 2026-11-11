@@ -358,3 +358,16 @@ test('a lead\'s ASK_USER lines come out of its reply as questions for you', asyn
   assert.deepEqual(splitAsks('Threads get ASK_USER: back when I do not know.'), { body: 'Threads get ASK_USER: back when I do not know.', asks: [] });
   assert.deepEqual(splitAsks('ASK_USER:'), { body: '', asks: [] });
 });
+
+test('an [observatory] line names the thread it is about, for the chat to open', async () => {
+  const { eventThread } = await import('../src/nebula/projectChat.ts');
+  assert.equal(eventThread('[observatory] finished: Fix login on fix-login (agent a1): Needs review'), 'a1');
+  assert.equal(eventThread('[observatory] CI failed #193: Fix login on fix-login (agent a1): lint'), 'a1');
+  assert.equal(eventThread('[observatory] started fix-bottom-clip (agent a9)'), 'a9');
+  assert.equal(eventThread('[observatory] nudged a1'), 'a1');
+  assert.equal(eventThread('[observatory] refused NUDGE a1: it was nudged 3 times in the last hour'), 'a1');
+  assert.equal(eventThread('[observatory] the user said no to archiving a1'), 'a1');
+  assert.equal(eventThread('[observatory] queued fix-bottom-clip: 2 running, waiting for a slot'), null);
+  assert.equal(eventThread('[observatory] the user merged #12 (your ASK)'), null);
+  assert.equal(eventThread('[observatory] leads: Lead shop (/u/shop)'), null);
+});
