@@ -126,13 +126,22 @@ async function run(req: Req): Promise<unknown> {
       const text = typeof req.text === "string" ? req.text : str(req, "text");
       let el = document.activeElement as HTMLElement | null;
       if (typeof req.into === "string") {
-        const fields = [...document.querySelectorAll("input, textarea")].filter(visible);
+        const fields = [...document.querySelectorAll("input, textarea, select")].filter(visible);
         // Its label, hint or name: any of them names it.
         const field = (f: Element) => ["aria-label", "placeholder", "name"].map((a) => f.getAttribute(a) ?? "").join(" | ");
         const hits = matching(fields, field, req.into);
         if (hits.length !== 1) throw new Error(hits.length ? `${hits.length} fields match "${req.into}"` : `no field called "${req.into}"`);
         el = hits[0] as HTMLElement;
         el.focus();
+      }
+      if (el instanceof HTMLSelectElement) {
+        // A picker: the option by its value or its text, as picking it would.
+        const opt = [...el.options].find((o) => o.value === text || o.text.trim() === text.trim());
+        if (!opt) throw new Error(`"${text}" isn't one of its options`);
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(el, opt.value);
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        await frames();
+        return opt.text;
       }
       if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) throw new Error("no text field has the focus; pass \"into\"");
       // React tracks the value itself, so it's set the way a keystroke would.

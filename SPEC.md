@@ -288,7 +288,7 @@ Built from the LATER.md item; notes in `docs/PROGRESS-thread-tags-plus.md`.
 
 Status: done, with unit tests. Not yet checked in a browser or the sandbox.
 
-## Box Yard ideas (S17 to S21, S26 to S29)
+## Box Yard ideas (S17 to S21, S26 to S30)
 
 Problem: Dispatch starts work and S7 to S10 cut down what reaches me, but three gaps are left. Spend goes over budget and new tasks keep launching. A follow-up to work from last week starts a fresh thread, because the router only sees open sessions. Nobody keeps the thread of a project across its tasks except me. And work done on the Mac isn't on `pc` until I push it. These stories borrow ideas from [Box Yard](https://github.com/webdevcody/box-yard) (one coordinator chat running a lead agent per project) without adopting its model: Observatory stays a client of nebula, and every lead, hold and push is something I can turn off.
 
@@ -386,6 +386,20 @@ Acceptance criteria:
 - Given every kind and coat, then its avatar shows its eyes inside the circle and centred: test.
 - Given replies, my messages, events and task cards, then the avatar shows on the first reply of each run only: test.
 - Given the sandbox with a top lead, then the "All projects" row and the chat header show its face in a circle, and the header's dot pulses while it works (manual check against the sandbox `scripts/sandbox.sh app`).
+
+Status: in review
+
+### S31: Lead levels, and each lead kept to its project
+As a user, I want to set per project how far its lead may go on its own, from just watching to merging and releasing, with the app refusing anything above that level and anything aimed outside the lead's project, so that a lead does what I ask itself within limits I chose, and can't reach other repos, ~/Library or other projects' threads.
+Notes: builds on S17, S26, S28 and S29. The user decided on 2026-11-10 (option 1A): four levels, default 2, enforced by the app, not just stated in the prompt. **Levels** (`leadLevel.ts`): 1 Watch (notes and answers only), 2 Suggest (S17's prefilled links and S28's ASK rows, what a lead did before), 3 Act on safe things (START, NUDGE, `ARCHIVE <agent id>` for a thread that said ✅ Safe to close, `REMOVE <branch>` for a clean worktree whose PR merged), 4 Merge and release (`MERGE #<n>` for a PR whose checks all passed, `RELEASE <branch>: <brief>` to start a task that cuts a release). The card keeps `lead.level`; a lead saved with S28's `acts` on reads as 3. `decide()` refuses any action above the level with the level it needs, and the `[observatory]` line says so; `checkNewTask()` and `checkFollowUp()` do the same for observatory:// links, and the top lead's PASS to a lead at Watch is refused. Setting the level is in Settings → Leads → Project leads and on the card, and the chat header shows it with a picker; a running lead is told its new level and rules. **Kept to its project:** every action is checked against the lead's project (threads, PRs, worktrees; START always starts there), a lead's new-task link opens only in its own project, and the prompt says it stays in its folder. In the lead's session, a `PreToolUse` hook that Observatory puts in its main checkout's `.claude/settings.local.json` (beside nebula's own hooks, inert in every other session) runs the app's binary with `--lead-guard` (`lead_guard.rs`): reads outside the project's folders and its notes ask, `~/Library` is refused, writes go only to its notes, `nebula spawn`/`send`/`worktree`, `git push`/`commit`/`merge` and `gh pr merge` are refused, and observatory:// links are refused at Watch and need `from=` above it. The guard is put in when a lead starts or changes level, once for each running lead after launch, and taken out when its lead is removed. Nothing changes nebula's protocol.
+Acceptance criteria:
+- Given each action at each level, then Watch refuses all, Suggest allows only ASK, 3 allows all but MERGE and RELEASE, 4 allows all, each refusal naming the level it needs (unit test on `decide()`).
+- Given a NUDGE, ARCHIVE or ASK archive on another project's thread, a MERGE of a PR not in the project, or a REMOVE of a branch that isn't its worktree, then it's refused; ARCHIVE of a thread that hasn't said ✅, MERGE of a PR with failing checks, REMOVE of the main checkout, a dirty, busy or unmerged worktree are refused too (unit test).
+- Given a lead's new-task link naming another project, or from a lead at Watch, then it's refused; naming its own project or none, it opens in the lead's project; a follow-up from a lead at Watch is refused (unit test on `checkNewTask()` and `checkFollowUp()`).
+- Given a lead at 4 and a reply with every action line, then each allowed action is carried out once and reported, and a failed merge comes back as refused with the reason (unit test on `runActions()`).
+- Given `leadPrompt()` at each level, then it states the level and describes only that level's lines and links, and says the lead stays in its project (unit test).
+- Given a lead's tool call, then the guard allows reads in its project and notes, asks outside them, refuses ~/Library, writes outside its notes, and commands that act for it; the hook is inert for any other session and asks when the guard can't run; installing it keeps every other hook (Rust tests).
+- Given the sandbox with a lead on a project, then Settings lists it with its level, the chat header shows the level, changing it tells the lead, and its main checkout's settings hold the guard (manual check against the sandbox).
 
 Status: in review
 

@@ -7,6 +7,7 @@
 import { COATS, coatFor, FRAMES, type CritterKind } from "../vendor/pixel-pets/frames.ts";
 import { ASK_USER } from "./leadAsk.ts";
 import { askLines } from "./leadActions.ts";
+import { levelOf, type LeadLevel } from "./leadLevel.ts";
 import type { Entry } from "./transcript";
 
 // ---- pets ----
@@ -276,20 +277,22 @@ export interface LeadEntry {
   name: string;
   model: string;
   pet: LeadPet;
-  /** Its action lines are carried out (S28): a project lead with them on. */
+  /** Its action lines are carried out (S28): a project lead above Watch. */
   acts: boolean;
+  /** A project lead's level (leadLevel.ts); null for the top lead. */
+  level: LeadLevel | null;
 }
 
 /** Every running lead, the top lead first, then projects by name. */
 export function leadsOf(
-  cards: Record<string, { lead?: { agentId: string; model: string; pet?: unknown; acts?: boolean } }>,
+  cards: Record<string, { lead?: { agentId: string; model: string; pet?: unknown; acts?: boolean; level?: unknown } }>,
   top: { agentId: string; model: string; pet?: unknown } | undefined | null,
   agents: Record<string, { archived: boolean }>,
   projects: Record<string, { name: string } | undefined>,
 ): LeadEntry[] {
   const live = (id: string) => !!agents[id] && !agents[id].archived;
   const out: LeadEntry[] = [];
-  if (top && live(top.agentId)) out.push({ agentId: top.agentId, projectId: null, title: "Top lead", name: ALL_PROJECTS, model: top.model, pet: petOf(top, null), acts: false });
+  if (top && live(top.agentId)) out.push({ agentId: top.agentId, projectId: null, title: "Top lead", name: ALL_PROJECTS, model: top.model, pet: petOf(top, null), acts: false, level: null });
   const rows = Object.entries(cards)
     .flatMap(([key, c]) => {
       const p = projects[key];
@@ -304,7 +307,8 @@ export function leadsOf(
       name: r.name,
       model: r.lead.model,
       pet: petOf(r.lead, r.name),
-      acts: r.lead.acts === true,
+      acts: levelOf(r.lead) >= 2,
+      level: levelOf(r.lead),
     });
   return out;
 }

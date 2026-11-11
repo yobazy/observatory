@@ -4,7 +4,8 @@ import { dollars, costBySession } from "../nebula/budgetHold";
 import { markLeadSeen, noteReply, openLeadChat, openLeadTerminal, useChatLead, useLeadCalls, useLeadReply } from "../nebula/leadCalls";
 import { lastReply, QUIET, type FaceFrame, type LeadEntry } from "../nebula/leadChat";
 import { outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
-import { answerLeadAsk, setLeadActs, startedTasks } from "../nebula/leadRunner";
+import { answerLeadAsk, levelFlash, setLeadLevel, startedTasks } from "../nebula/leadRunner";
+import { levelOf } from "../nebula/leadLevel";
 import { chatItems, chatPreview, leadActivity, liveReply, runStarts, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
 import { enqueue } from "../nebula/queue";
 import { answer, findQuestion, readScreen, type Choice, type Question } from "../nebula/screen";
@@ -16,8 +17,7 @@ import type { Entry } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
 import { avatarStatusLabel, LeadAvatar, tintVars, type AvatarStatus } from "./LeadAvatar";
 import { Reply, useTranscript, Where } from "./Reader";
-import { Switch } from "./Settings";
-import { LeadVoiceFields } from "./LeadCard";
+import { LeadVoiceFields, LevelPicker } from "./LeadCard";
 
 // Chat with a project (S29): the project's lead is a pet, and the face of
 // the project. Its thread shows here as a chat, not in the Read view or the
@@ -306,16 +306,17 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
           </p>
         </div>
         {!top && card && lead.projectId && (
-          <label className="chat-acts" htmlFor={`chat-acts-${lead.projectId}`} title="Whether the app carries out the lead's START and NUDGE lines">
-            <Switch
-              id={`chat-acts-${lead.projectId}`}
-              on={card.acts === true}
-              onChange={(on) => {
-                setLeadActs(lead.projectId!, card, on);
-                flash(on ? `${lead.name}'s lead can start and nudge threads` : `${lead.name}'s lead's action lines are ignored now`);
+          <label className="chat-acts" htmlFor={`chat-level-${lead.projectId}`}>
+            Level
+            <LevelPicker
+              id={`chat-level-${lead.projectId}`}
+              compact
+              level={levelOf(card)}
+              onPick={(level) => {
+                setLeadLevel(lead.projectId!, card, level);
+                flash(levelFlash(lead.name, level));
               }}
             />
-            Starts and nudges threads
           </label>
         )}
         {voiceOpen && !top && card && lead.projectId && (

@@ -10153,6 +10153,48 @@ button.board-main:hover .board-text {
   }
 }
 
+/* A project lead's level (leadLevel.ts): its picker and what it allows. */
+.lead-level {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.lead-level .setting-input {
+  flex: none;
+}
+
+.lead-level.is-compact .setting-input {
+  font-size: 12px;
+  padding-block: 2px;
+}
+
+.lead-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lead-levels li {
+  display: grid;
+  grid-template-columns: minmax(90px, 160px) 1fr;
+  align-items: start;
+  gap: 12px;
+}
+
+.lead-levels-name {
+  padding-top: 5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A lead's face (S30, LeadAvatar.tsx): its pet close up, at whole pixels,
    in a circle of its tint, with an optional status dot on the rim. The
    fill is the tint toned down, so fur of the same colour still reads by its

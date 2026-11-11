@@ -9,6 +9,7 @@
 // be a project's card flagged `isHome`, or a plain folder that isn't a nebula
 // project: that card is keyed `folder:<path>` and exists only while it's Home.
 import { useSyncExternalStore } from "react";
+import type { LeadLevel } from "./leadLevel";
 
 /** Isolated: each task gets its own worktree. Shared: tasks run side by side
  *  in the main checkout, at most `concurrency` at once. */
@@ -59,8 +60,10 @@ export interface CardLead {
   /** The pixel-pets animal it is in the sidebar and the dialogue (S27,
    *  leadChat.ts); unset is one picked from the project's name. */
   pet?: { kind: string; coat: string };
-  /** "Let the lead start and nudge threads" (S28, leadActions.ts): on for
-   *  a lead started since, off for one saved before until turned on. */
+  /** How far the lead may go (leadLevel.ts, read through levelOf()). */
+  level?: LeadLevel;
+  /** S28's "Let the lead start and nudge threads", from before levels: on
+   *  reads as level 3. Read only, never written. */
   acts?: boolean;
   /** Its started tasks that may run at once; unset is DEFAULT_MAX_TASKS. */
   maxTasks?: number;
@@ -301,7 +304,7 @@ function leadOf(x: unknown): CardLead | null {
     model: typeof l.model === "string" ? l.model : "",
     notes: typeof l.notes === "string" ? l.notes : "",
     ...(l.pet && typeof l.pet.kind === "string" && typeof l.pet.coat === "string" ? { pet: { kind: l.pet.kind, coat: l.pet.coat } } : {}),
-    ...(l.acts === true ? { acts: true } : {}),
+    ...(l.level === 1 || l.level === 2 || l.level === 3 || l.level === 4 ? { level: l.level } : l.acts === true ? { acts: true } : {}),
     ...(typeof l.maxTasks === "number" && Number.isFinite(l.maxTasks) && l.maxTasks >= 1 ? { maxTasks: Math.floor(l.maxTasks) } : {}),
     ...(typeof l.personality === "string" && l.personality.trim() ? { personality: l.personality } : {}),
     ...(typeof l.instructions === "string" && l.instructions.trim() ? { instructions: l.instructions } : {}),

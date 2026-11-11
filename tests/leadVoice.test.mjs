@@ -19,7 +19,7 @@ const { PERSONALITY_PRESETS, personalityPresets } = await import('../src/nebula/
 const { chatItems, eventText } = await import('../src/nebula/projectChat.ts');
 const { COATS } = await import('../src/vendor/pixel-pets/frames.ts');
 
-const base = { project: 'observatory', path: '/repo/observatory', notes: '~/.config/observatory/leads/observatory.md', acts: true, maxTasks: 2 };
+const base = { project: 'observatory', path: '/repo/observatory', notes: '~/.config/observatory/leads/observatory.md', level: 3, maxTasks: 2 };
 
 test("Given a personality and instructions, then the lead's prompt has both in a labelled section after every one of the app's rules", () => {
   const p = leadPrompt({ ...base, personality: 'dry and brief', instructions: 'always run checks on the pc\nnever touch the release' }, ['Answer rules section.']);

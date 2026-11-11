@@ -110,13 +110,27 @@ export function eventText(line: string, name: (agentId: string) => string | unde
   if ((m = body.match(/^started (\S+) \(agent [\w-]+\)$/))) return `Started ${m[1]}`;
   if ((m = body.match(/^queued (\S+): (.*)$/))) return `Queued ${m[1]}: ${m[2]}`;
   if ((m = body.match(/^nudged ([\w-]+)$/))) return `Nudged ${thread(m[1])}`;
-  if ((m = body.match(/^refused (START|NUDGE|PASS|ASK merge|ASK archive) (.+?): (.*)$/))) {
+  if ((m = body.match(/^refused (START|NUDGE|PASS|ASK merge|ASK archive|ARCHIVE|REMOVE|MERGE|RELEASE) (.+?): (.*)$/))) {
     const [, what, target, why] = m;
-    const verb = { START: "start", NUDGE: "nudge", PASS: "pass work to", "ASK merge": "ask to merge", "ASK archive": "ask to archive" }[what];
-    const on = what === "NUDGE" || what === "ASK archive" ? thread(target) : target;
+    const verb = {
+      START: "start",
+      NUDGE: "nudge",
+      PASS: "pass work to",
+      "ASK merge": "ask to merge",
+      "ASK archive": "ask to archive",
+      ARCHIVE: "archive",
+      REMOVE: "remove",
+      MERGE: "merge",
+      RELEASE: "start the release",
+    }[what];
+    const on = what === "NUDGE" || what === "ASK archive" || what === "ARCHIVE" ? thread(target) : target;
     return `Didn't ${verb} ${on}: ${why}`;
   }
   if ((m = body.match(/^passed to (Lead .+)$/))) return `Passed to ${m[1]}`;
+  if ((m = body.match(/^archived ([\w-]+)$/))) return `Archived ${thread(m[1])}`;
+  if ((m = body.match(/^removed the worktree on (\S+)$/))) return `Removed ${m[1]}`;
+  if ((m = body.match(/^merged (#\d+)$/))) return `Merged ${m[1]}`;
+  if ((m = body.match(/^your level is now (\d), ([^.]+)/))) return `Level ${m[1]}: ${m[2]}`;
   if ((m = body.match(/^the user (merged|archived) (\S+) \(your ASK\)$/))) return `You ${m[1]} ${m[1] === "archived" ? thread(m[2]) : m[2]}`;
   if ((m = body.match(/^the user said no to (merging|archiving) (\S+)$/))) return `You said no to ${m[1]} ${m[1] === "archiving" ? thread(m[2]) : m[2]}`;
   if ((m = body.match(/^couldn't (merge|archive) (\S+): (.*)$/))) return `Couldn't ${m[1]} ${m[1] === "archive" ? thread(m[2]) : m[2]}: ${m[3]}`;
@@ -161,6 +175,11 @@ export function taskStep(t: Pick<ChatTask, "label" | "checks">): { step: 0 | 1 |
  *  S29 (no reply number) goes under the last reply before it started.
  *  "Started"/"Queued" lines for a task with a card are left out: the card
  *  says so. */
+/** S28's rules, before levels, ended with this. */
+const OLD_RULES_END = "Treat it as work I asked for: START it as usual.";
+/** Whether a line ends a rules message, from before levels or after. */
+const ended = (line: string) => line.trim().endsWith(RULES_END) || line.trim().endsWith(OLD_RULES_END);
+
 export function chatItems(entries: readonly ChatEntry[], input: ChatInput): ChatItem[] {
   const { leadId, tasks = [], outcomes = [], answered = () => false, name, settled = () => null } = input;
   const sorted = [...entries].sort((a, b) => a.n - b.n);
@@ -212,7 +231,7 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
         let voice = false;
         text.split("\n").forEach((line, i) => {
           if (rules) {
-            if (line.trim().endsWith(RULES_END)) rules = false;
+            if (ended(line)) rules = false;
             return;
           }
           // Your new instructions, sent after their event line, are yours
@@ -226,10 +245,12 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
             voice = true;
             return;
           }
-          if (line.startsWith(`${LINE_PREFIX}actions are on.`)) {
-            // The switch turned on is news; the rules after it aren't.
-            out.push({ kind: "event", key: `e${e.n}.${i}`, text: eventText(`${LINE_PREFIX}actions are on`), at: e.at });
-            rules = !line.trim().endsWith(RULES_END);
+          if (line.startsWith(`${LINE_PREFIX}actions are on.`) || line.startsWith(`${LINE_PREFIX}your level is now `)) {
+            // The change is news; the rules after it aren't. Before levels,
+            // S28's rules ended with OLD_RULES_END.
+            const head = line.startsWith(`${LINE_PREFIX}actions are on.`) ? `${LINE_PREFIX}actions are on` : line.slice(0, line.indexOf(".") + 1 || undefined);
+            out.push({ kind: "event", key: `e${e.n}.${i}`, text: eventText(head), at: e.at });
+            rules = !ended(line);
             return;
           }
           if (!line.startsWith(LINE_PREFIX)) return;
