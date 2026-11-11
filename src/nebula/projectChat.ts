@@ -324,3 +324,24 @@ export function runStarts(items: readonly ChatItem[]): Set<string> {
   }
   return out;
 }
+
+/** A lead's reply split into what it says and the questions it passes on to
+ *  you: lines that start `ASK_USER:` (the answer a lead gives a thread it
+ *  can't answer for you, which it sometimes says in the chat too). The
+ *  marker is for agents; the chat shows each as a question of its own. */
+export function splitAsks(text: string): { body: string; asks: string[] } {
+  const asks: string[] = [];
+  const body = text
+    .split("\n")
+    .filter((line) => {
+      const m = /^\s*(?:[-*]\s+)?(?:\*\*|__)?ASK_USER:(?:\*\*|__)?\s*(.*)$/.exec(line);
+      if (!m) return true;
+      const q = m[1].replace(/^(?:\*\*|__)\s*/, "").trim();
+      if (q) asks.push(q[0].toUpperCase() + q.slice(1));
+      return false;
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { body, asks };
+}

@@ -10104,6 +10104,36 @@ button.board-main:hover .board-text {
   align-self: flex-start;
 }
 
+/* A question the lead passes on to you, out of its reply and in a bubble
+   of its own; open ones in the waiting color with an Answer button. */
+.chat-question {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.chat-question.is-open {
+  border-color: color-mix(in oklab, var(--st-waiting) 55%, transparent);
+  background: color-mix(in oklab, var(--st-waiting) 10%, var(--raised));
+}
+.chat-question-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.chat-question.is-open .chat-question-label {
+  color: var(--st-waiting);
+}
+.chat-question .chat-md > :first-child {
+  margin-top: 0;
+}
+.chat-question .chat-md > :last-child {
+  margin-bottom: 0;
+}
+.chat-question-answer {
+  margin-top: 4px;
+}
 .chat-compose {
   display: flex;
   gap: 8px;

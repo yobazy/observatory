@@ -348,3 +348,13 @@ test("Given a reply with decisions and then an update without any, then the earl
   assert.equal(liveReply([pet(1, 'Fix it now?'), me('1 A')], asks), -1);
   assert.equal(liveReply([pet(1, 'Fix it now?'), me('1 A'), pet(3, 'Started.')], asks), 3);
 });
+
+test('a lead\'s ASK_USER lines come out of its reply as questions for you', async () => {
+  const { splitAsks } = await import('../src/nebula/projectChat.ts');
+  const said = 'The tests pass.\n\nASK_USER: should a failed sync stop and tell you, or keep retrying?';
+  assert.deepEqual(splitAsks(said), { body: 'The tests pass.', asks: ['Should a failed sync stop and tell you, or keep retrying?'] });
+  assert.deepEqual(splitAsks('**ASK_USER:** Ship it today?\n- ASK_USER: and tag it?'), { body: '', asks: ['Ship it today?', 'And tag it?'] });
+  // Only at the start of a line: a reply talking about the marker keeps it.
+  assert.deepEqual(splitAsks('Threads get ASK_USER: back when I do not know.'), { body: 'Threads get ASK_USER: back when I do not know.', asks: [] });
+  assert.deepEqual(splitAsks('ASK_USER:'), { body: '', asks: [] });
+});
