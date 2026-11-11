@@ -4,7 +4,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { isPreview, runSuggester, sendInput } from "../nebula/client";
 import { buildSuggestPrompt, freshReply, previewSuggestions, readSuggestions, suggestCommand } from "../nebula/nextprompts";
-import { flash, getState, projectOfWorktree, subscribe, useAppState } from "../nebula/store";
+import { flash, getState, projectOfWorktree, setState, subscribe, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, sendQueued, unqueue, queuedSentAt, type Queued } from "../nebula/queue";
@@ -23,6 +23,7 @@ import { fitTables } from "../nebula/tablecols";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
 import { draftFor, keepDraft, onDraftAdded } from "../nebula/drafts";
+import { useWaiting } from "../nebula/decisions";
 import { rubOut, unsentLine } from "../nebula/typed";
 import { harnessLabel, relativeTime, statusLabel } from "../nebula/status";
 import type { Agent } from "../nebula/types";
@@ -897,6 +898,12 @@ export function Reader({
         setFinding(true);
         return;
       }
+      // ⌘↵ after tapping an option, as from the box: send, then the next thread.
+      if (e.key === "Enter" && !e.shiftKey && !(document.activeElement as HTMLElement).matches("textarea, input") && nextUp) {
+        e.preventDefault();
+        void send(true);
+        return;
+      }
       if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || (document.activeElement as HTMLElement).matches("textarea, input")) return;
       const el = scroller.current;
       if (!el) return;
@@ -1121,8 +1128,17 @@ export function Reader({
 
   // Behind a queued prompt, a reply still waits its turn.
   const canSend = isIdle(agent) || (atPrompt && !queue?.length);
-  const send = async () => {
+  // The next thread waiting on you, as Decisions lists them: Send & next
+  // answers this one and opens that, so a round of answers needs no hunting.
+  const nextUp = useWaiting()?.find((w) => w.agent.id !== agent.id && !w.agent.archived) ?? null;
+  const goNext = () => {
+    if (!nextUp) return;
+    const a = nextUp.agent;
+    setState((s) => ({ selectedProject: s.worktrees[a.worktree_id]?.project_id ?? s.selectedProject, selectedSession: { Agent: a.id } }));
+  };
+  const send = async (thenNext = false) => {
     const text = outgoing;
+    if (thenNext && !text) return goNext();
     if (!text || waiting) return;
     const was = { draft, tapped, pointed };
     setDraft("");
@@ -1137,6 +1153,8 @@ export function Reader({
       // A queued one shows in the queue instead, a command on the working line.
       setOutbox(how === "queued" || commandOf(text) !== null ? null : { text, after, sent: true });
       if (how === "queued") flash(`Queued for ${agent.name}: sent when its turn ends`);
+      // Once it's gone, not before: a send that fails puts your reply back here.
+      if (thenNext) goNext();
     } catch {
       setOutbox(null);
       // It didn't go: put back what you wrote and picked.
@@ -1502,15 +1520,26 @@ export function Reader({
                     e.preventDefault();
                     setTapped({ entry: latest, picks: recommended });
                   } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    // Enter sends, like the terminal; Shift-Enter starts a new line.
+                    // Enter sends, like the terminal; Shift-Enter starts a new line;
+                    // ⌘-Enter sends and opens the next thread waiting on you.
                     e.preventDefault();
-                    void send();
+                    void send(e.metaKey && !!nextUp);
                   }
                 }}
               />
               <button className="btn btn-primary" disabled={!outgoing} onClick={() => void send()} title="Send (↵). Shift-↵ for a new line">
                 {canSend ? "Send" : "Queue"}
               </button>
+              {nextUp && (
+                <button
+                  className="link-btn rd-sendnext"
+                  onClick={() => void send(true)}
+                  title={`${outgoing ? `${canSend ? "Send" : "Queue"} this, then open` : "Open"} ${nextUp.agent.name}, the next thread waiting on you (⌘↵)`}
+                >
+                  {outgoing ? (canSend ? "Send & next" : "Queue & next") : "Next"} <span className="rd-sendnext-name">→ {nextUp.agent.name}</span>{" "}
+                  <kbd>⌘↵</kbd>
+                </button>
+              )}
             </>
           )}
         </div>

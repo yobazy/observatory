@@ -5045,6 +5045,37 @@ td.task-last {
   border-radius: 11px;
   padding: 5px 13px;
 }
+/* Send & next: under the box at its right, naming where it goes. */
+.rd-compose:has(> .rd-sendnext) {
+  padding-bottom: 38px;
+}
+.rd-compose:has(> .rd-sendnext) > .btn-primary {
+  bottom: 46px;
+}
+.rd-sendnext {
+  position: absolute;
+  right: 32px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: calc(100% - 64px);
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.rd-sendnext:hover {
+  color: var(--accent);
+}
+.rd-sendnext-name {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+.rd-sendnext kbd {
+  color: var(--faint);
+}
 .rd-wait {
   margin: 0;
   font-size: 13px;
