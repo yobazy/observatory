@@ -28,8 +28,13 @@ export function sizeFor(agentId: string): { cols: number; rows: number } {
 }
 
 /** The last rows of the agent's screen, trimmed; null when it has no live
- *  terminal to read. */
-export async function readScreen(agent: Agent, maxBytes = 48_000): Promise<string[] | null> {
+ *  terminal to read. `unwrap`: a row the terminal wrapped joins the row
+ *  before it, so a long command reads whole instead of split mid-word. */
+export async function readScreen(
+  agent: Agent,
+  maxBytes = 48_000,
+  { unwrap = false }: { unwrap?: boolean } = {},
+): Promise<string[] | null> {
   if (!agent.alive) return null;
   const tail = await tailOutput({ Agent: agent.id }, maxBytes, null);
   if (!tail) return null;
@@ -38,8 +43,14 @@ export async function readScreen(agent: Agent, maxBytes = 48_000): Promise<strin
   try {
     await new Promise<void>((r) => term.write(tail.data, r));
     const buf = term.buffer.active;
-    const lines: string[] = [];
-    for (let i = 0; i < buf.length; i++) lines.push(buf.getLine(i)?.translateToString(true) ?? "");
+    const raw: string[] = [];
+    for (let i = 0; i < buf.length; i++) {
+      const line = buf.getLine(i);
+      const text = line?.translateToString(false) ?? "";
+      if (unwrap && line?.isWrapped && raw.length) raw[raw.length - 1] += text;
+      else raw.push(text);
+    }
+    const lines = raw.map((l) => l.trimEnd());
     while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
     return lines.slice(-rows);
   } finally {
@@ -50,8 +61,8 @@ export async function readScreen(agent: Agent, maxBytes = 48_000): Promise<strin
 /** Pick a choice by its number, as pressing the key in the terminal does —
  *  after checking the same question is still on screen, since the agent
  *  may have moved on (or you answered in the terminal) since it was read. */
-export async function answer(agent: Agent, q: Question, choice: Choice): Promise<void> {
-  const lines = await readScreen(agent);
+export async function answer(agent: Agent, q: Question, choice: Choice, opts: { unwrap?: boolean } = {}): Promise<void> {
+  const lines = await readScreen(agent, undefined, opts);
   const now = lines && findQuestion(lines);
   // The fresh copy, since a row choice's arrow keys count from wherever the
   // mark is now.

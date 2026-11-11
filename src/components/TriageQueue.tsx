@@ -108,7 +108,7 @@ export function TriageQueue({ title, rows, stale }: { title: string; rows: Queue
 }
 
 /** Each label's dot and chip tone, in the board rows' colours. */
-const LABEL_DOT: Record<QueueRow["label"], string> = {
+export const LABEL_DOT: Record<QueueRow["label"], string> = {
   decision: "dot-needs_feedback",
   stuck: "dot-failed",
   review: "dot-review",

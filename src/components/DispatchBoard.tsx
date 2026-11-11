@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { QuickAnswer } from "./QuickAnswer";
-import { TriageActions, TriageChip, TriageHint, TriageNeed, TriageQueue, useTriageQueue } from "./TriageQueue";
+import { LABEL_DOT, LABEL_TONE, TriageActions, TriageChip, TriageHint, TriageNeed, TriageQueue, useTriageQueue } from "./TriageQueue";
 import { TaskBudget } from "./TaskBudget";
 import { selectAgent } from "./Sidebar";
 import { openLink } from "./Run";
@@ -32,6 +32,7 @@ import {
   batchSummary,
   boardRows,
   clearableBatches,
+  groupOf,
   groupRows,
   hiddenByDismiss,
   redirectPrompt,
@@ -101,6 +102,29 @@ function tone(p: Phase, held: boolean): "wait" | "error" | "run" | "ok" | "quiet
   return "quiet";
 }
 
+/** Focus what `pick` finds once the board has re-rendered, or the board's
+ *  heading when that's gone: a row that moved or left mustn't drop focus
+ *  to the page, where the next Esc would close the board. */
+function focusLater(pick: () => HTMLElement | null | undefined) {
+  requestAnimationFrame(() => {
+    const el = pick();
+    (el?.isConnected ? el : document.getElementById("board-title"))?.focus();
+  });
+}
+
+/** After Clear done or Dismiss: the notice's Undo. */
+const focusUndo = () => focusLater(() => document.querySelector<HTMLElement>(".notice-action"));
+
+/** Where focus goes when a row's action moves it: the next row's way in,
+ *  else the one before, else its section's heading. */
+function focusAfter(from: HTMLElement) {
+  const li = from.closest("li");
+  const section = from.closest(".board-group");
+  const way = (x: Element | null | undefined) => x?.querySelector<HTMLElement>("button.board-main, button");
+  const next = way(li?.nextElementSibling) ?? way(li?.previousElementSibling) ?? section?.querySelector<HTMLElement>("h2");
+  focusLater(() => next);
+}
+
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** When a row's task last moved, for how long it's waited or since it
@@ -142,19 +166,17 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
     for (const r of [...queue.rows, ...queue.stale]) m.set(r.id, r);
     return m;
   }, [queue]);
-  const groups = useMemo(
-    () =>
-      groupRows(
-        rows,
-        (r) => !!holdOn(r.task, holds),
-        (r) => {
-          const label = r.agent && triageOf.get(r.agent.id)?.label;
-          return label === "decision" || label === "stuck";
-        },
-      ),
-    [rows, holds, triageOf],
+  // Rows triage says need you (a decision, or stuck), wherever their phase
+  // would list them.
+  const urgent = useCallback(
+    (r: Row) => {
+      const label = r.agent && triageOf.get(r.agent.id)?.label;
+      return label === "decision" || label === "stuck";
+    },
+    [triageOf],
   );
-  const clearable = useMemo(() => clearableBatches(rows), [rows]);
+  const groups = useMemo(() => groupRows(rows, (r) => !!holdOn(r.task, holds), urgent), [rows, holds, urgent]);
+  const clearable = useMemo(() => clearableBatches(rows, urgent), [rows, urgent]);
   const heldLine = useMemo(() => holdSummary(live.flatMap((b) => b.tasks), holds), [live, holds]);
   const onBoard = useMemo(() => new Set(rows.map((r) => r.agent?.id).filter((x): x is string => !!x)), [rows]);
   const otherRows = queue.rows.filter((r) => !onBoard.has(r.id));
@@ -178,7 +200,14 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
     const ids = [...clearable];
     ids.forEach(dismissBatch);
     const n = rows.filter((r) => ids.includes(r.batchId)).length;
-    flash(`Cleared ${plural(n, "done task")}`, 6000, { label: "Undo", run: () => ids.forEach(undismissBatch) });
+    flash(`Cleared ${plural(n, "done task")}`, 6000, {
+      label: "Undo",
+      run: () => {
+        ids.forEach(undismissBatch);
+        focusLater(() => document.getElementById("board-title"));
+      },
+    });
+    focusUndo();
   };
   const triage = showTriage && (
     <TriageQueue title={rows.length ? "Other threads" : "What needs you"} rows={otherRows} stale={otherStale} />
@@ -188,7 +217,9 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
     <section className="usage board" aria-labelledby="board-title">
       <header className="usage-head" data-tauri-drag-region>
         <div>
-          <h1 id="board-title">Dispatch board</h1>
+          <h1 id="board-title" tabIndex={-1}>
+            Dispatch board
+          </h1>
           <p className="usage-sub">{rows.length ? summary : "Every task you dispatch shows up here until you clear it."}</p>
         </div>
         <div className="usage-controls" ref={controls}>
@@ -215,7 +246,7 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
             <Fragment key={g.key}>
               <section className={`board-group is-${g.key}`} aria-labelledby={`board-group-${g.key}`}>
                 <div className="board-group-head">
-                  <h2 id={`board-group-${g.key}`}>
+                  <h2 id={`board-group-${g.key}`} tabIndex={-1}>
                     {g.label}
                     <span className="board-group-count">{g.rows.length}</span>
                   </h2>
@@ -247,7 +278,7 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
             </Fragment>
           ))
         )}
-        {rows.length > 0 && <Batches batches={settledLeft} rows={rows} />}
+        {rows.length > 0 && <Batches batches={settledLeft} rows={rows} urgent={urgent} />}
         {!showTriage && <TriageHint />}
       </div>
     </section>
@@ -257,12 +288,19 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
 /** Settled batches with something besides done tasks left in them, which
  *  Clear done leaves: each can still be taken off the board as a whole,
  *  with Undo, the notice naming what went with it. */
-function Batches({ batches, rows }: { batches: Batch[]; rows: Row[] }) {
+function Batches({ batches, rows, urgent }: { batches: Batch[]; rows: Row[]; urgent: (r: Row) => boolean }) {
   if (!batches.length) return null;
   const dismiss = (b: Batch) => {
-    const hid = hiddenByDismiss(rows, b.id);
+    const hid = hiddenByDismiss(rows, b.id, urgent);
     dismissBatch(b.id);
-    flash(`Dismissed a batch of ${b.tasks.length}${hid ? `: ${hid}` : ""}`, 6000, { label: "Undo", run: () => undismissBatch(b.id) });
+    flash(`Dismissed a batch of ${b.tasks.length}${hid ? `: ${hid}` : ""}`, 6000, {
+      label: "Undo",
+      run: () => {
+        undismissBatch(b.id);
+        focusLater(() => document.getElementById("board-title"));
+      },
+    });
+    focusUndo();
   };
   return (
     <section className="board-batches" aria-label="Settled batches">
@@ -271,6 +309,7 @@ function Batches({ batches, rows }: { batches: Batch[]; rows: Row[] }) {
         <span key={b.id} className="board-batch">
           <span>
             {relativeTime(b.at) === "now" ? "just now" : `${relativeTime(b.at)} ago`}, {plural(b.tasks.length, "task")}
+            {hiddenByDismiss(rows, b.id, urgent) && ` · ${hiddenByDismiss(rows, b.id, urgent)}`}
           </span>
           <button
             className="link-btn"
@@ -312,10 +351,12 @@ function BoardRow({
   // A finished row's review label says what its To review section does.
   const sameNews = (triage?.label === "review" || triage?.label === "checked") && phase === "finished";
   const inNeeds = group === "needs";
+  // Under Needs you only because triage flagged it: its dot and chip say so.
+  const flagged = inNeeds && !!triage && groupOf(phase, held) !== "needs";
   return (
     <li className={`board-row is-${phase}${compact ? " is-compact" : ""}`}>
       <div className="board-line">
-        <span className={`sdot ${dotClass(row, group, held)}`} aria-hidden />
+        <span className={`sdot ${flagged ? LABEL_DOT[triage!.label] : dotClass(row, group, held)}`} aria-hidden />
         {open ? (
           <button className="board-main" onClick={open} title={`Open ${agent!.name}`}>
             <span className="board-title">{title}</span>
@@ -332,13 +373,16 @@ function BoardRow({
             {relativeTime(since)}
           </span>
         )}
-        <span className={`board-chip is-${tone(phase, held)}`}>{statusText(row, state, holds)}</span>
+        <span className={`board-chip is-${flagged ? LABEL_TONE[triage!.label] : tone(phase, held)}`}>{statusText(row, state, holds)}</span>
         {triage && !sameAsk && !sameNews && <TriageChip row={triage} />}
         {checkable &&
           (t.done ? (
             <button
               className="link-btn board-check"
-              onClick={() => checkOffTask(batchId, t.id, false)}
+              onClick={(e) => {
+                focusAfter(e.currentTarget);
+                checkOffTask(batchId, t.id, false);
+              }}
               aria-label={`Uncheck ${title}`}
               title="Put it back: its items in the to-do list are unchecked too"
             >
@@ -347,7 +391,10 @@ function BoardRow({
           ) : (
             <button
               className={inNeeds ? "btn btn-sm" : "link-btn board-check"}
-              onClick={() => checkOffTask(batchId, t.id, true)}
+              onClick={(e) => {
+                focusAfter(e.currentTarget);
+                checkOffTask(batchId, t.id, true);
+              }}
               aria-label={`Check off ${title}`}
               title="Mark it done: its items in the to-do list are checked too"
             >
@@ -357,7 +404,7 @@ function BoardRow({
         {triage && agent && !sameAsk && <TriageActions row={triage} agent={agent} />}
       </div>
       {body && <Prompt text={body} title={title} lines={inNeeds ? 1 : 2} />}
-      {triage && agent && <TriageNeed row={triage} agent={agent} />}
+      {triage && agent && !compact && !sameAsk && <TriageNeed row={triage} agent={agent} />}
       {!compact && (
         <>
           {t.state === "launched" && t.past && t.note && t.note !== "queued" && <p className="board-note">{t.note}</p>}

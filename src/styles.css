@@ -7316,13 +7316,40 @@ button.board-main:hover .board-title {
   box-shadow: inset 0 0 0 1.5px var(--faint);
   opacity: 0.7;
 }
+/* What a permission prompt asks about, on one line (full text in its title). */
 .qa-detail {
-  max-height: none;
+  margin: 0;
   padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--term);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 11px;
+  user-select: text;
+}
+/* Light pages: the filled error chip's text steps toward the ink, and the
+   settled ring keeps its full strength, so both hold their contrast. */
+:root[data-mode="light"] .board-chip.is-error {
+  color: color-mix(in srgb, var(--st-error) 70%, var(--text));
+}
+:root[data-mode="light"] .dot-settled {
+  opacity: 1;
+}
+/* Check off on an archived or removed row: offered on hover or focus. */
+.board-row.is-archived .board-check,
+.board-row.is-gone .board-check {
+  opacity: 0;
+}
+.board-row.is-archived:hover .board-check,
+.board-row.is-archived:focus-within .board-check,
+.board-row.is-gone:hover .board-check,
+.board-row.is-gone:focus-within .board-check {
+  opacity: 1;
 }
 .board-chip.is-run {
   color: var(--st-running);

@@ -224,23 +224,23 @@ export function groupRows(
  *  cancelled), which Clear done takes off the board. A batch with anything
  *  left (a failure, a finished turn nobody looked at, a task on your list)
  *  stays: it dismisses as a whole, and that would hide what's left. */
-export function clearableBatches(rows: Row[]): string[] {
+export function clearableBatches(rows: Row[], urgent: (r: Row) => boolean = () => false): string[] {
   const left = new Set<string>();
   const seen: string[] = [];
   for (const r of rows) {
     if (!seen.includes(r.batchId)) seen.push(r.batchId);
-    if (groupOf(r.phase) !== "done") left.add(r.batchId);
+    if (urgent(r) || groupOf(r.phase) !== "done") left.add(r.batchId);
   }
   return seen.filter((id) => !left.has(id));
 }
 
 /** What dismissing a batch would hide besides its done tasks:
  *  "1 failed, 1 blocked", or "" when nothing is. */
-export function hiddenByDismiss(rows: Row[], batchId: string): string {
+export function hiddenByDismiss(rows: Row[], batchId: string, urgent: (r: Row) => boolean = () => false): string {
   const n = new Map<string, number>();
   for (const r of rows) {
-    if (r.batchId !== batchId || groupOf(r.phase) === "done") continue;
-    const what = r.phase === "finished" ? "to review" : r.phase === "listed" ? "on your list" : r.phase === "plan" || r.phase === "waiting" ? "waiting on you" : r.phase;
+    if (r.batchId !== batchId || (groupOf(r.phase) === "done" && !urgent(r))) continue;
+    const what = urgent(r) && groupOf(r.phase) !== "needs" ? "needing you" : r.phase === "finished" ? "to review" : r.phase === "listed" ? "on your list" : r.phase === "plan" || r.phase === "waiting" ? "waiting on you" : r.phase;
     n.set(what, (n.get(what) ?? 0) + 1);
   }
   return [...n].map(([what, k]) => `${k} ${what}`).join(", ");

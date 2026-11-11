@@ -219,6 +219,10 @@ test('Clear done takes only batches with every task done; one with anything left
   assert.equal(hiddenByDismiss(rows, 'one-failed'), '1 failed');
   assert.equal(hiddenByDismiss(rows, 'unreviewed'), '1 to review');
   assert.equal(hiddenByDismiss(rows, 'all-done'), '');
+  // A done row triage says needs you (shown under Needs you) keeps its batch.
+  const urgent = (r) => r.task.id === 'b-t4';
+  assert.deepEqual(clearableBatches(rows, urgent), []);
+  assert.equal(hiddenByDismiss(rows, 'all-done', urgent), '1 needing you');
 });
 
 test("a row's title is its session's name, else the task's first line or first sentence, clipped", () => {

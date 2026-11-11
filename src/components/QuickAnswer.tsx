@@ -38,7 +38,7 @@ export function QuickAnswer({
     let t: ReturnType<typeof setTimeout>;
     // Each read waits for the last: a slow daemon mustn't pile them up.
     const read = async () => {
-      const lines = document.hidden ? undefined : await readScreen(agent).catch(() => null);
+      const lines = document.hidden ? undefined : await readScreen(agent, undefined, { unwrap: compact }).catch(() => null);
       if (!live) return;
       if (lines !== undefined) setScreen(lines);
       t = setTimeout(read, every);
@@ -55,7 +55,7 @@ export function QuickAnswer({
   const pick = async (q: Question, c: Choice) => {
     setBusy(true);
     try {
-      await answer(agent, q, c);
+      await answer(agent, q, c, { unwrap: compact });
       if (c.typed) onOpen();
       else {
         flash(`Answered ${agent.name}: ${c.label}`);
@@ -114,7 +114,7 @@ export function QuickAnswer({
       <div className="qa qa-compact" role="group" aria-label={`Answer ${agent.name}`}>
         {/* What it asks about, on one line: never a Yes said blind. */}
         {detail && (
-          <p className="rd-ask-detail qa-detail" title={q.detail!.join("\n")}>
+          <p className="qa-detail" title={q.detail!.join("\n")}>
             {detail}
           </p>
         )}

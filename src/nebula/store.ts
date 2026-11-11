@@ -255,9 +255,16 @@ export function useAppState(): State {
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Show `notice` for `ms`; longer for a line that takes reading. */
+/** Until when the notice up now offers its action (an Undo). */
+let actionUntil = 0;
+
+/** Show `notice` for `ms`; longer for a line that takes reading. A plain
+ *  notice doesn't replace one offering an action (an Undo) before that one
+ *  is due to go; a newer one with an action does. */
 export function flash(notice: string, ms = 3500, action: { label: string; run: () => void } | null = null) {
+  if (!action && getState().noticeAction && Date.now() < actionUntil) return;
   if (noticeTimer) clearTimeout(noticeTimer);
+  actionUntil = action ? Date.now() + ms : 0;
   setState({ notice, noticeAction: action });
   noticeTimer = setTimeout(() => setState({ notice: null, noticeAction: null }), ms);
 }
