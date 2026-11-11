@@ -10,25 +10,19 @@
   underneath on its own.
 -->
 
-### A lead for each project
+### Talk to a project's lead as a chat
 
-Start a lead from a project's card: a thread that hears about each task as it finishes, fails, needs you or opens a pull request. It answers tasks' questions about facts and past decisions, starts tasks from a sentence, nudges threads that stall, and asks you before it merges or archives anything. A top lead sits over every project and passes questions down to the project leads. Talk to a lead as its pet, in a dialogue along the bottom of the window (⌘L). Pick each lead's model from a list: leads start on Sonnet and the top lead on Opus, without changing your default.
+Each project's lead is now a chat with its pet instead of a thread. Its replies are set as cards, like the Read view, and their decisions answer the lead with one click, and stay clickable after an update lands below them. A new lead stuck on the folder trust prompt shows it in the chat, with buttons to answer it.
 
-### A triage queue that knows what needs you
+### Leads with a face and a personality
 
-Open threads are ranked by what they need from you. Threads stuck on the same error, or close to their budget, are flagged. Threads idle for days move to Ideas, and new work waits when enough is already running. Dispatch tasks wait once spend is over budget, can go to projects without a card yet, and follow-ups reach finished and archived threads.
+Every lead has a round avatar of its face, beside its messages and in its chat's header, and its pet sits in the project's header with a dot when it has something for you. Give each lead a personality and your own instructions in Settings, on its card or in its chat. Leads no longer hear about other leads, even ones another window started.
 
-### Finished means checked and pushed
+### A lighter app when you're not looking
 
-A read-only reviewer checks a finished thread's changes before it shows as done. Turn on a card setting to push a thread's branch each time its turn ends.
+The sand plates draw only while their sand moves, slow down when it holds, and stop when the window is behind others, so the app uses far less CPU while it sits open.
 
 ### And smaller things
 
-- Answer Decisions from the keyboard, put a card off till later, and see answered threads move along. Threads stopped on a terminal prompt show up there too.
-- Search every Settings tab from a box above the tabs.
-- Long decision options that wrap show as rounded boxes, and long links wrap instead of being cut off.
-- Decisions read correctly under "**Needs you.** My pick is in bold", and from an indented line under the question.
-- A decision asked again shows why it was asked the first time.
-- The sidebar and Read view cats are redrawn.
-- The terminal scrollbar stays faint until you scroll.
-- A dev build keeps its own settings, usage log and moments.
+- Closing a thread opens the next thread in its project, not the last one you visited.
+- A message that starts with a picture shows its words in the Read view.
