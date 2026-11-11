@@ -97,8 +97,11 @@ const agents: Agent[] = [
   agent("a11", "w0", "Old Spike", "finished", 60 * 24 * 6, ["spike on an image CDN"], { archived: true }),
   // The leads (S17, S26), so the sidebar shows their pets and one calls you.
   agent("lead0", "w0", "Lead storefront", "finished", 3, ["[observatory] finished: Sequential Cart Sync on cart-sync"], { model: "sonnet" }),
-  agent("lead1", "wm0", "Lead marketing-site", "finished", 40, ["[observatory] finished: Lighthouse Fixes on main"], { model: "sonnet" }),
+  agent("lead1", "wm0", "Lead marketing-site", "finished", 40, ["[observatory] finished: Lighthouse Fixes on main"], { model: "sonnet", alive: false }),
   agent("lead4", "wm3", "Lead billing-api", "finished", 8, ["[observatory] failed: Weekly Invoice Job on main"], { model: "sonnet", unseen: true }),
+  // Just started in a folder Claude Code hasn't seen, so it's asking to
+  // trust it before its first turn.
+  agent("lead6", "wm4", "Lead design-system", "running", 0, ["[observatory] You're the lead for design-system."], { model: "sonnet" }),
   agent("leadtop", "wm5", "Lead", "finished", 15, ["[observatory] leads: Lead storefront, Lead marketing-site, Lead billing-api"], { model: "opus" }),
 ];
 
@@ -126,7 +129,19 @@ const LEADS: Record<string, { project: string | null; said: string[]; chat?: Sai
       "Sequential Cart Sync finished and opened PR #61. Sync applied every update with `Promise.all`, so two tabs raced; now a worker applies one update at a time:\n\n```ts\nfor (const update of pending) {\n  await this.apply(update);\n}\n```\n\nThe tests pass, and I've written it into my notes. Search Facets is still waiting on review, and Invoice Webhooks is working.\n\nASK_USER: should a cart sync that fails three times stop and tell you, or keep retrying in the background? Nothing in the notes says.\n\nASK merge #128: the e2e fix is pushed, and you asked for this",
     ],
   },
-  lead1: { project: "p1", said: ["All quiet. Lighthouse Fixes merged yesterday, and the hero redesign is waiting on you for a permission prompt."] },
+  // A decision, then an update landing after it: its buttons still take taps.
+  lead1: {
+    project: "p1",
+    chat: [
+      { you: "Why is the hero so slow to paint?", ago: 30 },
+      {
+        said: "The hero image is 2.4 MB and isn't lazy-loaded.\n\n**Needs you**\n\n1. Shrink it now?  A START a task to serve it as AVIF at 1600px · B later\n\n🟠 Keep open: decision 1 is waiting on you.",
+        ago: 29,
+      },
+      { you: "[observatory] finished: Lighthouse Fixes on main", ago: 5 },
+    ],
+    said: ["Lighthouse Fixes finished and merged. The hero redesign is waiting on you for a permission prompt.\n\n🟠 Keep open: the hero image decision is waiting on you."],
+  },
   lead4: {
     project: "p4",
     said: [
@@ -146,6 +161,39 @@ const LEADS: Record<string, { project: string | null; said: string[]; chat?: Sai
   },
 };
 
+/** Leads that haven't started their first turn, by project: no thread yet,
+ *  and the folder trust prompt on screen until you pick a row. */
+const FRESH_LEADS: Record<string, string> = { lead6: "p5" };
+/** The row each fresh lead's trust prompt has marked, and whether it's
+ *  been answered. */
+const trustRow: Record<string, number> = {};
+const trusted = new Set<string>();
+
+function trustScreen(id: string): string {
+  const row = trustRow[id] ?? 0;
+  const opt = (n: number, label: string) => (n === row ? ` ${c(111, `❯ ${label}`)}` : `   ${label}`);
+  return [
+    c(215, "─".repeat(80)),
+    ` ${bold("Accessing workspace:")}`,
+    "",
+    ` ${HOME}/design-system`,
+    "",
+    " Quick safety check: Is this a project you created or one you trust? (Like your",
+    " own code, a well-known open source project, or work from your team). If not,",
+    " take a moment to review what's in this folder first.",
+    "",
+    " Claude Code'll be able to read, edit, and execute files here.",
+    "",
+    ` ${c(244, "Security guide")}`,
+    "",
+    opt(0, "No, exit"),
+    opt(1, "Yes, I trust this folder"),
+    "",
+    ` ${c(244, "Enter to confirm · Esc to cancel")}`,
+    "",
+  ].join("\r\n");
+}
+
 /** What you said to a mock lead and what it answered, after the canned start. */
 const leadTalk: Record<string, { you: string; said: string; at: number }[]> = {};
 const typedTo: Record<string, string> = {};
@@ -159,10 +207,10 @@ const LEAD_ANSWERS = [
 /** The mock leads on their cards and in Settings, unless you've set your own. */
 function seedLeads() {
   if (!Object.values(allCards()).some((c) => c.lead))
-    for (const [id, l] of Object.entries(LEADS))
-      if (l.project)
+    for (const [id, project] of [...Object.entries(LEADS).map(([id, l]) => [id, l.project] as const), ...Object.entries(FRESH_LEADS)])
+      if (project)
         saveLead(
-          l.project,
+          project,
           { agentId: id, model: "sonnet", notes: `~/.config/observatory/leads/${id}.md`, ...(id === "lead0" ? { level: 3 as const } : {}) },
           draftCard({ files: [], isGitRepo: true }),
         );
@@ -263,6 +311,7 @@ const bold = (t: string) => `\x1b[1m${t}\x1b[0m`;
 function screenFor(session: SessionRef): string {
   const s = getState();
   if ("Agent" in session && session.Agent === "a2") return DEMO;
+  if ("Agent" in session && FRESH_LEADS[session.Agent] && !trusted.has(session.Agent)) return trustScreen(session.Agent);
   const tab = "Terminal" in session ? s.terminals[session.Terminal] : undefined;
   const agent = "Agent" in session ? s.agents[session.Agent] : undefined;
   const wt = s.worktrees[agent?.worktree_id ?? tab?.worktree_id ?? ""];
@@ -431,6 +480,14 @@ export function startMock(handlers: Map<string, PtyHandler>) {
     if (variant === "SendInput" && body && "Agent" in (body.session as SessionRef)) {
       const id = (body.session as { Agent: string }).Agent;
       const cur = getState().agents[id];
+      if (FRESH_LEADS[id] && !trusted.has(id)) {
+        const k = String(body.data);
+        if (k === "\x1b[B") trustRow[id] = 1;
+        else if (k === "\x1b[A") trustRow[id] = 0;
+        else if (k === "\r" && trustRow[id] === 1) trusted.add(id);
+        else if (k === "\r" && cur) setState((s) => ({ agents: { ...s.agents, [id]: { ...cur, status: "finished", alive: false, status_changed_at: Date.now() } } }));
+        return null;
+      }
       const picked = cur?.status === "needs_feedback" && /^\d$/.test(String(body.data));
       // A lead answers what was typed to it, when its turn ends.
       if (LEADS[id] && body.data !== "\r") typedTo[id] = String(body.data).replace(/\x1b\[20[01]~/g, "");
@@ -498,6 +555,11 @@ export function startMock(handlers: Map<string, PtyHandler>) {
     if (variant !== "Attach" || !body) return;
     const session = body.session as SessionRef;
     const key = "Agent" in session ? `a:${session.Agent}` : `t:${session.Terminal}`;
+    // Attaching wakes an agent that was put to sleep, as the daemon does.
+    if ("Agent" in session && getState().agents[session.Agent]?.alive === false) {
+      const id = session.Agent;
+      setTimeout(() => setState((s) => (s.agents[id] ? { agents: { ...s.agents, [id]: { ...s.agents[id], alive: true } } } : {})), 800);
+    }
     setTimeout(() => {
       const bytes = new TextEncoder().encode(screenFor(session));
       handlers.get(key)?.({ session, replay: true, seq: 0, data: "" }, bytes);
@@ -881,6 +943,7 @@ function leadTranscript(s: State, agentId: string): Transcript {
 
 /** The reader's conversation, made from the demo's latest turns. */
 export function mockTranscript(s: State, agentId: string): Transcript | null {
+  if (FRESH_LEADS[agentId]) return null;
   if (LEADS[agentId]) return leadTranscript(s, agentId);
   const turn = mockTurn(s, agentId);
   if (!turn) return null;

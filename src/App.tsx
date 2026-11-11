@@ -32,6 +32,7 @@ import { SettingsView } from "./components/Settings";
 import { useUsagePolling } from "./nebula/usage";
 import { useAutomationsPolling } from "./nebula/automationsLoad";
 import { savePrefs, useTheme } from "./nebula/theme";
+import { useAutoClose } from "./nebula/autocloseRunner";
 import { termFont, zoomed } from "./nebula/termfont";
 import { useRunWatch, useServingWatch } from "./nebula/runs";
 import { useLimitWatch } from "./nebula/limits";
@@ -208,6 +209,7 @@ export default function App() {
   useAutomationsPolling();
   useActivityPolling();
   useTheme();
+  useAutoClose();
   useRunWatch();
   useLimitWatch();
   useServingWatch();

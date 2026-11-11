@@ -6,8 +6,9 @@ import { lastReply, QUIET, type FaceFrame, type LeadEntry } from "../nebula/lead
 import { outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
 import { answerLeadAsk, levelFlash, setLeadLevel, startedTasks } from "../nebula/leadRunner";
 import { levelOf } from "../nebula/leadLevel";
-import { chatItems, chatPreview, leadActivity, runStarts, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
+import { chatItems, chatPreview, leadActivity, liveReply, runStarts, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
 import { enqueue } from "../nebula/queue";
+import { answer, findQuestion, readScreen, type Choice, type Question } from "../nebula/screen";
 import { useLanded } from "../nebula/prwatch";
 import { answersSaid, answerText, readCard } from "../nebula/replycard";
 import { flash, getState, useAppState } from "../nebula/store";
@@ -165,15 +166,18 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     for (const it of items) n = it.kind === "pet" ? it.n : it.kind === "me" ? -1 : n;
     return n;
   }, [items]);
+  // The reply whose decisions take taps; a later update without any leaves
+  // them live.
+  const live = useMemo(() => liveReply(items, (text) => readCard(text).asks.length > 0), [items]);
   const [tapped, setTapped] = useState<{ entry: number; picks: Record<number, string>; sent: boolean }>({ entry: -1, picks: {}, sent: false });
-  const picks = tapped.entry === latest ? tapped.picks : {};
-  const pick = (n: number, letter: string) => setTapped({ entry: latest, picks: { ...picks, [n]: picks[n] === letter ? "" : letter }, sent: false });
+  const picks = tapped.entry === live ? tapped.picks : {};
+  const pick = (n: number, letter: string) => setTapped({ entry: live, picks: { ...picks, [n]: picks[n] === letter ? "" : letter }, sent: false });
   // What you answered each earlier reply with, read from your next message.
   const answered = useMemo(() => {
     const out: Record<number, Record<number, string>> = {};
     let asked = -1;
     for (const it of items) {
-      if (it.kind === "pet") asked = readCard(it.text).asks.length ? it.n : -1;
+      if (it.kind === "pet") asked = readCard(it.text).asks.length ? it.n : asked;
       else if (it.kind === "me" && asked >= 0) {
         out[asked] = answersSaid(it.text);
         asked = -1;
@@ -188,11 +192,13 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
   const latestVerdict = useMemo(() => (latestText ? readCard(latestText).verdict : null), [latestText]);
   const landed = useLanded(wt?.path, latestVerdict);
   const latestThread = useMemo(() => (entries && latest >= 0 ? { n: latest, entries } : undefined), [entries, latest]);
+  const liveThread = useMemo(() => (entries && live >= 0 ? { n: live, entries } : undefined), [entries, live]);
   const prompted = agent.status === "needs_feedback";
   const replyOf = (n: number): ReplyBits => {
-    if (n !== latest) return { live: false, sent: true, picks: answered[n] ?? {}, onPick: pick };
-    const gone = tapped.entry === latest && tapped.sent;
-    return { live: !gone && !prompted, sent: gone, picks, onPick: pick, landed, thread: latestThread };
+    const own = n === latest ? { landed, thread: latestThread } : {};
+    if (n !== live) return { live: false, sent: true, picks: answered[n] ?? {}, onPick: pick, ...own };
+    const gone = tapped.entry === live && tapped.sent;
+    return { live: !gone && !prompted, sent: gone, picks, onPick: pick, ...own, thread: liveThread };
   };
   // A PR named as "#75" links to it, in the project's repo.
   const prUrl = useMemo(() => {
@@ -204,8 +210,24 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     return pr?.kind === "found" ? pr.pr.url : null;
   }, [lead.projectId, state.worktrees, state.prs]);
 
+  // A lead that hasn't said anything yet may be stuck before its first turn,
+  // on a question its hooks can't report: whether to trust a new folder.
+  const screenAsk = useScreenAsk(agent, agent.status === "running" && !items.some((it) => it.kind === "pet"));
+  const [answering, setAnswering] = useState(false);
+  const pickOnScreen = async (q: Question, c: Choice) => {
+    setAnswering(true);
+    try {
+      await answer(agent, q, c);
+      flash(`Answered ${lead.title}: ${c.label}`);
+    } catch (err) {
+      flash(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTimeout(() => setAnswering(false), 800);
+    }
+  };
+
   const queued = state.queue[agent.id]?.length ?? 0;
-  const activity = leadActivity({ status: agent.status, queued, sending: sent.length });
+  const activity = leadActivity({ status: agent.status, queued, sending: sent.length, onScreen: !!screenAsk });
   const working = activity === "working";
 
   // Kept at the bottom as things land, unless you've scrolled up to read.
@@ -226,7 +248,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     if (!words) return;
     input.current!.value = "";
     const was = tapped;
-    if (Object.values(picks).some(Boolean)) setTapped({ entry: latest, picks, sent: true });
+    if (Object.values(picks).some(Boolean)) setTapped({ entry: live, picks, sent: true });
     pinned.current = true;
     const mine = { text: words, after: lastN };
     setSent((s) => [...s, mine]);
@@ -316,8 +338,8 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
         }}
       >
         <Where.Provider value={{ from: agent.id, root: wt?.path ?? "", prUrl, turnEndedAt: t?.turnEndedAt ?? null, run: false }}>
-          {!t && <p className="chat-empty">Reading the lead's thread…</p>}
-          {t && !items.length && !sent.length && <p className="chat-empty">Nothing said yet. Say hello, or give it a task.</p>}
+          {!t && !screenAsk && <p className="chat-empty">Reading the lead's thread…</p>}
+          {t && !screenAsk && !items.length && !sent.length && <p className="chat-empty">Nothing said yet. Say hello, or give it a task.</p>}
           {items.map((it) => (
             <ChatLine key={it.key} item={it} lead={lead} day={days.get(it.key)} first={starts.has(it.key)} reply={it.kind === "pet" ? replyOf(it.n) : undefined} />
           ))}
@@ -326,7 +348,23 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
               <div className="chat-bubble">{m.text}</div>
             </div>
           ))}
-          {activity === "prompt" && (
+          {screenAsk && (
+            <div className="chat-prompt is-asking" role="group" aria-label={`Answer ${lead.title}`}>
+              <span>{lead.title} is waiting on this in its terminal before it starts:</span>
+              {screenAsk.prompt && <p className="qa-prompt">{screenAsk.prompt}</p>}
+              <div className="qa-choices">
+                {screenAsk.choices.map((c) => (
+                  <button key={c.key} type="button" className={`qa-choice${c.selected ? " is-current" : ""}`} disabled={answering} onClick={() => void pickOnScreen(screenAsk, c)}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="link-btn" onClick={() => openLeadTerminal(agent.id)}>
+                Open terminal
+              </button>
+            </div>
+          )}
+          {activity === "prompt" && !screenAsk && (
             <div className="chat-prompt" role="status">
               <span>{lead.title} is waiting on a prompt in its terminal.</span>
               <button type="button" className="btn chat-yes" onClick={() => openLeadTerminal(agent.id)}>
@@ -531,4 +569,37 @@ function useBlink(on: boolean): FaceFrame {
     };
   }, [on]);
   return blink ? "blink" : "sit";
+}
+
+const SCREEN_MS = 2_000;
+
+/** The question on the lead's screen while `on`, read every couple of
+ *  seconds; null when there's none. */
+function useScreenAsk(agent: Agent, on: boolean): Question | null {
+  const [q, setQ] = useState<Question | null>(null);
+  useEffect(() => {
+    if (!on || !agent.alive) {
+      setQ(null);
+      return;
+    }
+    let live = true;
+    let timer: ReturnType<typeof setTimeout>;
+    // Each read waits for the last, so a slow daemon can't pile them up.
+    const read = async () => {
+      if (!document.hidden) {
+        const lines = await readScreen(agent).catch(() => null);
+        if (!live) return;
+        setQ(lines ? findQuestion(lines) : null);
+      }
+      timer = setTimeout(read, SCREEN_MS);
+    };
+    void read();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+    // Re-reading on every agent update would restart the poll each time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.id, agent.alive, on]);
+  return q;
 }

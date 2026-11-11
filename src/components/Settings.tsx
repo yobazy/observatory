@@ -128,6 +128,7 @@ export function SettingsView() {
         <Rows rows={GENERAL} settings={settings} save={save} />
         <Previews />
         <ReadView />
+        <ClosingThreads />
         <DispatchSettings />
         <LeadsSettings />
         <AutomationsSettings />
@@ -281,6 +282,31 @@ const READER_WIDTH = [
   { id: undefined, label: "Reading width" },
   { id: "wide", label: "Full width" },
 ] as const;
+
+/** Finished threads that said they're safe to close (autocloseRunner.ts). */
+function ClosingThreads() {
+  const { prefs } = useAppState();
+  return (
+    <Group title="Finished threads">
+      <div className="setting">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor="set-auto-close">
+            Close safe threads after a day
+          </label>
+          <span className="setting-hint">
+            A thread whose last reply ends ✅ Safe to close is archived once it has sat finished for 24 hours, if
+            nothing was sent to it since. Pinned threads, ones flagged to follow up, and the one you have open stay.
+          </span>
+        </div>
+        <Switch
+          id="set-auto-close"
+          on={prefs.autoCloseSafe !== false}
+          onChange={(on) => void savePrefs({ ...prefs, autoCloseSafe: on ? undefined : false })}
+        />
+      </div>
+    </Group>
+  );
+}
 
 /** How the Read view (Reader.tsx) sets a thread: its text size and width. */
 function ReadView() {

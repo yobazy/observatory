@@ -7,6 +7,21 @@ hook() { # $1 = hook event name
   echo "{\"session_id\":\"fake-$$\",\"cwd\":\"$PWD\",\"prompt\":\"$2\"}" | bash -c "$cmd" >/dev/null 2>&1
 }
 printf '\e[1;38;5;111mfake agent\e[0m in %s\n' "$PWD"
+# A turn whose reply ends on $2, written as Claude Code logs it, into the
+# sandbox's own CLAUDE_CONFIG_DIR (sandbox.sh), so the app reads its verdict.
+verdict() { # $1 = prompt, $2 = the verdict line
+  hook UserPromptSubmit "$1"
+  echo "$2"
+  # A daemon started before sandbox.sh set it falls back to the same place.
+  local dir="${CLAUDE_CONFIG_DIR:-$(cd "$(dirname "$0")/.." && pwd)/.sandbox/claude}/projects/sandbox"
+  mkdir -p "$dir"
+  python3 -c 'import json,sys,time
+t=time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
+u={"type":"user","timestamp":t,"message":{"content":sys.argv[1]}}
+a={"type":"assistant","timestamp":t,"message":{"content":[{"type":"text","text":"Did it.\n\n"+sys.argv[2]}]}}
+print(json.dumps(u));print(json.dumps(a))' "$1" "$2" >>"$dir/fake-$$.jsonl"
+  hook Stop
+}
 reply() { # $1 = a prompt, typed or given at start
   local line="$1"
   case "$line" in
@@ -63,13 +78,16 @@ reply() { # $1 = a prompt, typed or given at start
       hook SubagentStart
       echo "two agents are working in the background."
       hook Stop ;;
+    # A reply ending on a close verdict, logged where the app reads it.
+    safe*) verdict "$line" "✅ Safe to close" ;;
+    keep*) verdict "$line" "🟠 Keep open: waiting on you" ;;
     *) hook UserPromptSubmit "$line"; echo "working on: $line"; sleep 3; echo "done."; hook Stop ;;
   esac
 }
 # A task it starts on: the prompts above work as tasks too, so scripts/drive
 # can start one without typing into a terminal.
 case "$1" in
-  ask* | menu* | mcp* | quiz* | agents*) reply "$1" ;;
+  ask* | menu* | mcp* | quiz* | agents* | safe* | keep*) reply "$1" ;;
   ?*) hook UserPromptSubmit "$1"; echo "task: $1"; sleep 2; hook Stop ;;
 esac
 while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do reply "$line"; done

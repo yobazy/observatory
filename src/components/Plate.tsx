@@ -1,9 +1,11 @@
 // A thread's (or project's) artwork: a Chladni plate whose sand is moved by
 // its work (plate.ts). Running plates keep shifting, a plate waiting on you
 // holds and pulses, and everything else settles and stops drawing. One
-// animation loop serves every plate on screen.
+// animation loop serves every plate on screen, and it runs only as fast as the
+// sand needs (framePace) and only while the window is in front: a window you
+// aren't using shows each plate's last frame and costs nothing.
 import { useEffect, useRef } from "react";
-import { sandFill, scatter, settle, workMode, type Mode } from "../nebula/plate";
+import { framePace, sandFill, scatter, settle, SETTLING_FPS, workMode, type Mode } from "../nebula/plate";
 import { getState, subscribe } from "../nebula/store";
 import { useTurns } from "../nebula/turnCount";
 import type { Agent, AgentStatus } from "../nebula/types";
@@ -51,7 +53,7 @@ interface Live {
   seed: string;
   work: number;
   t: number;
-  /** Frames left before a still plate stops drawing. */
+  /** Frames (at 60 a second) left before a still plate stops drawing. */
   settling: number;
   /** An extra shake that dies away: the plate struck when its thread opens
    *  or finishes, so the sand jumps and settles again. */
@@ -64,13 +66,21 @@ interface Live {
   dot?: number;
   /** Passes left before a still plate's figure is done. */
   developing?: number;
+  /** When the loop last moved it, and when it's next due (performance.now()). */
+  last?: number;
+  due?: number;
 }
 
 const DPR = Math.min(3, Math.max(2, window.devicePixelRatio || 2));
-const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+const reduced = () => motionQuery.matches;
+/** The window is behind another or hidden: plates hold their last frame. */
+const asleep = () => document.hidden || !document.hasFocus();
+/** Sand jumps straight to its figure instead of moving there. */
+const calm = () => reduced() || asleep();
 const plates = new Set<Live>();
 let frame = 0;
-let last = 0;
+let timer = 0;
 let palette: Record<string, string> | null = null;
 /** When the daemon's first snapshot landed: plates that mount just after
  *  arrive as loose sand and settle, the list's loading going away. */
@@ -108,13 +118,18 @@ subscribe(() => {
 });
 
 const isBig = (p: Live) => p.size > 48;
-const moving = (p: Live) =>
-  p.developing === undefined &&
-  (p.drift || p.loose || p.tone === "running" || p.tone === "needs_feedback" || p.settling > 0 || p.k < 1 || p.kick > 0);
 
 function grainsFor(size: number) {
   return size > 110 ? 20000 : size > 70 ? 9000 : size > 48 ? 4200 : 260;
 }
+
+/** How it should move now: settling, steady, or not at all (plate.ts). */
+const paceOf = (p: Live) =>
+  framePace({
+    shown: p.visible && p.developing === undefined,
+    alive: p.drift || p.tone === "running" || p.tone === "needs_feedback",
+    settling: p.loose || p.settling > 0 || p.k < 1 || p.kick > 0,
+  });
 
 function step(p: Live, dt: number) {
   p.t += dt;
@@ -128,7 +143,7 @@ function step(p: Live, dt: number) {
   const big = isBig(p);
   const shake = (p.tone === "running" || p.drift ? 0.004 : 0.0012) + (big ? 0.016 : 0) + p.kick + (p.loose ? 0.05 : 0);
   settle(p.grains.subarray(0, p.count * 2), p.from, p.to, p.k, p.loose ? 0.02 : big ? 0.14 : 0.35, shake);
-  if (p.k >= 1 && p.settling > 0) p.settling--;
+  if (p.k >= 1 && p.settling > 0) p.settling = Math.max(0, p.settling - dt * 60);
   if (p.kick > 0) p.kick = p.kick < 0.002 ? 0 : p.kick * Math.pow(0.03, dt);
 }
 
@@ -138,6 +153,16 @@ function retarget(p: Live, to: Mode) {
   p.to = to;
   p.k = 0;
   p.settling = 90;
+}
+
+/** Straight to its figure, for when the sand shouldn't be seen moving. */
+function rest(p: Live) {
+  if (p.developing !== undefined) return;
+  p.from = p.to;
+  p.k = 1;
+  p.kick = 0;
+  p.settling = 0;
+  for (let i = 0; i < 40; i++) settle(p.grains, p.to, p.to, 1, isBig(p) ? 0.14 : 0.35, isBig(p) ? 0.016 : 0);
 }
 
 function draw(p: Live) {
@@ -159,7 +184,7 @@ function draw(p: Live) {
 
   const big = isBig(p);
   const tone = p.tone === "sand" ? c.sand : (c[p.tone] ?? c.idle);
-  const pulse = p.tone === "needs_feedback" && !reduced() ? 0.75 + 0.25 * Math.sin(p.t * 2.4) : 1;
+  const pulse = p.tone === "needs_feedback" && !calm() ? 0.75 + 0.25 * Math.sin(p.t * 2.4) : 1;
   // Big plates pile light up where the sand gathers; small ones keep their
   // status color true instead of washing out to white.
   ctx.globalCompositeOperation = big ? "lighter" : "source-over";
@@ -192,25 +217,77 @@ function draw(p: Live) {
 }
 
 function loop(now: number) {
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
-  let any = false;
-  if (!document.hidden) {
-    for (const p of plates) {
-      if (!p.visible || !moving(p)) continue;
-      any = true;
+  frame = 0;
+  if (calm()) return;
+  let next = Infinity;
+  for (const p of plates) {
+    const fps = paceOf(p);
+    if (!fps) continue;
+    if ((p.due ?? 0) <= now + 2) {
+      // Each plate keeps its own clock, so a slow one doesn't jump when a
+      // fast one wakes the loop.
+      const dt = Math.min(0.1, (now - (p.last ?? now - 1000 / fps)) / 1000);
+      p.last = now;
       step(p, dt);
       draw(p);
+      const after = paceOf(p);
+      if (!after) continue;
+      p.due = now + 1000 / after;
     }
+    next = Math.min(next, p.due!);
   }
-  frame = any || document.hidden ? requestAnimationFrame(loop) : 0;
+  schedule(next - now);
+}
+
+/** The next pass: on the next frame when it's close, else after a timer, so
+ *  a slow plate doesn't keep the display ticking at 60 a second. */
+function schedule(wait: number) {
+  if (frame || timer || wait === Infinity) return;
+  if (wait < 20) frame = requestAnimationFrame(loop);
+  else
+    timer = window.setTimeout(() => {
+      timer = 0;
+      frame = requestAnimationFrame(loop);
+    }, wait - 8);
 }
 
 function wake() {
-  if (frame || reduced()) return;
-  last = performance.now();
-  frame = requestAnimationFrame(loop);
+  if (calm()) return;
+  const now = performance.now();
+  for (const p of plates) {
+    // One that's been resting starts from now, not from when it last moved.
+    if (p.last === undefined || p.last < now - 200) p.last = now - 1000 / SETTLING_FPS;
+    if (p.due === undefined || p.due > now + 100) p.due = now;
+  }
+  if (timer) {
+    clearTimeout(timer);
+    timer = 0;
+  }
+  schedule(0);
 }
+
+/** Out of sight or out of focus: whatever was moving shows its figure, and a
+ *  waiting plate its full color, until the window is back in front. */
+function sleep() {
+  for (const p of plates) {
+    const fps = paceOf(p);
+    if (!fps) continue;
+    if (fps === SETTLING_FPS) rest(p);
+    draw(p);
+  }
+}
+window.addEventListener("focus", wake);
+// An iframe taking the focus blurs the window too, but the document still
+// has it; only a real move to another window puts the plates to sleep.
+window.addEventListener("blur", () => setTimeout(() => asleep() && sleep()));
+document.addEventListener("visibilitychange", () => (document.hidden ? sleep() : wake()));
+motionQuery.addEventListener?.("change", () => {
+  if (!reduced()) return wake();
+  for (const p of plates) {
+    rest(p);
+    draw(p);
+  }
+});
 
 /** Still plates on screen with their figure to come. */
 const darkroom = new Set<Live>();
@@ -307,8 +384,8 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, fil
     // one (a thread or project just opened) arrives half formed and settles
     // in front of you, and so does any plate that comes in with the first
     // load, out of the loose sand that stood in for it.
-    const landing = !reduced() && performance.now() - landedAt < 1600;
-    const struck = isBig(p) && !reduced();
+    const landing = !calm() && performance.now() - landedAt < 1600;
+    const struck = isBig(p) && !calm();
     const pre = loose || landing ? 0 : struck ? 6 : isBig(p) ? 45 : 40;
     for (let i = 0; i < pre; i++) settle(p.grains, mode, mode, 1, isBig(p) ? 0.14 : 0.35, isBig(p) ? 0.016 : 0);
     if (landing && !loose) {
@@ -337,7 +414,7 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, fil
     if (!p || still) return;
     // A thread that just finished gets one last shake before it rests,
     // read or not: one you're watching is marked seen as it finishes.
-    if ((tone === "finished" || tone === "fresh") && (p.tone === "running" || p.tone === "needs_feedback") && !reduced()) {
+    if ((tone === "finished" || tone === "fresh") && (p.tone === "running" || p.tone === "needs_feedback") && !calm()) {
       p.kick = isBig(p) ? 0.03 : 0.015;
       p.settling = Math.max(p.settling, 90);
     }
@@ -345,7 +422,7 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, fil
     p.drift = drift;
     if (p.loose && !loose) {
       // The data landed: the sand finds its figure.
-      p.kick = reduced() ? 0 : 0.02;
+      p.kick = calm() ? 0 : 0.02;
       p.settling = Math.max(p.settling, 110);
     }
     p.loose = loose;
@@ -359,13 +436,9 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, fil
       p.work = work;
       retarget(p, workMode(seed, work));
     }
-    if (reduced()) {
-      // No motion: jump straight to the new figure.
-      p.from = p.to;
-      p.k = 1;
-      for (let i = 0; i < 40; i++) settle(p.grains, p.to, p.to, 1, isBig(p) ? 0.14 : 0.35, isBig(p) ? 0.016 : 0);
-    }
     p.settling = Math.max(p.settling, 30);
+    // No motion, or nobody in front of it: jump straight to the new figure.
+    if (calm()) rest(p);
     draw(p);
     wake();
   }, [seed, work, tone, drift, fill, loose]);
@@ -383,19 +456,25 @@ export function Plate({ seed, work, tone, size, drift = false, round = true, fil
 }
 
 /** A thread's plate: its figure moved by its prompts (or `work`, when the
- *  caller counts its steps too), its sand as deep as the turns it has taken. */
+ *  caller counts its steps too), its sand as deep as the turns it has taken.
+ *  While it works, a ring hums out from its rim (styles.css .plate-hum): a
+ *  CSS animation the compositor runs, so it costs no drawing. */
 export function ThreadPlate({ agent, size, work, loose }: { agent: Agent; size: number; work?: number; loose?: boolean }) {
   const turns = useTurns(agent);
+  const working = agent.status === "running";
   return (
-    <Plate
-      seed={agent.id}
-      work={work ?? agent.recent_prompts.length}
-      tone={plateTone(agent)}
-      size={size}
-      drift={agent.status === "running"}
-      fill={turns}
-      loose={loose}
-    />
+    <span className={`plate-mount${size > 48 ? " is-big" : ""}`}>
+      <Plate
+        seed={agent.id}
+        work={work ?? agent.recent_prompts.length}
+        tone={plateTone(agent)}
+        size={size}
+        drift={working}
+        fill={turns}
+        loose={loose}
+      />
+      {working && !loose && <span className="plate-hum" aria-hidden />}
+    </span>
   );
 }
 

@@ -5,6 +5,7 @@ import type { UsageReport } from "./usage";
 import type { AutomationsReport, Watches } from "./automations";
 import type { DesktopPrefs } from "./theme";
 import { byPriority, rank } from "./priority.ts";
+import { threadOrder } from "./threadOrder.ts";
 import { allCards } from "./cards.ts";
 import { leadIds, withoutLeads } from "./lead.ts";
 import type { PrState } from "./prs";
@@ -341,17 +342,13 @@ export function threadAgents(s: Pick<State, "agents" | "prefs">): Agent[] {
 }
 
 /** A branch's tasks: those pinned (dragged into place) first, in their
- *  order, then the rest by priority, then urgency. */
+ *  order, then the rest by priority, then the one last prompted first
+ *  (threadOrder.ts). */
 export function worktreeAgents(s: State, worktreeId: string, archived = false): Agent[] {
-  const auto = threadAgents(s)
-    .filter((a) => a.worktree_id === worktreeId && a.archived === archived)
-    .sort(
-      (a, b) =>
-        rank(s.prefs.taskPriorities?.[a.id]) - rank(s.prefs.taskPriorities?.[b.id]) ||
-        urgency(a) - urgency(b) ||
-        b.status_changed_at - a.status_changed_at ||
-        a.sort_order - b.sort_order,
-    );
+  const auto = threadOrder(
+    threadAgents(s).filter((a) => a.worktree_id === worktreeId && a.archived === archived),
+    s.prefs.taskPriorities,
+  );
   return archived ? auto : pinnedFirst(auto, s.prefs.pinnedTasks?.[worktreeId], (a) => a.id);
 }
 

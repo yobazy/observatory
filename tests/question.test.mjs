@@ -352,3 +352,43 @@ test('a permission prompt keeps an arrow at the end of its command', () => {
   const q = findQuestion([rule, ' Bash command', '', '   echo next →', '', ' Do you want to proceed?', ' ❯ 1. Yes', '   2. No']);
   assert.deepEqual(q.detail, ['Bash command', '', 'echo next →']);
 });
+
+// Claude Code asks this before it starts in a folder it hasn't seen, so a
+// new project's lead waits on it with nothing in its thread yet.
+const trust = [
+  '────────────────────────────────────────────────────────────────────────────────',
+  ' Accessing workspace:',
+  '',
+  ' /Users/me/Programming/pixel-pets',
+  '',
+  " Quick safety check: Is this a project you created or one you trust? (Like your",
+  ' own code, a well-known open source project, or work from your team). If not,',
+  " take a moment to review what's in this folder first.",
+  '',
+  " Claude Code'll be able to read, edit, and execute files here.",
+  '',
+  ' Security guide',
+  '',
+  ' ❯ No, exit',
+  '   Yes, I trust this folder',
+  '',
+  ' Enter to confirm · Esc to cancel',
+];
+
+test('the folder trust prompt reads as a question, its choices picked by arrow keys', () => {
+  const q = findQuestion(trust);
+  assert.match(q.prompt, /^Quick safety check: Is this a project you created or one you trust\?/);
+  assert.deepEqual(q.choices.map((c) => c.label), ['No, exit', 'Yes, I trust this folder']);
+  assert.deepEqual(q.choices.map((c) => c.selected), [true, false]);
+  assert.deepEqual(q.choices.map((c) => c.keys), [['\r'], ['\x1b[B', '\r']]);
+});
+
+test('with the mark on the lower row, the upper one is reached by up arrow', () => {
+  const q = findQuestion([...trust.slice(0, 13), '   No, exit', ' ❯ Yes, I trust this folder', '', trust.at(-1)]);
+  assert.deepEqual(q.choices.map((c) => c.keys), [['\x1b[A', '\r'], ['\r']]);
+});
+
+test("Claude Code's input line is no question, with or without a footer", () => {
+  assert.equal(findQuestion(['Done.', '', '❯ ', '', '  ? for shortcuts']), null);
+  assert.equal(findQuestion(['Done.', '', '❯ fix it', '', ' Enter to confirm']), null);
+});

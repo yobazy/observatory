@@ -63,7 +63,7 @@ function upToText(lines: string[]): string[] {
  *  a run numbered 1, 2, 3… in the last rows counts, so a numbered list in
  *  the agent's prose above doesn't. */
 export function findQuestion(screen: string[]): Question | null {
-  return previewed(screen) ?? numbered(screen) ?? inRow(screen);
+  return previewed(screen) ?? numbered(screen) ?? inRow(screen) ?? stacked(screen);
 }
 
 function numbered(screen: string[]): Question | null {
@@ -291,6 +291,55 @@ function inRow(screen: string[]): Question | null {
     title.unshift(t);
   }
   return title.length ? { prompt: above.join(" "), detail: title, choices } : { prompt: above.join(" "), choices };
+}
+
+/** The footer under a picker whose rows have no numbers. */
+const CONFIRM = /^Enter to (?:confirm|select)\b/;
+
+/** Choices stacked one per row with no numbers, the current one marked, and
+ *  "Enter to confirm" under them, as Claude Code asks whether to trust a
+ *  folder before it starts: "❯ No, exit" over "Yes, I trust this folder".
+ *  The footer must be there, since Claude Code's own input line is a
+ *  marked row too. Each is reached by arrow keys from the mark, then Enter. */
+function stacked(screen: string[]): Question | null {
+  const lines = upToText(screen);
+  const rows = lines.map((l) => l.replace(EDGE, ""));
+  let foot = rows.length - 1;
+  while (foot >= 0 && !rows[foot].trim()) foot--;
+  if (foot < 0 || !CONFIRM.test(rows[foot].trim())) return null;
+  let end = foot - 1;
+  while (end >= 0 && !rows[end].trim()) end--;
+  let start = end;
+  while (start > 0 && rows[start - 1].trim()) start--;
+  if (start < 0 || end - start < 1) return null;
+  const block = rows.slice(start, end + 1);
+  const at = block.findIndex((r) => MARK.test(r.trim()));
+  if (at < 0 || block.filter((r) => MARK.test(r.trim())).length !== 1) return null;
+  // Every row's label starts where the marked row's does.
+  const raw = lines.slice(start, end + 1).map((l) => l.replace(/^[│┃|]/, ""));
+  const col = raw[at].search(/[^\s❯›▶]/);
+  if (!raw.every((r, n) => n === at || r.search(/\S/) === col)) return null;
+  const choices: Choice[] = block.map((r, n) => {
+    const step = n > at ? "\x1b[B" : "\x1b[A";
+    return {
+      key: String(n + 1),
+      label: r.trim().replace(MARK, ""),
+      selected: n === at,
+      keys: [...Array<string>(Math.abs(n - at)).fill(step), "\r"],
+    };
+  });
+  // The question is the nearest paragraph above with a "?" in it, past a
+  // link or two ("Security guide") that sits between it and the choices.
+  let prompt = "";
+  let j = start - 1;
+  for (let tries = 0; tries < 4 && j >= 0; tries++) {
+    const [text, k] = textAbove(rows, j, 4);
+    if (!text) break;
+    if (!prompt || text.includes("?")) prompt = text;
+    if (text.includes("?")) break;
+    j = k;
+  }
+  return { prompt, choices };
 }
 
 /** The panel rows above the prompt, up to the rule or box top the panel

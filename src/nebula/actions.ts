@@ -1,6 +1,7 @@
 // Things the app asks agents to do on the user's behalf: start one with a
 // task, or hand a prompt to one that's idle on a branch.
-import { readSettings, request, sendInput } from "./client";
+import { isAttached, readSettings, request, send, sendInput } from "./client";
+import { sizeFor } from "./screen";
 import { defaultAgentName, settingsStem } from "./status";
 import { flash, getState, selectInPlace, setState, type State } from "./store";
 import { remoteOf, type GitStatus, type ShipKind } from "./git";
@@ -89,12 +90,25 @@ export async function followUp(agent: Agent, text: string, opts: { select?: bool
   }
   if (!agent.alive) {
     flash(`Starting ${agent.name}…`);
-    const deadline = Date.now() + 20_000;
-    while (!getState().agents[agent.id]?.alive) {
-      if (Date.now() > deadline) throw new Error(`${agent.name} didn't start; try again once it's up`);
-      await new Promise((r) => setTimeout(r, 300));
+    // Attaching is what wakes it. The terminal attaches the thread it
+    // shows, but a lead's chat (or any view without that terminal) shows
+    // none, so it would never wake: attach it here until the prompt is in.
+    const session = { Agent: agent.id };
+    await new Promise((r) => setTimeout(r, 200));
+    const held = !isAttached(session);
+    if (held) void send("Attach", { session, from_seq: null, ...sizeFor(agent.id) }).catch(() => {});
+    try {
+      const deadline = Date.now() + 20_000;
+      while (!getState().agents[agent.id]?.alive) {
+        if (Date.now() > deadline) throw new Error(`${agent.name} didn't start; try again once it's up`);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      await new Promise((r) => setTimeout(r, 2_500));
+      await deliverPrompt(getState().agents[agent.id] ?? agent, text);
+    } finally {
+      if (held) void send("Detach", { session }).catch(() => {});
     }
-    await new Promise((r) => setTimeout(r, 2_500));
+    return;
   }
   await deliverPrompt(getState().agents[agent.id] ?? agent, text);
 }

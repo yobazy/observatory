@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MODES, field, hash, scatter, settle, workMode } from '../src/nebula/plate.ts';
+import { MODES, SETTLING_FPS, STEADY_FPS, field, framePace, hash, scatter, settle, workMode } from '../src/nebula/plate.ts';
 
 test('a seed always picks the same figure', () => {
   assert.deepEqual(workMode('cart-sync', 3), workMode('cart-sync', 3));
@@ -49,4 +49,20 @@ test('settling gathers the sand onto the still lines and keeps it on the plate',
   for (let i = 0; i < 40; i++) settle(g, mode, mode, 1, 0.35, 0, random);
   assert.ok(off(g) < before / 5, `settled ${off(g)} from ${before}`);
   assert.ok(g.every((v) => v >= 0 && v <= 1));
+});
+
+test('a plate that has settled and has nothing going on stops drawing', () => {
+  assert.equal(framePace({ shown: true, alive: false, settling: false }), 0);
+});
+
+test('sand on its way to a figure moves smoothly, and an alive plate at rest ticks over slowly', () => {
+  assert.equal(framePace({ shown: true, alive: false, settling: true }), SETTLING_FPS);
+  assert.equal(framePace({ shown: true, alive: true, settling: true }), SETTLING_FPS);
+  assert.equal(framePace({ shown: true, alive: true, settling: false }), STEADY_FPS);
+  assert.ok(STEADY_FPS < SETTLING_FPS && SETTLING_FPS < 60);
+});
+
+test('a plate off screen never animates, whatever its thread is doing', () => {
+  assert.equal(framePace({ shown: false, alive: true, settling: true }), 0);
+  assert.equal(framePace({ shown: false, alive: true, settling: false }), 0);
 });

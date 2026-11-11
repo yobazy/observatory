@@ -106,3 +106,20 @@ export function sandFill(turns: number, small: boolean): number {
   const floor = small ? 0.3 : 0.05;
   return floor + (1 - floor) * (1 - Math.exp(-Math.max(0, turns) / 60));
 }
+
+/** Frames a second while the sand moves to a new figure or settles: smooth
+ *  enough for grains, half what the screen could do. */
+export const SETTLING_FPS = 30;
+/** Frames a second for a plate that holds its figure but stays alive (a
+ *  running plate's shimmer, a waiting one's pulse). */
+export const STEADY_FPS = 12;
+
+/** How often a plate needs drawing, in frames a second; 0 is not at all. A
+ *  plate off screen or still in the darkroom never animates, one settling
+ *  moves at SETTLING_FPS, one alive but settled at STEADY_FPS, and the rest
+ *  keep the frame they have. */
+export function framePace(p: { shown: boolean; alive: boolean; settling: boolean }): number {
+  if (!p.shown) return 0;
+  if (p.settling) return SETTLING_FPS;
+  return p.alive ? STEADY_FPS : 0;
+}
