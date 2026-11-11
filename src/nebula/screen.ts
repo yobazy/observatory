@@ -22,6 +22,11 @@ export function noteSize(agentId: string, cols: number, rows: number) {
   lastSize = { cols, rows };
 }
 
+/** The grid to size an agent's PTY to when nothing on screen sizes it. */
+export function sizeFor(agentId: string): { cols: number; rows: number } {
+  return sizes.get(agentId) ?? lastSize;
+}
+
 /** The last rows of the agent's screen, trimmed; null when it has no live
  *  terminal to read. */
 export async function readScreen(agent: Agent, maxBytes = 48_000): Promise<string[] | null> {
