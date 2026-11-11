@@ -208,10 +208,15 @@ export interface RowGroup {
 }
 
 /** The rows in their sections, keeping their order within each; empty
- *  sections are left out. */
-export function groupRows(rows: Row[], held: (r: Row) => boolean = () => false): RowGroup[] {
+ *  sections are left out. `urgent`: rows triage says need you (a decision,
+ *  or stuck), which go under Needs you whatever their phase. */
+export function groupRows(
+  rows: Row[],
+  held: (r: Row) => boolean = () => false,
+  urgent: (r: Row) => boolean = () => false,
+): RowGroup[] {
   const by = new Map<Group, Row[]>(GROUP_ORDER.map((g) => [g, []]));
-  for (const r of rows) by.get(groupOf(r.phase, held(r)))!.push(r);
+  for (const r of rows) by.get(urgent(r) ? "needs" : groupOf(r.phase, held(r)))!.push(r);
   return GROUP_ORDER.filter((g) => by.get(g)!.length).map((g) => ({ key: g, label: GROUP_LABEL[g], rows: by.get(g)! }));
 }
 

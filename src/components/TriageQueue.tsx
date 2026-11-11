@@ -111,14 +111,14 @@ export function TriageQueue({ title, rows, stale }: { title: string; rows: Queue
 const LABEL_DOT: Record<QueueRow["label"], string> = {
   decision: "dot-needs_feedback",
   stuck: "dot-failed",
-  review: "dot-running",
+  review: "dot-review",
   checked: "dot-finished",
   stale: "dot-pending",
 };
 export const LABEL_TONE: Record<QueueRow["label"], string> = {
   decision: "wait",
   stuck: "error",
-  review: "run",
+  review: "review",
   checked: "ok",
   stale: "quiet",
 };

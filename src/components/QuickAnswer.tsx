@@ -102,10 +102,28 @@ export function QuickAnswer({
     </details>
   );
   if (q && compact) {
+    // Its paragraphs on one line, a dot between them. (Rows come trimmed,
+    // so a word the terminal wrapped can't be told from two words.)
+    const detail = q.detail
+      ?.join("\n")
+      .split(/\n\s*\n/)
+      .map((block) => block.split("\n").join(" ").trim())
+      .filter(Boolean)
+      .join(" · ");
     return (
       <div className="qa qa-compact" role="group" aria-label={`Answer ${agent.name}`}>
+        {/* What it asks about, on one line: never a Yes said blind. */}
+        {detail && (
+          <p className="rd-ask-detail qa-detail" title={q.detail!.join("\n")}>
+            {detail}
+          </p>
+        )}
         <div className="qa-line">
-          {q.prompt && <span className="qa-prompt">{q.prompt}</span>}
+          {q.prompt && (
+            <span className="qa-prompt" title={q.prompt}>
+              {q.prompt}
+            </span>
+          )}
           <div className="qa-choices">
             {q.choices.map((c) => (
               <button
@@ -121,7 +139,7 @@ export function QuickAnswer({
             ))}
           </div>
         </div>
-        {screenBox(q.detail?.length ? q.detail : lastRows(screen, 8))}
+        {screenBox(lastRows(screen, 12))}
       </div>
     );
   }

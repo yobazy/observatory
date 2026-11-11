@@ -182,6 +182,19 @@ test('rows fall into Needs you, Running, Up next and Done, in that order, keepin
   assert.equal(flat.length, rows.length);
 });
 
+test('a row triage flags as a decision or stuck goes under Needs you, whatever its phase', () => {
+  const agents = byId([agent('a1', 'running'), agent('a2', 'finished'), agent('a3', 'running')]);
+  const rows = boardRows([{ id: 'b', at: 0, tasks: [task(1), task(2), task(3)] }], agents, () => 0, NOW);
+  const urgent = (r) => r.agent.id === 'a1' || r.agent.id === 'a2';
+  assert.deepEqual(
+    groupRows(rows, () => false, urgent).map((g) => [g.key, g.rows.map((r) => r.agent.id)]),
+    [
+      ['needs', ['a1', 'a2']],
+      ['running', ['a3']],
+    ],
+  );
+});
+
 test('empty sections are left out; a plan, cancelled and gone rows land where they wait', () => {
   assert.deepEqual(groupRows([]), []);
   assert.equal(groupOf('plan'), 'needs');

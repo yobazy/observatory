@@ -7296,9 +7296,33 @@ button.board-main:hover .board-title {
   color: var(--st-waiting);
   border-color: color-mix(in srgb, var(--st-waiting) 50%, var(--line));
 }
+/* Gone wrong reads filled, so it's told apart from waiting at a glance. */
 .board-chip.is-error {
   color: var(--st-error);
-  border-color: color-mix(in srgb, var(--st-error) 50%, var(--line));
+  background: color-mix(in srgb, var(--st-error) 16%, transparent);
+  border-color: color-mix(in srgb, var(--st-error) 40%, transparent);
+}
+.board-chip.is-review {
+  color: var(--st-merged);
+  border-color: color-mix(in srgb, var(--st-merged) 45%, var(--line));
+}
+/* A thread to review, as triage labels it: still, unlike a running dot. */
+.dot-review {
+  background: var(--st-merged);
+}
+/* Everything in Done: one settled ring. */
+.dot-settled {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--faint);
+  opacity: 0.7;
+}
+.qa-detail {
+  max-height: none;
+  padding: 3px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
 }
 .board-chip.is-run {
   color: var(--st-running);
@@ -7318,12 +7342,6 @@ button.board-main:hover .board-title {
 }
 .board-hint .link-btn {
   font-size: 12px;
-}
-.board-confirm {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  color: var(--muted);
 }
 .board-plan-screen {
   display: flex;
@@ -7498,19 +7516,30 @@ button.board-main:hover .board-title {
   color: var(--faint);
 }
 .board-batches {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 2px;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   color: var(--faint);
   font-size: 12px;
 }
-.board-batches li {
-  display: flex;
-  gap: 10px;
+.board-batches-label {
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.board-batch {
+  display: inline-flex;
   align-items: baseline;
+  gap: 6px;
+}
+.board-batch .link-btn {
+  font-size: 12px;
+  color: var(--muted);
+}
+.board-batch .link-btn:hover {
+  color: var(--accent);
 }
 
 /* ---------- triage queue (Dispatch board) ---------- */

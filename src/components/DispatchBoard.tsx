@@ -78,7 +78,7 @@ function statusText(r: Row, s: State, h: Holds): string {
 }
 
 /** Where the task went: project / branch / chat, or Home, or You. */
-function targetText(t: BatchTask, agent: Agent | undefined, s: State): string {
+function targetText(t: BatchTask, agent: Agent | undefined, s: State, title?: string): string {
   if (t.target === "you") return agent ? "You, booked via Home" : "You";
   if (t.target === "home") return "Home";
   const project = t.projectId ? s.projects[t.projectId]?.name ?? "Project" : "Project";
@@ -86,7 +86,8 @@ function targetText(t: BatchTask, agent: Agent | undefined, s: State): string {
   const wt = wtId ? s.worktrees[wtId] : undefined;
   const branch = wt?.branch ?? (t.mode === "new_worktree" ? "new worktree" : "main checkout");
   const parts = [project, branch];
-  if (t.mode === "existing_chat") parts.push(agent?.name ?? "chat");
+  // The chat's name, unless it's the row's title already.
+  if (t.mode === "existing_chat" && (agent?.name ?? "chat") !== title) parts.push(agent?.name ?? "chat");
   return parts.join(" / ");
 }
 
@@ -102,11 +103,24 @@ function tone(p: Phase, held: boolean): "wait" | "error" | "run" | "ok" | "quiet
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** When a row's task last moved: its session's last status change once
- *  that's settled, else when it launched. */
+/** When a row's task last moved, for how long it's waited or since it
+ *  ended: its session's last status change once that's settled (or its
+ *  archiving), when it was blocked, else when it launched or was dispatched. */
 function rowSince(r: Row, batches: Batch[]): number {
-  if (r.agent && r.agent.status !== "running") return r.agent.archived ? r.agent.archived_at || r.agent.status_changed_at : r.agent.status_changed_at;
-  return r.task.launchedAt ?? batches.find((b) => b.id === r.batchId)?.at ?? Date.now();
+  const a = r.agent;
+  if (a && a.status !== "running") return a.archived ? a.archived_at || a.status_changed_at : a.status_changed_at;
+  if (r.phase === "blocked" && r.task.blockedAt) return r.task.blockedAt;
+  return r.task.launchedAt ?? r.task.launchingAt ?? batches.find((b) => b.id === r.batchId)?.at ?? Date.now();
+}
+
+/** Each section's dot for a row, where the phase alone doesn't say it:
+ *  Needs you's held row waits on you, To review's finished turn is ready,
+ *  and everything in Done is one settled ring. */
+function dotClass(r: Row, group: Group, held: boolean): string {
+  if (group === "done") return "dot-settled";
+  if (group === "review") return "dot-finished is-unseen";
+  if (held || r.phase === "plan") return "dot-needs_feedback";
+  return r.agent && !r.agent.archived ? `dot-${r.agent.status}` : `dot-${r.phase}`;
 }
 
 /** Every dispatched task, in sections: what needs you, what to review,
@@ -120,9 +134,6 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
   const queued = useMemo(() => (id: string) => state.queue[id]?.length ?? 0, [state.queue]);
   const rows = useMemo(() => boardRows(live, state.agents, queued), [live, state.agents, queued]);
   const holds = useHolds();
-  const groups = useMemo(() => groupRows(rows, (r) => !!holdOn(r.task, holds)), [rows, holds]);
-  const clearable = useMemo(() => clearableBatches(rows), [rows]);
-  const heldLine = useMemo(() => holdSummary(live.flatMap((b) => b.tasks), holds), [live, holds]);
   // A session on the board shows its triage label, need and actions on its
   // own row; the triage section lists only the other threads.
   const queue = useTriageQueue();
@@ -131,6 +142,20 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
     for (const r of [...queue.rows, ...queue.stale]) m.set(r.id, r);
     return m;
   }, [queue]);
+  const groups = useMemo(
+    () =>
+      groupRows(
+        rows,
+        (r) => !!holdOn(r.task, holds),
+        (r) => {
+          const label = r.agent && triageOf.get(r.agent.id)?.label;
+          return label === "decision" || label === "stuck";
+        },
+      ),
+    [rows, holds, triageOf],
+  );
+  const clearable = useMemo(() => clearableBatches(rows), [rows]);
+  const heldLine = useMemo(() => holdSummary(live.flatMap((b) => b.tasks), holds), [live, holds]);
   const onBoard = useMemo(() => new Set(rows.map((r) => r.agent?.id).filter((x): x is string => !!x)), [rows]);
   const otherRows = queue.rows.filter((r) => !onBoard.has(r.id));
   const otherStale = queue.stale.filter((r) => !onBoard.has(r.id));
@@ -211,19 +236,18 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
                       row={r}
                       state={state}
                       holds={holds}
-                      compact={g.key === "done" || g.key === "review"}
-                      since={g.key === "done" || g.key === "review" ? rowSince(r, live) : undefined}
+                      group={g.key}
+                      since={g.key === "running" || g.key === "next" ? undefined : rowSince(r, live)}
                       triage={r.agent ? triageOf.get(r.agent.id) : undefined}
                     />
                   ))}
                 </ul>
-                {g.key === "done" && <Batches batches={settledLeft} rows={rows} />}
               </section>
               {g.key === "needs" && triage}
             </Fragment>
           ))
         )}
-        {rows.length > 0 && count("done") === 0 && <Batches batches={settledLeft} rows={rows} />}
+        {rows.length > 0 && <Batches batches={settledLeft} rows={rows} />}
         {!showTriage && <TriageHint />}
       </div>
     </section>
@@ -231,44 +255,33 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
 }
 
 /** Settled batches with something besides done tasks left in them, which
- *  Clear done leaves. Each can still be dismissed as a whole, once you've
- *  confirmed what that hides. */
+ *  Clear done leaves: each can still be taken off the board as a whole,
+ *  with Undo, the notice naming what went with it. */
 function Batches({ batches, rows }: { batches: Batch[]; rows: Row[] }) {
-  const [asking, setAsking] = useState<string | null>(null);
   if (!batches.length) return null;
+  const dismiss = (b: Batch) => {
+    const hid = hiddenByDismiss(rows, b.id);
+    dismissBatch(b.id);
+    flash(`Dismissed a batch of ${b.tasks.length}${hid ? `: ${hid}` : ""}`, 6000, { label: "Undo", run: () => undismissBatch(b.id) });
+  };
   return (
-    <ul className="board-batches" aria-label="Settled batches">
-      {batches.map((b) => {
-        const hides = hiddenByDismiss(rows, b.id);
-        const when = relativeTime(b.at) === "now" ? "just now" : `${relativeTime(b.at)} ago`;
-        return (
-          <li key={b.id}>
-            <span>
-              Batch from {when}: {plural(b.tasks.length, "task")}
-            </span>
-            {asking === b.id ? (
-              <span className="board-confirm" role="group" aria-label="Dismiss this batch?">
-                <span>Hide {hides} too?</span>
-                <button className="btn btn-sm" onClick={() => dismissBatch(b.id)}>
-                  Dismiss batch
-                </button>
-                <button className="link-btn" onClick={() => setAsking(null)}>
-                  Keep
-                </button>
-              </span>
-            ) : (
-              <button
-                className="link-btn"
-                onClick={() => (hides ? setAsking(b.id) : dismissBatch(b.id))}
-                title="Take all of this batch's tasks off the board; its unchecked items can be routed again"
-              >
-                Dismiss batch{hides && ` (hides ${hides})`}
-              </button>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <section className="board-batches" aria-label="Settled batches">
+      <span className="board-batches-label">Batches</span>
+      {batches.map((b) => (
+        <span key={b.id} className="board-batch">
+          <span>
+            {relativeTime(b.at) === "now" ? "just now" : `${relativeTime(b.at)} ago`}, {plural(b.tasks.length, "task")}
+          </span>
+          <button
+            className="link-btn"
+            onClick={() => dismiss(b)}
+            title="Take all of this batch's tasks off the board, finished or not; its unchecked items can be routed again"
+          >
+            Dismiss
+          </button>
+        </span>
+      ))}
+    </section>
   );
 }
 
@@ -276,14 +289,14 @@ function BoardRow({
   row,
   state,
   holds,
-  compact,
+  group,
   since,
   triage,
 }: {
   row: Row;
   state: State;
   holds: Holds;
-  compact: boolean;
+  group: Group;
   since?: number;
   triage?: QueueRow;
 }) {
@@ -291,16 +304,18 @@ function BoardRow({
   const open = agent ? () => selectAgent(agent) : undefined;
   const checkable = CHECKABLE.has(phase) || (t.target === "you" && phase === "blocked" && !agent);
   const held = !!holdOn(t, holds);
-  const dot = agent && !agent.archived ? `dot-${agent.status}` : `dot-${phase}`;
+  const compact = group === "done" || group === "review";
   const title = taskTitle(t.text, agent?.name);
   const body = compact ? null : taskBody(t.text, title);
   // The board's own row already asks what a decision label would.
   const sameAsk = triage?.label === "decision" && (phase === "waiting" || phase === "plan");
-  const inNeeds = phase === "plan" || phase === "waiting" || phase === "failed" || phase === "blocked" || phase === "stopped" || held;
+  // A finished row's review label says what its To review section does.
+  const sameNews = (triage?.label === "review" || triage?.label === "checked") && phase === "finished";
+  const inNeeds = group === "needs";
   return (
     <li className={`board-row is-${phase}${compact ? " is-compact" : ""}`}>
       <div className="board-line">
-        <span className={`sdot ${phase === "plan" ? "dot-needs_feedback" : dot}`} aria-hidden />
+        <span className={`sdot ${dotClass(row, group, held)}`} aria-hidden />
         {open ? (
           <button className="board-main" onClick={open} title={`Open ${agent!.name}`}>
             <span className="board-title">{title}</span>
@@ -311,14 +326,14 @@ function BoardRow({
           </span>
         )}
         {compact && agent && <Changes agent={agent} state={state} compact />}
-        <span className="board-target">{targetText(t, agent, state)}</span>
+        <span className="board-target">{targetText(t, agent, state, title)}</span>
         {since !== undefined && (
-          <span className="board-since" title={new Date(since).toLocaleString()}>
+          <span className="board-since" title={`${inNeeds ? "Waiting since" : "Since"} ${new Date(since).toLocaleString()}`}>
             {relativeTime(since)}
           </span>
         )}
         <span className={`board-chip is-${tone(phase, held)}`}>{statusText(row, state, holds)}</span>
-        {triage && !sameAsk && <TriageChip row={triage} />}
+        {triage && !sameAsk && !sameNews && <TriageChip row={triage} />}
         {checkable &&
           (t.done ? (
             <button
