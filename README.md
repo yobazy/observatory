@@ -172,7 +172,8 @@ it would do without changing anything, and `--help` lists the other options.
 - **Folders, names and tags for projects**, from a project's right-click menu. Folders fold away
   and still show what inside needs you. Tags filter the list, and so does typing `#tag`.
 - **Priority** (urgent, high, low) on threads and projects moves them up or down their list. On a
-  selected thread, `P` steps through them.
+  selected thread, `P` steps through them. Within a priority, a branch's threads go newest prompt
+  first; a thread finishing, waiting on you or being read doesn't move it.
 - **Thread tags**: chips above a project's list show one tag's threads. **Tag untagged** asks an
   agent CLI (`claude -p --model haiku` by default) to tag the rest from the project's own tags.
 - **Ideas**: `⌘I` writes an idea down without leaving what you're doing, filed under a project or

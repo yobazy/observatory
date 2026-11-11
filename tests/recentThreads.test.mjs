@@ -5,9 +5,10 @@ globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: 
 
 const { visit, recentThreads, afterClosing } = await import('../src/nebula/recentThreads.ts');
 
-// Finished threads list newest first, so a later status_changed_at sits higher up.
+// Threads never prompted list by their status change, newest first
+// (threadOrder.ts), so a later status_changed_at sits higher up.
 const agent = (id, wt = 'w1', over = {}) =>
-  ({ id, worktree_id: wt, name: id, archived: false, status: 'finished', status_changed_at: 0, sort_order: 0, ...over });
+  ({ id, worktree_id: wt, name: id, archived: false, status: 'finished', status_changed_at: 0, sort_order: 0, recent_prompts: [], ...over });
 const state = (agents, open) => ({
   agents: Object.fromEntries(agents.map((a) => [a.id, a])),
   worktrees: {
