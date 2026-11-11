@@ -10126,6 +10126,23 @@ button.board-main:hover .board-text {
   color: var(--faint);
   text-align: center;
 }
+/* About a thread: a click opens it. */
+.chat-event.is-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-event.is-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.chat-task-open {
+  font-size: 12px;
+}
 .chat-typing {
   display: inline-flex;
   gap: 3px;

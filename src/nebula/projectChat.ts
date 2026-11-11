@@ -24,11 +24,14 @@ export interface ChatTask {
   label: StartedState;
   /** Its PR's checks, while it has one open. */
   checks?: { state: string; failing: string[] } | null;
+  /** Its thread, while there is one to open. */
+  agentId?: string;
 }
 
 export type ChatItem =
   | { kind: "me"; key: string; text: string; at: number }
-  | { kind: "event"; key: string; text: string; at: number }
+  /** `thread`: the agent it's about, for a click to open it. */
+  | { kind: "event"; key: string; text: string; at: number; thread?: string }
   | { kind: "pet"; key: string; n: number; text: string; at: number }
   | { kind: "task"; key: string; task: ChatTask }
   /** `done` says why an ask can't be answered any more, or null while it
@@ -149,6 +152,22 @@ export function eventText(line: string, name: (agentId: string) => string | unde
   return upper(body);
 }
 
+/** The thread an [observatory] line is about, by agent id, so the chat can
+ *  open it: "Nudged Fix login", "CI failed on #193" (the thread with the
+ *  PR), "Started fix-bottom-clip". Null for anything not about one thread. */
+export function eventThread(line: string): string | null {
+  const body = oneLine(line.startsWith(LINE_PREFIX) ? line.slice(LINE_PREFIX.length) : line);
+  let m: RegExpMatchArray | null;
+  if ((m = body.match(/^(?:finished|failed|needs you|PR opened|CI failed|CI passed|PR merged|safe to close)(?: #\d+)?: ([\s\S]*)$/)))
+    return m[1].match(ABOUT)?.[3] ?? null;
+  if ((m = body.match(/^started \S+ \(agent ([\w-]+)\)$/))) return m[1];
+  if ((m = body.match(/^(?:nudged|archived) ([\w-]+)$/))) return m[1];
+  if ((m = body.match(/^refused (?:NUDGE|ASK archive|ARCHIVE) ([\w-]+): /))) return m[1];
+  if ((m = body.match(/^the user archived (\S+) \(your ASK\)$/))) return m[1];
+  if ((m = body.match(/^(?:the user said no to archiving|couldn't archive) ([\w-]+)\b/))) return m[1];
+  return null;
+}
+
 /** Where a started task is on the card's four steps (Queued, Running, PR,
  *  Merged), and what its state line says. */
 export function taskStep(t: Pick<ChatTask, "label" | "checks">): { step: 0 | 1 | 2 | 3; text: string; tone: "running" | "done" | "bad" | "quiet" } {
@@ -257,7 +276,8 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
           const said = eventText(line, name);
           const started = /^(?:Started|Queued) (\S+?):?(?: |$)/.exec(said);
           if (started && carded.has(started[1])) return;
-          out.push({ kind: "event", key: `e${e.n}.${i}`, text: said, at: e.at });
+          const thread = eventThread(line);
+          out.push({ kind: "event", key: `e${e.n}.${i}`, text: said, at: e.at, ...(thread ? { thread } : {}) });
         });
       } else out.push({ kind: "me", key: `m${e.n}`, text, at: e.at });
     } else if (e.kind === "claude") {
