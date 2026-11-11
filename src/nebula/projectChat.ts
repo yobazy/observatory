@@ -279,9 +279,10 @@ export function sinceToday(report: UsageReport | null, now = new Date()): UsageR
 
 /** What the lead is doing, for the foot of its chat: waiting on a prompt
  *  in its terminal (a permission, a choice), which only the terminal can
- *  answer; working on a turn (or with your message on its way); or at rest. */
-export function leadActivity(o: { status: string; queued: number; sending: number }): "prompt" | "working" | "idle" {
-  if (o.status === "needs_feedback") return "prompt";
+ *  answer, or a question read off its screen before its first turn;
+ *  working on a turn (or with your message on its way); or at rest. */
+export function leadActivity(o: { status: string; queued: number; sending: number; onScreen?: boolean }): "prompt" | "working" | "idle" {
+  if (o.status === "needs_feedback" || o.onScreen) return "prompt";
   if (o.status === "running" || o.queued > 0 || o.sending > 0) return "working";
   return "idle";
 }

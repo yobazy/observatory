@@ -145,6 +145,7 @@ test("Given the rules sent when a lead's actions are turned on, then the chat hi
 test('Given a lead waiting on a prompt, then the chat shows it waiting on its terminal rather than working', () => {
   assert.equal(leadActivity({ status: 'needs_feedback', queued: 1, sending: 1 }), 'prompt');
   assert.equal(leadActivity({ status: 'running', queued: 0, sending: 0 }), 'working');
+  assert.equal(leadActivity({ status: 'running', queued: 1, sending: 0, onScreen: true }), 'prompt');
   assert.equal(leadActivity({ status: 'finished', queued: 1, sending: 0 }), 'working');
   assert.equal(leadActivity({ status: 'finished', queued: 0, sending: 1 }), 'working');
   assert.equal(leadActivity({ status: 'finished', queued: 0, sending: 0 }), 'idle');

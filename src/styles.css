@@ -10024,6 +10024,14 @@ button.board-main:hover .board-text {
   background: color-mix(in oklab, var(--st-waiting) 10%, transparent);
   font-size: 13px;
 }
+/* A question read off its screen, with its choices to pick from here. */
+.chat-prompt.is-asking {
+  flex-direction: column;
+  align-items: stretch;
+}
+.chat-prompt.is-asking .link-btn {
+  align-self: flex-start;
+}
 
 .chat-compose {
   display: flex;
