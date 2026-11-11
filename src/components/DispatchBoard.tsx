@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { QuickAnswer } from "./QuickAnswer";
 import { TriageQueue } from "./TriageQueue";
@@ -30,7 +30,11 @@ import {
   activityLine,
   batchSummary,
   boardRows,
+  clearableBatches,
+  groupRows,
   redirectPrompt,
+  taskTitle,
+  type Group,
   type Phase,
   type Row,
 } from "../nebula/board";
@@ -81,7 +85,19 @@ function targetText(t: BatchTask, agent: Agent | undefined, s: State): string {
   return parts.join(" / ");
 }
 
-/** Every dispatched task in one list, the ones that need you first. */
+/** Phases a row's status chip is coloured for: waiting on you, gone wrong,
+ *  under way; the rest are quiet. */
+function tone(p: Phase, held: boolean): "wait" | "error" | "run" | "quiet" {
+  if (held || p === "plan" || p === "waiting") return "wait";
+  if (p === "failed" || p === "blocked" || p === "stopped") return "error";
+  if (p === "working" || p === "launching") return "run";
+  return "quiet";
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Every dispatched task, in sections: what needs you, what's running,
+ *  what's up next and what's done. */
 export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
   const state = useAppState();
   const batches = useBatches();
@@ -90,26 +106,33 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
   const live = useMemo(() => batches.filter((b) => !b.dismissed), [batches]);
   const queued = useMemo(() => (id: string) => state.queue[id]?.length ?? 0, [state.queue]);
   const rows = useMemo(() => boardRows(live, state.agents, queued), [live, state.agents, queued]);
-  const all = useMemo(
-    () => batchSummary(live.flatMap((b) => b.tasks), state.agents, queued),
-    [live, state.agents, queued],
-  );
   const holds = useHolds();
+  const groups = useMemo(() => groupRows(rows, (r) => !!holdOn(r.task, holds)), [rows, holds]);
+  const clearable = useMemo(() => clearableBatches(rows), [rows]);
   const heldLine = useMemo(() => holdSummary(live.flatMap((b) => b.tasks), holds), [live, holds]);
-  const working = rows.filter(
-    (r) => r.phase === "working" || r.phase === "launching" || (r.phase === "pending" && !holdOn(r.task, holds)),
-  ).length;
+  // Sessions already on the board aren't listed again under other threads.
+  const onBoard = useMemo(() => new Set(rows.map((r) => r.agent?.id).filter((x): x is string => !!x)), [rows]);
+  const count = (g: Group) => groups.find((x) => x.key === g)?.rows.length ?? 0;
+  const summary = [
+    count("needs") && `${count("needs")} ${count("needs") === 1 ? "needs" : "need"} you`,
+    count("running") && `${count("running")} running`,
+    count("next") && `${count("next")} up next`,
+    count("done") && `${count("done")} done`,
+    heldLine,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const settledLeft = live.filter(
+    (b) => !clearable.includes(b.id) && batchSummary(b.tasks, state.agents, queued).settled,
+  );
+  const triage = <TriageQueue title={rows.length ? "Other threads" : "What needs you"} exclude={onBoard} />;
 
   return (
     <section className="usage board" aria-labelledby="board-title">
       <header className="usage-head" data-tauri-drag-region>
         <div>
           <h1 id="board-title">Dispatch board</h1>
-          <p className="usage-sub">
-            {rows.length
-              ? [working && `${working} in progress`, heldLine, all.text].filter(Boolean).join(", ")
-              : "Every task you dispatch shows up here until you dismiss its batch."}
-          </p>
+          <p className="usage-sub">{rows.length ? summary : "Every task you dispatch shows up here until you clear it."}</p>
         </div>
         <div className="usage-controls" ref={controls}>
           <button className="btn btn-sm" onClick={onOpenList}>
@@ -120,8 +143,8 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
           </button>
         </div>
       </header>
-      <div className="usage-body">
-        <TriageQueue />
+      <div className="usage-body board-body">
+        {groups[0]?.key !== "needs" && triage}
         {rows.length === 0 ? (
           <p className="usage-empty">
             Nothing dispatched yet.{" "}
@@ -131,40 +154,64 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
             and route it.
           </p>
         ) : (
-          <>
-            <ul className="board-rows" aria-label="Dispatched tasks">
-              {rows.map((r) => (
-                <BoardRow key={r.task.id} row={r} state={state} holds={holds} />
-              ))}
-            </ul>
-            <Batches batches={live} />
-          </>
+          groups.map((g) => (
+            <Fragment key={g.key}>
+              <section className={`board-group is-${g.key}`} aria-labelledby={`board-group-${g.key}`}>
+                <div className="board-group-head">
+                  <h2 id={`board-group-${g.key}`}>
+                    {g.label}
+                    <span className="board-group-count">{g.rows.length}</span>
+                  </h2>
+                  {g.key === "done" && clearable.length > 0 && (
+                    <button
+                      className="link-btn"
+                      onClick={() => clearable.forEach(dismissBatch)}
+                      title={`Take the ${plural(clearable.length, "batch", "batches")} whose every task is done off the board`}
+                    >
+                      Clear done
+                    </button>
+                  )}
+                </div>
+                <ul className="board-rows" aria-label={g.label}>
+                  {g.rows.map((r) => (
+                    <BoardRow key={r.task.id} row={r} state={state} holds={holds} compact={g.key === "done"} />
+                  ))}
+                </ul>
+                {g.key === "done" && <Batches batches={settledLeft} />}
+              </section>
+              {g.key === "needs" && triage}
+            </Fragment>
+          ))
         )}
+        {rows.length > 0 && count("done") === 0 && <Batches batches={settledLeft} />}
       </div>
     </section>
   );
 }
 
-/** Each batch on the board, with how it stands; a settled one can be dismissed. */
+/** Settled batches with something besides done tasks left in them, which
+ *  Clear done leaves: each can still be dismissed as a whole. */
 function Batches({ batches }: { batches: Batch[] }) {
   const { agents, queue } = useAppState();
+  if (!batches.length) return null;
   return (
-    <ul className="board-batches" aria-label="Batches">
+    <ul className="board-batches" aria-label="Settled batches">
       {batches.map((b) => {
         const s = batchSummary(b.tasks, agents, (id) => queue[id]?.length ?? 0);
         return (
           <li key={b.id}>
-            <span className="board-batch-when">Dispatched {relativeTime(b.at)}</span>
             <span>
-              {b.tasks.length} {b.tasks.length === 1 ? "task" : "tasks"}
-              {s.text && `: ${s.text}`}
-              {!s.settled && ", still going"}
+              Batch from {relativeTime(b.at) === "now" ? "just now" : `${relativeTime(b.at)} ago`}:{" "}
+              {plural(b.tasks.length, "task")}
+              {s.text && `, ${s.text}`}
             </span>
-            {s.settled && (
-              <button className="link-btn" onClick={() => dismissBatch(b.id)} title="Take this batch off the board; its unchecked items can be routed again">
-                Dismiss
-              </button>
-            )}
+            <button
+              className="link-btn"
+              onClick={() => dismissBatch(b.id)}
+              title="Take all of this batch's tasks off the board; its unchecked items can be routed again"
+            >
+              Dismiss batch
+            </button>
           </li>
         );
       })}
@@ -172,42 +219,96 @@ function Batches({ batches }: { batches: Batch[] }) {
   );
 }
 
-function BoardRow({ row, state, holds }: { row: Row; state: State; holds: Holds }) {
+function BoardRow({ row, state, holds, compact }: { row: Row; state: State; holds: Holds; compact: boolean }) {
   const { task: t, agent, phase, batchId } = row;
   const open = agent ? () => selectAgent(agent) : undefined;
   const checkable = CHECKABLE.has(phase) || (t.target === "you" && phase === "blocked" && !agent);
+  const held = !!holdOn(t, holds);
   const dot = agent && !agent.archived ? `dot-${agent.status}` : `dot-${phase}`;
+  const title = taskTitle(t.text, agent?.name);
+  const body = !compact && t.text.trim() !== title ? t.text.trim() : null;
   return (
-    <li className={`board-row is-${phase}`}>
+    <li className={`board-row is-${phase}${compact ? " is-compact" : ""}`}>
       <div className="board-line">
-        {checkable ? (
-          <input
-            type="checkbox"
-            checked={!!t.done}
-            onChange={(e) => checkOffTask(batchId, t.id, e.target.checked)}
-            aria-label={`Check off ${t.text}`}
-            title="Check off: its items in the to-do list are checked too"
-          />
-        ) : (
-          <span className={`sdot ${phase === "plan" ? "dot-needs_feedback" : dot}`} aria-hidden />
-        )}
+        <span className={`sdot ${phase === "plan" ? "dot-needs_feedback" : dot}`} aria-hidden />
         {open ? (
           <button className="board-main" onClick={open} title={`Open ${agent!.name}`}>
-            <RowHead row={row} state={state} holds={holds} />
+            <span className="board-title">{title}</span>
           </button>
         ) : (
-          <div className="board-main">
-            <RowHead row={row} state={state} holds={holds} />
-          </div>
+          <span className="board-main" title={title}>
+            <span className="board-title">{title}</span>
+          </span>
         )}
+        {compact && agent && <Changes agent={agent} state={state} compact />}
+        <span className="board-target">{targetText(t, agent, state)}</span>
+        <span className={`board-chip is-${tone(phase, held)}`}>{statusText(row, state, holds)}</span>
+        {checkable &&
+          (t.done ? (
+            <button
+              className="link-btn board-check"
+              onClick={() => checkOffTask(batchId, t.id, false)}
+              aria-label={`Uncheck ${title}`}
+              title="Put it back: its items in the to-do list are unchecked too"
+            >
+              Uncheck
+            </button>
+          ) : (
+            <button
+              className="link-btn board-check"
+              onClick={() => checkOffTask(batchId, t.id, true)}
+              aria-label={`Check off ${title}`}
+              title="Mark it done: its items in the to-do list are checked too"
+            >
+              Check off
+            </button>
+          ))}
       </div>
-      {row.task.state === "launched" && row.task.past && row.task.note && row.task.note !== "queued" && (
-        <p className="board-note">{row.task.note}</p>
+      {body && <Prompt text={body} />}
+      {!compact && (
+        <>
+          {t.state === "launched" && t.past && t.note && t.note !== "queued" && <p className="board-note">{t.note}</p>}
+          <RowDetail row={row} state={state} holds={holds} />
+          {agent && (
+            <div className="board-foot">
+              <ReviewLine agentId={agent.id} />
+              {!agent.archived && <TaskBudget batchId={batchId} task={t} agent={agent} />}
+            </div>
+          )}
+        </>
       )}
-      <RowDetail row={row} state={state} holds={holds} />
-      {agent && <ReviewLine agentId={agent.id} />}
-      {agent && !agent.archived && <TaskBudget batchId={batchId} task={t} agent={agent} />}
+      {compact && agent && <ReviewLine agentId={agent.id} />}
     </li>
+  );
+}
+
+/** A task's whole text under its title, two lines until opened. */
+function Prompt({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [open, setOpen] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  const id = useId();
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    const check = () => setClipped(el.scrollHeight > el.clientHeight + 1);
+    check();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text, open]);
+  return (
+    <div className="board-prompt-wrap">
+      <p id={id} ref={ref} className={`board-prompt${open ? " is-open" : ""}`}>
+        {text}
+      </p>
+      {(clipped || open) && (
+        <button className="link-btn board-more" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+          {open ? "Less" : "More"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -216,16 +317,6 @@ function ReviewLine({ agentId }: { agentId: string }) {
   const { records, checking } = useReviews();
   const note = reviewNote(records[agentId], checking.has(agentId));
   return note ? <p className="board-note board-review">{note}</p> : null;
-}
-
-function RowHead({ row, state, holds }: { row: Row; state: State; holds: Holds }) {
-  return (
-    <>
-      <span className="board-text">{row.task.text}</span>
-      <span className="board-target">{targetText(row.task, row.agent, state)}</span>
-      <span className={`board-status is-${row.phase}`}>{statusText(row, state, holds)}</span>
-    </>
-  );
 }
 
 function RowDetail({ row, state, holds }: { row: Row; state: State; holds: Holds }) {
@@ -318,7 +409,7 @@ function LastLine({ agent }: { agent: Agent }) {
 }
 
 /** A finished task's diff stat, and its PR when there is one. */
-function Changes({ agent, state }: { agent: Agent; state: State }) {
+function Changes({ agent, state, compact }: { agent: Agent; state: State; compact?: boolean }) {
   const wt = state.worktrees[agent.worktree_id];
   const git = state.git[agent.worktree_id];
   const pr = state.prs[agent.worktree_id];
@@ -329,11 +420,12 @@ function Changes({ agent, state }: { agent: Agent; state: State }) {
   if (files > 0)
     parts.push(
       <span>
-        {files} {files === 1 ? "file" : "files"} changed{" "}
+        {files} {files === 1 ? "file" : "files"}
+        {!compact && " changed"}{" "}
         <span className="git-add">+{git.insertions}</span> <span className="git-del">−{git.deletions}</span>
       </span>,
     );
-  if (commits > 0) parts.push(<span>{commits} {commits === 1 ? "commit" : "commits"} on {wt.branch}</span>);
+  if (commits > 0 && !compact) parts.push(<span>{commits} {commits === 1 ? "commit" : "commits"} on {wt.branch}</span>);
   if (files > 0 || commits > 0)
     parts.push(
       <button className="link-btn" onClick={() => openReview(wt.id)}>
@@ -343,18 +435,19 @@ function Changes({ agent, state }: { agent: Agent; state: State }) {
   if (pr?.kind === "found")
     parts.push(
       <button className="link-btn" onClick={() => void openLink(pr.pr.url)} title={pr.pr.title}>
-        PR #{pr.pr.number} ({pr.pr.state})
+        PR #{pr.pr.number} ({pr.pr.state.toLowerCase()})
       </button>,
     );
   if (!parts.length) parts.push(<span className="git-muted">No changes</span>);
+  const Tag = compact ? "span" : "p";
   return (
-    <p className="git-line board-changes">
+    <Tag className={`git-line board-changes${compact ? " is-compact" : ""}`}>
       {parts.map((p, i) => (
         <span key={i} className="git-part">
           {p}
         </span>
       ))}
-    </p>
+    </Tag>
   );
 }
 

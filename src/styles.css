@@ -7149,6 +7149,42 @@ th:last-child > .col-grip {
   border-radius: var(--r-sm);
   padding: 0 5px;
 }
+.board-body {
+  gap: 22px;
+}
+.board-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.board-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.board-group-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.board-group-count {
+  margin-left: 6px;
+  color: var(--faint);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.board-group-head .link-btn {
+  margin-left: auto;
+  font-size: 12px;
+}
+.board-group.is-needs .board-group-head h2 {
+  color: var(--st-waiting);
+}
 .board-rows {
   list-style: none;
   margin: 0;
@@ -7161,23 +7197,43 @@ th:last-child > .col-grip {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 9px 12px;
   background: var(--night);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
+  min-width: 0;
 }
 .board-row.is-plan,
 .board-row.is-waiting {
   border-color: color-mix(in srgb, var(--st-waiting) 45%, var(--line));
 }
-.board-row.is-done,
-.board-row.is-cancelled,
-.board-row.is-archived,
-.board-row.is-gone {
-  opacity: 0.65;
+.board-row.is-failed,
+.board-row.is-blocked,
+.board-row.is-stopped {
+  border-color: color-mix(in srgb, var(--st-error) 35%, var(--line));
 }
-.board-row.is-done .board-text {
+/* Done rows are one quiet line each, stacked like a list. */
+.board-group.is-done .board-rows {
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.board-row.is-compact {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.board-row.is-compact + .board-row.is-compact {
+  border-top: 1px solid var(--line);
+}
+.board-row.is-compact .board-title {
+  color: var(--muted);
+}
+.board-row.is-done .board-title {
   text-decoration: line-through;
+  color: var(--faint);
 }
 .board-line {
   display: flex;
@@ -7185,18 +7241,10 @@ th:last-child > .col-grip {
   gap: 10px;
   min-width: 0;
 }
-.board-line input {
-  accent-color: var(--accent);
-  flex: none;
-  margin: 0;
-}
 .board-main {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
-  align-items: baseline;
-  gap: 12px;
+  display: flex;
   text-align: left;
   background: none;
   border: 0;
@@ -7204,33 +7252,113 @@ th:last-child > .col-grip {
   color: inherit;
   font: inherit;
 }
-button.board-main:hover .board-text {
-  text-decoration: underline;
+.board-row.is-compact .board-main {
+  flex: 0 1 auto;
 }
-.board-text {
-  overflow-wrap: anywhere;
+.board-title {
+  min-width: 0;
+  font-weight: 550;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   user-select: text;
 }
+button.board-main:hover .board-title {
+  text-decoration: underline;
+}
 .board-target {
-  color: var(--muted);
+  flex: 0 1 auto;
+  max-width: 40%;
+  margin-left: auto;
+  color: var(--faint);
   font-size: 12px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.board-status {
+.board-since {
+  flex: none;
+  color: var(--faint);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.board-chip {
+  flex: none;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
   color: var(--muted);
   white-space: nowrap;
 }
-.board-status.is-plan,
-.board-status.is-waiting {
+.board-chip.is-wait {
   color: var(--st-waiting);
+  border-color: color-mix(in srgb, var(--st-waiting) 50%, var(--line));
 }
-.board-status.is-failed,
-.board-status.is-stopped,
-.board-status.is-blocked {
+.board-chip.is-error {
   color: var(--st-error);
+  border-color: color-mix(in srgb, var(--st-error) 50%, var(--line));
+}
+.board-chip.is-run {
+  color: var(--st-running);
+  border-color: color-mix(in srgb, var(--st-running) 50%, var(--line));
+}
+.board-chip.is-quiet {
+  color: var(--faint);
+}
+.board-check {
+  flex: none;
+  font-size: 12px;
+}
+.board-prompt-wrap {
+  margin-left: 18px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.board-prompt {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.board-prompt.is-open {
+  display: block;
+  white-space: pre-line;
+  overflow: visible;
+}
+.board-more {
+  flex: none;
+  font-size: 12px;
+}
+.board-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-left: 18px;
+}
+.board-foot:empty {
+  display: none;
+}
+.board-foot .board-note,
+.board-foot .task-budget {
+  margin: 0;
+}
+.board-foot .task-budget {
+  margin-left: auto;
+  color: var(--faint);
 }
 .board-note,
 .board-activity,
@@ -7273,14 +7401,23 @@ button.board-main:hover .board-text {
 .dot-blocked {
   background: var(--st-error);
 }
+.board-changes.is-compact {
+  margin: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--faint);
+}
 .board-batches {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 2px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  color: var(--muted);
+  color: var(--faint);
   font-size: 12px;
 }
 .board-batches li {
@@ -7288,32 +7425,13 @@ button.board-main:hover .board-text {
   gap: 10px;
   align-items: baseline;
 }
-.board-batch-when {
-  color: var(--faint);
-}
 
 /* ---------- triage queue (Dispatch board) ---------- */
 
-.triage {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.triage-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.triage-head h2 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
 .triage-sub,
 .triage-empty,
 .triage-stale summary {
-  color: var(--muted);
+  color: var(--faint);
   font-size: 12px;
 }
 .triage-empty {
@@ -7334,15 +7452,6 @@ button.board-main:hover .board-text {
 }
 .triage-row.is-stuck {
   border-color: color-mix(in srgb, var(--st-error) 45%, var(--line));
-}
-.triage-label {
-  flex: none;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  white-space: nowrap;
 }
 .triage-label.is-decision {
   color: var(--st-waiting);

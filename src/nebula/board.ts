@@ -156,6 +156,88 @@ export function boardRows(
   return sortRows(rows);
 }
 
+// ---- the board's sections ----
+
+/** The board's sections, in the order it lists them:
+ *  - needs: won't move until you act (a plan, a question, a failure, a
+ *    block, a session that stopped, a task a budget holds).
+ *  - running: a session is on it, or its launch is out.
+ *  - next: waiting for a slot, or on your own list.
+ *  - done: finished, archived, gone, cancelled or checked off. */
+export type Group = "needs" | "running" | "next" | "done";
+
+export const GROUP_LABEL: Record<Group, string> = {
+  needs: "Needs you",
+  running: "Running",
+  next: "Up next",
+  done: "Done",
+};
+
+const GROUP_ORDER: Group[] = ["needs", "running", "next", "done"];
+
+/** Which section a row is listed in. `held`: a budget holds the task, so
+ *  it waits on you rather than on a slot. */
+export function groupOf(p: Phase, held = false): Group {
+  switch (p) {
+    case "plan":
+    case "waiting":
+    case "failed":
+    case "blocked":
+    case "stopped":
+      return "needs";
+    case "working":
+    case "launching":
+      return "running";
+    case "pending":
+      return held ? "needs" : "next";
+    case "listed":
+      return "next";
+    default:
+      return "done";
+  }
+}
+
+export interface RowGroup {
+  key: Group;
+  label: string;
+  rows: Row[];
+}
+
+/** The rows in their sections, keeping their order within each; empty
+ *  sections are left out. */
+export function groupRows(rows: Row[], held: (r: Row) => boolean = () => false): RowGroup[] {
+  const by = new Map<Group, Row[]>(GROUP_ORDER.map((g) => [g, []]));
+  for (const r of rows) by.get(groupOf(r.phase, held(r)))!.push(r);
+  return GROUP_ORDER.filter((g) => by.get(g)!.length).map((g) => ({ key: g, label: GROUP_LABEL[g], rows: by.get(g)! }));
+}
+
+/** Batches whose every task is done, which Clear done takes off the board.
+ *  A batch with anything left (a failure, a task on your list) stays: it
+ *  dismisses as a whole, and that would hide what's left. */
+export function clearableBatches(rows: Row[]): string[] {
+  const left = new Set<string>();
+  const seen: string[] = [];
+  for (const r of rows) {
+    if (!seen.includes(r.batchId)) seen.push(r.batchId);
+    if (groupOf(r.phase) !== "done") left.add(r.batchId);
+  }
+  return seen.filter((id) => !left.has(id));
+}
+
+/** A row's title: its session's name when it has one, else the task's
+ *  first line, cut at its first sentence when that line runs long, and
+ *  clipped to `max` characters. */
+export function taskTitle(text: string, sessionName?: string, max = 90): string {
+  const name = sessionName?.trim();
+  if (name) return name;
+  let line = text.trim().split("\n")[0].trim();
+  if (line.length > max) {
+    const end = line.search(/[.!?](\s|$)/);
+    if (end > 0 && end < max) line = line.slice(0, end + 1);
+  }
+  return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+}
+
 // ---- answering a plan ----
 
 /** What Approve sends the session. */

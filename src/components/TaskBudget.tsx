@@ -27,7 +27,7 @@ export function TaskBudget({ batchId, task, agent }: { batchId: string; task: Ba
   return (
     <p className="board-note task-budget">
       <span className={near ? "is-near" : undefined}>
-        {spend ? `${dollars(spend.cost)} ${sinceText(spend.since)}, of ${task.budget ? "its" : "the"}` : `Budget:`}
+        {spend ? `${dollars(spend.cost)} ${sinceText(spend.since)}, of ${task.budget ? "its" : "the"}` : "Budget"}
       </span>
       {editing ? (
         <span>
@@ -54,7 +54,7 @@ export function TaskBudget({ batchId, task, agent }: { batchId: string; task: Ba
           onClick={() => setEditing(true)}
           title={task.budget ? "This task's own budget; empty it to use the one in Settings" : "Give this task its own budget"}
         >
-          {dollars(budget)} budget
+          {spend ? `${dollars(budget)} budget` : dollars(budget)}
         </button>
       )}
     </p>

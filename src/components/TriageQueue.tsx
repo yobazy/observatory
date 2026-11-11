@@ -20,9 +20,10 @@ export function openQueued(row: QueueRow) {
   selectAgent(agent);
 }
 
-/** The triage queue, at the top of the Dispatch board: every open session
- *  with what it needs from you, the ones that need you most first. */
-export function TriageQueue() {
+/** The triage queue, on the Dispatch board: every open session with what it
+ *  needs from you, the ones that need you most first. `exclude`: sessions
+ *  the board lists already, under its own tasks. */
+export function TriageQueue({ title = "What needs you", exclude }: { title?: string; exclude?: Set<string> }) {
   const state = useAppState();
   const { records, acks } = useTriage();
   const stuck = useStuck();
@@ -33,6 +34,8 @@ export function TriageQueue() {
     () => queueOf({ agents, limits, git }, records, acks, reviews.records, stuck),
     [agents, limits, git, records, acks, reviews.records, stuck],
   );
+  const rows = exclude ? queue.rows.filter((r) => !exclude.has(r.id)) : queue.rows;
+  const stale = exclude ? queue.stale.filter((r) => !exclude.has(r.id)) : queue.stale;
   const on = state.prefs.triageOn === true;
   const error = status.result?.errors[0];
 
@@ -45,9 +48,12 @@ export function TriageQueue() {
         : "Waiting for the first read";
 
   return (
-    <section className="triage" aria-labelledby="triage-title">
-      <div className="triage-head">
-        <h2 id="triage-title">What needs you</h2>
+    <section className="board-group triage" aria-labelledby="triage-title">
+      <div className="board-group-head">
+        <h2 id="triage-title">
+          {title}
+          {rows.length > 0 && <span className="board-group-count">{rows.length}</span>}
+        </h2>
         <span className="triage-sub">{sub}</span>
         {on ? (
           <button className="link-btn" disabled={status.running} onClick={() => void triageNow()} title="Read the threads that changed since their last read now">
@@ -60,22 +66,22 @@ export function TriageQueue() {
         )}
       </div>
       {error && <p className="triage-error">Couldn't triage: {error}</p>}
-      {queue.rows.length === 0 ? (
-        <p className="triage-empty">Nothing needs you right now.</p>
+      {rows.length === 0 ? (
+        <p className="triage-empty">{exclude?.size ? "Nothing else needs you right now." : "Nothing needs you right now."}</p>
       ) : (
         <ul className="board-rows" aria-label="Triage queue">
-          {queue.rows.map((r) => (
+          {rows.map((r) => (
             <TriageRow key={r.id} row={r} />
           ))}
         </ul>
       )}
-      {queue.stale.length > 0 && (
+      {stale.length > 0 && (
         <details className="triage-stale">
           <summary>
-            {queue.stale.length} stale thread{queue.stale.length === 1 ? "" : "s"}
+            {stale.length} stale thread{stale.length === 1 ? "" : "s"}
           </summary>
           <ul className="board-rows">
-            {queue.stale.map((r) => (
+            {stale.map((r) => (
               <TriageRow key={r.id} row={r} />
             ))}
           </ul>
@@ -84,6 +90,15 @@ export function TriageQueue() {
     </section>
   );
 }
+
+/** Each label's dot, in the board rows' colours. */
+const LABEL_DOT: Record<QueueRow["label"], string> = {
+  decision: "dot-needs_feedback",
+  stuck: "dot-failed",
+  review: "dot-running",
+  checked: "dot-finished",
+  stale: "dot-pending",
+};
 
 function TriageRow({ row }: { row: QueueRow }) {
   const state = useAppState();
@@ -110,14 +125,15 @@ function TriageRow({ row }: { row: QueueRow }) {
   return (
     <li className={`board-row triage-row is-${row.label}`}>
       <div className="board-line">
-        <span className={`triage-label is-${row.label}`}>{LABEL_TEXT[row.label]}</span>
+        <span className={`sdot ${LABEL_DOT[row.label]}`} aria-hidden />
         <button className="board-main" onClick={() => openQueued(row)} title={`Open ${agent.name}`}>
-          <span className="board-text">{agent.name}</span>
-          <span className="board-target">{[project, branch].filter(Boolean).join(" / ")}</span>
-          <span className="board-status" title="How long it's waited">
-            {relativeTime(row.since)}
-          </span>
+          <span className="board-title">{agent.name}</span>
         </button>
+        <span className="board-target">{[project, branch].filter(Boolean).join(" / ")}</span>
+        <span className="board-since" title="How long it's waited">
+          {relativeTime(row.since)}
+        </span>
+        <span className={`board-chip triage-label is-${row.label}`}>{LABEL_TEXT[row.label]}</span>
         <div className="triage-actions">
           {row.label === "stuck" && <StuckActions agent={agent} onOpen={() => openQueued(row)} />}
           {row.label === "checked" && (
