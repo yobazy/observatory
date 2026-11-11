@@ -268,9 +268,11 @@ function BoardRow({ row, state, holds, compact }: { row: Row; state: State; hold
       {!compact && (
         <>
           {t.state === "launched" && t.past && t.note && t.note !== "queued" && <p className="board-note">{t.note}</p>}
-          <RowDetail row={row} state={state} holds={holds} />
+          <RowDetail row={row} holds={holds} />
           {agent && (
             <div className="board-foot">
+              {phase === "working" && agent.status === "running" && <LastLine agent={agent} />}
+              {(phase === "finished" || phase === "stopped") && <Changes agent={agent} state={state} />}
               <ReviewLine agentId={agent.id} />
               {!agent.archived && <TaskBudget batchId={batchId} task={t} agent={agent} />}
             </div>
@@ -319,7 +321,7 @@ function ReviewLine({ agentId }: { agentId: string }) {
   return note ? <p className="board-note board-review">{note}</p> : null;
 }
 
-function RowDetail({ row, state, holds }: { row: Row; state: State; holds: Holds }) {
+function RowDetail({ row, holds }: { row: Row; holds: Holds }) {
   const { task: t, agent, phase, batchId } = row;
   const hold = holdOn(t, holds);
   if (hold)
@@ -358,9 +360,7 @@ function RowDetail({ row, state, holds }: { row: Row; state: State; holds: Holds
   if (!agent) return null;
   if (phase === "plan") return <PlanCheckpoint batchId={batchId} task={t} agent={agent} />;
   if (phase === "waiting") return <QuickAnswer agent={agent} onOpen={() => selectAgent(agent)} />;
-  if (phase === "working" && agent.status === "running") return <LastLine agent={agent} />;
-  if (phase === "finished" || phase === "stopped" || phase === "done" || phase === "archived")
-    return <Changes agent={agent} state={state} />;
+  // A running line and a diff stat go in the row's foot, beside its budget.
   return null;
 }
 

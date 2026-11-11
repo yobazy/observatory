@@ -7311,6 +7311,9 @@ button.board-main:hover .board-title {
   flex: none;
   font-size: 12px;
 }
+.board-check:not(:hover):not(:focus-visible) {
+  color: var(--faint);
+}
 .board-prompt-wrap {
   margin-left: 18px;
   display: flex;
@@ -7353,8 +7356,15 @@ button.board-main:hover .board-title {
   display: none;
 }
 .board-foot .board-note,
+.board-foot .board-activity,
+.board-foot .board-changes,
 .board-foot .task-budget {
   margin: 0;
+  padding: 0;
+}
+.board-foot .board-activity {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .board-foot .task-budget {
   margin-left: auto;
@@ -7403,6 +7413,7 @@ button.board-main:hover .board-title {
 }
 .board-changes.is-compact {
   margin: 0;
+  padding: 0;
   flex: 0 1 auto;
   min-width: 0;
   flex-wrap: nowrap;
