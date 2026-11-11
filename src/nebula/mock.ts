@@ -97,7 +97,7 @@ const agents: Agent[] = [
   agent("a11", "w0", "Old Spike", "finished", 60 * 24 * 6, ["spike on an image CDN"], { archived: true }),
   // The leads (S17, S26), so the sidebar shows their pets and one calls you.
   agent("lead0", "w0", "Lead storefront", "finished", 3, ["[observatory] finished: Sequential Cart Sync on cart-sync"], { model: "sonnet" }),
-  agent("lead1", "wm0", "Lead marketing-site", "finished", 40, ["[observatory] finished: Lighthouse Fixes on main"], { model: "sonnet" }),
+  agent("lead1", "wm0", "Lead marketing-site", "finished", 40, ["[observatory] finished: Lighthouse Fixes on main"], { model: "sonnet", alive: false }),
   agent("lead4", "wm3", "Lead billing-api", "finished", 8, ["[observatory] failed: Weekly Invoice Job on main"], { model: "sonnet", unseen: true }),
   // Just started in a folder Claude Code hasn't seen, so it's asking to
   // trust it before its first turn.
@@ -555,6 +555,11 @@ export function startMock(handlers: Map<string, PtyHandler>) {
     if (variant !== "Attach" || !body) return;
     const session = body.session as SessionRef;
     const key = "Agent" in session ? `a:${session.Agent}` : `t:${session.Terminal}`;
+    // Attaching wakes an agent that was put to sleep, as the daemon does.
+    if ("Agent" in session && getState().agents[session.Agent]?.alive === false) {
+      const id = session.Agent;
+      setTimeout(() => setState((s) => (s.agents[id] ? { agents: { ...s.agents, [id]: { ...s.agents[id], alive: true } } } : {})), 800);
+    }
     setTimeout(() => {
       const bytes = new TextEncoder().encode(screenFor(session));
       handlers.get(key)?.({ session, replay: true, seq: 0, data: "" }, bytes);
