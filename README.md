@@ -106,7 +106,8 @@ it would do without changing anything, and `--help` lists the other options.
 - **Replies written as cards** (a bold headline, status dots, a **Needs you** list, folded
   **Details**) read as cards. Lettered options are buttons that build `1 A, 2 B` in the reply box,
   and when the agent recommends an answer, **Tab** takes it. Decisions you haven't answered wait
-  in a tray above the box.
+  in a tray above the box. **Send & next** (`⌘↵`) sends and opens the next thread waiting on you,
+  so a round of answers is Tab, `⌘↵`, Tab, `⌘↵`.
 - **Select part of a reply** and choose **Reply about this** to quote it. A file named in a reply
   opens in the preview, a PR number links to the PR, and an edit step shows its diff.
 - **Run** beside a shell command in a reply sends it to the thread as `! <command>`, so it runs
