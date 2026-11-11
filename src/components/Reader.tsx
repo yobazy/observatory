@@ -38,6 +38,12 @@ const dismissedFor = new Map<string, Set<number>>();
 /** Next prompts suggested for a thread's latest reply, keyed by thread and
  *  entry; asked once per reply for as long as the app runs. */
 const nextFor = new Map<string, string[] | "asking">();
+/** Send & next: the thread it opens starts in its reply box, for the next Tab. */
+let focusBoxNext = false;
+/** Threads answered with Send & next, by agent, at the status they had then:
+ *  still listed as waiting until the daemon says they're working, they're
+ *  passed over meanwhile rather than offered again. */
+const justSent = new Map<string, number>();
 
 /** The thread's artwork and name at the top of what it said, like a record
  *  sleeve. Every prompt and step it has taken moves the sand, so the plate is
@@ -881,6 +887,12 @@ export function Reader({
   // Opening the Read view from its switch puts you in the thread, so ⌘F and
   // ⌘↑ work at once; a box you're typing in keeps its focus.
   useEffect(() => {
+    // Come here with Send & next: straight into the reply box.
+    if (focusBoxNext) {
+      focusBoxNext = false;
+      // A frame on: the terminal behind takes focus as it attaches.
+      if (box.current) return void requestAnimationFrame(() => box.current?.focus({ preventScroll: true }));
+    }
     const at = document.activeElement;
     if (!at || at === document.body || at.closest("[role=radiogroup]")) scroller.current?.focus({ preventScroll: true });
   }, []);
@@ -898,10 +910,13 @@ export function Reader({
         setFinding(true);
         return;
       }
-      // ⌘↵ after tapping an option, as from the box: send, then the next thread.
-      if (e.key === "Enter" && !e.shiftKey && !(document.activeElement as HTMLElement).matches("textarea, input") && nextUp) {
+      // ⌘↵ after tapping an option, as from the box: send, then the next
+      // thread. On a terminal prompt there's nothing to send: just go on.
+      if (e.key === "Enter" && !e.shiftKey && !(document.activeElement as HTMLElement).matches("textarea, input")) {
         e.preventDefault();
-        void send(true);
+        if (e.repeat) return;
+        if (waiting) goNext();
+        else void send(!!nextUp);
         return;
       }
       if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || (document.activeElement as HTMLElement).matches("textarea, input")) return;
@@ -1130,16 +1145,30 @@ export function Reader({
   const canSend = isIdle(agent) || (atPrompt && !queue?.length);
   // The next thread waiting on you, as Decisions lists them: Send & next
   // answers this one and opens that, so a round of answers needs no hunting.
-  const nextUp = useWaiting()?.find((w) => w.agent.id !== agent.id && !w.agent.archived) ?? null;
+  // Taken in the list's order from where this thread is, so skipping goes on
+  // down the list rather than back and forth between the top two.
+  const waitingNow = useWaiting();
+  const nextUp = useMemo(() => {
+    const order = (waitingNow ?? []).filter((w) => !w.agent.archived && justSent.get(w.agent.id) !== w.agent.status_changed_at);
+    const i = order.findIndex((w) => w.agent.id === agent.id);
+    if (i < 0) return order[0] ?? null;
+    return order.length > 1 ? order[(i + 1) % order.length] : null;
+  }, [waitingNow, agent.id]);
+  // A send under way: a second ⌘↵ mustn't leave before it's known to have gone.
+  const sending = useRef(false);
   const goNext = () => {
-    if (!nextUp) return;
+    if (!nextUp || sending.current) return;
+    focusBoxNext = true;
     const a = nextUp.agent;
     setState((s) => ({ selectedProject: s.worktrees[a.worktree_id]?.project_id ?? s.selectedProject, selectedSession: { Agent: a.id } }));
   };
   const send = async (thenNext = false) => {
     const text = outgoing;
-    if (thenNext && !text) return goNext();
+    if (sending.current) return;
+    // Nothing to send skips to the next, unless you'd pointed at something.
+    if (thenNext && !text) return pointed ? undefined : goNext();
     if (!text || waiting) return;
+    sending.current = true;
     const was = { draft, tapped, pointed };
     setDraft("");
     setTapped({ entry: -1, picks: {} });
@@ -1153,9 +1182,12 @@ export function Reader({
       // A queued one shows in the queue instead, a command on the working line.
       setOutbox(how === "queued" || commandOf(text) !== null ? null : { text, after, sent: true });
       if (how === "queued") flash(`Queued for ${agent.name}: sent when its turn ends`);
+      justSent.set(agent.id, agent.status_changed_at);
+      sending.current = false;
       // Once it's gone, not before: a send that fails puts your reply back here.
       if (thenNext) goNext();
     } catch {
+      sending.current = false;
       setOutbox(null);
       // It didn't go: put back what you wrote and picked.
       setDraft(was.draft);
@@ -1469,7 +1501,13 @@ export function Reader({
               {question.prompt && <p className="rd-wait">{question.prompt}</p>}
               <AskChoices question={question} onPick={onPick} />
             </div>
-          ) : waiting ? (
+          ) : null}
+          {waiting && nextUp && (
+            <button className="link-btn rd-sendnext" onClick={goNext} title={`Leave this for now and open ${nextUp.agent.name}, the next thread waiting on you (⌘↵)`}>
+              Next <span className="rd-sendnext-name">→ {nextUp.agent.name}</span> <kbd>⌘↵</kbd>
+            </button>
+          )}
+          {waiting && question ? null : waiting ? (
             <p className="rd-wait">
               It's waiting on a choice in the terminal.{" "}
               <button className="link-btn" onClick={onTerminal}>
@@ -1523,7 +1561,7 @@ export function Reader({
                     // Enter sends, like the terminal; Shift-Enter starts a new line;
                     // ⌘-Enter sends and opens the next thread waiting on you.
                     e.preventDefault();
-                    void send(e.metaKey && !!nextUp);
+                    if (!e.repeat) void send(e.metaKey && !!nextUp);
                   }
                 }}
               />
