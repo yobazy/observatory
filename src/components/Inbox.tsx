@@ -91,38 +91,62 @@ export function InboxView() {
   useLayoutEffect(() => {
     pane.current?.scrollTo({ top: 0 });
   }, [focus]);
-  // Cards with an answer ready to go, for sending together.
-  const ready = live.flatMap((w) => {
+  // Cards whose answer is on its way, so neither Send nor Send all sends it
+  // again while the first is still out.
+  const inFlight = useRef(new Set<string>());
+  const claim = (k: string) => {
+    if (inFlight.current.has(k)) return false;
+    inFlight.current.add(k);
+    return true;
+  };
+  const release = (k: string) => inFlight.current.delete(k);
+  // Cards with an answer ready to go, for sending together. Not the ones put
+  // off with Later: that's what Later is for.
+  const ready = list.flatMap((w) => {
+    if (leaving.some((l) => keyOf(l.w) === keyOf(w)) || inFlight.current.has(keyOf(w))) return [];
     const text = w.prompt ? "" : outgoing(w.earlier, answerOf(w));
     return text ? [{ w, text }] : [];
   });
   // The ones whose reply recommends something you haven't started on.
-  const recommendable = live.filter((w) => !w.prompt && w.card && Object.keys(recommendedFor(w.card, answerOf(w))).length);
+  const recommendable = list.filter(
+    (w) => !w.prompt && w.card && !leaving.some((l) => keyOf(l.w) === keyOf(w)) && Object.keys(recommendedFor(w.card, answerOf(w))).length,
+  );
   const pickRecommended = () => {
-    for (const w of recommendable) setAnswer(keyOf(w), (a) => ({ ...a, picks: recommendedFor(w.card!, a) }));
+    for (const w of recommendable)
+      setAnswer(keyOf(w), (a) => {
+        const rec = recommendedFor(w.card!, a);
+        return Object.keys(rec).length ? { ...a, picks: rec } : a;
+      });
     flash(recommendable.length === 1 ? "Picked what 1 thread recommends" : `Picked what ${recommendable.length} threads recommend`);
   };
   const [sendingAll, setSendingAll] = useState(false);
   const sendAll = async () => {
-    if (!ready.length || sendingAll) return;
+    if (sendingAll) return;
+    const go = ready.filter(({ w }) => claim(keyOf(w)));
+    if (!go.length) return;
     setSendingAll(true);
     const got = await Promise.all(
-      ready.map(({ w, text }) =>
-        enqueue(w.agent, text, { stay: true }).then(
-          (how) => {
-            answered(w.agent, how === "queued");
-            return keyOf(w);
-          },
-          () => null,
-        ),
+      go.map(({ w, text }) =>
+        enqueue(w.agent, text, { stay: true })
+          .then(
+            (how) => {
+              answered(w.agent, how === "queued");
+              return keyOf(w);
+            },
+            () => null,
+          )
+          .finally(() => release(keyOf(w))),
       ),
     );
     setSendingAll(false);
     const ok = got.filter((k): k is string => !!k);
     setSent((s) => new Set([...s, ...ok]));
-    const failed = ready.length - ok.length;
+    const failed = go.length - ok.length;
+    const left = `${failed === 1 ? "its answer is" : "their answers are"} still here`;
     flash(
-      `Sent ${ok.length === 1 ? "1 answer" : `${ok.length} answers`}${failed ? `. ${failed} couldn't go; ${failed === 1 ? "its answer is" : "their answers are"} still here` : ""}`,
+      !ok.length
+        ? `Couldn't send ${failed === 1 ? "the answer" : `any of the ${failed} answers`}; ${left}`
+        : `Sent ${ok.length === 1 ? "1 answer" : `${ok.length} answers`}${failed ? `. ${failed} couldn't go; ${left}` : ""}`,
       failed ? 6000 : undefined,
     );
   };
@@ -137,7 +161,7 @@ export function InboxView() {
       // A focused control takes Enter and Space itself, but an option you
       // just clicked keeps focus, and Enter there means send.
       const control = e.target instanceof Element ? e.target.closest("button, a, summary, [role=button]") : null;
-      if (control && (e.key === " " || (e.key === "Enter" && !control.classList.contains("rd-opt") && !control.classList.contains("inbox-row")))) return;
+      if (control && (e.key === " " || (e.key === "Enter" && !control.classList.contains("rd-opt")))) return;
       const i = live.findIndex((w) => keyOf(w) === focus);
       if (e.key === "j" || e.key === "ArrowDown" || e.key === "k" || e.key === "ArrowUp") {
         const next = live[Math.max(0, Math.min(live.length - 1, i + (e.key === "j" || e.key === "ArrowDown" ? 1 : -1)))];
@@ -158,7 +182,11 @@ export function InboxView() {
     later: later.has(keyOf(w)),
     onLater: () => {
       if (later.has(keyOf(w))) later.delete(keyOf(w));
-      else later.add(keyOf(w));
+      else {
+        later.add(keyOf(w));
+        // Put off: on to the card that takes its place, not after it.
+        if (keyOf(w) === focus) setFocusKey(null);
+      }
       bump((n) => n + 1);
     },
   });
@@ -260,6 +288,9 @@ export function InboxView() {
                 leaving={isLeaving}
                 answer={answerOf(w)}
                 onAnswer={(f) => setAnswer(k, f)}
+                claim={() => claim(k)}
+                release={() => release(k)}
+                onSendAll={() => void sendAll()}
                 onSent={(animate) => {
                   const idx = all.findIndex((x) => keyOf(x) === k);
                   if (animate) setLeaving((ls) => [...ls, { w, at: idx }]);
@@ -277,6 +308,14 @@ export function InboxView() {
       </div>
     </section>
   );
+}
+
+/** What a thread stopped on a prompt is about, for its queue row: the
+ *  headline of what it said this turn, else what you asked it. */
+function promptLine(said: string, asked: string): string {
+  const head = said ? (readCard(said).headline ?? said.split("\n").find((l) => l.trim()) ?? "") : "";
+  const text = (head || (asked.trim() === CATCH_UP ? "" : asked)).replace(/(\*\*|__|`)/g, "").replace(/\s+/g, " ").trim();
+  return text || "A choice in its terminal";
 }
 
 /** One waiting thread in the queue: its name, its first question, and
@@ -302,8 +341,9 @@ function RailRow({
   const q = firstQuestion(card);
   const said = prompt ? "" : pickedWords(card, answer);
   const asks = card?.asks.length ?? 0;
+  const about = useMemo(() => (prompt ? promptLine(waiting.said, waiting.asked) : ""), [prompt, waiting.said, waiting.asked]);
   const line = prompt
-    ? "A choice in its terminal"
+    ? about
     : q
       ? q.text
       : waiting.earlier.length
@@ -315,6 +355,9 @@ function RailRow({
       data-key={k}
       aria-current={on || undefined}
       onClick={onPick}
+      // Tabbing to a row shows its card; a click leaves the keys on the card.
+      onFocus={onPick}
+      onMouseDown={(e) => e.preventDefault()}
       title={q && q.more ? `${q.text}\n…and ${q.more} more` : line}
     >
       <span className="inbox-row-top">
@@ -345,6 +388,9 @@ function InboxItem({
   leaving,
   answer,
   onAnswer,
+  claim,
+  release,
+  onSendAll,
   onSent,
   onGone,
 }: {
@@ -359,6 +405,11 @@ function InboxItem({
   /** What you've picked and typed on it, kept by the list. */
   answer: Answer;
   onAnswer: (f: (a: Answer) => Answer) => void;
+  /** Marks it on its way, false when it already is; `release` once it's gone or failed. */
+  claim: () => boolean;
+  release: () => void;
+  /** ⇧↵ in its reply box: every card's answer, this one's too. */
+  onSendAll: () => void;
   /** Answered; `animate` when it should slide away rather than just go. */
   onSent: (animate: boolean) => void;
   /** Its slide away has ended. */
@@ -394,7 +445,7 @@ function InboxItem({
     onSent(animate);
   };
   const send = async () => {
-    if (!text || leaving) return;
+    if (!text || leaving || !claim()) return;
     try {
       const how = await enqueue(agent, text, { stay: true });
       flash(how === "queued" ? `Queued for ${agent.name}` : `Sent to ${agent.name}`);
@@ -402,6 +453,8 @@ function InboxItem({
       leave();
     } catch {
       flash(`Couldn't send to ${agent.name}. Your answer is still here.`, 6000);
+    } finally {
+      release();
     }
   };
   const pick = (n: number, letter: string) => {
@@ -556,7 +609,8 @@ function InboxItem({
               setPicks(recommended);
             } else if (e.key === "Enter" && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              void send();
+              if (e.shiftKey) onSendAll();
+              else void send();
             }
           }}
         />
