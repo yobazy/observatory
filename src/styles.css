@@ -8526,6 +8526,9 @@ button.board-main:hover .board-text {
 }
 .inbox-item {
   display: grid;
+  /* One column, never wider than the list: WebKit counts the one-line "You
+     asked" at its full length, which made the whole card that wide. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 /* Answered: slides off to the right, then the gap it leaves closes. The
