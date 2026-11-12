@@ -342,7 +342,14 @@ export function Sessions({ onNewTask, onHide }: { onNewTask: NewTask; onHide: ()
       <PicksContext.Provider value={picks}>
       <div className="bands" ref={bandsRef} onMouseOver={preview.onMouseOver} onMouseLeave={preview.onMouseLeave}>
         {worktrees.map((wt) => (
-          <Band key={wt.id} worktree={wt} filter={filter} onNewTask={onNewTask} onMenu={onMenu} />
+          <Band
+            key={wt.id}
+            worktree={wt}
+            filter={filter}
+            onNewTask={onNewTask}
+            onMenu={onMenu}
+            onDelete={rowMenu.deleteWorktree}
+          />
         ))}
         {on.length > 0 && !firstMatch ? (
           <p className="sessions-no-match">
@@ -372,11 +379,13 @@ function Band({
   filter,
   onNewTask,
   onMenu,
+  onDelete,
 }: {
   worktree: Worktree;
   filter: Filter;
   onNewTask: NewTask;
   onMenu: OpenMenu;
+  onDelete: (worktree: Worktree) => void;
 }) {
   const state = useAppState();
   const [showArchived, setShowArchived] = useState(false);
@@ -414,7 +423,7 @@ function Band({
 
   return (
     <section className="band">
-      <header className="band-head">
+      <header className="band-head" onContextMenu={(e) => onMenu(e, { Worktree: worktree })}>
         <span className="band-title">
           <span className="band-branch" title={worktree.path}>
             <BranchGlyph />
@@ -474,6 +483,17 @@ function Band({
             <button className="link-btn" onClick={() => onNewTask(worktree.id)}>
               Start a task on this branch
             </button>
+            {/* With no task to right-click, its menu's Delete worktree is out of reach. */}
+            {!worktree.is_main && (
+              <>
+                <span className="git-muted" aria-hidden>
+                  {" · "}
+                </span>
+                <button className="link-btn link-quiet" onClick={() => onDelete(worktree)}>
+                  Delete worktree
+                </button>
+              </>
+            )}
           </li>
         )}
       </ul>
