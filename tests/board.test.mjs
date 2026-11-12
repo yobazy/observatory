@@ -244,7 +244,13 @@ test("a row's body is what the title leaves out: the rest after a first line or 
   const long = 'Review draft PR #1 and get it ready to merge. Check out the branch and do all the work on it, not on main, then run the checks.';
   assert.equal(taskBody(long, taskTitle(long)), 'Check out the branch and do all the work on it, not on main, then run the checks.');
   const run = 'x'.repeat(120);
-  assert.equal(taskBody(run, taskTitle(run)), run);
+  assert.equal(taskBody(run, taskTitle(run)), `…${'x'.repeat(31)}`);
+  // A long first sentence clips at a word, and the body carries on from there.
+  const path = 'In /data/scratch/repos/demo-api, add a new file AUTHORS.txt at the repo root containing exactly one line: sandbox. Then open a PR.';
+  const title = taskTitle(path);
+  assert.equal(title, 'In /data/scratch/repos/demo-api, add a new file AUTHORS.txt at the repo root containing…');
+  assert.ok(!title.slice(0, -1).endsWith(' '));
+  assert.equal(`${title.slice(0, -1)} ${taskBody(path, title).slice(1)}`.replace(/\s+/g, ' '), path);
 });
 
 test('a session stopped at its plan checkpoint shows as awaiting the plan until approved', () => {

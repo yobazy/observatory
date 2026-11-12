@@ -247,11 +247,16 @@ export function hiddenByDismiss(rows: Row[], batchId: string, urgent: (r: Row) =
 }
 
 /** What goes under a row's title: the task's whole text when the title is
- *  its session's name or was clipped, else what's left after the title;
- *  null when that's nothing. */
+ *  its session's name, else what's left after the title (from "…" when the
+ *  title was clipped); null when that's nothing. */
 export function taskBody(text: string, title: string): string | null {
   const t = text.trim();
-  if (title.endsWith("…") || !t.startsWith(title)) return t || null;
+  if (title.endsWith("…")) {
+    // Clipped: the body carries on where the title stopped.
+    const head = title.slice(0, -1);
+    if (t.startsWith(head)) return `…${t.slice(head.length).trimStart()}`;
+  }
+  if (!t.startsWith(title)) return t || null;
   return t.slice(title.length).trim() || null;
 }
 
@@ -266,7 +271,10 @@ export function taskTitle(text: string, sessionName?: string, max = 90): string 
     const end = line.search(/[.!?](\s|$)/);
     if (end > 0 && end < max) line = line.slice(0, end + 1);
   }
-  return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+  if (line.length <= max) return line;
+  // Clipped at a word when there's one late enough, else mid-word.
+  const cut = line.lastIndexOf(" ", max - 1);
+  return `${line.slice(0, cut > max * 0.6 ? cut : max - 1).trimEnd()}…`;
 }
 
 // ---- answering a plan ----
