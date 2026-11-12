@@ -83,3 +83,16 @@ test('given 4 sessions working, the New task box says it will wait in the queue;
   assert.equal(inMain.worktreeId, 'w-career-main');
   assert.equal(inMain.lane, 'career');
 });
+
+test('two tasks queued in the same millisecond get their own batch and task ids', () => {
+  const realNow = Date.now;
+  Date.now = () => 1_700_000_000_000;
+  try {
+    const a = newTaskBatch({ text: 'a', projectId: 'shop' }, cards);
+    const b = newTaskBatch({ text: 'b', projectId: 'shop' }, cards);
+    assert.notEqual(a.id, b.id);
+    assert.notEqual(a.tasks[0].id, b.tasks[0].id);
+  } finally {
+    Date.now = realNow;
+  }
+});
