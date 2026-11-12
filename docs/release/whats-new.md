@@ -10,19 +10,26 @@
   underneath on its own.
 -->
 
-### Talk to a project's lead as a chat
+### Decisions, one card at a time
 
-Each project's lead is now a chat with its pet instead of a thread. Its replies are set as cards, like the Read view, and their decisions answer the lead with one click, and stay clickable after an update lands below them. A new lead stuck on the folder trust prompt shows it in the chat, with buttons to answer it.
+Decisions now shows its queue down the side with one card beside it. Pick answers as you go, then send every picked answer at once. Cards stay inside their column when you asked something long, so their summary and details stay readable.
 
-### Leads with a face and a personality
+### A dispatch board sorted by what needs you
 
-Every lead has a round avatar of its face, beside its messages and in its chat's header, and its pet sits in the project's header with a dot when it has something for you. Give each lead a personality and your own instructions in Settings, on its card or in its chat. Leads no longer hear about other leads, even ones another window started.
+The dispatch board sorts tasks into Needs you, To review, Running, Up next and Done, with short rows and an Undo.
 
-### A lighter app when you're not looking
+### Answer and move on
 
-The sand plates draw only while their sand moves, slow down when it holds, and stop when the window is behind others, so the app uses far less CPU while it sits open.
+In the Read view, Send & next (⌘↵) answers a thread and opens the next one waiting on you.
+
+### Leads you can steer
+
+Set each project lead's level in Settings, and every lead keeps to its own project. A lead's questions for you stand out in its chat with an Answer button, a line about a thread opens that thread, and each task it starts has an Open link. Messaging a sleeping lead wakes it, instead of failing after 20 seconds.
+
+### Threads that stay put
+
+A project's threads keep their place when they finish, wait on you or are read; only a new prompt moves one up. Threads that said ✅ Safe to close close on their own a day later. A working thread's plate hums, with a faint ring rippling out from its rim until it stops.
 
 ### And smaller things
 
-- Closing a thread opens the next thread in its project, not the last one you visited.
-- A message that starts with a picture shows its words in the Read view.
+- A moment's reviewer runs its usual review, check and merge commands without asking.
