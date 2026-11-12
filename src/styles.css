@@ -1191,6 +1191,9 @@ body.is-resizing-rows * {
   padding: 0;
   color: var(--accent);
 }
+.link-btn.link-quiet {
+  color: var(--muted);
+}
 .link-btn:hover {
   text-decoration: underline;
 }
