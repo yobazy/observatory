@@ -5388,6 +5388,37 @@ td.task-last {
 .dialog-note.card-indent {
   margin-left: 102px;
 }
+/* The card's three parts: what lives here, how tasks run, Home. */
+.card-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.card-sec h3,
+.lead-sec h3 {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.field.field-switch > label {
+  padding-top: 1px;
+}
+.dialog-note.card-lead-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 0;
+}
+.card-lead-line .lead-mark.is-small {
+  margin-left: 0;
+}
+.card-sec .dialog-note.card-sec-why {
+  margin: -8px 0 0;
+}
 .dialog-note.card-flat {
   margin: 0;
 }
@@ -9863,6 +9894,10 @@ button.board-main:hover .board-title {
   font-weight: 600;
   letter-spacing: 0.02em;
 }
+.lead-mark.is-running {
+  border-color: color-mix(in srgb, var(--st-done) 45%, transparent);
+  color: var(--st-done);
+}
 .lead-mark.is-stopped {
   border-color: var(--line);
   color: var(--muted);
@@ -9965,15 +10000,6 @@ button.board-main:hover .board-title {
 .lead-voice-help {
   grid-column: 1 / -1;
 }
-.lead-voice-project {
-  display: grid;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-.lead-voice-name {
-  font-weight: 600;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .lead-pet.is-calling .avatar {
@@ -10043,6 +10069,150 @@ button.board-main:hover .board-title {
   max-width: 100%;
 }
 
+
+/* A project's lead on its own (LeadDialog.tsx): its face and state up top,
+   then what it may do, its personality, and what it runs on. */
+.lead-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.lead-dialog-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.lead-dialog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.dialog-note.lead-dialog-about {
+  margin: 0;
+  line-height: 1.5;
+}
+.lead-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.lead-sec .dialog-note {
+  margin: 0;
+}
+.lead-sub {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.lead-levels-pick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.lead-level-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--night);
+  color: var(--text);
+  text-align: left;
+}
+.lead-level-opt:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.lead-level-opt.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--night));
+}
+.lead-level-opt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.lead-level-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.lead-level-what {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.lead-sec select,
+.lead-sec input.lead-max,
+.top-lead-fields select {
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 5px 8px;
+  color: var(--text);
+  outline: none;
+}
+.lead-sec select:focus,
+.top-lead-fields select:focus {
+  border-color: var(--accent);
+}
+.lead-sec .card-cap.lead-notes input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.dialog-note.lead-pending {
+  color: var(--st-waiting);
+}
+.lead-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.link-btn.lead-remove {
+  color: var(--muted);
+}
+.link-btn.lead-remove:hover {
+  color: var(--st-waiting);
+}
+
+/* Settings › Leads: one row per project lead. */
+.lead-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lead-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.lead-row:first-child {
+  border-top: 0;
+}
+.lead-row-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-weight: 600;
+}
+.lead-row-name > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* What a lead started (S28, LeadCard.tsx): its tasks on the card, each with
    where it is now. */
@@ -10234,24 +10404,6 @@ button.board-main:hover .board-title {
 }
 .chat-meta .chat-raw {
   font-size: 12px;
-}
-.chat-voice {
-  position: absolute;
-  top: calc(100% - 6px);
-  right: 22px;
-  z-index: 5;
-  display: grid;
-  gap: 10px;
-  width: min(460px, calc(100% - 44px));
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
-  font-size: 13px;
-}
-.chat-voice-done {
-  justify-self: end;
 }
 .chat-acts {
   display: flex;
@@ -10633,29 +10785,8 @@ button.board-main:hover .board-title {
   padding-block: 2px;
 }
 
-.lead-levels {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
 
-.lead-levels li {
-  display: grid;
-  grid-template-columns: minmax(90px, 160px) 1fr;
-  align-items: start;
-  gap: 12px;
-}
 
-.lead-levels-name {
-  padding-top: 5px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* A lead's face (S30, LeadAvatar.tsx): its pet close up, at whole pixels,
    in a circle of its tint, with an optional status dot on the rim. The

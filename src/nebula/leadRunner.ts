@@ -75,6 +75,7 @@ import { latestReply, watchLeadCalls } from "./leadCalls";
 import { cleanUp, mergePr } from "./prs";
 import { holdsPrWork } from "./autoclean";
 import { DEFAULT_LEVEL, levelName, levelOf, type LeadLevel } from "./leadLevel";
+import type { LeadPet } from "./leadChat";
 import { checkVerdict, closeThread, onVerdicts, verdictKnown } from "./verdicts";
 import { openPreview } from "./preview";
 import { editQueued, enqueue } from "./queue";
@@ -203,7 +204,10 @@ async function retire(lead: CardLead | undefined) {
 
 /** "Start a lead" (and Restart) on a project's card. `base` is the card as
  *  the dialog has it, for a project with no card saved yet. */
-export async function startProjectLead(projectId: string, opts: { model: string; notes: string; base?: ProjectCard }): Promise<CardLead> {
+export async function startProjectLead(
+  projectId: string,
+  opts: { model: string; notes: string; base?: ProjectCard; level?: LeadLevel; pet?: LeadPet },
+): Promise<CardLead> {
   const s = getState();
   const project = s.projects[projectId];
   const main = Object.values(s.worktrees).find((w) => w.project_id === projectId && w.is_main);
@@ -212,11 +216,12 @@ export async function startProjectLead(projectId: string, opts: { model: string;
   const kind = defaultKind(settings);
   const before = allCards()[projectId]?.lead;
   await retire(before);
-  // A restarted lead stays the same animal, and keeps its level: Suggest
-  // for a new lead.
-  const level = before ? levelOf(before) : DEFAULT_LEVEL;
+  // A restarted lead stays the same animal, and keeps its level. A new one
+  // gets what was picked before it started, else Suggest.
+  const level = before ? levelOf(before) : (opts.level ?? DEFAULT_LEVEL);
+  const pet = before?.pet ?? opts.pet;
   const keep = {
-    ...(before?.pet ? { pet: before.pet } : {}),
+    ...(pet ? { pet } : {}),
     level,
     ...(before?.maxTasks ? { maxTasks: before.maxTasks } : {}),
     ...(before?.personality ? { personality: before.personality } : {}),

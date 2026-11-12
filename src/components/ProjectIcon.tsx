@@ -21,6 +21,7 @@ import { FolderDialog, ProjectDetailsDialog } from "./ProjectOrganize";
 import { locateProject } from "../nebula/relocate";
 import { useCards } from "../nebula/cards";
 import { CardDialog, type CardTarget } from "./CardDialog";
+import { openLeadSettings } from "./LeadDialog";
 import { Plate } from "./Plate";
 
 /** A project's icon: the emoji or image picked for it, its repo's logo, or
@@ -230,6 +231,10 @@ export function useProjectMenu() {
       label: cards[project.id]?.isHome ? "Project card (Home)…" : "Project card…",
       run: () => setCard({ cardKey: project.id, name: project.name, folder: project.repo_path }),
       separated: items.length > 0,
+    });
+    items.push({
+      label: "Lead…",
+      run: () => openLeadSettings(project.id),
     });
     items.push({ label: "Name and tags…", run: () => setDetails(project) });
     items.push({ label: "Thread tags…", run: () => setTagging(project) });

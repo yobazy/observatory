@@ -931,8 +931,8 @@ function ShellGlyph() {
 }
 
 /** The project's lead (S29), as its pet in the header: a click opens the
- *  project's chat. A project without a running lead has none; its card
- *  has Start a lead. */
+ *  project's chat. A project without a running lead has none; its menu's
+ *  Lead… starts one. */
 function ProjectLeadPet({ projectId }: { projectId: string }) {
   const lead = useLeads().find((l) => l.projectId === projectId);
   return lead ? <LeadPetButton lead={lead} /> : null;
