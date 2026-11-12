@@ -81,6 +81,8 @@ reply() { # $1 = a prompt, typed or given at start
     # A reply ending on a close verdict, logged where the app reads it.
     safe*) verdict "$line" "✅ Safe to close" ;;
     keep*) verdict "$line" "🟠 Keep open: waiting on you" ;;
+    # Work still going elsewhere, which the app checks in on (checkinRunner.ts).
+    running*) verdict "$line" "🟠 Keep open: round 3 is running on \`pc\`." ;;
     *) hook UserPromptSubmit "$line"; echo "working on: $line"; sleep 3; echo "done."; hook Stop ;;
   esac
 }
