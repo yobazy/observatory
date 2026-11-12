@@ -13,10 +13,9 @@ export const MAX_CHECK_INS = 24;
 export const STALE_MS = 3 * 60 * 60 * 1000;
 
 export const CHECK_IN_PROMPT =
-  "Automatic check-in from Observatory, which asks every 30 minutes while your last reply says something is running: " +
-  "look at the running work and reply with a short status card (what's finished, what's running now, anything wrong). " +
-  "If it has finished, wrap it up as you planned and report the results. " +
-  'If nothing is still running, end with a verdict that doesn\'t say "running", so the check-ins stop.';
+  "Automatic check-in from Observatory: a short status card on the running work, please. " +
+  "If it has finished, wrap it up as you planned and report. " +
+  "If nothing is running any more, leave \"running\" out of your verdict so these check-ins stop.";
 
 /** Per thread, kept across launches: `on` or `off` when you chose, how many
  *  check-ins were sent since, and when the last one went. */
