@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useOverlayKeys } from "./Overlay";
 import { QuickAnswer } from "./QuickAnswer";
-import { LABEL_DOT, LABEL_TONE, TriageActions, TriageChip, TriageHint, TriageNeed, TriageQueue, useTriageQueue } from "./TriageQueue";
+import { LABEL_DOT, TriageActions, TriageChip, TriageHint, TriageNeed, TriageQueue, useTriageQueue } from "./TriageQueue";
 import { TaskBudget } from "./TaskBudget";
 import { selectAgent } from "./Sidebar";
 import { openLink } from "./Run";
@@ -290,8 +290,7 @@ export function DispatchBoard({ onOpenList }: { onOpenList: () => void }) {
  *  with Undo, the notice naming what went with it. */
 function Batches({ batches, rows, urgent }: { batches: Batch[]; rows: Row[]; urgent: (r: Row) => boolean }) {
   if (!batches.length) return null;
-  const dismiss = (b: Batch) => {
-    const hid = hiddenByDismiss(rows, b.id, urgent);
+  const dismiss = (b: Batch, hid: string) => {
     dismissBatch(b.id);
     flash(`Dismissed a batch of ${b.tasks.length}${hid ? `: ${hid}` : ""}`, 6000, {
       label: "Undo",
@@ -305,21 +304,24 @@ function Batches({ batches, rows, urgent }: { batches: Batch[]; rows: Row[]; urg
   return (
     <section className="board-batches" aria-label="Settled batches">
       <span className="board-batches-label">Batches</span>
-      {batches.map((b) => (
-        <span key={b.id} className="board-batch">
-          <span>
-            {relativeTime(b.at) === "now" ? "just now" : `${relativeTime(b.at)} ago`}, {plural(b.tasks.length, "task")}
-            {hiddenByDismiss(rows, b.id, urgent) && ` · ${hiddenByDismiss(rows, b.id, urgent)}`}
+      {batches.map((b) => {
+        const hides = hiddenByDismiss(rows, b.id, urgent);
+        return (
+          <span key={b.id} className="board-batch">
+            <span>
+              {relativeTime(b.at) === "now" ? "just now" : `${relativeTime(b.at)} ago`}, {plural(b.tasks.length, "task")}
+              {hides && ` · ${hides}`}
+            </span>
+            <button
+              className="link-btn"
+              onClick={() => dismiss(b, hides)}
+              title="Take all of this batch's tasks off the board, finished or not; its unchecked items can be routed again"
+            >
+              Dismiss
+            </button>
           </span>
-          <button
-            className="link-btn"
-            onClick={() => dismiss(b)}
-            title="Take all of this batch's tasks off the board, finished or not; its unchecked items can be routed again"
-          >
-            Dismiss
-          </button>
-        </span>
-      ))}
+        );
+      })}
     </section>
   );
 }
@@ -353,6 +355,7 @@ function BoardRow({
   const inNeeds = group === "needs";
   // Under Needs you only because triage flagged it: its dot and chip say so.
   const flagged = inNeeds && !!triage && groupOf(phase, held) !== "needs";
+  const showTriageChip = !!triage && !sameAsk && !sameNews;
   return (
     <li className={`board-row is-${phase}${compact ? " is-compact" : ""}`}>
       <div className="board-line">
@@ -373,8 +376,11 @@ function BoardRow({
             {relativeTime(since)}
           </span>
         )}
-        <span className={`board-chip is-${flagged ? LABEL_TONE[triage!.label] : tone(phase, held)}`}>{statusText(row, state, holds)}</span>
-        {triage && !sameAsk && !sameNews && <TriageChip row={triage} />}
+        {/* A flagged row's triage chip says why it's here; its phase would only disagree. */}
+        {!(flagged && showTriageChip) && (
+          <span className={`board-chip is-${tone(phase, held)}`}>{statusText(row, state, holds)}</span>
+        )}
+        {showTriageChip && <TriageChip row={triage!} />}
         {checkable &&
           (t.done ? (
             <button

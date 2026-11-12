@@ -43,16 +43,20 @@ export async function readScreen(
   try {
     await new Promise<void>((r) => term.write(tail.data, r));
     const buf = term.buffer.active;
-    const raw: string[] = [];
+    // The last screenful of rows, as the terminal has them; then, when
+    // unwrapping, each wrapped row joins the one before it.
+    const phys: { text: string; wrapped: boolean }[] = [];
     for (let i = 0; i < buf.length; i++) {
       const line = buf.getLine(i);
-      const text = line?.translateToString(false) ?? "";
-      if (unwrap && line?.isWrapped && raw.length) raw[raw.length - 1] += text;
-      else raw.push(text);
+      phys.push({ text: line?.translateToString(false) ?? "", wrapped: !!line?.isWrapped });
     }
-    const lines = raw.map((l) => l.trimEnd());
-    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-    return lines.slice(-rows);
+    while (phys.length && !phys[phys.length - 1].text.trim()) phys.pop();
+    const lines: string[] = [];
+    for (const [n, r] of phys.slice(-rows).entries()) {
+      if (unwrap && r.wrapped && n > 0) lines[lines.length - 1] += r.text;
+      else lines.push(r.text);
+    }
+    return lines.map((l) => l.trimEnd());
   } finally {
     term.dispose();
   }

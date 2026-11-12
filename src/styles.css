@@ -5212,7 +5212,8 @@ td.task-last {
   flex: 1;
   min-width: 0;
 }
-.rd-ask-detail {
+.rd-ask-detail,
+.qa-detail {
   margin: 0;
   max-height: 9.5em;
   overflow: auto;
@@ -7316,21 +7317,22 @@ button.board-main:hover .board-title {
   box-shadow: inset 0 0 0 1.5px var(--faint);
   opacity: 0.7;
 }
-/* What a permission prompt asks about, on one line (full text in its title). */
+/* What a permission prompt asks about, on one line (full text in its
+   title): .rd-ask-detail's box, kept to a row. */
 .qa-detail {
-  margin: 0;
+  max-height: none;
   padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--term);
-  font-family: var(--mono);
   font-size: 11px;
-  line-height: 1.45;
-  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
+  overflow-wrap: normal;
   text-overflow: ellipsis;
   user-select: text;
+}
+/* Headings focus is moved to after a row leaves: a ring only from the keyboard. */
+.board h1:focus:not(:focus-visible),
+.board h2:focus:not(:focus-visible) {
+  outline: none;
 }
 /* Light pages: the filled error chip's text steps toward the ink, and the
    settled ring keeps its full strength, so both hold their contrast. */
