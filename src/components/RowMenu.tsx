@@ -306,9 +306,31 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
     return { x: e.clientX || r.left + 24, y: e.clientY || r.bottom };
   };
 
-  const openFor = (e: React.MouseEvent, target: { Agent: Agent } | { Terminal: TerminalTab }) => {
+  /** The branch header's menu, so a branch with no tasks can still be
+   *  opened or deleted. */
+  const worktreeItems = (wt: Worktree): MenuItem[] => {
+    const items: MenuItem[] = [
+      { label: "Open worktree", run: () => void attempt(openWorktree(wt)) },
+      { label: "Review changes", run: () => openReview(wt.id) },
+    ];
+    if (!wt.is_main)
+      items.push({
+        label: "Delete worktree",
+        destructive: true,
+        separated: true,
+        run: () => confirmDeleteWorktree(wt, false),
+      });
+    return items;
+  };
+
+  const openFor = (
+    e: React.MouseEvent,
+    target: { Agent: Agent } | { Terminal: TerminalTab } | { Worktree: Worktree },
+  ) => {
     const { x, y } = at(e);
     if ("Agent" in target) setMenu({ items: agentItems(target.Agent), x, y, label: `${target.Agent.name} actions` });
+    else if ("Worktree" in target)
+      setMenu({ items: worktreeItems(target.Worktree), x, y, label: `${target.Worktree.branch} actions` });
     else setMenu({ items: terminalItems(target.Terminal), x, y, label: `${target.Terminal.name} actions` });
   };
 
@@ -349,5 +371,6 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
       )}
     </>
   );
-  return { openFor, openForMany, element };
+  const deleteWorktree = (wt: Worktree) => confirmDeleteWorktree(wt, false);
+  return { openFor, openForMany, deleteWorktree, element };
 }
