@@ -6219,6 +6219,7 @@ button.attempt-status:hover span:nth-child(2) {
   height: 100%;
 }
 .fpv-picture .fpv-image {
+  position: relative;
   overflow: auto;
   padding-bottom: 56px;
 }
@@ -6237,7 +6238,21 @@ button.attempt-status:hover span:nth-child(2) {
   max-width: none;
   max-height: none;
   margin: auto;
-  cursor: zoom-out;
+  cursor: grab;
+}
+.fpv-image.is-panning,
+.fpv-image.is-panning img {
+  cursor: grabbing;
+}
+.fpv-image.is-commenting img {
+  cursor: crosshair;
+}
+/* A note's number, centred on the spot it's about. */
+.md-pin.fpv-pin {
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px #fff, var(--shadow-pop);
+  pointer-events: auto;
+  cursor: default;
 }
 .fpv-pdf {
   display: block;
