@@ -9,8 +9,8 @@ import type { State } from "./store";
 import type { ThreadEdit } from "./threadfiles";
 import type { Step as TurnStep, Turn } from "./turnsummary";
 import type { Entry as TranscriptEntry, Transcript } from "./transcript";
-import { allCards, draftCard, saveLead } from "./cards";
-import { reloadBatches, type Batch, type BatchTask } from "./batch";
+import { allCards, cardFor, draftCard, saveCard, saveLead } from "./cards";
+import { homeSignature, reloadBatches, type Batch, type BatchTask } from "./batch";
 import { leadActs, updateLeadActs } from "./leadActions";
 
 const now = Date.now();
@@ -215,6 +215,7 @@ function seedLeads() {
           draftCard({ files: [], isGitRepo: true }),
         );
   seedLeadWork();
+  seedBoard();
   const topLead = { agentId: "leadtop", model: "opus", notes: "~/.config/observatory/leads/top.md", path: "/Users/dev" };
   try {
     const saved = JSON.parse(localStorage.getItem("observatory.prefs") ?? "{}");
@@ -268,6 +269,94 @@ function seedLeadWork() {
     ],
     outcomes: { lead0: { n: reply.last, at: when.last, lines: [], asks: [ask] } },
   }));
+}
+
+/** A long, many-sentence task, as a to-do list item often is: the board
+ *  shows its first line as the title and keeps the rest out of the way. */
+const LONG_TASK = [
+  "Review draft PR #121 \"Size and color facets\" (branch `search-facets`) and get it ready to merge.",
+  "Check out `search-facets` (`gh pr checkout 121`) and do all work on that branch. Read every commit against main for correctness, and hold them to the repo's CLAUDE.md: src/search has no dependencies on the UI, and facet counts come from the index, never from a second query. Anything that would change how results rank, or that needs the owner's choice, goes in a PR comment instead of a fix.",
+  "Run `npm run build && npm test` and make sure both pass. Fix any real problems with small commits pushed to `search-facets`. When it's clean, mark the PR ready for review (`gh pr ready 121`) and post a short review summary as a PR comment. Don't merge. Finish with what you found, what you fixed, and whether it's safe to merge.",
+].join("\n\n");
+
+/** The Dispatch board's demo (S1 of the board overhaul): three live batches
+ *  with a task in every state the board shows. Written again on each load so
+ *  the times stay fresh, unless you've dismissed one. Every slot is taken
+ *  (four tasks' sessions plus the design-system lead), so the pending ones
+ *  stay pending; billing-api's card has a $1 daily budget, so its task is
+ *  held. */
+function seedBoard() {
+  const at = (ago: number) => now - ago * min;
+  const base = { sourceItemIds: [], confidence: 1, planCheckpoint: false, context: [], lane: null };
+  const task = (id: string, text: string, extra: Partial<BatchTask>): BatchTask =>
+    ({ ...base, id, text, target: "project", ...extra }) as BatchTask;
+  const launched = (agentId: string, ago: number, projectId = "p0") =>
+    ({ state: "launched", agentId, projectId, launchingAt: at(ago), launchedAt: at(ago) }) as Partial<BatchTask>;
+  try {
+    const p4 = cardFor("p4");
+    if (p4 && p4.dailyBudget === undefined) saveCard("p4", { ...p4, dailyBudget: 1 });
+  } catch {
+    // Without the card the held task shows as waiting for a slot.
+  }
+  const today: Batch = {
+    id: "mock-board-today",
+    at: at(35),
+    tasks: [
+      task("mbt1", "Accept unicode product names in URL slugs, and plan it first", { ...launched("a5", 100), planCheckpoint: true }),
+      task("mbt2", "Make cart sync apply one update at a time", launched("a2", 30)),
+      task("mbt3", "Rework the hero so the pricing grid leads", { ...launched("a6", 30, "p1"), mode: "existing_chat" }),
+      task("mbt4", "Why does search ignore synonyms like tee and t-shirt?", launched("a1", 25)),
+      task(
+        "mbt5",
+        "Handle invoice.paid webhooks idempotently.\n\nStripe retries a webhook until it gets a 2xx, so the same invoice.paid can arrive two or three times. Store the event id in a processed_events table inside the same transaction that marks the invoice paid, and return 200 early when it's already there. Add a test that delivers the same event twice and checks the invoice is paid once and only one receipt email goes out.\n\nDon't touch the subscription webhooks; they're next week's job.",
+        { ...launched("a4", 20), mode: "new_worktree" },
+      ),
+      task("mbt6", "Backfill last month's order events into the warehouse", { state: "pending", projectId: "p6" }),
+      task("mbt7", "Retry the weekly invoice job in batches of 50", { state: "pending", projectId: "p4" }),
+      task("mbt8", "Call the payment provider about the chargeback fee", { state: "listed", target: "you" }),
+    ],
+  };
+  const morning: Batch = {
+    id: "mock-board-morning",
+    at: at(60 * 5),
+    tasks: [
+      task("mbm1", "Add a share sheet for product pages", {
+        state: "failed",
+        projectId: "p3",
+        mode: "new_worktree",
+        note: "The daemon refused it: a branch named share-sheet already exists.",
+      }),
+      task("mbm2", "Sort the receipts folder into this year's tax categories", {
+        state: "blocked",
+        target: "home",
+        note: "No Home is set. Pick one from the sidebar.",
+        blockedOnHome: homeSignature(allCards()),
+        blockedAt: now,
+      }),
+      task("mbm3", "Generate the weekly invoice batch", launched("a10", 60 * 5, "p4")),
+      task("mbm4", "Add exponential backoff when a cart sync fails", launched("a3", 60 * 5)),
+      task("mbm5", LONG_TASK, launched("a12", 60 * 5)),
+    ],
+  };
+  const yesterday: Batch = {
+    id: "mock-board-yesterday",
+    at: at(60 * 26),
+    tasks: [
+      task("mby2", "Add a cmd+k menu for orders", { ...launched("a8", 60 * 26, "p2"), done: true }),
+      task("mby3", "Spike on an image CDN", launched("a11", 60 * 26)),
+      task("mby4", "Try lazy-loading the reviews widget", launched("a-gone", 60 * 26, "p1")),
+    ],
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem("observatory.dispatch.batches") ?? "{}");
+    const batches: Batch[] = Array.isArray(saved.batches) ? saved.batches : [];
+    const demo = [today, morning, yesterday].map((b) => (batches.find((x) => x.id === b.id)?.dismissed ? { ...b, dismissed: true } : b));
+    const ids = new Set(demo.map((b) => b.id));
+    localStorage.setItem("observatory.dispatch.batches", JSON.stringify({ batches: [...batches.filter((b) => !ids.has(b.id)), ...demo] }));
+    reloadBatches();
+  } catch {
+    // The preview without storage has an empty board.
+  }
 }
 
 const DEMO = [

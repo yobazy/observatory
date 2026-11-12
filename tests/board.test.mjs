@@ -18,12 +18,18 @@ const {
   awaitingPlan,
   batchSummary,
   boardRows,
+  clearableBatches,
   decideSummary,
   dispatchedLine,
+  groupOf,
+  groupRows,
   phaseOf,
   redirectPrompt,
   sortRows,
   suppressTaskNotification,
+  taskBody,
+  taskTitle,
+  hiddenByDismiss,
   PLAN_APPROVED,
 } = await import('../src/nebula/board.ts');
 const { urgency } = await import('../src/nebula/store.ts');
@@ -31,6 +37,7 @@ const {
   allBatches,
   checkOffTask,
   dismissBatch,
+  undismissBatch,
   dispatchPlan,
   isDispatched,
   reloadBatches,
@@ -129,6 +136,122 @@ test('dismissed batches leave the board', () => {
 });
 
 // ---- the plan checkpoint ----
+
+// ---- sections ----
+
+test('rows fall into Needs you, Running, Up next and Done, in that order, keeping their order within each', () => {
+  const agents = byId([
+    agent('a1', 'running'),
+    agent('a2', 'needs_feedback'),
+    agent('a3', 'finished'),
+    agent('a4', 'terminated'),
+    agent('a6', 'finished', { archived: true }),
+  ]);
+  const tasks = [
+    task(1),
+    task(2),
+    task(3),
+    task(4),
+    task(5, { state: 'pending', agentId: undefined }),
+    task(6),
+    task(7, { state: 'listed', agentId: undefined, target: 'you' }),
+    task(8, { state: 'failed', agentId: undefined }),
+    task(9, { state: 'blocked', agentId: undefined }),
+    task(10, { done: true }),
+    task(11, { state: 'pending', agentId: undefined }),
+  ];
+  const rows = boardRows([{ id: 'b', at: 0, tasks }], agents, () => 0, NOW);
+  const held = (r) => r.task.id === 'b-t11';
+  const groups = groupRows(rows, held);
+  assert.deepEqual(
+    groups.map((g) => [g.label, g.rows.map((r) => r.phase)]),
+    [
+      ['Needs you', ['waiting', 'stopped', 'failed', 'blocked', 'pending']],
+      ['To review', ['finished']],
+      ['Running', ['working']],
+      ['Up next', ['pending', 'listed']],
+      ['Done', ['archived', 'done']],
+    ],
+  );
+  // Within a section the board's order stands.
+  const flat = groups.flatMap((g) => g.rows);
+  assert.deepEqual(
+    groups.map((g) => g.rows.map((r) => rows.indexOf(r))).map((ix) => ix.every((x, i) => i === 0 || x > ix[i - 1])),
+    [true, true, true, true, true],
+  );
+  assert.equal(flat.length, rows.length);
+});
+
+test('a row triage flags as a decision or stuck goes under Needs you, whatever its phase', () => {
+  const agents = byId([agent('a1', 'running'), agent('a2', 'finished'), agent('a3', 'running')]);
+  const rows = boardRows([{ id: 'b', at: 0, tasks: [task(1), task(2), task(3)] }], agents, () => 0, NOW);
+  const urgent = (r) => r.agent.id === 'a1' || r.agent.id === 'a2';
+  assert.deepEqual(
+    groupRows(rows, () => false, urgent).map((g) => [g.key, g.rows.map((r) => r.agent.id)]),
+    [
+      ['needs', ['a1', 'a2']],
+      ['running', ['a3']],
+    ],
+  );
+});
+
+test('empty sections are left out; a plan, cancelled and gone rows land where they wait', () => {
+  assert.deepEqual(groupRows([]), []);
+  assert.equal(groupOf('plan'), 'needs');
+  assert.equal(groupOf('launching'), 'running');
+  assert.equal(groupOf('pending'), 'next');
+  assert.equal(groupOf('pending', true), 'needs');
+  assert.equal(groupOf('gone'), 'done');
+  assert.equal(groupOf('cancelled'), 'done');
+  assert.equal(groupOf('finished'), 'review');
+});
+
+test('Clear done takes only batches with every task done; one with anything left, a finished turn too, stays', () => {
+  const agents = byId([agent('a1', 'finished', { archived: true }), agent('a2', 'finished', { archived: true }), agent('a3', 'finished')]);
+  const batches = [
+    { id: 'all-done', at: 0, tasks: [task(1), task(4, { done: true, agentId: undefined, state: 'listed' })] },
+    { id: 'one-failed', at: 0, tasks: [task(2), task(5, { state: 'failed', agentId: undefined })] },
+    { id: 'unreviewed', at: 0, tasks: [task(3), task(6, { done: true, agentId: undefined, state: 'listed' })] },
+  ];
+  const rows = boardRows(batches, agents, () => 0, NOW);
+  assert.deepEqual(clearableBatches(rows), ['all-done']);
+  // Dismissing the others says what it would hide.
+  assert.equal(hiddenByDismiss(rows, 'one-failed'), '1 failed');
+  assert.equal(hiddenByDismiss(rows, 'unreviewed'), '1 to review');
+  assert.equal(hiddenByDismiss(rows, 'all-done'), '');
+  // A done row triage says needs you (shown under Needs you) keeps its batch.
+  const urgent = (r) => r.task.id === 'b-t4';
+  assert.deepEqual(clearableBatches(rows, urgent), []);
+  assert.equal(hiddenByDismiss(rows, 'all-done', urgent), '1 needing you');
+});
+
+test("a row's title is its session's name, else the task's first line or first sentence, clipped", () => {
+  assert.equal(taskTitle('Fix the cart\n\nLots more detail', 'Cart Fix'), 'Cart Fix');
+  assert.equal(taskTitle('Fix the cart\n\nLots more detail'), 'Fix the cart');
+  const long = 'Review draft PR #1 and get it ready to merge. Check out the branch and do all the work on it, not on main, then run the checks.';
+  assert.equal(taskTitle(long), 'Review draft PR #1 and get it ready to merge.');
+  const run = 'x'.repeat(120);
+  assert.equal(taskTitle(run).length, 90);
+  assert.ok(taskTitle(run).endsWith('…'));
+  assert.equal(taskTitle('  Short one  ', '  '), 'Short one');
+});
+
+test("a row's body is what the title leaves out: the rest after a first line or sentence, all of it under a session name", () => {
+  const text = 'Fix the cart\n\nLots more detail';
+  assert.equal(taskBody(text, taskTitle(text)), 'Lots more detail');
+  assert.equal(taskBody(text, taskTitle(text, 'Cart Fix')), text);
+  assert.equal(taskBody('Short one', taskTitle('Short one')), null);
+  const long = 'Review draft PR #1 and get it ready to merge. Check out the branch and do all the work on it, not on main, then run the checks.';
+  assert.equal(taskBody(long, taskTitle(long)), 'Check out the branch and do all the work on it, not on main, then run the checks.');
+  const run = 'x'.repeat(120);
+  assert.equal(taskBody(run, taskTitle(run)), `…${'x'.repeat(31)}`);
+  // A long first sentence clips at a word, and the body carries on from there.
+  const path = 'In /data/scratch/repos/demo-api, add a new file AUTHORS.txt at the repo root containing exactly one line: sandbox. Then open a PR.';
+  const title = taskTitle(path);
+  assert.equal(title, 'In /data/scratch/repos/demo-api, add a new file AUTHORS.txt at the repo root containing…');
+  assert.ok(!title.slice(0, -1).endsWith(' '));
+  assert.equal(`${title.slice(0, -1)} ${taskBody(path, title).slice(1)}`.replace(/\s+/g, ' '), path);
+});
 
 test('a session stopped at its plan checkpoint shows as awaiting the plan until approved', () => {
   const t = task(1, { planCheckpoint: true });
@@ -325,6 +448,11 @@ test('items already out in a batch are not routed again; dismissing the batch fr
   assert.deepEqual(routableItems(after, allBatches()).map((i) => i.text), ['b', 'c']);
   assert.equal(allBatches()[0].dismissed, true);
   assert.equal(items.length, 3);
+
+  // Undo puts it back, and its items out in it again.
+  undismissBatch(batch.id);
+  assert.equal(allBatches()[0].dismissed, false);
+  assert.deepEqual(routableItems(dispatchItems(), allBatches()).map((i) => i.text), ['c']);
 });
 
 test("a running session's line is its latest message or tool call, not the input box", () => {

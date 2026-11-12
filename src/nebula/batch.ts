@@ -8,7 +8,7 @@
 // Value imports name their .ts files: the tests load this module in Node.
 import { useSyncExternalStore } from "react";
 import { canSchedule, homeCard, isFolderKey, type Cards } from "./cards.ts";
-import { linkItems, setItemsChecked, unlinkBatch, type DispatchItem } from "./dispatch.ts";
+import { dispatchItems, linkItems, setItemsChecked, unlinkBatch, type DispatchItem } from "./dispatch.ts";
 import { clearRoutedPlan, type PlanTask, type RoutedPlan } from "./router.ts";
 import { freeName, suggestBranch } from "./branches.ts";
 import type { Agent, AgentKind, AgentStatus } from "./types";
@@ -608,6 +608,19 @@ export function checkOffTask(batchId: string, taskId: string, done: boolean) {
 export function dismissBatch(batchId: string) {
   updateBatch(batchId, { dismissed: true });
   unlinkBatch(batchId);
+}
+
+/** Put a dismissed batch back on the board (Undo after Clear done): its
+ *  items count as out in it again, unless they've gone out in another since. */
+export function undismissBatch(batchId: string) {
+  const b = allBatches().find((x) => x.id === batchId);
+  if (!b) return;
+  updateBatch(batchId, { dismissed: false });
+  const free = new Set(dispatchItems().filter((i) => !i.batchId).map((i) => i.id));
+  linkItems(
+    b.tasks.flatMap((t) => t.sourceItemIds).filter((id) => free.has(id)),
+    batchId,
+  );
 }
 
 /** Whether an item is out in a batch still on the board: routing it again

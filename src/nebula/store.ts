@@ -255,11 +255,37 @@ export function useAppState(): State {
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Show `notice` for `ms`; longer for a line that takes reading. */
+/** Until when the notice up now offers its action (an Undo). */
+let actionUntil = 0;
+/** The newest plain notice held back while an action notice was up, shown
+ *  once that one goes. */
+let pending: { notice: string; ms: number } | null = null;
+
+/** Show `notice` for `ms`; longer for a line that takes reading. A plain
+ *  notice doesn't replace one offering an action (an Undo) before that one
+ *  is due to go: it waits, and shows when that one goes. A newer one with
+ *  an action does replace it. */
 export function flash(notice: string, ms = 3500, action: { label: string; run: () => void } | null = null) {
+  if (!action && getState().noticeAction && Date.now() < actionUntil) {
+    pending = { notice, ms };
+    return;
+  }
   if (noticeTimer) clearTimeout(noticeTimer);
+  actionUntil = action ? Date.now() + ms : 0;
   setState({ notice, noticeAction: action });
-  noticeTimer = setTimeout(() => setState({ notice: null, noticeAction: null }), ms);
+  noticeTimer = setTimeout(clearNotice, ms);
+}
+
+/** Take the notice down (it's due, or its action was taken), and show the
+ *  plain one that waited for it, if any. */
+export function clearNotice() {
+  if (noticeTimer) clearTimeout(noticeTimer);
+  noticeTimer = null;
+  actionUntil = 0;
+  setState({ notice: null, noticeAction: null });
+  const next = pending;
+  pending = null;
+  if (next) flash(next.notice, next.ms);
 }
 
 export function byId<T extends { id: string }>(rows: T[]): Record<string, T> {
