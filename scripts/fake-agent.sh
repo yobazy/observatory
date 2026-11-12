@@ -81,13 +81,15 @@ reply() { # $1 = a prompt, typed or given at start
     # A reply ending on a close verdict, logged where the app reads it.
     safe*) verdict "$line" "✅ Safe to close" ;;
     keep*) verdict "$line" "🟠 Keep open: waiting on you" ;;
+    # Work still going elsewhere, which the app checks in on (checkinRunner.ts).
+    running*) verdict "$line" "🟠 Keep open: round 3 is running on \`pc\`." ;;
     *) hook UserPromptSubmit "$line"; echo "working on: $line"; sleep 3; echo "done."; hook Stop ;;
   esac
 }
 # A task it starts on: the prompts above work as tasks too, so scripts/drive
 # can start one without typing into a terminal.
 case "$1" in
-  ask* | menu* | mcp* | quiz* | agents* | safe* | keep*) reply "$1" ;;
+  ask* | menu* | mcp* | quiz* | agents* | safe* | keep* | running*) reply "$1" ;;
   ?*) hook UserPromptSubmit "$1"; echo "task: $1"; sleep 2; hook Stop ;;
 esac
 while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do reply "$line"; done

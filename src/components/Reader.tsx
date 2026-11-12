@@ -10,6 +10,8 @@ import { resolve } from "../nebula/termpaths";
 import { enqueue, isIdle, sendQueued, unqueue, queuedSentAt, type Queued } from "../nebula/queue";
 import { actOf, clock, doingLine, heldAtPrompt, liveStep, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
+import { setCheckIn, useCheckIn } from "../nebula/checkinRunner";
+import { untilText } from "../nebula/checkin";
 import { useLanded } from "../nebula/prwatch";
 import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, withBefore, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
@@ -380,7 +382,19 @@ function Videos({ paths, from }: { paths: string[]; from: string }) {
 /** How the reply closes: safe to close, with the button that does it while
  *  this is the latest reply, or what's keeping it open, with what's left to
  *  ship beside it. */
-function VerdictLine({ verdict, onClose, ship, landed }: { verdict: Chip; onClose?: () => void; ship?: Ship | null; landed?: string | null }) {
+function VerdictLine({
+  verdict,
+  onClose,
+  ship,
+  landed,
+  checkIn,
+}: {
+  verdict: Chip;
+  onClose?: () => void;
+  ship?: Ship | null;
+  landed?: string | null;
+  checkIn?: CheckInView | null;
+}) {
   return (
     <div className="rd-verdict-row">
       <p className={`rd-verdict is-${verdict.tone}`}>
@@ -396,12 +410,44 @@ function VerdictLine({ verdict, onClose, ship, landed }: { verdict: Chip; onClos
           Close thread
         </button>
       )}
+      {checkIn && verdict.tone === "wait" && <CheckInButton view={checkIn} />}
       {ship && verdict.tone !== "done" && (
         <button className="btn btn-sm" onClick={ship.run} title={ship.title}>
           {ship.label}
         </button>
       )}
     </div>
+  );
+}
+
+/** Whether the app asks this thread how its running work is going, and
+ *  when it next will (checkinRunner.ts). */
+type CheckInView = { on: boolean; next: number | null; toggle: () => void };
+
+function CheckInButton({ view }: { view: CheckInView }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!view.on) return;
+    const t = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, [view.on]);
+  if (!view.on)
+    return (
+      <button className="btn btn-sm btn-rare" onClick={view.toggle} title="Ask this thread for a status card every 30 minutes while it says something is running">
+        Check in every 30m
+      </button>
+    );
+  const now = Date.now();
+  const when = view.next == null ? "paused" : view.next <= now ? "checking soon" : `next in ${untilText(view.next, now)}`;
+  return (
+    <button
+      className="btn btn-sm rd-checkin is-on"
+      onClick={view.toggle}
+      title="The app asks this thread for a status card every 30 minutes while its reply says something is running, and stops once it doesn't. Click to stop."
+    >
+      <span className="rd-checkin-dot" aria-hidden />
+      Checking in · {when}
+    </button>
   );
 }
 
@@ -460,6 +506,7 @@ export function CardReply({
   onPick,
   onClose,
   landed,
+  checkIn,
 }: {
   card: Card;
   /** Its two pictures as before and after, when it says which is which. */
@@ -478,6 +525,8 @@ export function CardReply({
   onClose?: () => void;
   /** The PRs its verdict waits on, once they've all landed: "#134 merged". */
   landed?: string | null;
+  /** The latest reply's check-ins, while its verdict keeps the thread open. */
+  checkIn?: CheckInView | null;
 }) {
   const headline = useMemo(() => (card.headline ? toHtml(card.headline, true) : ""), [card.headline]);
   return (
@@ -539,7 +588,7 @@ export function CardReply({
           <Md text={card.details} />
         </details>
       )}
-      {card.verdict && <VerdictLine verdict={card.verdict} onClose={onClose} ship={ship} landed={landed} />}
+      {card.verdict && <VerdictLine verdict={card.verdict} onClose={onClose} ship={ship} landed={landed} checkIn={checkIn} />}
     </article>
   );
 }
@@ -592,6 +641,7 @@ export function Reply(props: {
   onPick: (n: number, letter: string) => void;
   onClose?: () => void;
   landed?: string | null;
+  checkIn?: CheckInView | null;
   /** The thread up to it, for what earlier replies said about the
    *  decisions it asks again. */
   thread?: { n: number; entries: Entry[] };
@@ -874,6 +924,9 @@ export function Reader({
   const latestThread = useMemo(() => (t && latest >= 0 ? { n: latest, entries: t.entries } : undefined), [t?.entries, latest]);
   // The PRs the latest reply's verdict waits on, once they've all landed.
   const prsLanded = useLanded(state.worktrees[agent.worktree_id]?.path, latestCard?.verdict ?? null);
+  // Status cards asked for on their own while it says something's running.
+  const latestAt = t?.entries.find((x) => x.n === latest)?.at ?? null;
+  const checkIn = useCheckIn(agent, latestCard?.verdict, latestAt);
   // Answers typed or dictated into the box ("2 a, 3 b") light up as taps.
   const typed = typedAnswers(latestCard, draft);
   const shown = { ...typed.picks, ...Object.fromEntries(Object.entries(picks).filter(([, l]) => l)) };
@@ -1310,6 +1363,11 @@ export function Reader({
                         onPick={pick}
                         onClose={e.n === latest && agent.status === "finished" && !agent.archived ? () => closeThread(agent) : undefined}
                         landed={e.n === latest ? prsLanded : null}
+                        checkIn={
+                          e.n === latest && agent.status === "finished" && !agent.archived
+                            ? { ...checkIn, toggle: () => setCheckIn(agent.id, !checkIn.on) }
+                            : null
+                        }
                         thread={e.n === latest ? latestThread : undefined}
                       />
                       <div className="rd-tools">

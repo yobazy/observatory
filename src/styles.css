@@ -8790,6 +8790,30 @@ button.board-main:hover .board-title {
   border-top: none;
 }
 
+/* Check-ins (checkinRunner.ts): on, a breathing dot in waiting's color and
+   when the next status card is asked for. */
+.rd-checkin {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.rd-checkin.is-on {
+  color: var(--st-waiting);
+}
+.rd-checkin-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--st-waiting);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-checkin-dot {
+    animation: none;
+  }
+}
+
 /* Decisions (Inbox.tsx): the queue on the left, one line a thread, and the
    card it's on on the right. Each scrolls on its own. */
 .inbox-body {
