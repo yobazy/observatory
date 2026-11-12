@@ -7,6 +7,7 @@ import { buildSuggestPrompt, freshReply, previewSuggestions, readSuggestions, su
 import { flash, getState, projectOfWorktree, setState, subscribe, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
+import { reveal } from "../nebula/reveal";
 import { enqueue, isIdle, sendQueued, unqueue, queuedSentAt, type Queued } from "../nebula/queue";
 import { actOf, clock, doingLine, heldAtPrompt, liveStep, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
@@ -577,6 +578,35 @@ function More({ card, from, pair }: { card: Card; from: string; pair: [string, s
         )}
       </details>
     </>
+  );
+}
+
+/** Fades a reply in word by word when `on`, as a streamed one would. It's
+ *  held hidden from the first paint, then split into words once the
+ *  reply's own effects (Copy buttons, PR links) have made its text. */
+export function useReveal(el: React.RefObject<HTMLElement | null>, on: boolean) {
+  const go = useRef(on && !matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useLayoutEffect(() => {
+    if (go.current) el.current?.classList.add("rv-hold");
+  }, [el]);
+  useEffect(() => {
+    const root = el.current;
+    if (!go.current || !root) return;
+    // Run again before it's done (as React's dev checks do), it starts over.
+    const end = reveal(root, () => (go.current = false));
+    root.classList.remove("rv-hold");
+    return end;
+  }, [el]);
+}
+
+/** A reply's box, faded in word by word when it's new. */
+function Revealed({ on, children, ...rest }: { on: boolean; children: React.ReactNode; className: string; "data-n": number }) {
+  const el = useRef<HTMLDivElement>(null);
+  useReveal(el, on);
+  return (
+    <div ref={el} {...rest}>
+      {children}
+    </div>
   );
 }
 
@@ -1295,9 +1325,10 @@ export function Reader({
                       {e.text}
                     </div>
                   ) : e.kind === "claude" ? (
-                    <div
+                    <Revealed
                       key={e.n}
                       data-n={e.n}
+                      on={fresh(e)}
                       className={`rd-reply${pointed?.entry === e.n ? " is-pointed" : ""}${fresh(e) ? " is-new" : ""}`}
                     >
                       <Reply
@@ -1338,7 +1369,7 @@ export function Reader({
                           </button>
                         )}
                       </div>
-                    </div>
+                    </Revealed>
                   ) : e.kind === "steps" ? (
                     <Steps key={e.n} entry={e} root={root.replace(/\/+$/, "")} fresh={fresh(e)} />
                   ) : (
