@@ -309,7 +309,7 @@ export function RouteReview({ items, onBack, onClose }: { items: DispatchItem[];
                         : t.skill && card?.skills.includes(t.skill)
                           ? `Uses the ${t.skill} skill.`
                           : card?.policy === "shared"
-                            ? `Shared: at most ${card.concurrency} at once.`
+                            ? `Main checkout: at most ${card.concurrency} at once.`
                             : ""}
                   </span>
                   <button

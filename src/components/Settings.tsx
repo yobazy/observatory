@@ -41,12 +41,15 @@ import { leadState } from "../nebula/lead";
 import { ASK_LINE_TEMPLATE, countsText, DEFAULT_TOP_MODEL, TOP_LEAD_NAME, TOP_NOTES, type LogCounts } from "../nebula/leadAsk";
 import { answerCounts, defaultTopFolder, openAnswersLog, removeTopLead, setTopLeadModel, setTopLeadPet, startTopLead } from "../nebula/leadRunner";
 import { petOf } from "../nebula/leadChat";
-import { LeadVoiceFields, LevelPicker, ModelPicker, PetPicker, VOICE_HELP } from "./LeadCard";
+import { LevelPicker, ModelPicker, PetPicker } from "./LeadCard";
+import { LeadAvatar } from "./LeadAvatar";
+import { LeadStateMark, openLeadSettings } from "./LeadDialog";
+import { ContextMenu } from "./Menu";
 import { useCards } from "../nebula/cards";
 import { levelOf } from "../nebula/leadLevel";
 import { levelFlash, setLeadLevel } from "../nebula/leadRunner";
 
-const TABS = ["Appearance", "General", "Sessions", "Agents", "Project", "Shortcuts", "Experimental"] as const;
+const TABS = ["Appearance", "General", "Sessions", "Agents", "Leads", "Project", "Shortcuts", "Experimental"] as const;
 type Tab = (typeof TABS)[number];
 
 /** nebula's settings, tab for tab as the TUI lays them out, plus the desktop
@@ -130,7 +133,6 @@ export function SettingsView() {
         <ReadView />
         <ClosingThreads />
         <DispatchSettings />
-        <LeadsSettings />
         <AutomationsSettings />
         <Updates />
         <UsageLog />
@@ -147,6 +149,8 @@ export function SettingsView() {
           </Group>
         ))}
       </>
+    ) : t === "Leads" ? (
+      <LeadsSettings />
     ) : t === "Project" ? (
       <ProjectTab settings={settings} onChange={() => void loadSettings().then(setSettings)} />
     ) : t === "Shortcuts" ? (
@@ -732,42 +736,82 @@ function DispatchSettings() {
   );
 }
 
-/** Each project's lead and its level: what the app lets it do on its own. */
-function ProjectLeadLevels() {
+/** Every project's lead, one row each: its face, whether it runs, its
+ *  level, and Edit… for the rest (LeadDialog). Projects without one are
+ *  offered after, so a lead can be started from here too. */
+function ProjectLeadsList() {
   const cards = useCards();
-  const { projects } = useAppState();
-  const rows = Object.entries(cards)
-    .flatMap(([id, c]) => (c.lead && projects[id] ? [{ id, name: projects[id].name, lead: c.lead }] : []))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const { projects, agents } = useAppState();
+  const all = Object.values(projects).sort((a, b) => a.name.localeCompare(b.name));
+  const rows = all.flatMap((p) => {
+    const lead = cards[p.id]?.lead;
+    return lead ? [{ id: p.id, name: p.name, lead }] : [];
+  });
+  const without = all.filter((p) => !cards[p.id]?.lead);
+  const [adding, setAdding] = useState<{ x: number; y: number } | null>(null);
+  const addBtn = useRef<HTMLButtonElement>(null);
   return (
-    <div className="setting setting-stack">
+    <div
+      className="setting setting-stack"
+      data-search={`personality instructions pet looks like ${rows.map((r) => r.name).join(" ")}`}
+    >
       <div className="setting-text">
-        <span className="setting-label">Project leads</span>
         <span className="setting-hint">
-          What each project's lead may do on its own. Observatory refuses anything above its level, and keeps every lead to its own
-          project's folder, threads and worktrees.
+          One thread per project that hears of its tasks and answers their questions. The app refuses anything above a lead's level,
+          and keeps it to its own project's folder, threads and worktrees.
         </span>
       </div>
-      {rows.length === 0 ? (
-        <span className="setting-hint">No project has a lead. Start one from a project's card.</span>
-      ) : (
-        <ul className="lead-levels" aria-label="Project leads' levels">
-          {rows.map((r) => (
-            <li key={r.id}>
-              <label htmlFor={`set-lead-level-${r.id}`} className="lead-levels-name">
-                {r.name}
-              </label>
-              <LevelPicker
-                id={`set-lead-level-${r.id}`}
-                level={levelOf(r.lead)}
-                onPick={(level) => {
-                  setLeadLevel(r.id, r.lead, level);
-                  flash(levelFlash(r.name, level));
-                }}
-              />
-            </li>
-          ))}
+      {rows.length > 0 && (
+        <ul className="lead-rows" aria-label="Project leads">
+          {rows.map((r) => {
+            const state = leadState(r.lead, agents);
+            return (
+              <li key={r.id} className="lead-row">
+                <LeadAvatar pet={petOf(r.lead, r.name)} size={28} />
+                <span className="lead-row-name">
+                  <span>{r.name}</span>
+                  <LeadStateMark state={state} small />
+                </span>
+                <LevelPicker
+                  id={`set-lead-level-${r.id}`}
+                  compact
+                  level={levelOf(r.lead)}
+                  onPick={(level) => {
+                    setLeadLevel(r.id, r.lead, level);
+                    flash(levelFlash(r.name, level));
+                  }}
+                />
+                <button className="btn btn-sm" onClick={() => openLeadSettings(r.id)} aria-label={`Edit ${r.name}'s lead`}>
+                  Edit…
+                </button>
+              </li>
+            );
+          })}
         </ul>
+      )}
+      {without.length > 0 && (
+        <div className="setting-inline">
+          <button
+            ref={addBtn}
+            className="btn btn-sm"
+            aria-haspopup="menu"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setAdding({ x: r.left, y: r.bottom + 4 });
+            }}
+          >
+            {rows.length ? "Add a lead…" : "Start a project's first lead…"}
+          </button>
+          {adding && (
+            <ContextMenu
+              {...adding}
+              label="Projects without a lead"
+              // From the button, so focus comes back to it when the dialog closes.
+              items={without.map((p) => ({ label: p.name, run: () => (addBtn.current?.focus(), openLeadSettings(p.id)) }))}
+              onClose={() => setAdding(null)}
+            />
+          )}
+        </div>
       )}
     </div>
   );
@@ -785,6 +829,7 @@ function LeadsSettings() {
   const [busy, setBusy] = useState(false);
   const [counts, setCounts] = useState<LogCounts | null>(null);
   const [copied, setCopied] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const agent = top ? agents[top.agentId] : undefined;
   const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -818,170 +863,158 @@ function LeadsSettings() {
   };
 
   return (
-    <Group title="Leads">
-      <div className="setting setting-stack">
-        <div className="setting-text">
-          <span className="setting-label">
-            Top lead{" "}
-            {state !== "none" && (
-              <span className={`lead-mark is-small${state === "stopped" ? " is-stopped" : ""}`}>
-                {state === "running" ? "Running" : "Top lead stopped"}
-              </span>
-            )}
-          </span>
-          <span className="setting-hint">
-            {state === "stopped"
-              ? "Its thread was archived or deleted, so tasks only ask their project's lead. Restart starts a fresh one from its notes."
-              : `One thread over every project, named ${TOP_LEAD_NAME}. Tasks ask it about other projects; it answers facts and past decisions with a source from its notes, the projects' CLAUDE.md and README, memory and your vault, passes a question about one project to that project's lead, and sends anything else back to you. It never acts on a question. Off until you start it; it costs nothing till then.`}
-          </span>
-        </div>
-        <div className="setting-inline top-lead-fields">
-          <label className="card-cap">
-            folder
-            <input
-              className="setting-input"
-              value={folder}
-              onChange={(e) => setFolder(e.target.value)}
-              disabled={state === "running"}
-              spellCheck={false}
-              aria-label="The folder the top lead runs in"
-            />
-          </label>
-          {state !== "running" && (
-            <button
-              className="btn btn-sm"
-              onClick={() => void pickFolder(folder || undefined, "Choose where the top lead runs").then((d) => d && setFolder(d))}
-            >
-              Choose…
-            </button>
-          )}
-        </div>
-        <div className="setting-inline top-lead-fields">
-          <ModelPicker model={model} label="The top lead's model" onPick={pickModel} />
-          <label className="card-cap">
-            notes
-            <input
-              className="setting-input"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              disabled={state === "running"}
-              spellCheck={false}
-              aria-label="The top lead's notes file"
-            />
-          </label>
-        </div>
-        {top && (
-          <div className="setting-inline top-lead-fields">
-            <PetPicker
-              pet={petOf(top, null)}
-              label="What the top lead looks like"
-              onPick={(pet) => void setTopLeadPet(top, pet).then(() => flash(`The top lead is a ${pet.kind} now`))}
-            />
+    <>
+      <Group title="Project leads">
+        <ProjectLeadsList />
+      </Group>
+      <Group title="Top lead">
+        <div className="setting setting-stack">
+          <div className="setting-text">
+            <span className="setting-label">
+              Over every project{" "}
+              {state !== "none" && (
+                <LeadStateMark state={state} small />
+              )}
+            </span>
+            <span className="setting-hint">
+              {state === "stopped"
+                ? "Its thread was archived or deleted, so tasks only ask their project's lead. Restart starts a fresh one from its notes."
+                : `One thread over every project, named ${TOP_LEAD_NAME}. Tasks ask it about other projects; it answers facts and past decisions with a source from its notes, the projects' CLAUDE.md and README, memory and your vault, passes a question about one project to that project's lead, and sends anything else back to you. It never acts on a question. Off until you start it; it costs nothing till then.`}
+            </span>
           </div>
-        )}
-        <div className="setting-inline">
-          {state === "running" && agent && (
-            <button
-              className="link-btn"
-              onClick={() => openLeadChat(agent.id)}
-            >
-              Open its chat
-            </button>
+          <div className="setting-inline top-lead-fields">
+            <label className="card-cap">
+              folder
+              <input
+                className="setting-input"
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+                disabled={state === "running"}
+                spellCheck={false}
+                aria-label="The folder the top lead runs in"
+              />
+            </label>
+            {state !== "running" && (
+              <button
+                className="btn btn-sm"
+                onClick={() => void pickFolder(folder || undefined, "Choose where the top lead runs").then((d) => d && setFolder(d))}
+              >
+                Choose…
+              </button>
+            )}
+          </div>
+          <div className="setting-inline top-lead-fields">
+            <ModelPicker model={model} label="The top lead's model" onPick={pickModel} />
+            <label className="card-cap">
+              notes
+              <input
+                className="setting-input"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                disabled={state === "running"}
+                spellCheck={false}
+                aria-label="The top lead's notes file"
+              />
+            </label>
+          </div>
+          {top && (
+            <div className="setting-inline top-lead-fields">
+              <PetPicker
+                pet={petOf(top, null)}
+                label="What the top lead looks like"
+                onPick={(pet) => void setTopLeadPet(top, pet).then(() => flash(`The top lead is a ${pet.kind} now`))}
+              />
+            </div>
           )}
+          <div className="setting-inline">
+            {state === "running" && agent && (
+              <button
+                className="link-btn"
+                onClick={() => openLeadChat(agent.id)}
+              >
+                Open its chat
+              </button>
+            )}
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={start}
+              title={state === "running" ? "Archive its thread and start a fresh one from its notes" : undefined}
+            >
+              {busy ? "Starting…" : state === "none" ? "Start the top lead" : "Restart"}
+            </button>
+            {state !== "none" &&
+              (removing ? (
+                <span className="lead-confirm">
+                  Remove the top lead?
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => {
+                      setRemoving(false);
+                      void removeTopLead().then(
+                        (how) => flash(how === "archived" ? "The top lead is off, and its thread is archived" : "The top lead is off"),
+                        (e) => flash(`Couldn't archive the top lead's thread, so it's still on: ${errText(e)}`),
+                      );
+                    }}
+                  >
+                    Remove
+                  </button>
+                  <button className="btn btn-sm" autoFocus onClick={() => setRemoving(false)}>
+                    Keep it
+                  </button>
+                </span>
+              ) : (
+                <button className="link-btn hint lead-remove" onClick={() => setRemoving(true)}>
+                  Remove…
+                </button>
+              ))}
+          </div>
+        </div>
+      </Group>
+      <Group title="How tasks ask a lead">
+        <div className="setting">
+          <div className="setting-text">
+            <span className="setting-label">Answers</span>
+            <span className="setting-hint">
+              {counts ? `${countsText(counts)}.` : "Couldn't read the answers log."} Every lead writes one line per answer to{" "}
+              <code>answers.log</code> beside its notes.
+            </span>
+          </div>
           <button
             className="btn"
-            disabled={busy}
-            onClick={start}
-            title={state === "running" ? "Archive its thread and start a fresh one from its notes" : undefined}
+            onClick={() => void openAnswersLog().catch((e) => flash(`Couldn't open the log: ${errText(e)}`))}
           >
-            {busy ? "Starting…" : state === "none" ? "Start the top lead" : "Restart"}
+            Open the log
           </button>
-          {state !== "none" && (
+        </div>
+        <div className="setting setting-stack">
+          <div className="setting-text">
+            <span className="setting-label">Ask a lead first</span>
+            <span className="setting-hint">
+              Dispatch's tasks and Start task get this line when a lead is running. For threads you start yourself, put it in a
+              project's <code>CLAUDE.md</code>, with the project's name.
+            </span>
+          </div>
+          <pre className="handoff-text">{ASK_LINE_TEMPLATE}</pre>
+          <div>
             <button
-              className="link-btn hint"
+              className="btn btn-sm"
               onClick={() =>
-                void removeTopLead().then(
-                  (how) => flash(how === "archived" ? "The top lead is off, and its thread is archived" : "The top lead is off"),
-                  (e) => flash(`Couldn't archive the top lead's thread, so it's still on: ${errText(e)}`),
-                )
+                void navigator.clipboard
+                  .writeText(ASK_LINE_TEMPLATE)
+                  .then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1800);
+                  })
+                  .catch(() => flash("Couldn't copy it; select the text instead."))
               }
             >
-              Remove
+              {copied ? "Copied" : "Copy the ask line"}
             </button>
-          )}
+          </div>
         </div>
-      </div>
-      <ProjectLeadLevels />
-      <ProjectLeadsVoice />
-      <div className="setting">
-        <div className="setting-text">
-          <span className="setting-label">Answers</span>
-          <span className="setting-hint">
-            {counts ? `${countsText(counts)}.` : "Couldn't read the answers log."} Every lead writes one line per answer to{" "}
-            <code>answers.log</code> beside its notes.
-          </span>
-        </div>
-        <button
-          className="btn"
-          onClick={() => void openAnswersLog().catch((e) => flash(`Couldn't open the log: ${errText(e)}`))}
-        >
-          Open the log
-        </button>
-      </div>
-      <div className="setting setting-stack">
-        <div className="setting-text">
-          <span className="setting-label">Ask a lead first</span>
-          <span className="setting-hint">
-            Dispatch's tasks and Start task get this line when a lead is running. For threads you start yourself, put it in a
-            project's <code>CLAUDE.md</code>, with the project's name.
-          </span>
-        </div>
-        <pre className="handoff-text">{ASK_LINE_TEMPLATE}</pre>
-        <div>
-          <button
-            className="btn btn-sm"
-            onClick={() =>
-              void navigator.clipboard
-                .writeText(ASK_LINE_TEMPLATE)
-                .then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1800);
-                })
-                .catch(() => flash("Couldn't copy it; select the text instead."))
-            }
-          >
-            {copied ? "Copied" : "Copy the ask line"}
-          </button>
-        </div>
-      </div>
-    </Group>
-  );
-}
-
-/** Each project lead's personality and instructions (also in its chat's
- *  header and its project's card). */
-function ProjectLeadsVoice() {
-  const cards = useCards();
-  const { projects } = useAppState();
-  const leads = Object.entries(cards)
-    .flatMap(([id, c]) => (c.lead && projects[id] ? [{ id, name: projects[id].name, lead: c.lead }] : []))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  return (
-    <div className="setting setting-stack">
-      <div className="setting-text">
-        <span className="setting-label">Project leads' personality and instructions</span>
-        <span className="setting-hint">
-          {VOICE_HELP}
-          {leads.length ? "" : " Start a lead from a project's card to set them."}
-        </span>
-      </div>
-      {leads.map((l) => (
-        <div key={l.id} className="lead-voice-project">
-          <span className="lead-voice-name">{l.name}</span>
-          <LeadVoiceFields projectId={l.id} projectName={l.name} lead={l.lead} help={false} />
-        </div>
-      ))}
-    </div>
+      </Group>
+    </>
   );
 }
 

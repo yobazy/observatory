@@ -17,7 +17,8 @@ import type { Entry } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
 import { avatarStatusLabel, LeadAvatar, tintVars, type AvatarStatus } from "./LeadAvatar";
 import { Md, Reply, useTranscript, Where } from "./Reader";
-import { LeadVoiceFields, LevelPicker } from "./LeadCard";
+import { LevelPicker } from "./LeadCard";
+import { openLeadSettings } from "./LeadDialog";
 
 // Chat with a project (S29): the project's lead is a pet, and the face of
 // the project. Its thread shows here as a chat, not in the Read view or the
@@ -278,7 +279,6 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
   const frame = useBlink(!reduced);
   const top = lead.projectId === null;
   const days = dayLabels(items);
-  const [voiceOpen, setVoiceOpen] = useState(false);
   const starts = useMemo(() => runStarts(items), [items]);
   const lastIsPet = items.length > 0 && items[items.length - 1].kind === "pet" && !sent.length;
   // A question the lead passed on to you in its latest reply, unanswered.
@@ -307,17 +307,16 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
             <button type="button" className="link-btn chat-raw" onClick={() => openLeadTerminal(agent.id)} title="The lead's raw session, as a thread's terminal">
               Open terminal
             </button>
-            {!top && card && (
+            {!top && card && lead.projectId && (
               <>
                 {" · "}
                 <button
                   type="button"
                   className="link-btn chat-raw"
-                  aria-expanded={voiceOpen}
-                  onClick={() => setVoiceOpen((o) => !o)}
-                  title="How the lead talks, and your instructions to it"
+                  onClick={() => openLeadSettings(lead.projectId!)}
+                  title="What the lead may do, how it talks, and its model"
                 >
-                  Personality{card.personality ? `: ${card.personality.length > 40 ? `${card.personality.slice(0, 39)}…` : card.personality}` : ""}
+                  Lead settings
                 </button>
               </>
             )}
@@ -336,14 +335,6 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
               }}
             />
           </label>
-        )}
-        {voiceOpen && !top && card && lead.projectId && (
-          <div className="chat-voice" role="dialog" aria-label={`${lead.name}'s personality and instructions`} onKeyDown={(e) => e.key === "Escape" && setVoiceOpen(false)}>
-            <LeadVoiceFields projectId={lead.projectId} projectName={lead.name} lead={card} />
-            <button type="button" className="link-btn chat-voice-done" onClick={() => setVoiceOpen(false)}>
-              Done
-            </button>
-          </div>
         )}
       </header>
       <div

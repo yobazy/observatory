@@ -7,6 +7,7 @@ import { DispatchDialog } from "./components/DispatchDialog";
 import { IdeaDialog } from "./components/IdeaDialog";
 import { DispatchBoard } from "./components/DispatchBoard";
 import { CardDialog, type CardTarget } from "./components/CardDialog";
+import { LeadDialogHost } from "./components/LeadDialog";
 import type { Seed } from "./components/RowMenu";
 import { useHandoffLinks, type Handoff } from "./nebula/handoffLinks";
 import { useMoveRequests } from "./nebula/moveThread";
@@ -438,6 +439,7 @@ export default function App() {
       )}
       <ParkConfirm />
       {card && <CardDialog key={card.cardKey} target={card} onClose={() => setCard(null)} />}
+      <LeadDialogHost />
       {dispatch && <DispatchDialog initialText={dispatch.text} onClose={() => setDispatch(null)} />}
       {addStep && <AddProjectDialog step={addStep} onDone={setAddStep} />}
       {palette && <Palette ctx={paletteCtx} onClose={() => setPalette(false)} />}
