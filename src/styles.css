@@ -5174,7 +5174,23 @@ td.task-last {
 .rd-latest:hover {
   border-color: var(--accent);
 }
+/* A reply that lands while you watch comes in word by word, as a streamed
+   one does (nebula/reveal.ts). It's hidden until its words are split, so it
+   never shows whole first. */
+.rv-hold {
+  visibility: hidden;
+}
+.rv-w {
+  animation: fade 360ms ease-out both;
+  animation-delay: calc(var(--rv, 0) * var(--rv-step, 0ms));
+}
+.chat-said {
+  display: contents;
+}
 @media (prefers-reduced-motion: reduce) {
+  .rv-w {
+    animation: none;
+  }
   .rd-col > .is-new,
   .rd-reply.is-new .rd-card,
   .rd-reply.is-new .rd-card > *,

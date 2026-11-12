@@ -202,6 +202,8 @@ const LEAD_ANSWERS = [
   "Got it. I've written that into my notes, so I won't ask again, and I'll tell the next task that runs into it.",
   "That's in the project's CLAUDE.md under Checks: npm run build, then npm test. Source: CLAUDE.md, line 12.",
   "Nothing new since this morning. Ask me where something lives and I'll find it.",
+  // A card, so a lead's card reply can be seen landing in the chat.
+  "**Cart sync is fixed in #61, and #128 waits on one e2e test.**\n\n✅ Sync fix merged · 🟠 e2e failing · ⚪ Search Facets idle\n\nThe two-tab test still races on a slow runner. I've asked Sequential Cart Sync to rerun it with the queue on.\n\n**Needs you**\n1. Merge #128 once e2e passes?  A merge then · B wait for me\n\n**Details**\n- `src/cart/sync.ts` applies one update at a time\n- The e2e suite takes about 4 minutes",
 ];
 
 /** The mock leads on their cards and in Settings, unless you've set your own. */
