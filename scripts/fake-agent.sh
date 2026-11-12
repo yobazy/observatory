@@ -89,7 +89,7 @@ reply() { # $1 = a prompt, typed or given at start
 # A task it starts on: the prompts above work as tasks too, so scripts/drive
 # can start one without typing into a terminal.
 case "$1" in
-  ask* | menu* | mcp* | quiz* | agents* | safe* | keep*) reply "$1" ;;
+  ask* | menu* | mcp* | quiz* | agents* | safe* | keep* | running*) reply "$1" ;;
   ?*) hook UserPromptSubmit "$1"; echo "task: $1"; sleep 2; hook Stop ;;
 esac
 while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do reply "$line"; done
