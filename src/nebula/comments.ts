@@ -1,26 +1,14 @@
-// Comments on a previewed mockup or doc: click what should change, say how,
+// Comments on a previewed mockup, doc or picture: click what should change
+// (or a spot on the picture), say how,
 // and send them all to the agent that made the file as one prompt (queued
 // if it's mid-turn). Pins stay on the file, greyed once sent, until cleared,
 // so you can check each one was handled when the preview reloads.
 import { enqueue } from "./queue";
 import { flash, getState, setState } from "./store";
 import type { Agent } from "./types";
+import { commentPrompt, type CommentKind, type MockComment, type Target } from "./commentText";
 
-export interface Target {
-  /** Finds the element again in a page (HTML); empty for a doc. */
-  selector: string;
-  /** The element's tag: "button", "h2", "li". */
-  tag: string;
-  /** What it says, shortened. */
-  text: string;
-}
-
-export interface MockComment {
-  id: string;
-  target: Target;
-  note: string;
-  sent: boolean;
-}
+export { spotText, type CommentKind, type MockComment, type Target } from "./commentText";
 
 export function commentsOf(path: string): MockComment[] {
   return getState().comments[path] ?? [];
@@ -51,44 +39,12 @@ export function clearComments(path: string) {
   write(path, []);
 }
 
-const NOUN: Record<string, string> = {
-  h1: "heading",
-  h2: "heading",
-  h3: "heading",
-  h4: "heading",
-  h5: "heading",
-  h6: "heading",
-  p: "paragraph",
-  li: "list item",
-  tr: "table row",
-  td: "table cell",
-  th: "table heading",
-  blockquote: "quote",
-  pre: "code block",
-  a: "link",
-  img: "image",
-};
-
-/** How a prompt names the thing commented on. */
-function describeTarget(t: Target, doc: boolean): string {
-  const quoted = t.text ? ` "${t.text}"` : "";
-  if (doc) return `The ${NOUN[t.tag] ?? t.tag}${quoted}`;
-  return `The <${t.tag}>${quoted}${t.selector ? ` (${t.selector})` : ""}`;
-}
-
-/** The prompt for the unsent comments on `path`. */
-export function commentPrompt(path: string, doc: boolean, comments: MockComment[]): string {
-  const what = doc ? "the doc" : "the mockup";
-  const lines = comments.map((c, i) => `${i + 1}. ${describeTarget(c.target, doc)}: ${c.note}`);
-  return `Feedback on ${what} at ${path}. Please make these changes in that file:\n\n${lines.join("\n")}`;
-}
-
 /** Send the unsent comments on `path` to `agent`, now if it's idle, else
  *  when its turn ends. They stay pinned, marked sent. */
-export async function sendComments(path: string, doc: boolean, agent: Agent): Promise<void> {
+export async function sendComments(path: string, kind: CommentKind, agent: Agent): Promise<void> {
   const unsent = commentsOf(path).filter((c) => !c.sent);
   if (!unsent.length) return;
-  const how = await enqueue(agent, commentPrompt(path, doc, unsent));
+  const how = await enqueue(agent, commentPrompt(path, kind, unsent));
   write(
     path,
     commentsOf(path).map((c) => (unsent.some((u) => u.id === c.id) ? { ...c, sent: true } : c)),

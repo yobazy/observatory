@@ -50,7 +50,7 @@ export function PreviewPane() {
   const file = preview ? preview.files[preview.active] : undefined;
   const [commenting, setCommenting] = useState(false);
   const [picked, setPicked] = useState<{ target: Target; spot: Spot } | null>(null);
-  const canComment = file?.kind === "html" || file?.kind === "markdown";
+  const canComment = file?.kind === "html" || file?.kind === "markdown" || file?.kind === "image";
   const onPick = useCallback((target: Target, spot: Spot) => setPicked({ target, spot }), []);
   const stopCommenting = useCallback(() => {
     setPicked(null);
@@ -141,7 +141,13 @@ export function PreviewPane() {
               className={`btn btn-sm${commenting ? " btn-primary" : ""}`}
               aria-pressed={commenting}
               onClick={() => (commenting ? stopCommenting() : setCommenting(true))}
-              title={commenting ? "Stop commenting (C)" : "Click parts of the page to comment on them (C)"}
+              title={
+                commenting
+                  ? "Stop commenting (C)"
+                  : file.kind === "image"
+                    ? "Click spots on the picture to note them (C)"
+                    : "Click parts of the page to comment on them (C)"
+              }
             >
               {commenting ? "Done" : "Comment"}
             </button>
@@ -176,7 +182,11 @@ export function PreviewPane() {
         )}
       </div>
       {commenting && (
-        <p className="fpv-commenting">Click what should change. Esc when you're done.</p>
+        <p className="fpv-commenting">
+          {file.kind === "image"
+            ? "Click a spot to note it; drag to move around. Esc when you're done."
+            : "Click what should change. Esc when you're done."}
+        </p>
       )}
       <div className="fpv-body">
         <FileView
@@ -267,7 +277,7 @@ function FileView({ file, rev, width, ...picking }: { file: PreviewFile; rev: nu
     case "markdown":
       return <MarkdownView path={file.path} from={file.from} rev={rev} {...picking} />;
     case "image":
-      return <ImageView file={file} rev={rev} />;
+      return <ImageView file={file} rev={rev} {...picking} />;
     case "video":
       return (
         <div className="fpv-stage fpv-image">
@@ -284,12 +294,23 @@ function FileView({ file, rev, width, ...picking }: { file: PreviewFile; rev: nu
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 8;
 
+/** How far the pointer moves before a press is a drag, not a click. */
+const DRAG_PX = 4;
+
 /** A picture, fit to the pane. A click zooms to its real size where you
  *  clicked (or doubles a small one), another fits it again; pinch, ⌘-scroll,
- *  + and − zoom too, 0 fits. The bar under it says how big, and steps to the
- *  other open files when there are some. */
-function ImageView({ file, rev }: { file: PreviewFile; rev: number }) {
-  const { preview } = useAppState();
+ *  + and − zoom too, 0 fits. Zoomed in, it drags to move around. In comment
+ *  mode a click notes that spot, and the notes stay pinned on it. The bar
+ *  under it says how big, and steps to the other open files when there are
+ *  some. */
+function ImageView({
+  file,
+  rev,
+  commenting,
+  onPick,
+}: { file: PreviewFile; rev: number } & Omit<Picking, "onEscape">) {
+  const { preview, comments } = useAppState();
+  const notes = comments[file.path];
   const stage = useRef<HTMLDivElement>(null);
   const img = useRef<HTMLImageElement>(null);
   // null fits it to the pane; a number is its scale, 1 for real pixels.
@@ -297,6 +318,15 @@ function ImageView({ file, rev }: { file: PreviewFile; rev: number }) {
   const [fit, setFit] = useState(1);
   // The point of the picture to keep under the pointer as the zoom changes.
   const anchor = useRef<{ fx: number; fy: number; x: number; y: number } | null>(null);
+  // A press on the picture: where it started, and whether it became a drag.
+  const drag = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
+  const [panning, setPanning] = useState(false);
+  // Where the picture sits in the stage's scrolled content, for the pins.
+  const [box, setBox] = useState({ left: 0, top: 0, width: 0, height: 0 });
+  const place = useCallback(() => {
+    const el = img.current;
+    if (el) setBox({ left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight });
+  }, []);
 
   const scaleNow = () => {
     const el = img.current;
@@ -375,10 +405,15 @@ function ImageView({ file, rev }: { file: PreviewFile; rev: number }) {
   useEffect(() => {
     const box = stage.current;
     if (!box) return;
-    const watch = new ResizeObserver(measure);
+    const watch = new ResizeObserver(() => {
+      measure();
+      place();
+    });
     watch.observe(box);
+    if (img.current) watch.observe(img.current);
     return () => watch.disconnect();
-  }, []);
+  }, [place]);
+  useLayoutEffect(place, [zoom, place]);
 
   const el = img.current;
   const zoomed = zoom !== null && !!el?.naturalWidth;
@@ -386,17 +421,74 @@ function ImageView({ file, rev }: { file: PreviewFile; rev: number }) {
   const step = (by: number) => preview && showPreviewFile((preview.active + by + n) % n);
   return (
     <div className="fpv-picture">
-      <div ref={stage} className={`fpv-stage fpv-image${zoomed ? " is-zoomed" : ""}`}>
+      <div
+        ref={stage}
+        className={`fpv-stage fpv-image${zoomed ? " is-zoomed" : ""}${commenting ? " is-commenting" : ""}${panning ? " is-panning" : ""}`}
+        // Zoomed in, a press drags the picture around, as in Preview.
+        onPointerDown={(e) => {
+          const box = stage.current;
+          if (e.button !== 0 || !box) return;
+          drag.current = { x: e.clientX, y: e.clientY, left: box.scrollLeft, top: box.scrollTop, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const d = drag.current;
+          const box = stage.current;
+          if (!d || !box || !(e.buttons & 1)) return;
+          if (!d.moved) {
+            if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < DRAG_PX) return;
+            d.moved = true;
+            box.setPointerCapture(e.pointerId);
+            setPanning(true);
+          }
+          box.scrollLeft = d.left - (e.clientX - d.x);
+          box.scrollTop = d.top - (e.clientY - d.y);
+        }}
+        onPointerUp={() => setPanning(false)}
+        onPointerCancel={() => {
+          drag.current = null;
+          setPanning(false);
+        }}
+      >
         <img
           ref={img}
           src={previewUrl(file.path, rev)}
           alt={baseName(file.path)}
           draggable={false}
-          onLoad={measure}
+          onLoad={() => {
+            measure();
+            place();
+          }}
           style={zoomed ? { width: el!.naturalWidth * zoom!, height: el!.naturalHeight * zoom! } : undefined}
-          title={zoomed ? "Click to fit" : "Click to zoom in"}
-          onClick={(e) => zoomTo(zoomed ? null : Math.max(1, fitScale() * 2), e.clientX, e.clientY)}
+          title={commenting ? "Click a spot to note it" : zoomed ? "Drag to move around, click to fit" : "Click to zoom in"}
+          onClick={(e) => {
+            // The end of a drag isn't a click.
+            const dragged = drag.current?.moved;
+            drag.current = null;
+            if (dragged) return;
+            if (commenting) {
+              const r = e.currentTarget.getBoundingClientRect();
+              const at = {
+                x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+                y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+              };
+              onPick({ selector: "", tag: "img", text: "", at }, { x: e.clientX, y: e.clientY, w: 0, h: 0 });
+              return;
+            }
+            zoomTo(zoomed ? null : Math.max(1, fitScale() * 2), e.clientX, e.clientY);
+          }}
         />
+        {notes?.map((c, i) =>
+          c.target.at ? (
+            <span
+              key={c.id}
+              className={`md-pin fpv-pin${c.sent ? " is-sent" : ""}`}
+              style={{ left: box.left + c.target.at.x * box.width, top: box.top + c.target.at.y * box.height }}
+              title={c.note}
+            >
+              {i + 1}
+            </span>
+          ) : null,
+        )}
       </div>
       <div className="fpv-picbar" role="toolbar" aria-label="Picture">
         {n > 1 && (
