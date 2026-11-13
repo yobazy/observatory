@@ -165,7 +165,11 @@ async function run(req: Req): Promise<unknown> {
       const thread = req.thread as Transcript | null | undefined;
       if (!moment?.state) throw new Error("replay needs \"moment\", a moment.json");
       const id = await replayThread();
-      if (thread?.entries?.length) standIn(id, thread);
+      if (thread?.entries?.length) {
+        standIn(id, thread);
+        // Decisions reads it again too, as the moment had it.
+        (await import("./decisions")).recheck([id]);
+      }
       select(id);
       const view = moment.state.view as State["view"] | undefined;
       if (view && VIEWS.includes(view)) setState({ view });

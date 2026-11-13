@@ -5,6 +5,7 @@
 import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isPreview } from "./client";
+import { stoodIn } from "./pane";
 import { getState, subscribe, threadAgents } from "./store";
 import { asksYou, pendingCard, promptContext, type Card, type Pending } from "./replycard";
 import type { Transcript } from "./transcript";
@@ -46,9 +47,12 @@ export function keepPutAway(agentId: string, entry: number) {
 }
 
 async function waitingOn(agent: Agent): Promise<Waiting | null> {
-  const t: Transcript | null = isPreview()
-    ? (await import("./mock")).mockTranscript(getState(), agent.id)
-    : await invoke<Transcript | null>("thread_transcript", { session: agent.session_id, from: null, kind: agent.kind }).catch(() => null);
+  // A replayed moment's thread (`scripts/drive replay`) reads as it did then.
+  const t: Transcript | null =
+    stoodIn(agent.id) ??
+    (isPreview()
+      ? (await import("./mock")).mockTranscript(getState(), agent.id)
+      : await invoke<Transcript | null>("thread_transcript", { session: agent.session_id, from: null, kind: agent.kind }).catch(() => null));
   const entries = t?.entries ?? [];
   const prompt = agent.status === "needs_feedback";
   const got = pendingCard(entries);
@@ -89,6 +93,10 @@ function idle(): Agent[] {
 
 const found = new Map<string, { at: number; status: Agent["status"]; got: Waiting | null }>();
 let list: Waiting[] | null = null;
+/** Threads to read again though their status hasn't moved: a reply can land
+ *  without one (a "! cmd" turn, a quick turn the daemon missed), and a card
+ *  read before it would stay up as if you'd sent nothing. */
+const reread = new Set<string>();
 const listeners = new Set<() => void>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let scanning = false;
@@ -104,8 +112,9 @@ async function scan() {
     const now = idle();
     const stale = now.filter((a) => {
       const f = found.get(a.id);
-      return !f || f.at !== a.status_changed_at || f.status !== a.status;
+      return !f || f.at !== a.status_changed_at || f.status !== a.status || reread.has(a.id);
     });
+    reread.clear();
     // A few at a time, the list shown after each: at launch every recent
     // finished thread is read once.
     publish(now, stale.length > 0);
@@ -145,6 +154,19 @@ function publish(now: Agent[], partial: boolean) {
   if (partial && list === null && !next.length) return;
   list = next;
   listeners.forEach((l) => l());
+}
+
+/** How far back recheck() looks: threads that moved this recently. */
+const RECHECK_MS = 6 * 3600_000;
+
+/** Read again the threads waiting on you, the ones that moved lately and
+ *  any named, so Decisions shows their latest reply. For when it opens, and
+ *  now and then while it's open. */
+export function recheck(ids: string[] = []) {
+  const since = Date.now() - RECHECK_MS;
+  const waiting = new Set([...(list ?? []).map((w) => w.agent.id), ...ids]);
+  for (const a of idle()) if (waiting.has(a.id) || a.status_changed_at > since) reread.add(a.id);
+  if (reread.size) schedule();
 }
 
 function schedule() {

@@ -48,6 +48,10 @@ export function standIn(id: string, thread: Transcript) {
   notify();
 }
 
+/** The conversation stood in for agent `id`, if any, for readers outside
+ *  React (Decisions). */
+export const stoodIn = (id: string): Transcript | null => standIns.get(id) ?? null;
+
 export function useStandIn(id: string | undefined): Transcript | null {
   return useSyncExternalStore(watch, () => (id ? (standIns.get(id) ?? null) : null));
 }
