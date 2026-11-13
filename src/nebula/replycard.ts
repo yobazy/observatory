@@ -6,6 +6,8 @@
 // way reads as it always did. Kept free of the app so its tests run under
 // plain Node.
 
+import { saysRunning } from "./checkin.ts";
+
 export type Tone = "done" | "wait" | "bad" | "idle";
 
 export interface Chip {
@@ -699,8 +701,17 @@ export function promptContext(entries: { n: number; kind: string; text: string }
 }
 
 /** The card itself asks you something: numbered decisions, or a Needs
- *  you note on a card that isn't finished ("Needs you: Nothing." isn't). */
-export const asksYou = (card: Card) => card.asks.length > 0 || (!emptyNote(card.asksNote) && card.verdict?.tone !== "done");
+ *  you note on a card that isn't finished ("Needs you: Nothing." isn't, nor
+ *  "Nothing until it finishes" while its verdict says the work is running). */
+export const asksYou = (card: Card) =>
+  card.asks.length > 0 ||
+  (!emptyNote(card.asksNote) && card.verdict?.tone !== "done" && !(saysRunning(card.verdict) && onlyWait(card.asksNote)));
+
+/** A Needs you that opens on there being nothing to do yet ("Nothing until
+ *  it finishes. I'm watching the run…"), with no "but" or "unless" after it
+ *  in that sentence. Only read so while the work it waits on is running:
+ *  "Nothing until you've tried it" asks you something. */
+const onlyWait = (note: string) => /^[-*•\s]*(nothing|none)\b(?![^.\n]*\b(but|unless|except|other than|apart from)\b)/i.test(note.trim());
 
 /** A Needs you that says there's nothing: "Nothing.", "- None", "n/a". */
 export const emptyNote = (note: string) => !note.trim() || /^[-*•\s]*(nothing|none|n\/a|—|-)[\s.!:;)—-]*$/i.test(note.trim());
