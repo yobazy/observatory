@@ -38,6 +38,7 @@ import { useCheckInRunner } from "./nebula/checkinRunner";
 import { termFont, zoomed } from "./nebula/termfont";
 import { useRunWatch, useServingWatch } from "./nebula/runs";
 import { useLimitWatch } from "./nebula/limits";
+import { useStallWatch } from "./nebula/stallWatch";
 import { useAutoFollowUps } from "./nebula/organize";
 import { useProjectSessions } from "./nebula/focus";
 import { useRecentTracking } from "./nebula/recent";
@@ -215,6 +216,7 @@ export default function App() {
   useCheckInRunner();
   useRunWatch();
   useLimitWatch();
+  useStallWatch();
   useServingWatch();
   useAutoFollowUps();
   useProjectSessions();

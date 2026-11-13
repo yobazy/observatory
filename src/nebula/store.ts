@@ -85,6 +85,10 @@ export interface State {
    *  agent id: the line that said so, and the daemon's status_changed_at it
    *  was read against (limits.ts). Shown as waiting on you meanwhile. */
   limits: Record<string, { message: string; since: number }>;
+  /** Claude agents back at their prompt after a turn that never told the
+   *  daemon it ended, by agent id: the daemon's status_changed_at it was read
+   *  against (stallWatch.ts). Shown as finished meanwhile. */
+  stalls: Record<string, { since: number }>;
   /** Each project's own logo, by repo path; null when it keeps none (icons.ts). */
   logos: Record<string, string | null>;
   /** A one-line flash at the bottom of the window, e.g. "x is already a project". */
@@ -153,6 +157,7 @@ let state: State = {
   runUrls: {},
   agentUrls: {},
   limits: {},
+  stalls: {},
   logos: {},
   missingProjects: {},
   preview: null,

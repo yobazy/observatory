@@ -22,6 +22,14 @@ a={"type":"assistant","timestamp":t,"message":{"content":[{"type":"text","text":
 print(json.dumps(u));print(json.dumps(a))' "$1" "$2" >>"$dir/fake-$$.jsonl"
   hook Stop
 }
+# The prompt alone, logged as Claude Code logs one, with no reply after it.
+log_prompt() { # $1 = prompt
+  local dir="${CLAUDE_CONFIG_DIR:-$(cd "$(dirname "$0")/.." && pwd)/.sandbox/claude}/projects/sandbox"
+  mkdir -p "$dir"
+  python3 -c 'import json,sys,time
+t=time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
+print(json.dumps({"type":"user","timestamp":t,"message":{"content":sys.argv[1]}}))' "$1" >>"$dir/fake-$$.jsonl"
+}
 reply() { # $1 = a prompt, typed or given at start
   local line="$1"
   case "$line" in
@@ -78,6 +86,13 @@ reply() { # $1 = a prompt, typed or given at start
       hook SubagentStart
       echo "two agents are working in the background."
       hook Stop ;;
+    # A turn the CLI gives up on without a Stop hook, as Claude Code does on
+    # an API error: the prompt is logged, no reply follows, and nebula keeps
+    # the thread at running while it sits at its input box.
+    stall*)
+      hook UserPromptSubmit "$line"
+      log_prompt "$line"
+      echo "  ⎿  API Error: Request timed out." ;;
     # A reply ending on a close verdict, logged where the app reads it.
     safe*) verdict "$line" "✅ Safe to close" ;;
     keep*) verdict "$line" "🟠 Keep open: waiting on you" ;;
@@ -89,7 +104,7 @@ reply() { # $1 = a prompt, typed or given at start
 # A task it starts on: the prompts above work as tasks too, so scripts/drive
 # can start one without typing into a terminal.
 case "$1" in
-  ask* | menu* | mcp* | quiz* | agents* | safe* | keep* | running*) reply "$1" ;;
+  ask* | menu* | mcp* | quiz* | agents* | stall* | safe* | keep* | running*) reply "$1" ;;
   ?*) hook UserPromptSubmit "$1"; echo "task: $1"; sleep 2; hook Stop ;;
 esac
 while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do reply "$line"; done
