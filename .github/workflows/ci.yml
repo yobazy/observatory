@@ -17,6 +17,8 @@ jobs:
     name: check
     # The app only builds for macOS, so CI runs there too.
     runs-on: macos-latest
+    # A run takes about 3 minutes; this stops a hung one from burning runner time.
+    timeout-minutes: 15
     env:
       CARGO_TERM_COLOR: always
 
