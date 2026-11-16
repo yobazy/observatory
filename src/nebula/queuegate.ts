@@ -67,9 +67,20 @@ export function canSendQueued(a: GateAgent, turnEndedAt: number | null | undefin
  *  it sends it. An agent asleep (reaped when idle) waits: waking it means
  *  attaching, which would switch the terminal out from under you. Unless
  *  it's the thread on screen: then nothing switches, and you're waiting on
- *  it. */
-export function holdNext(a: GateAgent, s: Sends, onScreen: boolean, now = Date.now()): "not ready" | "asleep" | "typing" | null {
-  if (!readyForNext(a, s, now)) return "not ready";
+ *  it. `turnEndedAt` is when its log says the turn ended, for a prompt that
+ *  goes in as soon as the turn does (see Queued.afterAgents). */
+export function holdNext(
+  a: GateAgent,
+  s: Sends,
+  onScreen: boolean,
+  now = Date.now(),
+  turnEndedAt?: number | null,
+): "not ready" | "asleep" | "typing" | null {
+  // Given the log's turn ending, a prompt goes once the turn is over even
+  // with subagents still out, as the terminal takes one then. Left out, it
+  // waits for them too.
+  const held = turnEndedAt !== undefined && reads(a, turnEndedAt, s, now);
+  if (!held && !readyForNext(a, s, now)) return "not ready";
   if (!a.alive && !onScreen) return "asleep";
   if (now - (s.lastTyped ?? 0) < TYPING_MS) return "typing";
   return null;

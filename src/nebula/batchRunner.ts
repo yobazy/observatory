@@ -54,7 +54,8 @@ async function deps(batchId: string, taskId: string): Promise<LaunchDeps> {
     isIdle: (a) => isIdle(a),
     queuedFor: (id) => getState().queue[id]?.length ?? 0,
     followUp: (a, text) => followUp(a, text, { select: false }),
-    enqueue: (a, text) => enqueue(a, text),
+    // A batch's next step waits out the thread's subagents too.
+    enqueue: (a, text) => enqueue(a, text, { afterAgents: true }),
     unarchive: async (id) => {
       await request("UnarchiveAgent", { id });
     },

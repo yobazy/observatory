@@ -21,7 +21,8 @@
       "expect": {
         "held": true,
         "canSendNow": true,
-        "hold": "not ready"
+        "hold": "not ready",
+        "holdReply": null
       }
     }
   ]
