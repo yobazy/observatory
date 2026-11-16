@@ -30,6 +30,15 @@ log_prompt() { # $1 = prompt
 t=time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
 print(json.dumps({"type":"user","timestamp":t,"message":{"content":sys.argv[1]}}))' "$1" >>"$dir/fake-$$.jsonl"
 }
+# A reply and the end of its turn, logged as Claude Code logs them.
+log_turn_end() { # $1 = the reply
+  local dir="${CLAUDE_CONFIG_DIR:-$(cd "$(dirname "$0")/.." && pwd)/.sandbox/claude}/projects/sandbox"
+  mkdir -p "$dir"
+  python3 -c 'import json,sys,time
+t=time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
+print(json.dumps({"type":"assistant","timestamp":t,"message":{"content":[{"type":"text","text":sys.argv[1]}]}}))
+print(json.dumps({"type":"system","subtype":"turn_duration","timestamp":t}))' "$1" >>"$dir/fake-$$.jsonl"
+}
 reply() { # $1 = a prompt, typed or given at start
   local line="$1"
   case "$line" in
@@ -86,6 +95,18 @@ reply() { # $1 = a prompt, typed or given at start
       hook SubagentStart
       echo "two agents are working in the background."
       hook Stop ;;
+    # A turn that works a while, then sends subagents off and ends: a reply
+    # queued meanwhile goes in at the turn's end, as the terminal takes it,
+    # though nebula holds the thread at running for the agents.
+    background*)
+      hook UserPromptSubmit "$line"
+      log_prompt "$line"
+      echo "working before sending agents off…"
+      sleep "${FAKE_TURN_SECONDS:-15}"
+      hook SubagentStart
+      log_turn_end "A builder is working in the background."
+      echo "a builder is working in the background."
+      hook Stop ;;
     # A turn the CLI gives up on without a Stop hook, as Claude Code does on
     # an API error: the prompt is logged, no reply follows, and nebula keeps
     # the thread at running while it sits at its input box.
@@ -104,7 +125,7 @@ reply() { # $1 = a prompt, typed or given at start
 # A task it starts on: the prompts above work as tasks too, so scripts/drive
 # can start one without typing into a terminal.
 case "$1" in
-  ask* | menu* | mcp* | quiz* | agents* | stall* | safe* | keep* | running*) reply "$1" ;;
+  ask* | menu* | mcp* | quiz* | agents* | background* | stall* | safe* | keep* | running*) reply "$1" ;;
   ?*) hook UserPromptSubmit "$1"; echo "task: $1"; sleep 2; hook Stop ;;
 esac
 while IFS= read -r -p $'\e[38;5;244m›\e[0m ' line; do reply "$line"; done
