@@ -1455,9 +1455,11 @@ export function Reader({
                     {q.text}
                     <span className="rd-queued-bar">
                       <span>
-                        {atPrompt
+                        {atPrompt && q.afterAgents
                           ? "Queued, sent when its agents finish"
-                          : isIdle(agent)
+                          : atPrompt
+                            ? "Queued. Its turn is over, so it goes in a moment"
+                            : isIdle(agent)
                             ? "Queued. Its turn is over, so it goes in a moment"
                             : "Queued, sent when its turn ends"}
                       </span>

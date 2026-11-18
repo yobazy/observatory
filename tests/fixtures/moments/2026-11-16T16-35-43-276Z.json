@@ -1,0 +1,29 @@
+{
+  "moment": "2026-11-16T16-35-43-276Z",
+  "family": "queue",
+  "note": "can we do a few more rounds of improvements to the reader. it doesnt handle queueing right when we have backround agents running. we want all the claude terminal features captured",
+  "fixedBy": "Send a queued reply as soon as the turn ends, even while background agents still run",
+  "source": "thread.json: the catch-up prompt at 16:19:02 (when it went running) and the reply that ended the turn at 16:35:33, with a builder subagent still out. The screenshot shows the reply queued before the turn ended and still held, \"Queued, sent when its agents finish\", at the moment.",
+  "checks": [
+    {
+      "reads": "queue",
+      "input": {
+        "agent": {
+          "status": "running",
+          "status_changed_at": "2026-11-16T16:19:02Z",
+          "alive": true
+        },
+        "turnEndedAt": "2026-11-16T16:35:33Z",
+        "sends": {},
+        "onScreen": true,
+        "now": "2026-11-16T16:35:43.276Z"
+      },
+      "expect": {
+        "held": true,
+        "canSendNow": true,
+        "hold": "not ready",
+        "holdReply": null
+      }
+    }
+  ]
+}
