@@ -20,3 +20,4 @@
 - S27: a "Talk to a lead" command in the ⌘K palette, and the pet clickable by keyboard on its project row (it sits inside the row's button, so today ⌘L is the keyboard way in). Also the dialogue's ▼ page turn has no way back to an earlier page.
 - S28: a lead's START in a Shared-policy project runs in the main checkout, as every Dispatch task there does (whereTo()), not in a new worktree on its branch; give lead starts their own worktree if that matters.
 - S29: a "Chat with <project>" command in the ⌘K palette (the lead's thread is out of its thread list now, and ⌘L is gone), and a call badge that stays until an ASK is answered rather than going quiet when the chat is opened.
+- Put the Observatory icon back as the app's Dock icon. The Dock shows the plate of whichever thread needs you most (dockIcon.ts, dock.rs), which changes all the time; the plain app icon is enough, and the red count badge already says when a thread waits (2026-11-15).

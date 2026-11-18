@@ -442,6 +442,48 @@ test('Decisions skips a Needs you that says nothing, earlier asks on a safe-to-c
   assert.equal(safe?.asked, 'fix the header');
 });
 
+test('Decisions skips a reply that only says to wait while its work runs elsewhere (moment 2026-11-13)', async () => {
+  const { pendingCard } = await import('../src/nebula/replycard.ts');
+  const go = { n: 0, kind: 'you', text: '1 A' };
+  // The start command it asked you to paste: still waiting on you.
+  const start = [
+    '**The round-four brief is pushed and ready for you to start on `pc`.**',
+    '',
+    '🟠 waiting on you to start the run · 🟠 preview server running',
+    '',
+    '**Needs you**',
+    'Paste this to start it:',
+    '```',
+    "! ssh pc 'systemd-run --user run-build.sh'",
+    '```',
+    '',
+    "🔴 Don't close: the run hasn't started, and the preview server is still running.",
+  ].join('\n');
+  assert.equal(pendingCard([go, { n: 1, kind: 'claude', text: start }])?.n, 1);
+  // Started: nothing until it finishes, and the verdict says it's running.
+  const running = [
+    '**Round four is running on `pc`.**',
+    '',
+    '🟠 run in progress · 🟠 preview server running',
+    '',
+    '**Needs you**',
+    "- Nothing until it finishes. I'm watching the run and will pick it up when it ends: check the draft PR, serve the build and tell you what to look at.",
+    '',
+    '**Details**',
+    "- **Progress:** `ssh pc 'tail -f ~/hoam-demo-build-4.log'`.",
+    '',
+    "🟠 Keep open: round four is running, and the critique notes aren't committed yet.",
+  ].join('\n');
+  const after = [go, { n: 1, kind: 'claude', text: start }, { n: 2, kind: 'steps', text: '' }, { n: 3, kind: 'claude', text: running }];
+  assert.equal(pendingCard(after), null);
+  const keepOpen = (note, verdict) => pendingCard([go, { n: 1, kind: 'claude', text: `**Started.**\n\n**Needs you**\n${note}\n\n🟠 Keep open: ${verdict}` }]);
+  assert.equal(keepOpen('Nothing yet.', 'the critique is running'), null);
+  // Something to do after all, or no running work to wait on: still asks.
+  assert.equal(keepOpen('Nothing yet, but confirm the API key.', 'the build is running')?.n, 1);
+  assert.equal(keepOpen("Nothing until you've tried it on your phone.", 'waiting on your try')?.n, 1);
+  assert.equal(keepOpen('Paste the start command.', 'the preview server is running')?.n, 1);
+});
+
 test('answers written in, or given in the tray alongside taps, count as answered', async () => {
   const { openDecisions, answersSaid } = await import('../src/nebula/replycard.ts');
   assert.deepEqual(answersSaid('1 A\n2: keep it for a week'), { 1: 'A', 2: 'keep it for a week' });

@@ -7,6 +7,7 @@ import { DispatchDialog } from "./components/DispatchDialog";
 import { IdeaDialog } from "./components/IdeaDialog";
 import { DispatchBoard } from "./components/DispatchBoard";
 import { CardDialog, type CardTarget } from "./components/CardDialog";
+import { LeadDialogHost } from "./components/LeadDialog";
 import type { Seed } from "./components/RowMenu";
 import { useHandoffLinks, type Handoff } from "./nebula/handoffLinks";
 import { useMoveRequests } from "./nebula/moveThread";
@@ -33,9 +34,11 @@ import { useUsagePolling } from "./nebula/usage";
 import { useAutomationsPolling } from "./nebula/automationsLoad";
 import { savePrefs, useTheme } from "./nebula/theme";
 import { useAutoClose } from "./nebula/autocloseRunner";
+import { useCheckInRunner } from "./nebula/checkinRunner";
 import { termFont, zoomed } from "./nebula/termfont";
 import { useRunWatch, useServingWatch } from "./nebula/runs";
 import { useLimitWatch } from "./nebula/limits";
+import { useStallWatch } from "./nebula/stallWatch";
 import { useAutoFollowUps } from "./nebula/organize";
 import { useProjectSessions } from "./nebula/focus";
 import { useRecentTracking } from "./nebula/recent";
@@ -210,8 +213,10 @@ export default function App() {
   useActivityPolling();
   useTheme();
   useAutoClose();
+  useCheckInRunner();
   useRunWatch();
   useLimitWatch();
+  useStallWatch();
   useServingWatch();
   useAutoFollowUps();
   useProjectSessions();
@@ -436,6 +441,7 @@ export default function App() {
       )}
       <ParkConfirm />
       {card && <CardDialog key={card.cardKey} target={card} onClose={() => setCard(null)} />}
+      <LeadDialogHost />
       {dispatch && <DispatchDialog initialText={dispatch.text} onClose={() => setDispatch(null)} />}
       {addStep && <AddProjectDialog step={addStep} onDone={setAddStep} />}
       {palette && <Palette ctx={paletteCtx} onClose={() => setPalette(false)} />}

@@ -385,7 +385,8 @@ export function promptAnswered(a: Agent) {
 }
 
 /** An agent row from the daemon, kept waiting on you while limits.ts holds
- *  it at a usage limit, or working once you've answered its prompt: until
+ *  it at a usage limit, finished while stallWatch.ts holds it stopped at
+ *  its prompt, or working once you've answered its prompt: until
  *  the daemon has status news of its own. */
 function held(a: Agent): Agent {
   a = withSessionStatus(a);
@@ -393,6 +394,15 @@ function held(a: Agent): Agent {
   if (since !== undefined) {
     if (a.status === "needs_feedback" && a.status_changed_at === since) a = { ...a, status: "running" };
     else answered.delete(a.id);
+  }
+  const stall = getState().stalls[a.id];
+  if (stall) {
+    if (a.status === "running" && a.status_changed_at === stall.since) return { ...a, status: "finished" };
+    setState((s) => {
+      const stalls = { ...s.stalls };
+      delete stalls[a.id];
+      return { stalls };
+    });
   }
   const hit = getState().limits[a.id];
   if (!hit) return a;

@@ -1,193 +1,11 @@
 import { useEffect, useState } from "react";
-import { saveLead, useCards, type CardLead, type ProjectCard } from "../nebula/cards";
-import { dollars } from "../nebula/budgetHold";
-import { useSessionCosts } from "../nebula/budget";
-import { DEFAULT_LEAD_MODEL, defaultNotes, leadModelOptions, leadName, leadState, MAX_INSTRUCTIONS, MAX_PERSONALITY } from "../nebula/lead";
-import { levelFlash, setLeadLevel, setLeadMaxTasks, setLeadModel, setLeadVoice, startedTasks, startProjectLead, unguardLead } from "../nebula/leadRunner";
-import { LEVELS, levelOf, type LeadLevel } from "../nebula/leadLevel";
-import { DEFAULT_MAX_TASKS, useLeadActs } from "../nebula/leadActions";
-import { sessionKey } from "../nebula/usageData";
-import { flash, setState, useAppState } from "../nebula/store";
+import { type CardLead } from "../nebula/cards";
+import { leadModelOptions, leadName, leadState, MAX_INSTRUCTIONS, MAX_PERSONALITY } from "../nebula/lead";
+import { setLeadVoice } from "../nebula/leadRunner";
+import { LEVELS, type LeadLevel } from "../nebula/leadLevel";
+import { flash, useAppState } from "../nebula/store";
 import { PET_CHOICES, personalityPresets, petFromKey, petKey, petOf, type LeadPet } from "../nebula/leadChat";
 import { LeadAvatar } from "./LeadAvatar";
-import { openLeadChat } from "../nebula/leadCalls";
-
-const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
-
-/** The lead's part of a project's card: Start a lead, or the running lead's
- *  model, notes and cost, or "Lead stopped" with Restart. `base` is the card
- *  as the dialog has it, saved with the lead when there's none saved yet. */
-export function LeadSection({ projectId, projectName, base }: { projectId: string; projectName: string; base: ProjectCard }) {
-  const lead = useCards()[projectId]?.lead;
-  const app = useAppState();
-  const { agents } = app;
-  const costs = useSessionCosts();
-  const state = leadState(lead, agents);
-  const [model, setModel] = useState(lead?.model || DEFAULT_LEAD_MODEL);
-  const [notes, setNotes] = useState(lead?.notes || defaultNotes(projectName));
-  const [busy, setBusy] = useState(false);
-  const [maxDraft, setMaxDraft] = useState<string | null>(null);
-  const agent = lead ? agents[lead.agentId] : undefined;
-  useLeadActs();
-  const started = lead ? startedTasks(projectId, app) : [];
-
-  const start = () => {
-    setBusy(true);
-    startProjectLead(projectId, { model, notes: notes.trim() || defaultNotes(projectName), base })
-      .then(() => flash(`Started ${projectName}'s lead as ${leadName(projectName)}`))
-      .catch((e) => flash(`Couldn't start the lead: ${errText(e)}`))
-      .finally(() => setBusy(false));
-  };
-  const pickModel = (next: string) => {
-    setModel(next);
-    if (!lead || !next.trim() || next.trim() === lead.model) return;
-    setLeadModel(projectId, lead, next)
-      .then(() => flash(state === "running" ? `Restarted the lead on ${next.trim()}` : `The lead will use ${next.trim()}`))
-      .catch((e) => flash(`Couldn't switch the lead's model: ${errText(e)}`));
-  };
-
-  return (
-    <div className="field field-top">
-      <span className="field-label">Lead</span>
-      <div className="card-stack lead-card">
-        {state !== "none" && (
-          <div className="card-row">
-            <span className={`lead-mark${state === "stopped" ? " is-stopped" : ""}`}>{state === "running" ? "Lead" : "Lead stopped"}</span>
-            {state === "running" && agent && (
-              <>
-                <button type="button" className="link-btn" onClick={() => openLeadChat(agent.id)}>
-                  Open its chat
-                </button>
-                <span className="dialog-note card-flat">{dollars(agent.session_id ? (costs.get(sessionKey(agent.kind, agent.session_id)) ?? 0) : 0)} so far</span>
-              </>
-            )}
-          </div>
-        )}
-        <div className="card-row">
-          <ModelPicker model={model} label="The lead's model" onPick={pickModel} />
-          {state === "none" ? (
-            <button type="button" className="btn" disabled={busy} onClick={start}>
-              {busy ? "Starting…" : "Start a lead"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              onClick={start}
-              title={state === "running" ? "Archive its thread and start a fresh one from its notes" : undefined}
-            >
-              {busy ? "Starting…" : "Restart"}
-            </button>
-          )}
-          {state !== "none" && (
-            <button
-              type="button"
-              className="link-btn hint"
-              onClick={() => {
-                saveLead(projectId, undefined);
-                void unguardLead(projectId);
-                flash(`${projectName} has no lead now${state === "running" ? "; its thread is still there to archive" : ""}`);
-              }}
-            >
-              Remove
-            </button>
-          )}
-        </div>
-        {lead && (
-          <div className="card-row lead-acts">
-            <LevelPicker
-              id={`lead-level-${projectId}`}
-              level={levelOf(lead)}
-              onPick={(level) => {
-                setLeadLevel(projectId, lead, level);
-                flash(levelFlash(projectName, level));
-              }}
-            />
-          </div>
-        )}
-        {lead && levelOf(lead) >= 3 && (
-          <div className="card-row">
-            {/* Its own row, so it never wraps beside the switch. */}
-            <label className="card-cap lead-max-cap">
-              at most
-              <input
-                type="number"
-                min={1}
-                max={9}
-                className="lead-max"
-                value={maxDraft ?? String(lead.maxTasks ?? DEFAULT_MAX_TASKS)}
-                // Empty while you type; a whole 1 to 9 is saved on Enter or
-                // leaving the field, anything else goes back to what was saved.
-                onChange={(e) => setMaxDraft(e.target.value)}
-                onBlur={() => {
-                  const n = Number(maxDraft);
-                  if (maxDraft !== null && Number.isInteger(n) && n >= 1 && n <= 9) setLeadMaxTasks(projectId, lead, n);
-                  setMaxDraft(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                }}
-                aria-label="Tasks the lead may run at once"
-              />
-              at once
-            </label>
-          </div>
-        )}
-        {started.length > 0 && (
-          <ul className="lead-tasks" aria-label="Tasks the lead started">
-            {started.slice(0, 8).map((t) => (
-              <li key={t.rec.taskId}>
-                {t.agent ? (
-                  <button
-                    type="button"
-                    className="link-btn"
-                    onClick={() => setState({ view: "sessions", selectedProject: projectId, selectedSession: { Agent: t.agent!.id } })}
-                  >
-                    {t.rec.branch}
-                  </button>
-                ) : (
-                  <span>{t.rec.branch}</span>
-                )}
-                <span className={`lead-task-state is-${t.label.startsWith("PR") ? "pr" : t.label}`}>{t.label}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {lead && (
-          <PetPicker
-            pet={petOf(lead, projectName)}
-            label="What the lead looks like"
-            onPick={(pet) => {
-              saveLead(projectId, { ...lead, pet });
-              flash(`${projectName}'s lead is a ${pet.kind} now`);
-            }}
-          />
-        )}
-        {lead && <LeadVoiceFields projectId={projectId} projectName={projectName} lead={lead} />}
-        <label className="card-cap lead-notes">
-          notes
-          <input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            disabled={state === "running"}
-            spellCheck={false}
-            aria-label="The lead's notes file"
-          />
-        </label>
-        <span className="dialog-note">
-          {state === "none"
-            ? "A thread in the main checkout that hears when this project's tasks finish, fail, need you or open a PR, and keeps the project's notes. Nothing runs until you start it."
-            : state === "stopped"
-              ? "Its thread was archived or deleted, so it hears nothing. Restart starts a fresh one from its notes."
-              : `It hears of every task here and answers their questions about facts and past decisions as ${leadName(projectName)}. ${
-                  LEVELS[levelOf(lead) - 1].what
-                } It stays in this project: the app refuses anything it aims elsewhere.`}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 /** A project lead's level (leadLevel.ts), 1 to 4, with what the picked one
  *  lets it do. The app refuses anything above it. */
@@ -215,8 +33,8 @@ export function LevelPicker({ id, level, onPick, compact }: { id: string; level:
 }
 
 /** A lead's model, picked from Haiku, Sonnet and Opus (a saved model that
- *  isn't one of them shows as "Custom: <model>"). Picking one on a running
- *  lead restarts it on that model (#189). */
+ *  isn't one of them shows as "Custom: <model>"). What a pick does is the
+ *  caller's: the lead dialog waits for Restart, the top lead restarts. */
 export function ModelPicker({ model, label, onPick }: { model: string; label: string; onPick: (model: string) => void }) {
   const options = leadModelOptions(model);
   return (

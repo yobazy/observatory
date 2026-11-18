@@ -82,14 +82,16 @@ export async function deliverPrompt(agent: Agent, prompt: string) {
  *  to come up. `select: false` sends it without switching the terminal to
  *  it, for a queued prompt — unless it has to be woken, which takes an
  *  attach. `stay` does that attach behind the current view rather than
- *  leaving it for the thread. */
-export async function followUp(agent: Agent, text: string, opts: { select?: boolean; stay?: boolean } = {}) {
-  if (opts.select !== false || !agent.alive) {
+ *  leaving it for the thread, and `background` doesn't select it at all. */
+export async function followUp(agent: Agent, text: string, opts: { select?: boolean; stay?: boolean; background?: boolean } = {}) {
+  // `background` wakes one asleep by attaching below without showing it: a
+  // check-in (checkinRunner.ts) shouldn't change what you're looking at.
+  if (!opts.background && (opts.select !== false || !agent.alive)) {
     if (opts.stay) selectInPlace({ Agent: agent.id });
     else setState({ selectedSession: { Agent: agent.id } });
   }
   if (!agent.alive) {
-    flash(`Starting ${agent.name}…`);
+    if (!opts.background) flash(`Starting ${agent.name}…`);
     // Attaching is what wakes it. The terminal attaches the thread it
     // shows, but a lead's chat (or any view without that terminal) shows
     // none, so it would never wake: attach it here until the prompt is in.

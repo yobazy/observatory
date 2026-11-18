@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { flash, setState, useAppState } from "../nebula/store";
 import { enqueue } from "../nebula/queue";
-import { keepPutAway, useWaiting, type Waiting } from "../nebula/decisions";
+import { keepPutAway, recheck, useWaiting, type Waiting } from "../nebula/decisions";
 import { CATCH_UP, answerText, asksYou, isCard, readCard, suggested, typedAnswers, type Card } from "../nebula/replycard";
 import { relativeTime } from "../nebula/status";
 import type { Agent } from "../nebula/types";
@@ -47,10 +47,15 @@ export function InboxView() {
   const head = useRef<HTMLDivElement>(null);
   useOverlayKeys(head);
   const found = useWaiting();
-  // How long each has waited, kept current while the list is open.
+  // How long each has waited, kept current while the list is open, and
+  // each card checked against its thread's latest reply.
   const [, tick] = useState(0);
   useEffect(() => {
-    const t = window.setInterval(() => tick((n) => n + 1), 60_000);
+    recheck();
+    const t = window.setInterval(() => {
+      tick((n) => n + 1);
+      recheck();
+    }, 60_000);
     return () => window.clearInterval(t);
   }, []);
   // Answered here: gone from the list while the thread takes it up. The
