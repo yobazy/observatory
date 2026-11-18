@@ -16,7 +16,7 @@ import { sessionKey } from "../nebula/usageData";
 import type { Entry } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
 import { avatarStatusLabel, LeadAvatar, tintVars, type AvatarStatus } from "./LeadAvatar";
-import { Md, Reply, useTranscript, Where } from "./Reader";
+import { Md, Reply, useReveal, useTranscript, Where } from "./Reader";
 import { LevelPicker } from "./LeadCard";
 import { openLeadSettings } from "./LeadDialog";
 
@@ -168,6 +168,11 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
       }),
     [entries, tasks, acts, lead.acts, lead.projectId, agent.id, state],
   );
+
+  // What was said when the chat opened sits still; replies after it fade in.
+  const known = useRef<Set<string> | null>(null);
+  if (t && !known.current) known.current = new Set(items.map((it) => it.key));
+  const fresh = (key: string) => !!known.current && !known.current.has(key);
 
   // The latest reply while nothing you said follows it: its decisions take
   // taps, sent with whatever you type.
@@ -356,6 +361,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
               lead={lead}
               day={days.get(it.key)}
               first={starts.has(it.key)}
+              fresh={fresh(it.key)}
               reply={it.kind === "pet" ? replyOf(it.n) : undefined}
               onAnswer={it.kind === "pet" && it.n === latest && !sent.length ? answerAsk : undefined}
             />
@@ -448,6 +454,7 @@ function ChatLine({
   lead,
   day,
   first,
+  fresh,
   reply,
   onAnswer,
 }: {
@@ -455,10 +462,14 @@ function ChatLine({
   lead: LeadEntry;
   day: string | undefined;
   first: boolean;
+  /** It landed while the chat was open: its words fade in. */
+  fresh: boolean;
   reply?: ReplyBits;
   /** Its questions for you are still open: answering one focuses the box. */
   onAnswer?: (question: string) => void;
 }) {
+  const said = useRef<HTMLDivElement>(null);
+  useReveal(said, fresh && item.kind === "pet");
   const line = (() => {
     switch (item.kind) {
       case "me":
@@ -470,7 +481,7 @@ function ChatLine({
       case "pet": {
         const { body, asks } = splitAsks(item.text);
         return (
-          <>
+          <div className="chat-said" ref={said}>
             {body && (
               <div className={`chat-say is-pet${first ? "" : " is-more"}`}>
                 <SayAvatar lead={lead} first={first} />
@@ -491,7 +502,7 @@ function ChatLine({
                 </div>
               </div>
             ))}
-          </>
+          </div>
         );
       }
       case "event":
