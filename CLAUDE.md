@@ -1,8 +1,7 @@
 # Observatory
 
-A macOS Tauri app (React + TypeScript in `src/`, Rust in `src-tauri/`) that's a client for the
-nebula daemon. README.md covers the layout, setup and releasing; CONTRIBUTING.md covers the PR
-rules. Both apply to agents too.
+A macOS Tauri client for the nebula daemon. README.md (sandbox, version pinning, releasing) and
+CONTRIBUTING.md (PR rules) apply to agents too.
 
 ## Checks
 
