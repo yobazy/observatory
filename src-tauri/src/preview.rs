@@ -9,7 +9,7 @@
 use serde::Serialize;
 use std::borrow::Cow;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 use tauri::http::{Request, Response, StatusCode};
@@ -21,6 +21,11 @@ pub struct PreviewScope(Mutex<Vec<PathBuf>>);
 
 impl PreviewScope {
     fn allows(&self, path: &Path) -> bool {
+        // `starts_with` reads `root/../x` as inside `root`, but the read
+        // goes to `x`: a path that climbs is never inside.
+        if path.components().any(|c| c == Component::ParentDir) {
+            return false;
+        }
         self.0
             .lock()
             .unwrap()
@@ -370,6 +375,26 @@ mod tests {
             "a sibling sharing a prefix"
         );
         assert!(!scope.allows(Path::new("/tmp/other.html")));
+    }
+
+    #[test]
+    fn the_scope_does_not_walk_out_through_dot_dot() {
+        // `starts_with` compares whole components, so `root/../x` looks
+        // inside `root` to it, while the read goes to `x`.
+        let base = std::env::temp_dir().join(format!("obs-scope-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("project");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("index.html"), "<p>hi</p>").unwrap();
+        std::fs::write(base.join("secret.txt"), "not yours").unwrap();
+        let scope = PreviewScope::default();
+        scope.allow(root.canonicalize().unwrap());
+        assert!(scope.allows(&root.join("index.html")));
+        assert!(
+            !scope.allows(&root.join("../secret.txt")),
+            "a path that climbs out of the root"
+        );
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

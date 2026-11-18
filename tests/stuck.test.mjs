@@ -320,3 +320,35 @@ test('crossing 85% fires one banner, and no more until it crosses 100%', () => {
   assert.equal(nudgeTitle('Search Facets', { step: 85, share: 0.87, budget: 10 }), 'Search Facets used 87% of its $10 budget');
   assert.equal(nudgeTitle('Search Facets', { step: 100, share: 1.02, budget: 10 }), 'Search Facets is over its $10 budget');
 });
+
+test('a turn that cannot be read keeps the flag it had, and is read again', async () => {
+  reloadStuck();
+  saveStuck({});
+  let current = turn(sameErrorThrice, 4);
+  let reading = true;
+  let s = agent('a');
+  const deps = () => ({
+    sessions: [{ ...s, stale: false }],
+    entries: loadStuck,
+    save: saveStuck,
+    turn: async () => {
+      if (!reading) throw new Error('the log is busy');
+      return current;
+    },
+    spent: () => new Map(),
+    budget: () => 10,
+    now: NOW,
+  });
+  await stuckCheck(deps());
+  assert.match(stuckNeed(loadStuck(), 'a'), /^Same error 3 times/);
+  // It finished again, but reading that turn fails.
+  s = { ...s, status: 'finished', status_changed_at: NOW + 60_000 };
+  reading = false;
+  await stuckCheck({ ...deps(), now: NOW + 61_000 });
+  assert.match(stuckNeed(loadStuck(), 'a'), /^Same error 3 times/, 'a failed read is not "no errors"');
+  // The next pass reads it again, and it's clear now.
+  reading = true;
+  current = turn([ok('Read', '/r/a.ts')], 5);
+  await stuckCheck({ ...deps(), now: NOW + 120_000 });
+  assert.equal(stuckNeed(loadStuck(), 'a'), null);
+});
