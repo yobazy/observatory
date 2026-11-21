@@ -15,6 +15,10 @@ import type { LeadLevel } from "./leadLevel";
  *  in the main checkout, at most `concurrency` at once. */
 export type RunPolicy = "isolated" | "shared";
 
+/** How a project's threads get their tool calls approved: Claude Code asks
+ *  you as usual, or they run free. */
+export type PermissionLevel = "ask" | "free";
+
 export interface ProjectCard {
   /** What lives in the project, in a few sentences. */
   description: string;
@@ -46,6 +50,10 @@ export interface ProjectCard {
   checks?: string[];
   /** The check before "done" is turned off for this project. */
   reviewOff?: boolean;
+  /** How its threads' tool calls are approved (permissions.ts). Unset: Claude
+   *  Code asks as usual; "free": they run without prompts, within
+   *  permissions.rs's limits. */
+  permissions?: PermissionLevel;
   /** The project's lead (lead.ts): a long-lived thread told of each task's
    *  turn ends, failures, waits and PRs. Unset: no lead, and nothing sent. */
   lead?: CardLead;
@@ -291,6 +299,7 @@ function normalize(x: unknown): ProjectCard | null {
       : {}),
     ...(Array.isArray(c.checks) ? { checks: strings(c.checks).map((x) => x.trim()).filter(Boolean) } : {}),
     ...(c.reviewOff === true ? { reviewOff: true } : {}),
+    ...(c.permissions === "free" ? { permissions: "free" as const } : {}),
     ...(leadOf(c.lead) ? { lead: leadOf(c.lead)! } : {}),
   };
 }

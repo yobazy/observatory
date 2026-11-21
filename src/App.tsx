@@ -19,6 +19,7 @@ import { watchAway } from "./nebula/away";
 import { homeCard, homeKeyFor, isFolderKey } from "./nebula/cards";
 import { useGitPolling } from "./nebula/git";
 import { usePushAfterTurn } from "./nebula/pushRunner";
+import { usePermissionsSync } from "./nebula/permissionsRunner";
 import { fitColumns, Resizer, SESSIONS, SIDEBAR, startSlide, useColumnWidth, useHidden, useMountedFor, useWindowWidth } from "./components/Resizer";
 import { PanelGlyph } from "./components/Sidebar";
 import { UsageView } from "./components/Usage";
@@ -189,6 +190,7 @@ export default function App() {
   }, []);
   useGitPolling();
   usePushAfterTurn();
+  usePermissionsSync();
   usePrPolling();
   useDelight();
   useBudgetWatch();
