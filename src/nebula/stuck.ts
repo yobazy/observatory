@@ -308,11 +308,21 @@ export async function stuckCheck(deps: StuckDeps): Promise<StuckEntries> {
   // The turns first; the flags are settled after, against what's stored
   // and spent by then, so a settle in the meantime isn't written over.
   const read = new Map<string, { errors: StuckFlag | null; started?: number }>();
+  // A turn that couldn't be read is neither "no errors" nor a turn to settle:
+  // its flags stay as they are, and it's read again on the next pass.
+  const unread = new Set<string>();
   const was = deps.entries();
   for (const s of deps.sessions)
     if (open(s) && (s.status === "running" || was[s.id]?.read !== stateOf(s))) {
-      const turn = await deps.turn(s).catch(() => null);
-      read.set(s.id, { errors: errorFlag(turn), started: turn?.started ? ms(turn.started) : undefined });
+      const turn = await deps.turn(s).then(
+        (t) => ({ t }),
+        () => null,
+      );
+      if (!turn) {
+        unread.add(s.id);
+        continue;
+      }
+      read.set(s.id, { errors: errorFlag(turn.t), started: turn.t?.started ? ms(turn.t.started) : undefined });
     }
   const now = deps.now ?? Date.now();
   const before = deps.entries();
@@ -325,6 +335,8 @@ export async function stuckCheck(deps: StuckDeps): Promise<StuckEntries> {
     } else if (s.stale) {
       // Folded away: no flag up, but what was put down stays down.
       if (e.raised) e = { ...e, raised: undefined };
+    } else if (unread.has(s.id)) {
+      // Nothing to read this pass: what it had stands.
     } else {
       const r = read.get(s.id);
       if (r) {

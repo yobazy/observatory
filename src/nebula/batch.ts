@@ -659,7 +659,10 @@ export interface NewTask {
 /** A task from the New task box as a batch of one, waiting for a slot. The
  *  runner launches it as a slot frees, the same as a dispatched task; it
  *  has no list items behind it. Its prompt is what was typed, as is. */
-export function newTaskBatch(task: NewTask, cards: Cards, id = `b${Date.now().toString(36)}n`): Batch {
+// A counter, not just the clock: a lead's reply can queue several tasks in
+// the same millisecond, and their ids must still differ.
+let batchSeq = 0;
+export function newTaskBatch(task: NewTask, cards: Cards, id = `b${Date.now().toString(36)}${(batchSeq++).toString(36)}n`): Batch {
   const shared = cards[task.projectId]?.policy === "shared";
   const t: BatchTask = {
     id: `${id}-t1`,
