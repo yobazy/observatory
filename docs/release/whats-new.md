@@ -10,26 +10,22 @@
   underneath on its own.
 -->
 
-### Decisions, one card at a time
+### Notes on a picture
 
-Decisions now shows its queue down the side with one card beside it. Pick answers as you go, then send every picked answer at once. Cards stay inside their column when you asked something long, so their summary and details stay readable.
+Zoom into a picture in the preview and drag it around to look closer. Comment pins numbered notes on spots in it, so you can point at exactly what you mean.
 
-### A dispatch board sorted by what needs you
+### Your lead, in its own window
 
-The dispatch board sorts tasks into Needs you, To review, Running, Up next and Done, with short rows and an Undo.
+A project's lead now opens in its own window from the project card, and the card itself is tidier. Settings › Leads sets each lead up.
 
-### Answer and move on
+### Threads that tell the truth
 
-In the Read view, Send & next (⌘↵) answers a thread and opens the next one waiting on you.
-
-### Leads you can steer
-
-Set each project lead's level in Settings, and every lead keeps to its own project. A lead's questions for you stand out in its chat with an Answer button, a line about a thread opens that thread, and each task it starts has an Open link. Messaging a sleeping lead wakes it, instead of failing after 20 seconds.
-
-### Threads that stay put
-
-A project's threads keep their place when they finish, wait on you or are read; only a new prompt moves one up. Threads that said ✅ Safe to close close on their own a day later. A working thread's plate hums, with a faint ring rippling out from its rim until it stops.
+A thread that says something is still running gets checked in on every 30 minutes, so it doesn't sit there quietly. A turn that ended without telling nebula now shows as done instead of running forever, and a run started on the PC shows as running in Decisions, not as waiting on you.
 
 ### And smaller things
 
-- A moment's reviewer runs its usual review, check and merge commands without asking.
+- New replies fade in word by word, in the Read view and the lead chat.
+- Delete a worktree from its branch header, even when it has no tasks.
+- The preview no longer opens files outside a project through `..` in a path.
+- Tasks a lead starts at the same moment each get their own id.
+- A thread's stuck flag stays when one of its turns can't be read.
