@@ -6,6 +6,7 @@ import {
   recipients,
   removeComment,
   sendComments,
+  spotText,
   type Target,
 } from "../nebula/comments";
 import type { PreviewFile } from "../nebula/preview";
@@ -59,13 +60,13 @@ export function CommentBox({
       }}
     >
       <p className="comment-target" title={target.selector || undefined}>
-        &lt;{target.tag}&gt; {target.text || "(no text)"}
+        {target.at ? `Spot ${spotText(target.at)}` : <>&lt;{target.tag}&gt; {target.text || "(no text)"}</>}
       </p>
       <textarea
         ref={field}
         rows={2}
         value={note}
-        placeholder="What should change?"
+        placeholder={target.at ? "Your note" : "What should change?"}
         onChange={(e) => setNote(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
@@ -97,7 +98,7 @@ export function CommentPanel({ file }: { file: PreviewFile }) {
   const unsent = list.filter((c) => !c.sent).length;
   const [busy, setBusy] = useState(false);
   if (!list.length) return null;
-  const doc = file.kind === "markdown";
+  const kind = file.kind === "markdown" ? "doc" : file.kind === "image" ? "picture" : "page";
 
   return (
     <section className="comment-panel" aria-label="Comments">
@@ -106,7 +107,7 @@ export function CommentPanel({ file }: { file: PreviewFile }) {
           <li key={c.id} className={c.sent ? "is-sent" : undefined}>
             <span className="comment-n">{i + 1}</span>
             <span className="comment-on" title={c.target.selector || undefined}>
-              {c.target.text || `<${c.target.tag}>`}
+              {c.target.at ? `Spot ${spotText(c.target.at)}` : c.target.text || `<${c.target.tag}>`}
             </span>
             <span className="comment-note">{c.note}</span>
             {c.sent && <span className="comment-sent">sent</span>}
@@ -142,7 +143,7 @@ export function CommentPanel({ file }: { file: PreviewFile }) {
             if (!agent) return;
             setBusy(true);
             try {
-              await sendComments(file.path, doc, agent);
+              await sendComments(file.path, kind, agent);
             } finally {
               setBusy(false);
             }

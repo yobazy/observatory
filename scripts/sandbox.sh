@@ -20,6 +20,9 @@ ROOT="${NEBULA_SANDBOX:-$PWD/.sandbox}"
 export NEBULA_RUNTIME_DIR=/tmp/observatory-sandbox
 export NEBULA_DATA_DIR="$ROOT/data"
 export NEBULA_AGENT_CMD="$PWD/scripts/fake-agent.sh"
+# Where the fake agent logs its turns and the app reads them (turns.rs,
+# usage.rs), instead of your own Claude Code logs.
+export CLAUDE_CONFIG_DIR="$ROOT/claude"
 # The dev build listens here for scripts/drive (control.rs).
 export OBSERVATORY_CONTROL="$NEBULA_RUNTIME_DIR/control.sock"
 

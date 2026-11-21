@@ -1,6 +1,7 @@
 // A lead starts tasks and looks after them (S28): a project's lead writes
-// action lines in its reply (START, NUDGE, ASK merge, ASK archive) and the
-// app carries them out, so the caps, budget holds and the off switch all
+// action lines in its reply (START, NUDGE, ASK merge, ASK archive, and with
+// its level ARCHIVE, REMOVE, MERGE and RELEASE) and the app carries them
+// out, so the caps, budget holds and the lead's level (leadLevel.ts) all
 // live here, not in the lead's prompt. The lead never spawns threads or
 // sends to them itself. This file is the pure part: reading the lines out of
 // a reply, deciding each one, the [observatory] line that reports it back,
@@ -9,6 +10,7 @@
 // Value imports name their .ts files: the tests load this module in Node.
 import { useSyncExternalStore } from "react";
 import { LINE_PREFIX, MAX_LINE } from "./lead.ts";
+import { levelName, overLevel, type LeadLevel, type LeadPower } from "./leadLevel.ts";
 import type { AgentStatus } from "./types";
 
 export type LeadAction =
@@ -16,6 +18,14 @@ export type LeadAction =
   | { kind: "nudge"; agentId: string; message: string }
   | { kind: "ask"; what: "merge"; pr: number; why: string }
   | { kind: "ask"; what: "archive"; agentId: string; why: string }
+  /** Act on safe things (3): a thread that said ✅ Safe to close, archived. */
+  | { kind: "archive"; agentId: string; why: string }
+  /** Act on safe things (3): a clean worktree whose PR merged, removed. */
+  | { kind: "remove"; branch: string; why: string }
+  /** Merge and release (4): a green PR, merged. */
+  | { kind: "merge"; pr: number; why: string }
+  /** Merge and release (4): a task that cuts a release. */
+  | { kind: "release"; branch: string; brief: string }
   /** The top lead's one action: work for a project's lead. */
   | { kind: "pass"; project: string; brief: string };
 
@@ -37,6 +47,10 @@ const NUDGE = /^NUDGE ([\w-]+): (\S.*)$/;
 const ASK_MERGE = /^ASK merge #(\d+): (\S.*)$/;
 const ASK_ARCHIVE = /^ASK archive ([\w-]+): (\S.*)$/;
 const PASS = /^PASS ([^:]*\S): (\S.*)$/;
+const ARCHIVE = /^ARCHIVE ([\w-]+): (\S.*)$/;
+const REMOVE = /^REMOVE (\S+): (\S.*)$/;
+const MERGE = /^MERGE #(\d+): (\S.*)$/;
+const RELEASE = /^RELEASE (\S+): (\S.*)$/;
 
 /** A branch name git takes, more or less: no spaces, no `..`, not starting
  *  with `-` or `/`, not ending with `/`, `.` or `.lock`. */
@@ -68,6 +82,15 @@ export function parseActions(text: string): LeadAction[] {
       if (pr > 0) out.push({ kind: "ask", what: "merge", pr, why: m[2].trim() });
     } else if ((m = line.match(ASK_ARCHIVE))) out.push({ kind: "ask", what: "archive", agentId: m[1], why: m[2].trim() });
     else if ((m = line.match(PASS))) out.push({ kind: "pass", project: m[1].trim(), brief: m[2].trim() });
+    else if ((m = line.match(ARCHIVE))) out.push({ kind: "archive", agentId: m[1], why: m[2].trim() });
+    else if ((m = line.match(REMOVE))) {
+      if (validBranch(m[1])) out.push({ kind: "remove", branch: m[1], why: m[2].trim() });
+    } else if ((m = line.match(MERGE))) {
+      const pr = Number(m[1]);
+      if (pr > 0) out.push({ kind: "merge", pr, why: m[2].trim() });
+    } else if ((m = line.match(RELEASE))) {
+      if (validBranch(m[1])) out.push({ kind: "release", branch: m[1], brief: m[2].trim() });
+    }
   }
   return out;
 }
@@ -75,7 +98,7 @@ export function parseActions(text: string): LeadAction[] {
 /** Whether a line (outside a code fence) is an action line parseActions()
  *  would read, well-formed or not: the chat (S29) leaves them out of the
  *  lead's words. */
-const ACTION_LINE = /^(?:START \S+|NUDGE \S+|ASK (?:merge|archive) \S+|PASS [^:]+):/;
+const ACTION_LINE = /^(?:START \S+|NUDGE \S+|ASK (?:merge|archive) \S+|PASS [^:]+|ARCHIVE \S+|REMOVE \S+|MERGE \S+|RELEASE \S+):/;
 
 /** A reply without its action lines, for the chat's bubble: the lines a
  *  code fence holds stay, as parseActions() leaves them too. */
@@ -96,8 +119,8 @@ export const askLines = (text: string) => parseActions(text).filter((a) => a.kin
 // ---- deciding ----
 
 export interface DecideContext {
-  /** The card's "Let the lead start and nudge threads". */
-  acts: boolean;
+  /** The lead's level (leadLevel.ts): what it may do at all. */
+  level: LeadLevel;
   /** The top lead: it acts only through project leads. */
   top: boolean;
   leadId: string;
@@ -109,30 +132,55 @@ export interface DecideContext {
   hold: string | null;
   /** Branches already a worktree in the project, or a START still waiting. */
   branches: ReadonlySet<string>;
-  /** Every thread Observatory knows, with its project. */
-  threads: Record<string, { projectId: string | null; archived?: boolean }>;
+  /** Every thread Observatory knows, with its project, and whether it's at
+   *  rest saying ✅ Safe to close. */
+  threads: Record<string, { projectId: string | null; archived?: boolean; safe?: boolean }>;
   /** Nudges sent to a thread within the last hour. */
   nudges: (agentId: string) => number;
   /** The open PRs in the project, by number. */
   prs: ReadonlySet<number>;
+  /** Of those, the ones whose checks all passed. */
+  green: ReadonlySet<number>;
+  /** The project's worktrees, by branch: whether each is the main checkout,
+   *  its PR merged, it has no uncommitted changes (undefined: unknown), and
+   *  a thread is working in it. */
+  worktrees: Record<string, { main: boolean; merged: boolean; clean: boolean | undefined; busy: boolean }>;
 }
 
 export type Decision = { ok: true } | { ok: false; reason: string };
 
 const no = (reason: string): Decision => ({ ok: false, reason });
 
-/** Whether the app carries out an action line, or why not. */
+/** What an action line asks the app to do, as leadLevel.ts counts it. */
+export function powerOf(a: Exclude<LeadAction, { kind: "pass" }>): LeadPower {
+  return a.kind;
+}
+
+/** Whether the app carries out an action line, or why not. Everything a
+ *  lead does is in its own project: a thread, PR or worktree elsewhere is
+ *  refused, and a START always starts in the lead's project. */
 export function decide(a: LeadAction, c: DecideContext): Decision {
   if (c.top) return no("the top lead acts only through project leads");
   if (a.kind === "pass") return no("only the top lead passes work on");
-  if (!c.acts) return no("actions are off");
-  if (a.kind === "start") {
+  const over = overLevel(powerOf(a), c.level);
+  if (over) return no(over);
+  if (a.kind === "start" || a.kind === "release") {
     if (c.hold) return no(c.hold);
     if (c.running >= c.maxTasks) return no(`${c.running} of your tasks are running, at most ${c.maxTasks}`);
     if (c.branches.has(a.branch)) return no(`${a.branch} is already a worktree in this project`);
     return { ok: true };
   }
-  const id = a.kind === "nudge" || a.what === "archive" ? (a as { agentId: string }).agentId : null;
+  if (a.kind === "remove") {
+    const w = c.worktrees[a.branch];
+    if (!w) return no(`no worktree on ${a.branch} in this project`);
+    if (w.main) return no("that's the project's main checkout");
+    if (!w.merged) return no(`${a.branch}'s PR hasn't merged`);
+    if (w.clean === undefined) return no(`couldn't tell whether ${a.branch} has uncommitted changes`);
+    if (!w.clean) return no(`${a.branch} has uncommitted changes`);
+    if (w.busy) return no(`a thread is still working in ${a.branch}`);
+    return { ok: true };
+  }
+  const id = a.kind === "nudge" || a.kind === "archive" || (a.kind === "ask" && a.what === "archive") ? (a as { agentId: string }).agentId : null;
   if (id !== null) {
     const t = c.threads[id];
     if (id === c.leadId) return no("that's your own thread");
@@ -140,10 +188,13 @@ export function decide(a: LeadAction, c: DecideContext): Decision {
     if (t.projectId !== c.projectId) return no("that thread is in another project");
     if (t.archived) return no("that thread is archived");
     if (a.kind === "nudge" && c.nudges(id) >= MAX_NUDGES) return no(`it was nudged ${MAX_NUDGES} times in the last hour`);
+    if (a.kind === "archive" && !t.safe) return no("it hasn't said ✅ Safe to close");
     return { ok: true };
   }
   const pr = (a as { pr: number }).pr;
-  return c.prs.has(pr) ? { ok: true } : no(`no open PR #${pr} in this project`);
+  if (!c.prs.has(pr)) return no(`no open PR #${pr} in this project`);
+  if (a.kind === "merge" && !c.green.has(pr)) return no(`#${pr}'s checks haven't all passed`);
+  return { ok: true };
 }
 
 /** Nudges to `agentId` in the window before `now`. */
@@ -158,9 +209,11 @@ export type Report =
   | { kind: "queued"; branch: string; running: number }
   | { kind: "refused"; action: LeadAction; reason: string }
   | { kind: "nudged"; agentId: string }
+  | { kind: "archived"; agentId: string }
+  | { kind: "removed"; branch: string }
+  | { kind: "merged"; pr: number }
   | { kind: "passed"; project: string }
-  | { kind: "answered"; ask: AskAction; yes: boolean; error?: string }
-  | { kind: "off" };
+  | { kind: "answered"; ask: AskAction; yes: boolean; error?: string };
 
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 
@@ -169,6 +222,10 @@ export function actionName(a: LeadAction): string {
   if (a.kind === "start") return `START ${a.branch}`;
   if (a.kind === "nudge") return `NUDGE ${a.agentId}`;
   if (a.kind === "pass") return `PASS ${a.project}`;
+  if (a.kind === "archive") return `ARCHIVE ${a.agentId}`;
+  if (a.kind === "remove") return `REMOVE ${a.branch}`;
+  if (a.kind === "merge") return `MERGE #${a.pr}`;
+  if (a.kind === "release") return `RELEASE ${a.branch}`;
   return a.what === "merge" ? `ASK merge #${a.pr}` : `ASK archive ${a.agentId}`;
 }
 
@@ -184,10 +241,14 @@ export function reportLine(r: Report): string {
         return `refused ${actionName(r.action)}: ${oneLine(r.reason)}`;
       case "nudged":
         return `nudged ${r.agentId}`;
+      case "archived":
+        return `archived ${r.agentId}`;
+      case "removed":
+        return `removed the worktree on ${r.branch}`;
+      case "merged":
+        return `merged #${r.pr}`;
       case "passed":
         return `passed to Lead ${r.project}`;
-      case "off":
-        return "actions are off";
       case "answered": {
         const a = r.ask;
         const what = a.what === "merge" ? `#${a.pr}` : a.agentId;
@@ -231,6 +292,12 @@ export interface RunDeps {
   nudge: (agentId: string, message: string) => Promise<unknown>;
   /** A thread's title, for the dialogue's line. */
   name: (agentId: string) => string;
+  /** Archive a thread (it said ✅ Safe to close). */
+  archive: (agentId: string) => Promise<unknown> | void;
+  /** Remove a worktree, by branch. */
+  remove: (branch: string) => Promise<unknown>;
+  /** Merge a PR, by number. */
+  merge: (pr: number) => Promise<unknown>;
 }
 
 export interface RunResult {
@@ -250,12 +317,39 @@ export async function runActions(actions: LeadAction[], deps: RunDeps): Promise<
       out.reports.push({ kind: "refused", action: a, reason: d.reason });
       continue;
     }
-    if (a.kind === "start") {
+    const failed = (e: unknown) => out.reports.push({ kind: "refused", action: a, reason: e instanceof Error ? e.message : String(e) });
+    if (a.kind === "start" || a.kind === "release") {
       const { full } = deps.start(a.branch, a.brief);
       if (full !== null) {
         out.reports.push({ kind: "queued", branch: a.branch, running: full });
         out.lines.push(`Queued ${a.branch}`);
       } else out.lines.push(`Started ${a.branch}`);
+    } else if (a.kind === "archive") {
+      try {
+        // Named before it goes: an archived thread may leave the store.
+        const name = deps.name(a.agentId);
+        await deps.archive(a.agentId);
+        out.reports.push({ kind: "archived", agentId: a.agentId });
+        out.lines.push(`Archived ${name}`);
+      } catch (e) {
+        failed(e);
+      }
+    } else if (a.kind === "remove") {
+      try {
+        await deps.remove(a.branch);
+        out.reports.push({ kind: "removed", branch: a.branch });
+        out.lines.push(`Removed ${a.branch}`);
+      } catch (e) {
+        failed(e);
+      }
+    } else if (a.kind === "merge") {
+      try {
+        await deps.merge(a.pr);
+        out.reports.push({ kind: "merged", pr: a.pr });
+        out.lines.push(`Merged #${a.pr}`);
+      } catch (e) {
+        failed(e);
+      }
     } else if (a.kind === "nudge") {
       try {
         await deps.nudge(a.agentId, a.message);
@@ -278,19 +372,19 @@ export interface PassTarget {
   agentId: string;
   /** Running, not archived or gone. */
   running: boolean;
-  acts: boolean;
+  level: LeadLevel;
 }
 
 /** What a project's lead is sent for a PASS. */
 export const passLine = (brief: string) => `${LINE_PREFIX}from the top lead: ${oneLine(brief)}`;
 
-/** Whether a PASS may go, and to whom: a project with a running lead whose
- *  actions are on. Projects are matched by name, ignoring case. */
+/** Whether a PASS may go, and to whom: a project with a running lead above
+ *  Watch (at Suggest it fills in the task for you; above, it starts it). Projects are matched by name, ignoring case. */
 export function decidePass(a: Extract<LeadAction, { kind: "pass" }>, targets: readonly PassTarget[]): { ok: true; target: PassTarget } | { ok: false; reason: string } {
   const want = a.project.trim().toLowerCase();
   const t = targets.find((x) => x.project.trim().toLowerCase() === want);
   if (!t || !t.running) return { ok: false, reason: `${a.project} has no running lead` };
-  if (!t.acts) return { ok: false, reason: `Lead ${t.project} has its actions off` };
+  if (t.level < 2) return { ok: false, reason: `Lead ${t.project} is at ${levelName(t.level)} (1), so it takes no work` };
   return { ok: true, target: t };
 }
 
@@ -438,13 +532,11 @@ export interface LeadActs {
   /** Every reply's outcome, oldest first (S29: the chat shows each under
    *  its reply, not only the latest). */
   history: (Outcome & { leadId: string })[];
-  /** Leads told their actions are off, since they were last turned on. */
-  toldOff: string[];
   tasks: LeadTask[];
 }
 
 const KEY = "observatory.leadActions";
-const EMPTY: LeadActs = { acted: {}, nudges: [], answered: [], outcomes: {}, history: [], toldOff: [], tasks: [] };
+const EMPTY: LeadActs = { acted: {}, nudges: [], answered: [], outcomes: {}, history: [], tasks: [] };
 /** Asks and nudges kept: enough for the hour and for the dialogue. */
 const KEEP = 200;
 
@@ -460,7 +552,6 @@ function load(): LeadActs {
       answered: arr<string>(raw.answered).filter((s) => typeof s === "string"),
       outcomes: raw.outcomes && typeof raw.outcomes === "object" ? raw.outcomes : {},
       history: arr<Outcome & { leadId: string }>(raw.history).filter((o) => o && typeof o.leadId === "string" && typeof o.n === "number"),
-      toldOff: arr<string>(raw.toldOff).filter((s) => typeof s === "string"),
       tasks: arr<LeadTask>(raw.tasks).filter((t) => t && typeof t.taskId === "string" && typeof t.leadId === "string"),
     };
   } catch {

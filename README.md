@@ -62,7 +62,10 @@ it would do without changing anything, and `--help` lists the other options.
 - **Waiting on you**: every session blocked on a permission prompt or a question, across all
   projects. `⌘J` cycles through them, and you get a macOS notification and a dock badge. A
   permission prompt's choices show as buttons above the terminal, so you can answer without
-  reaching for the keyboard. **Decisions** (`⌥⌘J`) lists every open question in one place.
+  reaching for the keyboard. **Decisions** (`⌥⌘J`) lists every open question in one place:
+  a queue on the left, one card at a time on the right. Your picks stay as you move between
+  cards, **Pick recommended** (`⇧R`) takes each reply's own recommendation, and **Send**
+  (`⇧↵`) answers them all at once.
 - **While you were away**: turns that finished while you weren't looking, with a line on what
   each did (tests passed, files edited). A finished task stays under Follow up until you reply,
   archive it or tick it off.
@@ -103,7 +106,8 @@ it would do without changing anything, and `--help` lists the other options.
 - **Replies written as cards** (a bold headline, status dots, a **Needs you** list, folded
   **Details**) read as cards. Lettered options are buttons that build `1 A, 2 B` in the reply box,
   and when the agent recommends an answer, **Tab** takes it. Decisions you haven't answered wait
-  in a tray above the box.
+  in a tray above the box. **Send & next** (`⌘↵`) sends and opens the next thread waiting on you,
+  so a round of answers is Tab, `⌘↵`, Tab, `⌘↵`.
 - **Select part of a reply** and choose **Reply about this** to quote it. A file named in a reply
   opens in the preview, a PR number links to the PR, and an edit step shows its diff.
 - **Run** beside a shell command in a reply sends it to the thread as `! <command>`, so it runs
@@ -172,7 +176,8 @@ it would do without changing anything, and `--help` lists the other options.
 - **Folders, names and tags for projects**, from a project's right-click menu. Folders fold away
   and still show what inside needs you. Tags filter the list, and so does typing `#tag`.
 - **Priority** (urgent, high, low) on threads and projects moves them up or down their list. On a
-  selected thread, `P` steps through them.
+  selected thread, `P` steps through them. Within a priority, a branch's threads go newest prompt
+  first; a thread finishing, waiting on you or being read doesn't move it.
 - **Thread tags**: chips above a project's list show one tag's threads. **Tag untagged** asks an
   agent CLI (`claude -p --model haiku` by default) to tag the rest from the project's own tags.
 - **Ideas**: `⌘I` writes an idea down without leaving what you're doing, filed under a project or

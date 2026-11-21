@@ -1191,6 +1191,9 @@ body.is-resizing-rows * {
   padding: 0;
   color: var(--accent);
 }
+.link-btn.link-quiet {
+  color: var(--muted);
+}
 .link-btn:hover {
   text-decoration: underline;
 }
@@ -5045,6 +5048,37 @@ td.task-last {
   border-radius: 11px;
   padding: 5px 13px;
 }
+/* Send & next: under the box at its right, naming where it goes. */
+.rd-compose:has(> .rd-sendnext) {
+  padding-bottom: 38px;
+}
+.rd-compose:has(> .rd-sendnext) > .btn-primary {
+  bottom: 46px;
+}
+.rd-sendnext {
+  position: absolute;
+  right: 32px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: calc(100% - 64px);
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.rd-sendnext:hover {
+  color: var(--accent);
+}
+.rd-sendnext-name {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+.rd-sendnext kbd {
+  color: var(--faint);
+}
 .rd-wait {
   margin: 0;
   font-size: 13px;
@@ -5143,7 +5177,23 @@ td.task-last {
 .rd-latest:hover {
   border-color: var(--accent);
 }
+/* A reply that lands while you watch comes in word by word, as a streamed
+   one does (nebula/reveal.ts). It's hidden until its words are split, so it
+   never shows whole first. */
+.rv-hold {
+  visibility: hidden;
+}
+.rv-w {
+  animation: fade 360ms ease-out both;
+  animation-delay: calc(var(--rv, 0) * var(--rv-step, 0ms));
+}
+.chat-said {
+  display: contents;
+}
 @media (prefers-reduced-motion: reduce) {
+  .rv-w {
+    animation: none;
+  }
   .rd-col > .is-new,
   .rd-reply.is-new .rd-card,
   .rd-reply.is-new .rd-card > *,
@@ -5212,7 +5262,8 @@ td.task-last {
   flex: 1;
   min-width: 0;
 }
-.rd-ask-detail {
+.rd-ask-detail,
+.qa-detail {
   margin: 0;
   max-height: 9.5em;
   overflow: auto;
@@ -5355,6 +5406,37 @@ td.task-last {
 }
 .dialog-note.card-indent {
   margin-left: 102px;
+}
+/* The card's three parts: what lives here, how tasks run, Home. */
+.card-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.card-sec h3,
+.lead-sec h3 {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.field.field-switch > label {
+  padding-top: 1px;
+}
+.dialog-note.card-lead-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 0;
+}
+.card-lead-line .lead-mark.is-small {
+  margin-left: 0;
+}
+.card-sec .dialog-note.card-sec-why {
+  margin: -8px 0 0;
 }
 .dialog-note.card-flat {
   margin: 0;
@@ -6153,6 +6235,7 @@ button.attempt-status:hover span:nth-child(2) {
   height: 100%;
 }
 .fpv-picture .fpv-image {
+  position: relative;
   overflow: auto;
   padding-bottom: 56px;
 }
@@ -6171,7 +6254,21 @@ button.attempt-status:hover span:nth-child(2) {
   max-width: none;
   max-height: none;
   margin: auto;
-  cursor: zoom-out;
+  cursor: grab;
+}
+.fpv-image.is-panning,
+.fpv-image.is-panning img {
+  cursor: grabbing;
+}
+.fpv-image.is-commenting img {
+  cursor: crosshair;
+}
+/* A note's number, centred on the spot it's about. */
+.md-pin.fpv-pin {
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px #fff, var(--shadow-pop);
+  pointer-events: auto;
+  cursor: default;
 }
 .fpv-pdf {
   display: block;
@@ -7149,6 +7246,42 @@ th:last-child > .col-grip {
   border-radius: var(--r-sm);
   padding: 0 5px;
 }
+.board-body {
+  gap: 22px;
+}
+.board-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.board-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.board-group-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.board-group-count {
+  margin-left: 6px;
+  color: var(--faint);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.board-group-head .link-btn {
+  margin-left: auto;
+  font-size: 12px;
+}
+.board-group.is-needs .board-group-head h2 {
+  color: var(--st-waiting);
+}
 .board-rows {
   list-style: none;
   margin: 0;
@@ -7161,23 +7294,43 @@ th:last-child > .col-grip {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 9px 12px;
   background: var(--night);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
+  min-width: 0;
 }
 .board-row.is-plan,
 .board-row.is-waiting {
   border-color: color-mix(in srgb, var(--st-waiting) 45%, var(--line));
 }
-.board-row.is-done,
-.board-row.is-cancelled,
-.board-row.is-archived,
-.board-row.is-gone {
-  opacity: 0.65;
+.board-row.is-failed,
+.board-row.is-blocked,
+.board-row.is-stopped {
+  border-color: color-mix(in srgb, var(--st-error) 35%, var(--line));
 }
-.board-row.is-done .board-text {
+/* Done rows are one quiet line each, stacked like a list. */
+.board-group.is-done .board-rows {
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.board-row.is-compact {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.board-row.is-compact + .board-row.is-compact {
+  border-top: 1px solid var(--line);
+}
+.board-row.is-compact .board-title {
+  color: var(--muted);
+}
+.board-row.is-done .board-title {
   text-decoration: line-through;
+  color: var(--faint);
 }
 .board-line {
   display: flex;
@@ -7185,18 +7338,10 @@ th:last-child > .col-grip {
   gap: 10px;
   min-width: 0;
 }
-.board-line input {
-  accent-color: var(--accent);
-  flex: none;
-  margin: 0;
-}
 .board-main {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
-  align-items: baseline;
-  gap: 12px;
+  display: flex;
   text-align: left;
   background: none;
   border: 0;
@@ -7204,33 +7349,245 @@ th:last-child > .col-grip {
   color: inherit;
   font: inherit;
 }
-button.board-main:hover .board-text {
-  text-decoration: underline;
+.board-row.is-compact .board-main {
+  flex: 0 1 auto;
 }
-.board-text {
-  overflow-wrap: anywhere;
+.board-title {
+  min-width: 0;
+  font-weight: 550;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   user-select: text;
 }
+button.board-main:hover .board-title {
+  text-decoration: underline;
+}
 .board-target {
-  color: var(--muted);
+  flex: 0 1 auto;
+  max-width: 40%;
+  margin-left: auto;
+  color: var(--faint);
   font-size: 12px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.board-status {
+.board-since {
+  flex: none;
+  color: var(--faint);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.board-chip {
+  flex: none;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
   color: var(--muted);
   white-space: nowrap;
 }
-.board-status.is-plan,
-.board-status.is-waiting {
+.board-chip.is-wait {
   color: var(--st-waiting);
+  border-color: color-mix(in srgb, var(--st-waiting) 50%, var(--line));
 }
-.board-status.is-failed,
-.board-status.is-stopped,
-.board-status.is-blocked {
+/* Gone wrong reads filled, so it's told apart from waiting at a glance. */
+.board-chip.is-error {
   color: var(--st-error);
+  background: color-mix(in srgb, var(--st-error) 16%, transparent);
+  border-color: color-mix(in srgb, var(--st-error) 40%, transparent);
+}
+.board-chip.is-review {
+  color: var(--st-merged);
+  border-color: color-mix(in srgb, var(--st-merged) 45%, var(--line));
+}
+/* A thread to review, as triage labels it: still, unlike a running dot. */
+.dot-review {
+  background: var(--st-merged);
+}
+/* Everything in Done: one settled ring. */
+.dot-settled {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--faint);
+  opacity: 0.7;
+}
+/* What a permission prompt asks about, on one line (full text in its
+   title): .rd-ask-detail's box, kept to a row. */
+.qa-detail {
+  max-height: none;
+  padding: 3px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  user-select: text;
+}
+/* Headings focus is moved to after a row leaves: a ring only from the keyboard. */
+.board h1:focus:not(:focus-visible),
+.board h2:focus:not(:focus-visible) {
+  outline: none;
+}
+/* Light pages: the filled error chip's text steps toward the ink, and the
+   settled ring keeps its full strength, so both hold their contrast. */
+:root[data-mode="light"] .board-chip.is-error {
+  color: color-mix(in srgb, var(--st-error) 70%, var(--text));
+}
+:root[data-mode="light"] .dot-settled {
+  opacity: 1;
+}
+/* Check off on an archived or removed row: offered on hover or focus. */
+.board-row.is-archived .board-check,
+.board-row.is-gone .board-check {
+  opacity: 0;
+}
+.board-row.is-archived:hover .board-check,
+.board-row.is-archived:focus-within .board-check,
+.board-row.is-gone:hover .board-check,
+.board-row.is-gone:focus-within .board-check {
+  opacity: 1;
+}
+.board-chip.is-run {
+  color: var(--st-running);
+  border-color: color-mix(in srgb, var(--st-running) 50%, var(--line));
+}
+.board-chip.is-ok {
+  color: var(--st-done);
+  border-color: color-mix(in srgb, var(--st-done) 50%, var(--line));
+}
+.board-chip.is-quiet {
+  color: var(--faint);
+}
+.board-hint {
+  margin: 0;
+  color: var(--faint);
+  font-size: 12px;
+}
+.board-hint .link-btn {
+  font-size: 12px;
+}
+.board-plan-screen {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.board-plan-screen .qa-tail {
+  flex: 1;
+  min-width: 0;
+  white-space: pre;
+  overflow-x: auto;
+  max-height: none;
+}
+/* QuickAnswer on a board row: the question and its choices on one line,
+   the screen behind Show screen. */
+.qa.qa-compact {
+  gap: 4px;
+}
+.qa-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.qa-compact .qa-prompt {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.qa-compact .qa-choices {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.qa-compact .qa-choice {
+  padding: 1px 7px;
+  max-width: 260px;
+}
+.qa-screen summary {
+  cursor: pointer;
+  width: max-content;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+.qa-screen summary:hover {
+  color: var(--accent);
+}
+.qa-screen .qa-tail {
+  margin-top: 4px;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  max-height: none;
+}
+.board-check {
+  flex: none;
+  font-size: 12px;
+}
+.board-check:not(:hover):not(:focus-visible) {
+  color: var(--faint);
+}
+.board-prompt-wrap {
+  margin-left: 18px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.board-prompt {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.board-prompt.is-open {
+  display: block;
+  white-space: pre-line;
+  overflow: visible;
+}
+.board-more {
+  flex: none;
+  font-size: 12px;
+}
+.board-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-left: 18px;
+}
+.board-foot:empty {
+  display: none;
+}
+.board-foot .board-note,
+.board-foot .board-activity,
+.board-foot .board-changes,
+.board-foot .task-budget {
+  margin: 0;
+  padding: 0;
+}
+.board-foot .board-activity {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.board-foot .task-budget {
+  margin-left: auto;
+  color: var(--faint);
 }
 .board-note,
 .board-activity,
@@ -7273,47 +7630,49 @@ button.board-main:hover .board-text {
 .dot-blocked {
   background: var(--st-error);
 }
-.board-batches {
-  list-style: none;
+.board-changes.is-compact {
   margin: 0;
   padding: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--faint);
+}
+.board-batches {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  color: var(--muted);
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: var(--faint);
   font-size: 12px;
 }
-.board-batches li {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
+.board-batches-label {
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
-.board-batch-when {
-  color: var(--faint);
+.board-batch {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.board-batch .link-btn {
+  font-size: 12px;
+  color: var(--muted);
+}
+.board-batch .link-btn:hover {
+  color: var(--accent);
 }
 
 /* ---------- triage queue (Dispatch board) ---------- */
 
-.triage {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.triage-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.triage-head h2 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
 .triage-sub,
 .triage-empty,
 .triage-stale summary {
-  color: var(--muted);
+  color: var(--faint);
   font-size: 12px;
 }
 .triage-empty {
@@ -7334,31 +7693,6 @@ button.board-main:hover .board-text {
 }
 .triage-row.is-stuck {
   border-color: color-mix(in srgb, var(--st-error) 45%, var(--line));
-}
-.triage-label {
-  flex: none;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  white-space: nowrap;
-}
-.triage-label.is-decision {
-  color: var(--st-waiting);
-  border-color: color-mix(in srgb, var(--st-waiting) 50%, var(--line));
-}
-.triage-label.is-stuck {
-  color: var(--st-error);
-  border-color: color-mix(in srgb, var(--st-error) 50%, var(--line));
-}
-.triage-label.is-review {
-  color: var(--st-running);
-  border-color: color-mix(in srgb, var(--st-running) 50%, var(--line));
-}
-.triage-label.is-checked {
-  color: var(--st-done);
-  border-color: color-mix(in srgb, var(--st-done) 50%, var(--line));
 }
 .triage-actions {
   display: flex;
@@ -8518,14 +8852,184 @@ button.board-main:hover .board-text {
   border-top: none;
 }
 
-/* Decisions (Inbox.tsx): each waiting thread's card, answered in place. */
+/* Check-ins (checkinRunner.ts): on, a breathing dot in waiting's color and
+   when the next status card is asked for. */
+.rd-checkin {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.rd-checkin.is-on {
+  color: var(--st-waiting);
+}
+.rd-checkin-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--st-waiting);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-checkin-dot {
+    animation: none;
+  }
+}
+
+/* Decisions (Inbox.tsx): the queue on the left, one line a thread, and the
+   card it's on on the right. Each scrolls on its own. */
 .inbox-body {
-  max-width: 80ch;
+  display: grid;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.inbox-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 32px 28px;
+}
+.inbox-pane > * {
   width: 100%;
-  margin: 0 auto;
+  max-width: 80ch;
+  margin-inline: auto;
+}
+/* One card at a time, picked out in the queue: no bar beside it. */
+.inbox-pane .inbox-item.is-focus::before {
+  content: none;
+}
+/* Nothing waiting: the pane takes the whole width. */
+.inbox-pane:only-child {
+  grid-column: 1 / -1;
+}
+.inbox-empty {
+  margin: 24px auto 0;
+  color: var(--muted);
+}
+.inbox-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 10px 20px;
+  border-right: 1px solid var(--line);
+}
+.inbox-rail-actions {
+  display: flex;
+  gap: 6px;
+  margin: 0 4px 8px;
+}
+.inbox-rail-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+.inbox-rail .inbox-later-head {
+  margin: 12px 8px 4px;
+}
+.inbox-row {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.inbox-row:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.inbox-row.is-on {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.inbox-row.is-later:not(.is-on) {
+  opacity: 0.62;
+}
+.inbox-row-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.inbox-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inbox-row-age {
+  flex: none;
+  color: var(--faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.inbox-row-q {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.inbox-row-said {
+  overflow: hidden;
+  color: var(--accent);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inbox-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+.inbox-row-tag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--muted);
+}
+.inbox-row-tag.is-prompt {
+  background: color-mix(in srgb, var(--st-waiting) 14%, transparent);
+  color: var(--st-waiting);
+}
+/* Narrow: the queue goes above the card, a few rows high. */
+@media (max-width: 820px) {
+  .inbox-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .inbox-rail {
+    max-height: 190px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .inbox-pane {
+    padding-inline: 20px;
+  }
 }
 .inbox-item {
   display: grid;
+  /* One column, never wider than the list: WebKit counts the one-line "You
+     asked" at its full length, which made the whole card that wide. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 /* Answered: slides off to the right, then the gap it leaves closes. The
@@ -9151,6 +9655,74 @@ button.board-main:hover .board-text {
   }
 }
 
+/* A working thread's plate hums: a faint ring of its blue leaves the rim
+   and fades, over and over, so you can tell it's working at a glance even
+   when its sand is sparse (ThreadPlate). Only transform and opacity move,
+   on one element, so the compositor runs it without repainting the page
+   or redrawing the plate. It goes when the thread stops working. */
+.plate-mount {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  vertical-align: top;
+  line-height: 0;
+  border-radius: 50%;
+}
+.plate-mount > .plate {
+  display: block;
+}
+.plate-hum {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--plate-running);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: plate-hum 1.6s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+}
+/* A big plate's ring spreads less of its size, or it would reach far past it. */
+.plate-mount.is-big .plate-hum {
+  border-width: 2px;
+  animation-name: plate-hum-big;
+  animation-duration: 2.2s;
+}
+@keyframes plate-hum {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  55% {
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(1.32);
+    opacity: 0;
+  }
+}
+@keyframes plate-hum-big {
+  from {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  55% {
+    opacity: 0.35;
+  }
+  to {
+    transform: scale(1.14);
+    opacity: 0;
+  }
+}
+/* No motion: a still ring at the rim says the same thing. */
+@media (prefers-reduced-motion: reduce) {
+  .plate-hum,
+  .plate-mount.is-big .plate-hum {
+    animation: none;
+    opacity: 0.55;
+    transform: scale(1.1);
+  }
+}
+
 /* ---------- a picked color fills the row ---------- */
 
 /* A project (Icon & color) or task (Color…) in a color of yours is a solid
@@ -9380,6 +9952,10 @@ button.board-main:hover .board-text {
   font-weight: 600;
   letter-spacing: 0.02em;
 }
+.lead-mark.is-running {
+  border-color: color-mix(in srgb, var(--st-done) 45%, transparent);
+  color: var(--st-done);
+}
 .lead-mark.is-stopped {
   border-color: var(--line);
   color: var(--muted);
@@ -9482,15 +10058,6 @@ button.board-main:hover .board-text {
 .lead-voice-help {
   grid-column: 1 / -1;
 }
-.lead-voice-project {
-  display: grid;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-.lead-voice-name {
-  font-weight: 600;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .lead-pet.is-calling .avatar {
@@ -9560,6 +10127,150 @@ button.board-main:hover .board-text {
   max-width: 100%;
 }
 
+
+/* A project's lead on its own (LeadDialog.tsx): its face and state up top,
+   then what it may do, its personality, and what it runs on. */
+.lead-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.lead-dialog-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.lead-dialog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.dialog-note.lead-dialog-about {
+  margin: 0;
+  line-height: 1.5;
+}
+.lead-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.lead-sec .dialog-note {
+  margin: 0;
+}
+.lead-sub {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.lead-levels-pick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.lead-level-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--night);
+  color: var(--text);
+  text-align: left;
+}
+.lead-level-opt:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.lead-level-opt.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--night));
+}
+.lead-level-opt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.lead-level-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.lead-level-what {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.lead-sec select,
+.lead-sec input.lead-max,
+.top-lead-fields select {
+  background: var(--night);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 5px 8px;
+  color: var(--text);
+  outline: none;
+}
+.lead-sec select:focus,
+.top-lead-fields select:focus {
+  border-color: var(--accent);
+}
+.lead-sec .card-cap.lead-notes input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.dialog-note.lead-pending {
+  color: var(--st-waiting);
+}
+.lead-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.link-btn.lead-remove {
+  color: var(--muted);
+}
+.link-btn.lead-remove:hover {
+  color: var(--st-waiting);
+}
+
+/* Settings › Leads: one row per project lead. */
+.lead-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lead-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.lead-row:first-child {
+  border-top: 0;
+}
+.lead-row-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-weight: 600;
+}
+.lead-row-name > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* What a lead started (S28, LeadCard.tsx): its tasks on the card, each with
    where it is now. */
@@ -9752,24 +10463,6 @@ button.board-main:hover .board-text {
 .chat-meta .chat-raw {
   font-size: 12px;
 }
-.chat-voice {
-  position: absolute;
-  top: calc(100% - 6px);
-  right: 22px;
-  z-index: 5;
-  display: grid;
-  gap: 10px;
-  width: min(460px, calc(100% - 44px));
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
-  font-size: 13px;
-}
-.chat-voice-done {
-  justify-self: end;
-}
 .chat-acts {
   display: flex;
   flex: none;
@@ -9880,6 +10573,23 @@ button.board-main:hover .board-text {
   font-size: 12px;
   color: var(--faint);
   text-align: center;
+}
+/* About a thread: a click opens it. */
+.chat-event.is-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-event.is-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.chat-task-open {
+  font-size: 12px;
 }
 .chat-typing {
   display: inline-flex;
@@ -10033,6 +10743,36 @@ button.board-main:hover .board-text {
   align-self: flex-start;
 }
 
+/* A question the lead passes on to you, out of its reply and in a bubble
+   of its own; open ones in the waiting color with an Answer button. */
+.chat-question {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.chat-question.is-open {
+  border-color: color-mix(in oklab, var(--st-waiting) 55%, transparent);
+  background: color-mix(in oklab, var(--st-waiting) 10%, var(--raised));
+}
+.chat-question-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.chat-question.is-open .chat-question-label {
+  color: var(--st-waiting);
+}
+.chat-question .chat-md > :first-child {
+  margin-top: 0;
+}
+.chat-question .chat-md > :last-child {
+  margin-bottom: 0;
+}
+.chat-question-answer {
+  margin-top: 4px;
+}
 .chat-compose {
   display: flex;
   gap: 8px;
@@ -10084,6 +10824,27 @@ button.board-main:hover .board-text {
     transition: none;
   }
 }
+
+/* A project lead's level (leadLevel.ts): its picker and what it allows. */
+.lead-level {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.lead-level .setting-input {
+  flex: none;
+}
+
+.lead-level.is-compact .setting-input {
+  font-size: 12px;
+  padding-block: 2px;
+}
+
+
+
 
 /* A lead's face (S30, LeadAvatar.tsx): its pet close up, at whole pixels,
    in a circle of its tint, with an optional status dot on the rim. The

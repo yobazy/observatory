@@ -348,3 +348,26 @@ test("Given a reply with decisions and then an update without any, then the earl
   assert.equal(liveReply([pet(1, 'Fix it now?'), me('1 A')], asks), -1);
   assert.equal(liveReply([pet(1, 'Fix it now?'), me('1 A'), pet(3, 'Started.')], asks), 3);
 });
+
+test('a lead\'s ASK_USER lines come out of its reply as questions for you', async () => {
+  const { splitAsks } = await import('../src/nebula/projectChat.ts');
+  const said = 'The tests pass.\n\nASK_USER: should a failed sync stop and tell you, or keep retrying?';
+  assert.deepEqual(splitAsks(said), { body: 'The tests pass.', asks: ['Should a failed sync stop and tell you, or keep retrying?'] });
+  assert.deepEqual(splitAsks('**ASK_USER:** Ship it today?\n- ASK_USER: and tag it?'), { body: '', asks: ['Ship it today?', 'And tag it?'] });
+  // Only at the start of a line: a reply talking about the marker keeps it.
+  assert.deepEqual(splitAsks('Threads get ASK_USER: back when I do not know.'), { body: 'Threads get ASK_USER: back when I do not know.', asks: [] });
+  assert.deepEqual(splitAsks('ASK_USER:'), { body: '', asks: [] });
+});
+
+test('an [observatory] line names the thread it is about, for the chat to open', async () => {
+  const { eventThread } = await import('../src/nebula/projectChat.ts');
+  assert.equal(eventThread('[observatory] finished: Fix login on fix-login (agent a1): Needs review'), 'a1');
+  assert.equal(eventThread('[observatory] CI failed #193: Fix login on fix-login (agent a1): lint'), 'a1');
+  assert.equal(eventThread('[observatory] started fix-bottom-clip (agent a9)'), 'a9');
+  assert.equal(eventThread('[observatory] nudged a1'), 'a1');
+  assert.equal(eventThread('[observatory] refused NUDGE a1: it was nudged 3 times in the last hour'), 'a1');
+  assert.equal(eventThread('[observatory] the user said no to archiving a1'), 'a1');
+  assert.equal(eventThread('[observatory] queued fix-bottom-clip: 2 running, waiting for a slot'), null);
+  assert.equal(eventThread('[observatory] the user merged #12 (your ASK)'), null);
+  assert.equal(eventThread('[observatory] leads: Lead shop (/u/shop)'), null);
+});

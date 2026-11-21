@@ -8,7 +8,8 @@ import { flash, getState, projectOfWorktree, setState, subscribe } from "./store
 import { fromLabel, linkAction, matchProject, parseFollowUp, parseHandoff } from "./handoff";
 import { allCards } from "./cards";
 import { addToDraft } from "./drafts";
-import { checkFollowUp, runningLeads } from "./lead";
+import { checkFollowUp, checkNewTask, runningLeads } from "./lead";
+import { levelOf, type LeadLevel } from "./leadLevel";
 import { setPaneMode } from "./pane";
 
 export interface Handoff {
@@ -20,6 +21,21 @@ export interface Handoff {
   from: string;
 }
 
+/** The project lead a thread is, with its project and level, or null. */
+function leadOf(agentId: string): { projectId: string; name: string; level: LeadLevel } | null {
+  const s = getState();
+  for (const [projectId, card] of Object.entries(allCards()))
+    if (card.lead?.agentId === agentId && s.projects[projectId]) return { projectId, name: s.projects[projectId].name, level: levelOf(card.lead) };
+  return null;
+}
+
+/** Each project's lead's level, by project. */
+function levels(): Record<string, LeadLevel> {
+  const out: Record<string, LeadLevel> = {};
+  for (const [projectId, card] of Object.entries(allCards())) if (card.lead) out[projectId] = levelOf(card.lead);
+  return out;
+}
+
 function toHandoff(url: string): Handoff | null {
   const parsed = parseHandoff(url);
   if ("error" in parsed) {
@@ -28,8 +44,14 @@ function toHandoff(url: string): Handoff | null {
   }
   const s = getState();
   const project = matchProject(Object.values(s.projects), parsed.project);
+  // A lead's link opens only within its level, in its own project.
+  const checked = checkNewTask({ projectId: project?.id ?? null, named: parsed.project, from: parsed.from }, leadOf);
+  if ("error" in checked) {
+    flash(checked.error, 6000);
+    return null;
+  }
   return {
-    projectId: project?.id ?? null,
+    projectId: checked.projectId,
     named: parsed.project,
     prompt: parsed.prompt,
     from: fromLabel(parsed.from, s.agents, (w) => projectOfWorktree(s, w)),
@@ -50,7 +72,7 @@ export function openFollowUp(url: string): boolean {
     const a = s.agents[id];
     return (a && projectOfWorktree(s, a.worktree_id)?.id) || null;
   };
-  const ok = checkFollowUp(parsed, s.agents, projectOf, runningLeads(allCards(), s.agents, s.projects));
+  const ok = checkFollowUp(parsed, s.agents, projectOf, runningLeads(allCards(), s.agents, s.projects), levels());
   if ("error" in ok) {
     flash(ok.error, 6000);
     return false;

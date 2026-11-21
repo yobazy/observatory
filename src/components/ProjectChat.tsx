@@ -4,20 +4,21 @@ import { dollars, costBySession } from "../nebula/budgetHold";
 import { markLeadSeen, noteReply, openLeadChat, openLeadTerminal, useChatLead, useLeadCalls, useLeadReply } from "../nebula/leadCalls";
 import { lastReply, QUIET, type FaceFrame, type LeadEntry } from "../nebula/leadChat";
 import { outcomesOf, useLeadActs, type AskAction } from "../nebula/leadActions";
-import { answerLeadAsk, setLeadActs, startedTasks } from "../nebula/leadRunner";
-import { chatItems, chatPreview, leadActivity, liveReply, runStarts, sinceToday, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
+import { answerLeadAsk, levelFlash, setLeadLevel, startedTasks } from "../nebula/leadRunner";
+import { levelOf } from "../nebula/leadLevel";
+import { chatItems, chatPreview, leadActivity, liveReply, runStarts, sinceToday, splitAsks, taskStep, type ChatItem, type ChatTask } from "../nebula/projectChat";
 import { enqueue } from "../nebula/queue";
 import { answer, findQuestion, readScreen, type Choice, type Question } from "../nebula/screen";
 import { useLanded } from "../nebula/prwatch";
 import { answersSaid, answerText, readCard } from "../nebula/replycard";
-import { flash, getState, useAppState } from "../nebula/store";
+import { flash, getState, setState, useAppState } from "../nebula/store";
 import { sessionKey } from "../nebula/usageData";
 import type { Entry } from "../nebula/transcript";
 import type { Agent } from "../nebula/types";
 import { avatarStatusLabel, LeadAvatar, tintVars, type AvatarStatus } from "./LeadAvatar";
-import { Reply, useTranscript, Where } from "./Reader";
-import { Switch } from "./Settings";
-import { LeadVoiceFields } from "./LeadCard";
+import { Md, Reply, useReveal, useTranscript, Where } from "./Reader";
+import { LevelPicker } from "./LeadCard";
+import { openLeadSettings } from "./LeadDialog";
 
 // Chat with a project (S29): the project's lead is a pet, and the face of
 // the project. Its thread shows here as a chat, not in the Read view or the
@@ -141,7 +142,16 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     return startedTasks(lead.projectId, state).map(({ rec, agent: a, label }) => {
       const p = a ? state.prs[a.worktree_id] : undefined;
       const open = p?.kind === "found" && (p.pr.state === "open" || p.pr.state === "draft") ? p.pr : null;
-      return { taskId: rec.taskId, branch: rec.branch, at: rec.at, n: rec.n, replyAt: rec.replyAt, label, checks: open ? { state: open.checks, failing: open.failing } : null };
+      return {
+        taskId: rec.taskId,
+        branch: rec.branch,
+        at: rec.at,
+        n: rec.n,
+        replyAt: rec.replyAt,
+        label,
+        checks: open ? { state: open.checks, failing: open.failing } : null,
+        agentId: a && !a.archived ? a.id : undefined,
+      };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.projectId, state.agents, state.prs, state.worktrees, acts]);
@@ -158,6 +168,11 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
       }),
     [entries, tasks, acts, lead.acts, lead.projectId, agent.id, state],
   );
+
+  // What was said when the chat opened sits still; replies after it fade in.
+  const known = useRef<Set<string> | null>(null);
+  if (t && !known.current) known.current = new Set(items.map((it) => it.key));
+  const fresh = (key: string) => !!known.current && !known.current.has(key);
 
   // The latest reply while nothing you said follows it: its decisions take
   // taps, sent with whatever you type.
@@ -252,6 +267,7 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
     pinned.current = true;
     const mine = { text: words, after: lastN };
     setSent((s) => [...s, mine]);
+    setAnsweringQ(null);
     try {
       const how = await enqueue(getState().agents[agent.id] ?? agent, words, { stay: true, turnEndedAt: t?.turnEndedAt });
       if (how === "queued") flash(`${lead.title} is busy; it gets your message when its turn ends.`);
@@ -268,10 +284,17 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
   const frame = useBlink(!reduced);
   const top = lead.projectId === null;
   const days = dayLabels(items);
-  const [voiceOpen, setVoiceOpen] = useState(false);
   const starts = useMemo(() => runStarts(items), [items]);
   const lastIsPet = items.length > 0 && items[items.length - 1].kind === "pet" && !sent.length;
-  const status: AvatarStatus = activity === "prompt" || items.some((it) => it.kind === "ask" && !it.done) ? "calling" : working ? "working" : "idle";
+  // A question the lead passed on to you in its latest reply, unanswered.
+  const openAsk = latestText !== undefined && !sent.length && splitAsks(latestText).asks.length > 0;
+  const status: AvatarStatus = activity === "prompt" || openAsk || items.some((it) => it.kind === "ask" && !it.done) ? "calling" : working ? "working" : "idle";
+  // Answer on a lead's question: the box says what you're answering.
+  const [answeringQ, setAnsweringQ] = useState<string | null>(null);
+  const answerAsk = (q: string) => {
+    setAnsweringQ(q);
+    input.current?.focus();
+  };
 
   return (
     <section className="chat" style={tintStyle(lead)} aria-label={top ? "Chat with every project's top lead" : `Chat with ${lead.name}`}>
@@ -289,42 +312,34 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
             <button type="button" className="link-btn chat-raw" onClick={() => openLeadTerminal(agent.id)} title="The lead's raw session, as a thread's terminal">
               Open terminal
             </button>
-            {!top && card && (
+            {!top && card && lead.projectId && (
               <>
                 {" · "}
                 <button
                   type="button"
                   className="link-btn chat-raw"
-                  aria-expanded={voiceOpen}
-                  onClick={() => setVoiceOpen((o) => !o)}
-                  title="How the lead talks, and your instructions to it"
+                  onClick={() => openLeadSettings(lead.projectId!)}
+                  title="What the lead may do, how it talks, and its model"
                 >
-                  Personality{card.personality ? `: ${card.personality.length > 40 ? `${card.personality.slice(0, 39)}…` : card.personality}` : ""}
+                  Lead settings
                 </button>
               </>
             )}
           </p>
         </div>
         {!top && card && lead.projectId && (
-          <label className="chat-acts" htmlFor={`chat-acts-${lead.projectId}`} title="Whether the app carries out the lead's START and NUDGE lines">
-            <Switch
-              id={`chat-acts-${lead.projectId}`}
-              on={card.acts === true}
-              onChange={(on) => {
-                setLeadActs(lead.projectId!, card, on);
-                flash(on ? `${lead.name}'s lead can start and nudge threads` : `${lead.name}'s lead's action lines are ignored now`);
+          <label className="chat-acts" htmlFor={`chat-level-${lead.projectId}`}>
+            Level
+            <LevelPicker
+              id={`chat-level-${lead.projectId}`}
+              compact
+              level={levelOf(card)}
+              onPick={(level) => {
+                setLeadLevel(lead.projectId!, card, level);
+                flash(levelFlash(lead.name, level));
               }}
             />
-            Starts and nudges threads
           </label>
-        )}
-        {voiceOpen && !top && card && lead.projectId && (
-          <div className="chat-voice" role="dialog" aria-label={`${lead.name}'s personality and instructions`} onKeyDown={(e) => e.key === "Escape" && setVoiceOpen(false)}>
-            <LeadVoiceFields projectId={lead.projectId} projectName={lead.name} lead={card} />
-            <button type="button" className="link-btn chat-voice-done" onClick={() => setVoiceOpen(false)}>
-              Done
-            </button>
-          </div>
         )}
       </header>
       <div
@@ -340,7 +355,16 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
           {!t && !screenAsk && <p className="chat-empty">Reading the lead's thread…</p>}
           {t && !screenAsk && !items.length && !sent.length && <p className="chat-empty">Nothing said yet. Say hello, or give it a task.</p>}
           {items.map((it) => (
-            <ChatLine key={it.key} item={it} lead={lead} day={days.get(it.key)} first={starts.has(it.key)} reply={it.kind === "pet" ? replyOf(it.n) : undefined} />
+            <ChatLine
+              key={it.key}
+              item={it}
+              lead={lead}
+              day={days.get(it.key)}
+              first={starts.has(it.key)}
+              fresh={fresh(it.key)}
+              reply={it.kind === "pet" ? replyOf(it.n) : undefined}
+              onAnswer={it.kind === "pet" && it.n === latest && !sent.length ? answerAsk : undefined}
+            />
           ))}
           {sent.map((m, i) => (
             <div key={`sent${i}`} className="chat-say is-me is-sending">
@@ -389,7 +413,9 @@ function Chat({ lead, agent }: { lead: LeadEntry; agent: Agent }) {
         <input
           ref={input}
           placeholder={
-            !tapped.sent && Object.values(picks).some(Boolean)
+            answeringQ && openAsk
+              ? `Your answer: ${answeringQ}`
+              : !tapped.sent && Object.values(picks).some(Boolean)
               ? "Add a note to your answers, or just Send"
               : top
                 ? "Ask about any project, or hand one some work"
@@ -423,7 +449,27 @@ function SayAvatar({ lead, first }: { lead: LeadEntry; first: boolean }) {
   return first ? <LeadAvatar pet={lead.pet} size={30} className="chat-say-pet" /> : <span className="chat-say-pet is-gap" aria-hidden />;
 }
 
-function ChatLine({ item, lead, day, first, reply }: { item: ChatItem; lead: LeadEntry; day: string | undefined; first: boolean; reply?: ReplyBits }) {
+function ChatLine({
+  item,
+  lead,
+  day,
+  first,
+  fresh,
+  reply,
+  onAnswer,
+}: {
+  item: ChatItem;
+  lead: LeadEntry;
+  day: string | undefined;
+  first: boolean;
+  /** It landed while the chat was open: its words fade in. */
+  fresh: boolean;
+  reply?: ReplyBits;
+  /** Its questions for you are still open: answering one focuses the box. */
+  onAnswer?: (question: string) => void;
+}) {
+  const said = useRef<HTMLDivElement>(null);
+  useReveal(said, fresh && item.kind === "pet");
   const line = (() => {
     switch (item.kind) {
       case "me":
@@ -432,15 +478,35 @@ function ChatLine({ item, lead, day, first, reply }: { item: ChatItem; lead: Lea
             <div className="chat-bubble">{item.text}</div>
           </div>
         );
-      case "pet":
+      case "pet": {
+        const { body, asks } = splitAsks(item.text);
         return (
-          <div className={`chat-say is-pet${first ? "" : " is-more"}`}>
-            <SayAvatar lead={lead} first={first} />
-            {reply && <Reply text={item.text} from={lead.agentId} prose="chat-bubble chat-md" {...reply} />}
+          <div className="chat-said" ref={said}>
+            {body && (
+              <div className={`chat-say is-pet${first ? "" : " is-more"}`}>
+                <SayAvatar lead={lead} first={first} />
+                {reply && <Reply text={body} from={lead.agentId} prose="chat-bubble chat-md" {...reply} />}
+              </div>
+            )}
+            {asks.map((q, i) => (
+              <div key={i} className={`chat-say is-pet${!body && !i && first ? "" : " is-more"}`}>
+                <SayAvatar lead={lead} first={!body && !i && first} />
+                <div className={`chat-bubble chat-question${onAnswer ? " is-open" : ""}`}>
+                  <span className="chat-question-label">{onAnswer ? "Asks you" : "Asked you"}</span>
+                  <Md text={q} className="chat-md" />
+                  {onAnswer && (
+                    <button type="button" className="btn btn-sm chat-question-answer" onClick={() => onAnswer(q)}>
+                      Answer
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         );
+      }
       case "event":
-        return <div className="chat-event">{item.text}</div>;
+        return <EventLine text={item.text} thread={item.thread} />;
       case "task":
         return <TaskCard task={item.task} />;
       case "ask":
@@ -455,6 +521,26 @@ function ChatLine({ item, lead, day, first, reply }: { item: ChatItem; lead: Lea
   );
 }
 
+/** Open a thread the lead talks about; the lead's face above the threads
+ *  comes back to the chat. */
+function openThread(agentId: string) {
+  setState((s) => {
+    const a = s.agents[agentId];
+    return a ? { selectedProject: s.worktrees[a.worktree_id]?.project_id ?? s.selectedProject, selectedSession: { Agent: a.id } } : {};
+  });
+}
+
+/** An [observatory] line; one about a thread that's still around opens it. */
+function EventLine({ text, thread }: { text: string; thread?: string }) {
+  const agent = useAppState().agents[thread ?? ""];
+  if (!agent || agent.archived) return <div className="chat-event">{text}</div>;
+  return (
+    <button type="button" className="chat-event is-link" onClick={() => openThread(agent.id)} title={`Open ${agent.name}`}>
+      {text}
+    </button>
+  );
+}
+
 /** A task the lead started, on the four steps: Queued, Running, PR, Merged. */
 function TaskCard({ task }: { task: ChatTask }) {
   const { step, text, tone } = taskStep(task);
@@ -463,6 +549,11 @@ function TaskCard({ task }: { task: ChatTask }) {
       <div className="chat-task-line">
         Started <code>{task.branch}</code>
         <span className="chat-task-state">{text}</span>
+        {task.agentId && (
+          <button type="button" className="link-btn chat-task-open" onClick={() => openThread(task.agentId!)} title="Open its thread">
+            Open
+          </button>
+        )}
       </div>
       <div className="chat-steps" aria-hidden>
         {STEPS.map((s, i) => (

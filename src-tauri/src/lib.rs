@@ -10,6 +10,7 @@ mod editor;
 mod gh;
 mod git;
 mod icons;
+mod lead_guard;
 mod moments;
 mod nebula_setup;
 mod notes;
@@ -61,6 +62,11 @@ fn main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // A lead's guard hook (lead_guard.rs) runs this binary for one check.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some(lead_guard::FLAG) {
+        std::process::exit(lead_guard::run_cli(&args[1..]));
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
@@ -86,6 +92,8 @@ pub fn run() {
         .manage(control::ControlState::default())
         .register_uri_scheme_protocol("preview", preview::serve)
         .invoke_handler(tauri::generate_handler![
+            lead_guard::lead_guard_install,
+            lead_guard::lead_guard_remove,
             daemon::connect,
             daemon::send,
             daemon::send_input,

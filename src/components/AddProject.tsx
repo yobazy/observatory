@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { inspectFolder, pickFolder, request } from "../nebula/client";
-import { flash, getState, setState, useAppState } from "../nebula/store";
+import { clearNotice, flash, getState, setState, useAppState } from "../nebula/store";
 
 /** What the add-project flow stopped to ask about, or the daemon's refusal. */
 export type AddStep =
@@ -154,7 +154,7 @@ export function Notice() {
           className="link-btn notice-action"
           onClick={() => {
             noticeAction.run();
-            setState({ notice: null, noticeAction: null });
+            clearNotice();
           }}
         >
           {noticeAction.label}

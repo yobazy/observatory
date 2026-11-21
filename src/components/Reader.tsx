@@ -4,12 +4,15 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { isPreview, runSuggester, sendInput } from "../nebula/client";
 import { buildSuggestPrompt, freshReply, previewSuggestions, readSuggestions, suggestCommand } from "../nebula/nextprompts";
-import { flash, getState, projectOfWorktree, subscribe, useAppState } from "../nebula/store";
+import { flash, getState, projectOfWorktree, setState, subscribe, useAppState } from "../nebula/store";
 import { findPrRefs, pathInCode, prLink } from "../nebula/pathtext";
 import { resolve } from "../nebula/termpaths";
+import { reveal } from "../nebula/reveal";
 import { enqueue, isIdle, sendQueued, unqueue, queuedSentAt, type Queued } from "../nebula/queue";
 import { actOf, clock, doingLine, heldAtPrompt, liveStep, merge, stepsLine, type Entry, type Transcript } from "../nebula/transcript";
 import { closeThread } from "../nebula/verdicts";
+import { setCheckIn, useCheckIn } from "../nebula/checkinRunner";
+import { untilText } from "../nebula/checkin";
 import { useLanded } from "../nebula/prwatch";
 import { CATCH_UP, answersSaid, answerText, beforeAfter, isCard, noteFor, openDecisions, turnsOf, passageText, suggested, pointerText, readCard, replyQuote, typedAnswers, withBefore, type Card, type Chip } from "../nebula/replycard";
 import { saveMoment } from "../nebula/moments";
@@ -23,6 +26,7 @@ import { fitTables } from "../nebula/tablecols";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
 import { draftFor, keepDraft, onDraftAdded } from "../nebula/drafts";
+import { useWaiting } from "../nebula/decisions";
 import { rubOut, unsentLine } from "../nebula/typed";
 import { harnessLabel, relativeTime, statusLabel } from "../nebula/status";
 import type { Agent } from "../nebula/types";
@@ -37,6 +41,12 @@ const dismissedFor = new Map<string, Set<number>>();
 /** Next prompts suggested for a thread's latest reply, keyed by thread and
  *  entry; asked once per reply for as long as the app runs. */
 const nextFor = new Map<string, string[] | "asking">();
+/** Send & next: the thread it opens starts in its reply box, for the next Tab. */
+let focusBoxNext = false;
+/** Threads answered with Send & next, by agent, at the status they had then:
+ *  still listed as waiting until the daemon says they're working, they're
+ *  passed over meanwhile rather than offered again. */
+const justSent = new Map<string, number>();
 
 /** The thread's artwork and name at the top of what it said, like a record
  *  sleeve. Every prompt and step it has taken moves the sand, so the plate is
@@ -373,7 +383,19 @@ function Videos({ paths, from }: { paths: string[]; from: string }) {
 /** How the reply closes: safe to close, with the button that does it while
  *  this is the latest reply, or what's keeping it open, with what's left to
  *  ship beside it. */
-function VerdictLine({ verdict, onClose, ship, landed }: { verdict: Chip; onClose?: () => void; ship?: Ship | null; landed?: string | null }) {
+function VerdictLine({
+  verdict,
+  onClose,
+  ship,
+  landed,
+  checkIn,
+}: {
+  verdict: Chip;
+  onClose?: () => void;
+  ship?: Ship | null;
+  landed?: string | null;
+  checkIn?: CheckInView | null;
+}) {
   return (
     <div className="rd-verdict-row">
       <p className={`rd-verdict is-${verdict.tone}`}>
@@ -389,12 +411,44 @@ function VerdictLine({ verdict, onClose, ship, landed }: { verdict: Chip; onClos
           Close thread
         </button>
       )}
+      {checkIn && verdict.tone === "wait" && <CheckInButton view={checkIn} />}
       {ship && verdict.tone !== "done" && (
         <button className="btn btn-sm" onClick={ship.run} title={ship.title}>
           {ship.label}
         </button>
       )}
     </div>
+  );
+}
+
+/** Whether the app asks this thread how its running work is going, and
+ *  when it next will (checkinRunner.ts). */
+type CheckInView = { on: boolean; next: number | null; toggle: () => void };
+
+function CheckInButton({ view }: { view: CheckInView }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!view.on) return;
+    const t = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, [view.on]);
+  if (!view.on)
+    return (
+      <button className="btn btn-sm btn-rare" onClick={view.toggle} title="Ask this thread for a status card every 30 minutes while it says something is running">
+        Check in every 30m
+      </button>
+    );
+  const now = Date.now();
+  const when = view.next == null ? "paused" : view.next <= now ? "checking soon" : `next in ${untilText(view.next, now)}`;
+  return (
+    <button
+      className="btn btn-sm rd-checkin is-on"
+      onClick={view.toggle}
+      title="The app asks this thread for a status card every 30 minutes while its reply says something is running, and stops once it doesn't. Click to stop."
+    >
+      <span className="rd-checkin-dot" aria-hidden />
+      Checking in · {when}
+    </button>
   );
 }
 
@@ -453,6 +507,7 @@ export function CardReply({
   onPick,
   onClose,
   landed,
+  checkIn,
 }: {
   card: Card;
   /** Its two pictures as before and after, when it says which is which. */
@@ -471,6 +526,8 @@ export function CardReply({
   onClose?: () => void;
   /** The PRs its verdict waits on, once they've all landed: "#134 merged". */
   landed?: string | null;
+  /** The latest reply's check-ins, while its verdict keeps the thread open. */
+  checkIn?: CheckInView | null;
 }) {
   const headline = useMemo(() => (card.headline ? toHtml(card.headline, true) : ""), [card.headline]);
   return (
@@ -532,7 +589,7 @@ export function CardReply({
           <Md text={card.details} />
         </details>
       )}
-      {card.verdict && <VerdictLine verdict={card.verdict} onClose={onClose} ship={ship} landed={landed} />}
+      {card.verdict && <VerdictLine verdict={card.verdict} onClose={onClose} ship={ship} landed={landed} checkIn={checkIn} />}
     </article>
   );
 }
@@ -573,6 +630,35 @@ function More({ card, from, pair }: { card: Card; from: string; pair: [string, s
   );
 }
 
+/** Fades a reply in word by word when `on`, as a streamed one would. It's
+ *  held hidden from the first paint, then split into words once the
+ *  reply's own effects (Copy buttons, PR links) have made its text. */
+export function useReveal(el: React.RefObject<HTMLElement | null>, on: boolean) {
+  const go = useRef(on && !matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useLayoutEffect(() => {
+    if (go.current) el.current?.classList.add("rv-hold");
+  }, [el]);
+  useEffect(() => {
+    const root = el.current;
+    if (!go.current || !root) return;
+    // Run again before it's done (as React's dev checks do), it starts over.
+    const end = reveal(root, () => (go.current = false));
+    root.classList.remove("rv-hold");
+    return end;
+  }, [el]);
+}
+
+/** A reply's box, faded in word by word when it's new. */
+function Revealed({ on, children, ...rest }: { on: boolean; children: React.ReactNode; className: string; "data-n": number }) {
+  const el = useRef<HTMLDivElement>(null);
+  useReveal(el, on);
+  return (
+    <div ref={el} {...rest}>
+      {children}
+    </div>
+  );
+}
+
 /** A reply as the Read view sets it: a card when it's written as one, else
  *  prose. The project chat draws its lead's replies with it too. */
 export function Reply(props: {
@@ -585,6 +671,7 @@ export function Reply(props: {
   onPick: (n: number, letter: string) => void;
   onClose?: () => void;
   landed?: string | null;
+  checkIn?: CheckInView | null;
   /** The thread up to it, for what earlier replies said about the
    *  decisions it asks again. */
   thread?: { n: number; entries: Entry[] };
@@ -867,6 +954,9 @@ export function Reader({
   const latestThread = useMemo(() => (t && latest >= 0 ? { n: latest, entries: t.entries } : undefined), [t?.entries, latest]);
   // The PRs the latest reply's verdict waits on, once they've all landed.
   const prsLanded = useLanded(state.worktrees[agent.worktree_id]?.path, latestCard?.verdict ?? null);
+  // Status cards asked for on their own while it says something's running.
+  const latestAt = t?.entries.find((x) => x.n === latest)?.at ?? null;
+  const checkIn = useCheckIn(agent, latestCard?.verdict, latestAt);
   // Answers typed or dictated into the box ("2 a, 3 b") light up as taps.
   const typed = typedAnswers(latestCard, draft);
   const shown = { ...typed.picks, ...Object.fromEntries(Object.entries(picks).filter(([, l]) => l)) };
@@ -880,6 +970,12 @@ export function Reader({
   // Opening the Read view from its switch puts you in the thread, so ⌘F and
   // ⌘↑ work at once; a box you're typing in keeps its focus.
   useEffect(() => {
+    // Come here with Send & next: straight into the reply box.
+    if (focusBoxNext) {
+      focusBoxNext = false;
+      // A frame on: the terminal behind takes focus as it attaches.
+      if (box.current) return void requestAnimationFrame(() => box.current?.focus({ preventScroll: true }));
+    }
     const at = document.activeElement;
     if (!at || at === document.body || at.closest("[role=radiogroup]")) scroller.current?.focus({ preventScroll: true });
   }, []);
@@ -895,6 +991,15 @@ export function Reader({
         e.preventDefault();
         setUnfolded(true);
         setFinding(true);
+        return;
+      }
+      // ⌘↵ after tapping an option, as from the box: send, then the next
+      // thread. On a terminal prompt there's nothing to send: just go on.
+      if (e.key === "Enter" && !e.shiftKey && !(document.activeElement as HTMLElement).matches("textarea, input")) {
+        e.preventDefault();
+        if (e.repeat) return;
+        if (waiting) goNext();
+        else void send(!!nextUp);
         return;
       }
       if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || (document.activeElement as HTMLElement).matches("textarea, input")) return;
@@ -1121,9 +1226,32 @@ export function Reader({
 
   // Behind a queued prompt, a reply still waits its turn.
   const canSend = isIdle(agent) || (atPrompt && !queue?.length);
-  const send = async () => {
+  // The next thread waiting on you, as Decisions lists them: Send & next
+  // answers this one and opens that, so a round of answers needs no hunting.
+  // Taken in the list's order from where this thread is, so skipping goes on
+  // down the list rather than back and forth between the top two.
+  const waitingNow = useWaiting();
+  const nextUp = useMemo(() => {
+    const order = (waitingNow ?? []).filter((w) => !w.agent.archived && justSent.get(w.agent.id) !== w.agent.status_changed_at);
+    const i = order.findIndex((w) => w.agent.id === agent.id);
+    if (i < 0) return order[0] ?? null;
+    return order.length > 1 ? order[(i + 1) % order.length] : null;
+  }, [waitingNow, agent.id]);
+  // A send under way: a second ⌘↵ mustn't leave before it's known to have gone.
+  const sending = useRef(false);
+  const goNext = () => {
+    if (!nextUp || sending.current) return;
+    focusBoxNext = true;
+    const a = nextUp.agent;
+    setState((s) => ({ selectedProject: s.worktrees[a.worktree_id]?.project_id ?? s.selectedProject, selectedSession: { Agent: a.id } }));
+  };
+  const send = async (thenNext = false) => {
     const text = outgoing;
+    if (sending.current) return;
+    // Nothing to send skips to the next, unless you'd pointed at something.
+    if (thenNext && !text) return pointed ? undefined : goNext();
     if (!text || waiting) return;
+    sending.current = true;
     const was = { draft, tapped, pointed };
     setDraft("");
     setTapped({ entry: -1, picks: {} });
@@ -1137,7 +1265,12 @@ export function Reader({
       // A queued one shows in the queue instead, a command on the working line.
       setOutbox(how === "queued" || commandOf(text) !== null ? null : { text, after, sent: true });
       if (how === "queued") flash(`Queued for ${agent.name}: sent when its turn ends`);
+      justSent.set(agent.id, agent.status_changed_at);
+      sending.current = false;
+      // Once it's gone, not before: a send that fails puts your reply back here.
+      if (thenNext) goNext();
     } catch {
+      sending.current = false;
       setOutbox(null);
       // It didn't go: put back what you wrote and picked.
       setDraft(was.draft);
@@ -1245,9 +1378,10 @@ export function Reader({
                       {e.text}
                     </div>
                   ) : e.kind === "claude" ? (
-                    <div
+                    <Revealed
                       key={e.n}
                       data-n={e.n}
+                      on={fresh(e)}
                       className={`rd-reply${pointed?.entry === e.n ? " is-pointed" : ""}${fresh(e) ? " is-new" : ""}`}
                     >
                       <Reply
@@ -1260,6 +1394,11 @@ export function Reader({
                         onPick={pick}
                         onClose={e.n === latest && agent.status === "finished" && !agent.archived ? () => closeThread(agent) : undefined}
                         landed={e.n === latest ? prsLanded : null}
+                        checkIn={
+                          e.n === latest && agent.status === "finished" && !agent.archived
+                            ? { ...checkIn, toggle: () => setCheckIn(agent.id, !checkIn.on) }
+                            : null
+                        }
                         thread={e.n === latest ? latestThread : undefined}
                       />
                       <div className="rd-tools">
@@ -1288,7 +1427,7 @@ export function Reader({
                           </button>
                         )}
                       </div>
-                    </div>
+                    </Revealed>
                   ) : e.kind === "steps" ? (
                     <Steps key={e.n} entry={e} root={root.replace(/\/+$/, "")} fresh={fresh(e)} />
                   ) : (
@@ -1451,7 +1590,13 @@ export function Reader({
               {question.prompt && <p className="rd-wait">{question.prompt}</p>}
               <AskChoices question={question} onPick={onPick} />
             </div>
-          ) : waiting ? (
+          ) : null}
+          {waiting && nextUp && (
+            <button className="link-btn rd-sendnext" onClick={goNext} title={`Leave this for now and open ${nextUp.agent.name}, the next thread waiting on you (⌘↵)`}>
+              Next <span className="rd-sendnext-name">→ {nextUp.agent.name}</span> <kbd>⌘↵</kbd>
+            </button>
+          )}
+          {waiting && question ? null : waiting ? (
             <p className="rd-wait">
               It's waiting on a choice in the terminal.{" "}
               <button className="link-btn" onClick={onTerminal}>
@@ -1502,15 +1647,26 @@ export function Reader({
                     e.preventDefault();
                     setTapped({ entry: latest, picks: recommended });
                   } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    // Enter sends, like the terminal; Shift-Enter starts a new line.
+                    // Enter sends, like the terminal; Shift-Enter starts a new line;
+                    // ⌘-Enter sends and opens the next thread waiting on you.
                     e.preventDefault();
-                    void send();
+                    if (!e.repeat) void send(e.metaKey && !!nextUp);
                   }
                 }}
               />
               <button className="btn btn-primary" disabled={!outgoing} onClick={() => void send()} title="Send (↵). Shift-↵ for a new line">
                 {canSend ? "Send" : "Queue"}
               </button>
+              {nextUp && (
+                <button
+                  className="link-btn rd-sendnext"
+                  onClick={() => void send(true)}
+                  title={`${outgoing ? `${canSend ? "Send" : "Queue"} this, then open` : "Open"} ${nextUp.agent.name}, the next thread waiting on you (⌘↵)`}
+                >
+                  {outgoing ? (canSend ? "Send & next" : "Queue & next") : "Next"} <span className="rd-sendnext-name">→ {nextUp.agent.name}</span>{" "}
+                  <kbd>⌘↵</kbd>
+                </button>
+              )}
             </>
           )}
         </div>

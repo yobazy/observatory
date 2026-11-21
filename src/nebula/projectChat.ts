@@ -24,11 +24,14 @@ export interface ChatTask {
   label: StartedState;
   /** Its PR's checks, while it has one open. */
   checks?: { state: string; failing: string[] } | null;
+  /** Its thread, while there is one to open. */
+  agentId?: string;
 }
 
 export type ChatItem =
   | { kind: "me"; key: string; text: string; at: number }
-  | { kind: "event"; key: string; text: string; at: number }
+  /** `thread`: the agent it's about, for a click to open it. */
+  | { kind: "event"; key: string; text: string; at: number; thread?: string }
   | { kind: "pet"; key: string; n: number; text: string; at: number }
   | { kind: "task"; key: string; task: ChatTask }
   /** `done` says why an ask can't be answered any more, or null while it
@@ -110,13 +113,27 @@ export function eventText(line: string, name: (agentId: string) => string | unde
   if ((m = body.match(/^started (\S+) \(agent [\w-]+\)$/))) return `Started ${m[1]}`;
   if ((m = body.match(/^queued (\S+): (.*)$/))) return `Queued ${m[1]}: ${m[2]}`;
   if ((m = body.match(/^nudged ([\w-]+)$/))) return `Nudged ${thread(m[1])}`;
-  if ((m = body.match(/^refused (START|NUDGE|PASS|ASK merge|ASK archive) (.+?): (.*)$/))) {
+  if ((m = body.match(/^refused (START|NUDGE|PASS|ASK merge|ASK archive|ARCHIVE|REMOVE|MERGE|RELEASE) (.+?): (.*)$/))) {
     const [, what, target, why] = m;
-    const verb = { START: "start", NUDGE: "nudge", PASS: "pass work to", "ASK merge": "ask to merge", "ASK archive": "ask to archive" }[what];
-    const on = what === "NUDGE" || what === "ASK archive" ? thread(target) : target;
+    const verb = {
+      START: "start",
+      NUDGE: "nudge",
+      PASS: "pass work to",
+      "ASK merge": "ask to merge",
+      "ASK archive": "ask to archive",
+      ARCHIVE: "archive",
+      REMOVE: "remove",
+      MERGE: "merge",
+      RELEASE: "start the release",
+    }[what];
+    const on = what === "NUDGE" || what === "ASK archive" || what === "ARCHIVE" ? thread(target) : target;
     return `Didn't ${verb} ${on}: ${why}`;
   }
   if ((m = body.match(/^passed to (Lead .+)$/))) return `Passed to ${m[1]}`;
+  if ((m = body.match(/^archived ([\w-]+)$/))) return `Archived ${thread(m[1])}`;
+  if ((m = body.match(/^removed the worktree on (\S+)$/))) return `Removed ${m[1]}`;
+  if ((m = body.match(/^merged (#\d+)$/))) return `Merged ${m[1]}`;
+  if ((m = body.match(/^your level is now (\d), ([^.]+)/))) return `Level ${m[1]}: ${m[2]}`;
   if ((m = body.match(/^the user (merged|archived) (\S+) \(your ASK\)$/))) return `You ${m[1]} ${m[1] === "archived" ? thread(m[2]) : m[2]}`;
   if ((m = body.match(/^the user said no to (merging|archiving) (\S+)$/))) return `You said no to ${m[1]} ${m[1] === "archiving" ? thread(m[2]) : m[2]}`;
   if ((m = body.match(/^couldn't (merge|archive) (\S+): (.*)$/))) return `Couldn't ${m[1]} ${m[1] === "archive" ? thread(m[2]) : m[2]}: ${m[3]}`;
@@ -133,6 +150,22 @@ export function eventText(line: string, name: (agentId: string) => string | unde
     return names.length ? `Leads running: ${names.join(", ")}` : m[1] === "none running" ? "No project leads running" : `Leads: ${m[1]}`;
   }
   return upper(body);
+}
+
+/** The thread an [observatory] line is about, by agent id, so the chat can
+ *  open it: "Nudged Fix login", "CI failed on #193" (the thread with the
+ *  PR), "Started fix-bottom-clip". Null for anything not about one thread. */
+export function eventThread(line: string): string | null {
+  const body = oneLine(line.startsWith(LINE_PREFIX) ? line.slice(LINE_PREFIX.length) : line);
+  let m: RegExpMatchArray | null;
+  if ((m = body.match(/^(?:finished|failed|needs you|PR opened|CI failed|CI passed|PR merged|safe to close)(?: #\d+)?: ([\s\S]*)$/)))
+    return m[1].match(ABOUT)?.[3] ?? null;
+  if ((m = body.match(/^started \S+ \(agent ([\w-]+)\)$/))) return m[1];
+  if ((m = body.match(/^(?:nudged|archived) ([\w-]+)$/))) return m[1];
+  if ((m = body.match(/^refused (?:NUDGE|ASK archive|ARCHIVE) ([\w-]+): /))) return m[1];
+  if ((m = body.match(/^the user archived (\S+) \(your ASK\)$/))) return m[1];
+  if ((m = body.match(/^(?:the user said no to archiving|couldn't archive) ([\w-]+)\b/))) return m[1];
+  return null;
 }
 
 /** Where a started task is on the card's four steps (Queued, Running, PR,
@@ -161,6 +194,11 @@ export function taskStep(t: Pick<ChatTask, "label" | "checks">): { step: 0 | 1 |
  *  S29 (no reply number) goes under the last reply before it started.
  *  "Started"/"Queued" lines for a task with a card are left out: the card
  *  says so. */
+/** S28's rules, before levels, ended with this. */
+const OLD_RULES_END = "Treat it as work I asked for: START it as usual.";
+/** Whether a line ends a rules message, from before levels or after. */
+const ended = (line: string) => line.trim().endsWith(RULES_END) || line.trim().endsWith(OLD_RULES_END);
+
 export function chatItems(entries: readonly ChatEntry[], input: ChatInput): ChatItem[] {
   const { leadId, tasks = [], outcomes = [], answered = () => false, name, settled = () => null } = input;
   const sorted = [...entries].sort((a, b) => a.n - b.n);
@@ -212,7 +250,7 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
         let voice = false;
         text.split("\n").forEach((line, i) => {
           if (rules) {
-            if (line.trim().endsWith(RULES_END)) rules = false;
+            if (ended(line)) rules = false;
             return;
           }
           // Your new instructions, sent after their event line, are yours
@@ -226,17 +264,20 @@ export function chatItems(entries: readonly ChatEntry[], input: ChatInput): Chat
             voice = true;
             return;
           }
-          if (line.startsWith(`${LINE_PREFIX}actions are on.`)) {
-            // The switch turned on is news; the rules after it aren't.
-            out.push({ kind: "event", key: `e${e.n}.${i}`, text: eventText(`${LINE_PREFIX}actions are on`), at: e.at });
-            rules = !line.trim().endsWith(RULES_END);
+          if (line.startsWith(`${LINE_PREFIX}actions are on.`) || line.startsWith(`${LINE_PREFIX}your level is now `)) {
+            // The change is news; the rules after it aren't. Before levels,
+            // S28's rules ended with OLD_RULES_END.
+            const head = line.startsWith(`${LINE_PREFIX}actions are on.`) ? `${LINE_PREFIX}actions are on` : line.slice(0, line.indexOf(".") + 1 || undefined);
+            out.push({ kind: "event", key: `e${e.n}.${i}`, text: eventText(head), at: e.at });
+            rules = !ended(line);
             return;
           }
           if (!line.startsWith(LINE_PREFIX)) return;
           const said = eventText(line, name);
           const started = /^(?:Started|Queued) (\S+?):?(?: |$)/.exec(said);
           if (started && carded.has(started[1])) return;
-          out.push({ kind: "event", key: `e${e.n}.${i}`, text: said, at: e.at });
+          const thread = eventThread(line);
+          out.push({ kind: "event", key: `e${e.n}.${i}`, text: said, at: e.at, ...(thread ? { thread } : {}) });
         });
       } else out.push({ kind: "me", key: `m${e.n}`, text, at: e.at });
     } else if (e.kind === "claude") {
@@ -302,4 +343,25 @@ export function runStarts(items: readonly ChatItem[]): Set<string> {
     prev = it;
   }
   return out;
+}
+
+/** A lead's reply split into what it says and the questions it passes on to
+ *  you: lines that start `ASK_USER:` (the answer a lead gives a thread it
+ *  can't answer for you, which it sometimes says in the chat too). The
+ *  marker is for agents; the chat shows each as a question of its own. */
+export function splitAsks(text: string): { body: string; asks: string[] } {
+  const asks: string[] = [];
+  const body = text
+    .split("\n")
+    .filter((line) => {
+      const m = /^\s*(?:[-*]\s+)?(?:\*\*|__)?ASK_USER:(?:\*\*|__)?\s*(.*)$/.exec(line);
+      if (!m) return true;
+      const q = m[1].replace(/^(?:\*\*|__)\s*/, "").trim();
+      if (q) asks.push(q[0].toUpperCase() + q.slice(1));
+      return false;
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { body, asks };
 }

@@ -65,6 +65,15 @@ export function statusChanged(agent: Agent, from: Agent["status"]) {
 
 /** Fire-and-forget request, e.g. `send("Detach", { session })`. */
 export function send(variant: string, body?: Record<string, unknown>): Promise<void> {
+  if (variant === "Attach" || variant === "Detach") {
+    const key = sessionKey(body?.session as SessionRef);
+    const n = (attached.get(key) ?? 0) + (variant === "Attach" ? 1 : -1);
+    if (n > 0) attached.set(key, n);
+    else attached.delete(key);
+    // Another holder still has it attached: letting go now would leave
+    // that one's pane (or a wake in progress) blank.
+    if (n > 0 && variant === "Detach") return Promise.resolve();
+  }
   if (mockSend) {
     const created = mockSend(variant, body) ?? null;
     if (body && "req_id" in body) {
@@ -94,6 +103,15 @@ export function send(variant: string, body?: Record<string, unknown>): Promise<v
 }
 
 const ORDERED = new Set(["Attach", "Detach", "Resize"]);
+/** How many holders (panes, a wake) have each session attached, by
+ *  sessionKey: the daemon keeps one attachment per session per connection,
+ *  so a Detach goes only when the last of them lets go. */
+const attached = new Map<string, number>();
+
+/** Whether anything in this app has `session` attached. */
+export function isAttached(session: SessionRef): boolean {
+  return attached.has(sessionKey(session));
+}
 let ordered: Promise<void> = Promise.resolve();
 
 /** An RPC-style request: resolves with the Ack's created id, rejects with the
@@ -367,7 +385,8 @@ export function promptAnswered(a: Agent) {
 }
 
 /** An agent row from the daemon, kept waiting on you while limits.ts holds
- *  it at a usage limit, or working once you've answered its prompt: until
+ *  it at a usage limit, finished while stallWatch.ts holds it stopped at
+ *  its prompt, or working once you've answered its prompt: until
  *  the daemon has status news of its own. */
 function held(a: Agent): Agent {
   a = withSessionStatus(a);
@@ -375,6 +394,15 @@ function held(a: Agent): Agent {
   if (since !== undefined) {
     if (a.status === "needs_feedback" && a.status_changed_at === since) a = { ...a, status: "running" };
     else answered.delete(a.id);
+  }
+  const stall = getState().stalls[a.id];
+  if (stall) {
+    if (a.status === "running" && a.status_changed_at === stall.since) return { ...a, status: "finished" };
+    setState((s) => {
+      const stalls = { ...s.stalls };
+      delete stalls[a.id];
+      return { stalls };
+    });
   }
   const hit = getState().limits[a.id];
   if (!hit) return a;

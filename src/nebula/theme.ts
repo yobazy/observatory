@@ -136,6 +136,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   /** Sessions working at once, however they were started; Dispatch's tasks
    *  and New task's queue wait past it (batch.ts); 4 when unset. */
   dispatchCap?: number;
+  /** Archive a finished thread whose last reply said ✅ Safe to close once
+   *  it has sat a day (autoclose.ts); on unless turned off. */
+  autoCloseSafe?: boolean;
   /** Park threads idle past `parkDays` in Ideas, their sessions archived
    *  (park.ts); off unless true. */
   parkOn?: boolean;

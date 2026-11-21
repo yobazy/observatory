@@ -5,6 +5,7 @@ import type { UsageReport } from "./usage";
 import type { AutomationsReport, Watches } from "./automations";
 import type { DesktopPrefs } from "./theme";
 import { byPriority, rank } from "./priority.ts";
+import { threadOrder } from "./threadOrder.ts";
 import { allCards } from "./cards.ts";
 import { leadIds, withoutLeads } from "./lead.ts";
 import type { PrState } from "./prs";
@@ -84,6 +85,10 @@ export interface State {
    *  agent id: the line that said so, and the daemon's status_changed_at it
    *  was read against (limits.ts). Shown as waiting on you meanwhile. */
   limits: Record<string, { message: string; since: number }>;
+  /** Claude agents back at their prompt after a turn that never told the
+   *  daemon it ended, by agent id: the daemon's status_changed_at it was read
+   *  against (stallWatch.ts). Shown as finished meanwhile. */
+  stalls: Record<string, { since: number }>;
   /** Each project's own logo, by repo path; null when it keeps none (icons.ts). */
   logos: Record<string, string | null>;
   /** A one-line flash at the bottom of the window, e.g. "x is already a project". */
@@ -152,6 +157,7 @@ let state: State = {
   runUrls: {},
   agentUrls: {},
   limits: {},
+  stalls: {},
   logos: {},
   missingProjects: {},
   preview: null,
@@ -254,11 +260,37 @@ export function useAppState(): State {
 
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Show `notice` for `ms`; longer for a line that takes reading. */
+/** Until when the notice up now offers its action (an Undo). */
+let actionUntil = 0;
+/** The newest plain notice held back while an action notice was up, shown
+ *  once that one goes. */
+let pending: { notice: string; ms: number } | null = null;
+
+/** Show `notice` for `ms`; longer for a line that takes reading. A plain
+ *  notice doesn't replace one offering an action (an Undo) before that one
+ *  is due to go: it waits, and shows when that one goes. A newer one with
+ *  an action does replace it. */
 export function flash(notice: string, ms = 3500, action: { label: string; run: () => void } | null = null) {
+  if (!action && getState().noticeAction && Date.now() < actionUntil) {
+    pending = { notice, ms };
+    return;
+  }
   if (noticeTimer) clearTimeout(noticeTimer);
+  actionUntil = action ? Date.now() + ms : 0;
   setState({ notice, noticeAction: action });
-  noticeTimer = setTimeout(() => setState({ notice: null, noticeAction: null }), ms);
+  noticeTimer = setTimeout(clearNotice, ms);
+}
+
+/** Take the notice down (it's due, or its action was taken), and show the
+ *  plain one that waited for it, if any. */
+export function clearNotice() {
+  if (noticeTimer) clearTimeout(noticeTimer);
+  noticeTimer = null;
+  actionUntil = 0;
+  setState({ notice: null, noticeAction: null });
+  const next = pending;
+  pending = null;
+  if (next) flash(next.notice, next.ms);
 }
 
 export function byId<T extends { id: string }>(rows: T[]): Record<string, T> {
@@ -341,17 +373,13 @@ export function threadAgents(s: Pick<State, "agents" | "prefs">): Agent[] {
 }
 
 /** A branch's tasks: those pinned (dragged into place) first, in their
- *  order, then the rest by priority, then urgency. */
+ *  order, then the rest by priority, then the one last prompted first
+ *  (threadOrder.ts). */
 export function worktreeAgents(s: State, worktreeId: string, archived = false): Agent[] {
-  const auto = threadAgents(s)
-    .filter((a) => a.worktree_id === worktreeId && a.archived === archived)
-    .sort(
-      (a, b) =>
-        rank(s.prefs.taskPriorities?.[a.id]) - rank(s.prefs.taskPriorities?.[b.id]) ||
-        urgency(a) - urgency(b) ||
-        b.status_changed_at - a.status_changed_at ||
-        a.sort_order - b.sort_order,
-    );
+  const auto = threadOrder(
+    threadAgents(s).filter((a) => a.worktree_id === worktreeId && a.archived === archived),
+    s.prefs.taskPriorities,
+  );
   return archived ? auto : pinnedFirst(auto, s.prefs.pinnedTasks?.[worktreeId], (a) => a.id);
 }
 

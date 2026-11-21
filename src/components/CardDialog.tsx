@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { readCardSources } from "../nebula/client";
 import {
   cardFor,
+  useCards,
   clearHome,
   draftCard,
   draftChecks,
@@ -14,9 +15,10 @@ import {
   type CardSources,
   type ProjectCard,
 } from "../nebula/cards";
-import { flash, getState } from "../nebula/store";
+import { flash, getState, useAppState } from "../nebula/store";
+import { leadState } from "../nebula/lead";
 import { Switch } from "./Settings";
-import { LeadSection } from "./LeadCard";
+import { LeadStateMark, onLeadDialogLeave, openLeadSettings } from "./LeadDialog";
 
 /** Which card to edit: a project's (keyed by its id), or a plain folder's
  *  Home card (`folder:<path>`). `makeHome` opens it flagged as Home. */
@@ -97,6 +99,18 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
     if (ready) first.current?.focus();
   }, [ready]);
 
+  // The lead's dialog, opened over this card, went to a chat or a thread:
+  // the card goes too, saying so when it had edits.
+  const edited = useRef(false);
+  useEffect(
+    () =>
+      onLeadDialogLeave(() => {
+        if (edited.current) flash(`Closed ${target.name}'s card without saving your changes`);
+        onClose();
+      }),
+    [onClose, target.name],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -119,7 +133,7 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
       taskKinds: splitList(kinds),
       homeFolder: card.isHome ? folder : null,
       dailyBudget: Number(budget) > 0 ? Number(budget) : undefined,
-      // Started or stopped from this dialog meanwhile: as saved, not as opened.
+      // Started or stopped from the lead's dialog meanwhile: as saved, not as opened.
       lead: cardFor(cardKey)?.lead,
       checks: checks
         .split("\n")
@@ -138,6 +152,11 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
         role="dialog"
         aria-modal="true"
         aria-labelledby="card-title"
+        // Typed in, or a switch or choice flipped.
+        onChange={() => (edited.current = true)}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("[role=switch], [role=radio], .link-btn:not(.card-lead-line .link-btn)")) edited.current = true;
+        }}
         onSubmit={(e) => {
           e.preventDefault();
           save();
@@ -147,185 +166,201 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
         <p className="dialog-note card-folder" title={folder}>
           {folder}
         </p>
+        {!folderHome && getState().projects[cardKey] && <CardLeadLine projectId={cardKey} />}
 
         {!card ? (
           <p className="dialog-body">Reading the project…</p>
         ) : (
           <>
-            <div className="field field-top">
-              <label htmlFor="card-desc">Description</label>
-              <div className="card-stack">
-                <textarea
-                  ref={first}
-                  id="card-desc"
-                  className="task-box card-desc"
-                  rows={3}
-                  value={card.description}
-                  onChange={(e) => setCard({ ...card, description: e.target.value })}
-                  placeholder="What lives here, so the router knows which tasks belong."
-                />
-                <span className="dialog-note">
-                  {readError ? `Couldn't read the folder: ${readError}` : sources ? draftedFrom(sources) : ""}{" "}
-                  {sources && saved && (
-                    <button type="button" className="link-btn" onClick={() => redraft(draftCard(sources))}>
-                      Redraft from files
-                    </button>
-                  )}
-                </span>
-              </div>
-            </div>
-
-            <div className="field">
-              <label htmlFor="card-skills">Skills</label>
-              <input id="card-skills" value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="apply, tracker" spellCheck={false} />
-            </div>
-
-            <div className="field">
-              <label htmlFor="card-kinds">Task kinds</label>
-              <input id="card-kinds" value={kinds} onChange={(e) => setKinds(e.target.value)} placeholder="job applications, outreach" />
-            </div>
-
-            <div className="field">
-              <span className="field-label" id="card-policy">
-                Tasks run
-              </span>
-              <div className="card-row">
-                <div className="segmented" role="radiogroup" aria-labelledby="card-policy">
-                  {(["isolated", "shared"] as const).map((p) => (
-                    <button
-                      type="button"
-                      key={p}
-                      role="radio"
-                      aria-checked={card.policy === p}
-                      className={card.policy === p ? "is-on" : ""}
-                      disabled={p === "isolated" && !canIsolate}
-                      onClick={() => setCard(withPolicy(card, p))}
-                    >
-                      {p === "isolated" ? "Isolated" : "Shared"}
-                    </button>
-                  ))}
-                </div>
-                {card.policy === "shared" && (
-                  <label className="card-cap">
-                    at most
-                    <input
-                      type="number"
-                      min={1}
-                      max={16}
-                      value={cap}
-                      onChange={(e) => setCap(e.target.value)}
-                      onBlur={() => setCap(String(withConcurrency(card, Number(cap)).concurrency))}
-                      aria-label="Tasks at once"
-                    />
-                    at once
-                  </label>
-                )}
-              </div>
-            </div>
-            <p className="dialog-note card-indent">
-              {card.policy === "isolated"
-                ? "Each task gets its own worktree."
-                : canIsolate
-                  ? "Tasks run side by side in the main checkout. Pick this when the project keeps its own locks."
-                  : "This folder isn't a git repo, so tasks run in it side by side."}
-            </p>
-
-            {canIsolate && (
-              <div className="field">
-                <label htmlFor="card-push">Push</label>
-                <div className="card-row">
-                  <Switch id="card-push" on={card.pushAfterTurn} onChange={(on) => setCard({ ...card, pushAfterTurn: on })} />
-                  <span className="dialog-note card-flat">Push the branch after every turn</span>
-                </div>
-              </div>
-            )}
-            {canIsolate && card.pushAfterTurn && (
-              <p className="dialog-note card-indent">
-                Fast-forward only, never forced. Only commits go, and never the main branch.
-              </p>
-            )}
-
-            <div className="field">
-              <label htmlFor="card-home">Home</label>
-              {folderHome ? (
-                <span className="dialog-note card-flat">Errands and scheduling run in this folder.</span>
-              ) : (
-                <div className="card-row">
-                  <Switch id="card-home" on={card.isHome} onChange={(on) => setCard({ ...card, isHome: on })} />
-                  <span className="dialog-note card-flat">Errands and scheduling run here.</span>
-                </div>
-              )}
-            </div>
-            {takingHome && <p className="dialog-note card-indent">Home moves here from {homeName ?? "another project"}.</p>}
-
-            {!folderHome && (
-              <div className="field">
-                <label htmlFor="card-budget">Daily budget</label>
-                <div className="card-row">
-                  <span className="budget-input">
-                    $
-                    <input
-                      id="card-budget"
-                      type="number"
-                      min={0}
-                      step={5}
-                      inputMode="decimal"
-                      value={budget}
-                      onChange={(e) => setBudget(e.target.value)}
-                      placeholder="none"
-                      aria-label="Daily budget in dollars"
-                    />
-                  </span>
-                  <span className="dialog-note card-flat">Past this today, its Dispatch tasks wait. Running ones carry on.</span>
-                </div>
-              </div>
-            )}
-
-            {!folderHome && (
+            <section className="card-sec" aria-labelledby="card-sec-about">
+              <h3 id="card-sec-about">{folderHome ? "This folder" : "What lives here"}</h3>
+              <p className="dialog-note card-sec-why">Dispatch reads this to pick which project a task belongs to.</p>
               <div className="field field-top">
-                <label htmlFor="card-checks">Checks</label>
+                <label htmlFor="card-desc">Description</label>
                 <div className="card-stack">
                   <textarea
-                    id="card-checks"
-                    className="task-box card-checks"
-                    rows={2}
-                    value={checks}
-                    onChange={(e) => setChecks(e.target.value)}
-                    placeholder="npm test"
-                    spellCheck={false}
+                    ref={first}
+                    id="card-desc"
+                    className="task-box card-desc"
+                    rows={3}
+                    value={card.description}
+                    onChange={(e) => setCard({ ...card, description: e.target.value })}
+                    placeholder="What lives here, so the router knows which tasks belong."
                   />
+                  <span className="dialog-note">
+                    {readError ? `Couldn't read the folder: ${readError}` : sources ? draftedFrom(sources) : ""}{" "}
+                    {sources && saved && (
+                      <button type="button" className="link-btn" onClick={() => redraft(draftCard(sources))}>
+                        Redraft from files
+                      </button>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="card-skills">Skills</label>
+                <input id="card-skills" value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="apply, tracker" spellCheck={false} />
+              </div>
+
+              <div className="field">
+                <label htmlFor="card-kinds">Task kinds</label>
+                <input id="card-kinds" value={kinds} onChange={(e) => setKinds(e.target.value)} placeholder="job applications, outreach" />
+              </div>
+            </section>
+
+            <section className="card-sec" aria-labelledby="card-sec-run">
+              <h3 id="card-sec-run">How tasks run</h3>
+              <div className="field field-top">
+                <span className="field-label" id="card-policy">
+                  Where
+                </span>
+                <div className="card-stack">
                   <div className="card-row">
-                    <Switch id="card-review" on={card.reviewOff !== true} onChange={(on) => setCard({ ...card, reviewOff: on ? undefined : true })} />
-                    <span className="dialog-note card-flat">
-                      Check finished work before it shows as done: these run in the checkout, one per line, then a read-only reviewer reads the result (Settings › Check before done).
+                    <div className="segmented" role="radiogroup" aria-labelledby="card-policy">
+                      {(["isolated", "shared"] as const).map((p) => (
+                        <button
+                          type="button"
+                          key={p}
+                          role="radio"
+                          aria-checked={card.policy === p}
+                          className={card.policy === p ? "is-on" : ""}
+                          disabled={p === "isolated" && !canIsolate}
+                          onClick={() => setCard(withPolicy(card, p))}
+                        >
+                          {p === "isolated" ? "Own worktree" : "Main checkout"}
+                        </button>
+                      ))}
+                    </div>
+                    {card.policy === "shared" && (
+                      <label className="card-cap">
+                        at most
+                        <input
+                          type="number"
+                          min={1}
+                          max={16}
+                          value={cap}
+                          onChange={(e) => setCap(e.target.value)}
+                          onBlur={() => setCap(String(withConcurrency(card, Number(cap)).concurrency))}
+                          aria-label="Tasks at once"
+                        />
+                        at once
+                      </label>
+                    )}
+                  </div>
+                  <span className="dialog-note">
+                    {card.policy === "isolated"
+                      ? "Each task gets its own worktree, so tasks never step on each other."
+                      : canIsolate
+                        ? "Tasks run side by side in the main checkout. Pick this when the project keeps its own locks."
+                        : "This folder isn't a git repo, so tasks run in it side by side."}
+                  </span>
+                </div>
+              </div>
+
+              {canIsolate && (
+                <div className="field field-top field-switch">
+                  <label htmlFor="card-push">Push</label>
+                  <div className="card-stack">
+                    <div className="card-row">
+                      <Switch id="card-push" on={card.pushAfterTurn} onChange={(on) => setCard({ ...card, pushAfterTurn: on })} />
+                      <span className="dialog-note card-flat">Push the branch after every turn</span>
+                    </div>
+                    {card.pushAfterTurn && (
+                      <span className="dialog-note">Fast-forward only, never forced. Only commits go, and never the main branch.</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!folderHome && (
+                <div className="field field-top field-switch">
+                  <label htmlFor="card-review">Checks</label>
+                  <div className="card-stack">
+                    <div className="card-row">
+                      <Switch id="card-review" on={card.reviewOff !== true} onChange={(on) => setCard({ ...card, reviewOff: on ? undefined : true })} />
+                      <span className="dialog-note card-flat">Check finished work before it shows as done</span>
+                    </div>
+                    {card.reviewOff !== true && (
+                      <>
+                        <textarea
+                          id="card-checks"
+                          className="task-box card-checks"
+                          rows={2}
+                          value={checks}
+                          onChange={(e) => setChecks(e.target.value)}
+                          placeholder="npm test"
+                          spellCheck={false}
+                          aria-label="Check commands, one per line"
+                        />
+                        <span className="dialog-note">
+                          These run in the checkout, one per line, then a read-only reviewer reads the result.
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!folderHome && (
+                <div className="field field-top">
+                  <label htmlFor="card-budget">Daily budget</label>
+                  <div className="card-stack">
+                    <span className="budget-input">
+                      $
+                      <input
+                        id="card-budget"
+                        type="number"
+                        min={0}
+                        step={5}
+                        inputMode="decimal"
+                        value={budget}
+                        onChange={(e) => setBudget(e.target.value)}
+                        placeholder="none"
+                        aria-label="Daily budget in dollars"
+                      />
+                    </span>
+                    <span className="dialog-note">Past this today, its Dispatch tasks wait. Running ones carry on.</span>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section className="card-sec" aria-labelledby="card-sec-home">
+              <h3 id="card-sec-home">Home</h3>
+              <div className="field field-top field-switch">
+                <label htmlFor="card-home">{folderHome ? "Home" : "Use as Home"}</label>
+                <div className="card-stack">
+                  {folderHome ? (
+                    <span className="dialog-note">Errands and scheduling run in this folder.</span>
+                  ) : (
+                    <div className="card-row">
+                      <Switch id="card-home" on={card.isHome} onChange={(on) => setCard({ ...card, isHome: on })} />
+                      <span className="dialog-note card-flat">Errands and scheduling run here</span>
+                    </div>
+                  )}
+                  {takingHome && <span className="dialog-note">Home moves here from {homeName ?? "another project"}.</span>}
+                </div>
+              </div>
+              {card.isHome && (
+                <div className="field field-top">
+                  <label htmlFor="card-sched">Scheduling</label>
+                  <div className="card-stack">
+                    <textarea
+                      id="card-sched"
+                      className="task-box card-sched"
+                      rows={3}
+                      value={card.schedulingInstruction}
+                      onChange={(e) => setCard({ ...card, schedulingInstruction: e.target.value })}
+                      placeholder="Check my calendar, ask me for a time, then book it."
+                    />
+                    <span className="dialog-note">
+                      How Home books time for tasks that are yours. Empty: they wait on the board as checkboxes.
                     </span>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {!folderHome && getState().projects[cardKey] && (
-              <LeadSection projectId={cardKey} projectName={target.name} base={card} />
-            )}
-
-            {card.isHome && (
-              <div className="field field-top">
-                <label htmlFor="card-sched">Scheduling</label>
-                <div className="card-stack">
-                  <textarea
-                    id="card-sched"
-                    className="task-box card-sched"
-                    rows={3}
-                    value={card.schedulingInstruction}
-                    onChange={(e) => setCard({ ...card, schedulingInstruction: e.target.value })}
-                    placeholder="Check my calendar, ask me for a time, then book it."
-                  />
-                  <span className="dialog-note">
-                    How Home books time for tasks that are yours. Empty: they wait on the board as checkboxes.
-                  </span>
-                </div>
-              </div>
-            )}
+              )}
+            </section>
           </>
         )}
 
@@ -354,5 +389,20 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
         </footer>
       </form>
     </div>
+  );
+}
+
+/** Where the lead went: it has its own dialog now, so the card only says
+ *  whether there is one and opens it. */
+function CardLeadLine({ projectId }: { projectId: string }) {
+  const lead = useCards()[projectId]?.lead;
+  const { agents } = useAppState();
+  return (
+    <p className="dialog-note card-lead-line">
+      Lead <LeadStateMark state={leadState(lead, agents)} small />
+      <button type="button" className="link-btn" onClick={() => openLeadSettings(projectId)}>
+        {lead ? "Lead settings…" : "Set one up…"}
+      </button>
+    </p>
   );
 }
