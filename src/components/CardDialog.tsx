@@ -273,6 +273,38 @@ export function CardDialog({ target, onClose }: { target: CardTarget; onClose: (
                 </div>
               )}
 
+              <div className="field field-top">
+                <span className="field-label" id="card-perms">
+                  Permissions
+                </span>
+                <div className="card-stack">
+                  <div className="card-row">
+                    <div className="segmented" role="radiogroup" aria-labelledby="card-perms">
+                      {(["ask", "free"] as const).map((p) => {
+                        const on = (card.permissions ?? "ask") === p;
+                        return (
+                          <button
+                            type="button"
+                            key={p}
+                            role="radio"
+                            aria-checked={on}
+                            className={on ? "is-on" : ""}
+                            onClick={() => setCard({ ...card, permissions: p === "free" ? "free" : undefined })}
+                          >
+                            {p === "ask" ? "Ask me" : "Run free"}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <span className="dialog-note">
+                    {card.permissions === "free"
+                      ? "Claude threads here run commands and edit the checkout without asking. Still off limits: ~/Library, your keys and sign-ins, deleting outside the checkout, force-pushing main. Anything else outside the project asks as usual."
+                      : "Claude asks before commands and edits, as set in your Claude settings."}
+                  </span>
+                </div>
+              </div>
+
               {!folderHome && (
                 <div className="field field-top field-switch">
                   <label htmlFor="card-review">Checks</label>

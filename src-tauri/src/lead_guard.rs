@@ -53,7 +53,7 @@ enum Place {
 }
 
 /// `p` without `.` and `..`, without touching the disk.
-fn lexical(p: &Path) -> PathBuf {
+pub(crate) fn lexical(p: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for c in p.components() {
         match c {
@@ -228,7 +228,7 @@ impl Guard {
 
 /// A command's words, near enough: split on spaces and shell operators,
 /// quotes dropped.
-fn words(command: &str) -> Vec<String> {
+pub(crate) fn words(command: &str) -> Vec<String> {
     command
         .split(|c: char| {
             c.is_whitespace() || matches!(c, ';' | '|' | '&' | '(' | ')' | '<' | '>' | '`')
@@ -241,7 +241,7 @@ fn words(command: &str) -> Vec<String> {
 
 /// The subcommand in a program's arguments: the first word that isn't a
 /// flag, skipping `-C <dir>` and `-c <key=value>` as git takes them.
-fn subcommand(args: &[String]) -> Option<&str> {
+pub(crate) fn subcommand(args: &[String]) -> Option<&str> {
     let mut i = 0;
     while let Some(a) = args.get(i) {
         if a == "-C" || a == "-c" {
@@ -270,7 +270,7 @@ pub fn hook_output(v: &Verdict) -> Option<Value> {
     }}))
 }
 
-fn home() -> PathBuf {
+pub(crate) fn home() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/"))
@@ -330,7 +330,7 @@ const SETTINGS: &str = ".claude/settings.local.json";
 /// Marks the hook group as this app's, so a reinstall replaces it.
 const MARK: &str = "_observatoryLead";
 
-fn quote(s: &str) -> String {
+pub(crate) fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
 }
 

@@ -14,6 +14,7 @@ mod lead_guard;
 mod moments;
 mod nebula_setup;
 mod notes;
+mod permissions;
 mod preview;
 mod relocate;
 mod review;
@@ -67,6 +68,10 @@ pub fn run() {
     if args.first().map(String::as_str) == Some(lead_guard::FLAG) {
         std::process::exit(lead_guard::run_cli(&args[1..]));
     }
+    // Run free's hook (permissions.rs) does the same.
+    if args.first().map(String::as_str) == Some(permissions::FLAG) {
+        std::process::exit(permissions::run_cli(&args[1..]));
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
@@ -94,6 +99,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             lead_guard::lead_guard_install,
             lead_guard::lead_guard_remove,
+            permissions::permissions_sync,
             daemon::connect,
             daemon::send,
             daemon::send_input,
