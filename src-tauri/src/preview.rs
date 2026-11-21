@@ -385,10 +385,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
         let root = base.join("project");
         std::fs::create_dir_all(&root).unwrap();
+        // The temp dir sits behind a symlink on macOS (/var → /private/var).
+        let root = root.canonicalize().unwrap();
         std::fs::write(root.join("index.html"), "<p>hi</p>").unwrap();
         std::fs::write(base.join("secret.txt"), "not yours").unwrap();
         let scope = PreviewScope::default();
-        scope.allow(root.canonicalize().unwrap());
+        scope.allow(root.clone());
         assert!(scope.allows(&root.join("index.html")));
         assert!(
             !scope.allows(&root.join("../secret.txt")),
