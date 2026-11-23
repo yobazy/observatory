@@ -6412,6 +6412,11 @@ button.attempt-status:hover span:nth-child(2) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* The app is unselectable by default; a document you open reads like one. */
+.fpv .md-doc,
+.fpv .fpv-text {
+  user-select: text;
+}
 .fpv-empty {
   padding: 24px;
   color: var(--muted);
