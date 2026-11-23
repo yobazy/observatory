@@ -132,7 +132,6 @@ fn clip_to(s: &str, max: usize) -> String {
     }
 }
 
-/// What an edit or a write changed, as diff lines, clipped.
 /// What a step acted on. An Artifact call says what it did first ("delete
 /// https://claude.ai/artifact/…"), since publishing and deleting the same
 /// page otherwise read alike.
@@ -141,10 +140,15 @@ fn step_target(tool: &str, input: &serde_json::Value) -> String {
     if tool != "Artifact" {
         return target;
     }
-    let action = input
-        .get("action")
-        .and_then(|a| a.as_str())
-        .unwrap_or("publish");
+    let action = match input.get("action").and_then(|a| a.as_str()) {
+        // An uploaded file or a removed asset isn't the page itself.
+        Some("delete") if input.get("path").is_some() => "delete-asset",
+        None | Some("publish") if input.get("asset") == Some(&serde_json::Value::Bool(true)) => {
+            "upload"
+        }
+        Some(a) => a,
+        None => "publish",
+    };
     let what = ["url", "file_path", "type_url"]
         .iter()
         .find_map(|k| input.get(*k).and_then(|v| v.as_str()))
@@ -152,6 +156,7 @@ fn step_target(tool: &str, input: &serde_json::Value) -> String {
     format!("{action} {what}").trim_end().to_string()
 }
 
+/// What an edit or a write changed, as diff lines, clipped.
 fn change_of(tool: &str, input: &serde_json::Value) -> Option<String> {
     let s = |v: &serde_json::Value, k: &str| {
         v.get(k).and_then(|t| t.as_str()).unwrap_or("").to_string()
@@ -636,6 +641,10 @@ mod tests {
             &call(r#"{"action":"delete","url":"https://claude.ai/artifact/x"}"#),
             &call(r#"{"file_path":"/tmp/dash.html"}"#),
             &call(r#"{"action":"list"}"#),
+            &call(r#"{"action":"delete","url":"https://claude.ai/artifact/x","path":"ab"}"#),
+            &call(
+                r#"{"url":"https://claude.ai/artifact/x","file_path":"/tmp/a.png","asset":true}"#,
+            ),
         ]);
         let targets: Vec<_> = r.entries[1]
             .steps
@@ -647,7 +656,9 @@ mod tests {
             [
                 "delete https://claude.ai/artifact/x",
                 "publish /tmp/dash.html",
-                "list"
+                "list",
+                "delete-asset https://claude.ai/artifact/x",
+                "upload https://claude.ai/artifact/x",
             ]
         );
     }
