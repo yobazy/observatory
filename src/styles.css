@@ -4874,6 +4874,17 @@ td.task-last {
   font-family: var(--mono);
   font-size: 12.5px;
   white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+}
+/* A long written-in answer wraps, up to three lines, instead of crushing the box. */
+.rd-picked-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .rd-steps {
   font-size: 13px;
@@ -5012,6 +5023,7 @@ td.task-last {
 .rd-compose {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px;
   max-width: var(--rd-measure);
@@ -5020,7 +5032,8 @@ td.task-last {
   padding: 10px 28px 18px;
 }
 .rd-compose textarea {
-  flex: 1;
+  /* Keeps room to type; a chip that leaves less goes on its own line above. */
+  flex: 1 1 320px;
   resize: none;
   min-height: 48px;
   max-height: 30vh;

@@ -1614,8 +1614,8 @@ export function Reader({
                 </span>
               )}
               {answerText(picks, "") && (
-                <span className="rd-picked">
-                  {answerText(picks, "")}
+                <span className="rd-picked" title={answerText(picks, "")}>
+                  <span className="rd-picked-text">{answerText(picks, "")}</span>
                   <button className="link-btn" onClick={() => setTapped({ entry: -1, picks: {} })} aria-label="Clear the answers">
                     ×
                   </button>
