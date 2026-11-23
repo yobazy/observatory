@@ -59,6 +59,11 @@ const LOOKS = new Set(["Read", "Grep", "Glob", "LS"]);
 
 const base = (p: string) => p.split("/").pop() || p;
 
+/** An Artifact step's action, which transcript.rs puts first in its target
+ *  ("delete https://claude.ai/artifact/…"). */
+const artifactAction = (s: TStep) => (s.tool === "Artifact" ? s.target.split(" ")[0] || "publish" : "");
+const ARTIFACT_DID: Record<string, string> = { publish: "published", delete: "deleted" };
+
 /** "Read 3 files, edited sync.ts, ran 2 commands (1 failed)". */
 export function stepsLine(steps: TStep[]): string {
   const edited = [...new Set(steps.filter((s) => EDITS.has(s.tool)).map((s) => base(s.target)))];
@@ -68,7 +73,14 @@ export function stepsLine(steps: TStep[]): string {
   const web = steps.filter((s) => s.tool === "WebFetch" || s.tool === "WebSearch").length;
   const subagents = steps.filter((s) => s.tool === "Agent" || s.tool === "Task").length;
   const counted = edited.length ? steps.filter((s) => EDITS.has(s.tool)).length : 0;
-  const other = steps.length - counted - looked - commands.length - web - subagents;
+  // Publishing or deleting a page is said; reading or listing them isn't.
+  const artifacts = new Map<string, number>();
+  for (const s of steps) {
+    const did = s.ok !== false && ARTIFACT_DID[artifactAction(s)];
+    if (did) artifacts.set(did, (artifacts.get(did) ?? 0) + 1);
+  }
+  const said = [...artifacts.values()].reduce((a, b) => a + b, 0);
+  const other = steps.length - counted - looked - commands.length - web - subagents - said;
   const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
   const parts: string[] = [];
   if (looked) parts.push(`read ${n(looked, "file")}`);
@@ -78,6 +90,7 @@ export function stepsLine(steps: TStep[]): string {
   if (failed) parts.push(`${failed} failed`);
   if (web) parts.push("searched the web");
   if (subagents) parts.push(`sent ${n(subagents, "subagent")}`);
+  for (const [did, k] of artifacts) parts.push(`${did} ${k === 1 ? "an artifact" : `${k} artifacts`}`);
   if (other) parts.push(`used ${n(other, parts.length ? "other tool" : "tool")}`);
   const line = parts.join(", ");
   return line ? line[0].toUpperCase() + line.slice(1) : "Worked";
@@ -104,6 +117,8 @@ export function doingLine(s: TStep): string {
   if (s.tool === "Bash") return command ? `Running ${command}` : "Running a command";
   if (s.tool === "WebFetch" || s.tool === "WebSearch") return "Searching the web";
   if (s.tool === "Agent" || s.tool === "Task") return "Waiting on a subagent";
+  if (artifactAction(s) === "delete") return "Deleting an artifact";
+  if (artifactAction(s) === "publish") return "Publishing an artifact";
   return `Using ${s.tool.replace(/^mcp__.+?__/, "").replace(/_/g, " ")}`;
 }
 
