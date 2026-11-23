@@ -133,6 +133,25 @@ fn clip_to(s: &str, max: usize) -> String {
 }
 
 /// What an edit or a write changed, as diff lines, clipped.
+/// What a step acted on. An Artifact call says what it did first ("delete
+/// https://claude.ai/artifact/…"), since publishing and deleting the same
+/// page otherwise read alike.
+fn step_target(tool: &str, input: &serde_json::Value) -> String {
+    let target = target_of(input);
+    if tool != "Artifact" {
+        return target;
+    }
+    let action = input
+        .get("action")
+        .and_then(|a| a.as_str())
+        .unwrap_or("publish");
+    let what = ["url", "file_path", "type_url"]
+        .iter()
+        .find_map(|k| input.get(*k).and_then(|v| v.as_str()))
+        .unwrap_or(&target);
+    format!("{action} {what}").trim_end().to_string()
+}
+
 fn change_of(tool: &str, input: &serde_json::Value) -> Option<String> {
     let s = |v: &serde_json::Value, k: &str| {
         v.get(k).and_then(|t| t.as_str()).unwrap_or("").to_string()
@@ -384,7 +403,7 @@ impl Reading {
                     }
                     entry.steps.push(Step {
                         tool: tool.to_string(),
-                        target: target_of(&input),
+                        target: step_target(tool, &input),
                         ok: None,
                         detail: change_of(tool, &input),
                     });
@@ -603,6 +622,34 @@ mod tests {
         let steps = &r.entries[1].steps;
         assert_eq!(steps[0].detail.as_deref(), Some("- a\n- b\n+ c"));
         assert_eq!(steps[1].detail.as_deref(), Some("ok 1\nnot ok 2 - sync"));
+    }
+
+    #[test]
+    fn an_artifact_step_says_what_it_did() {
+        let call = |input: &str| {
+            format!(
+                r#"{{"type":"assistant","message":{{"content":[{{"type":"tool_use","id":"a","name":"Artifact","input":{input}}}]}}}}"#
+            )
+        };
+        let r = read(&[
+            PROMPT,
+            &call(r#"{"action":"delete","url":"https://claude.ai/artifact/x"}"#),
+            &call(r#"{"file_path":"/tmp/dash.html"}"#),
+            &call(r#"{"action":"list"}"#),
+        ]);
+        let targets: Vec<_> = r.entries[1]
+            .steps
+            .iter()
+            .map(|s| s.target.as_str())
+            .collect();
+        assert_eq!(
+            targets,
+            [
+                "delete https://claude.ai/artifact/x",
+                "publish /tmp/dash.html",
+                "list"
+            ]
+        );
     }
 
     #[test]

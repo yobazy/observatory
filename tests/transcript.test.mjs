@@ -40,6 +40,16 @@ test('a run of tool calls reads as one line', () => {
   assert.equal(stepsLine([s('Read'), s('TaskUpdate')]), 'Read 1 file, used 1 other tool');
 });
 
+test('deleting or publishing an artifact is said, not counted as a tool', () => {
+  assert.equal(
+    stepsLine([s('Bash', 'sed -i x a.js'), s('Artifact', 'delete https://claude.ai/artifact/x')]),
+    'Ran sed -i x a.js, deleted an artifact',
+  );
+  assert.equal(stepsLine([s('Artifact', 'publish /t/a.html'), s('Artifact', 'publish /t/b.html')]), 'Published 2 artifacts');
+  assert.equal(stepsLine([s('Artifact', 'read https://claude.ai/artifact/x')]), 'Used 1 tool');
+  assert.equal(stepsLine([s('Artifact', 'delete https://claude.ai/artifact/x', false)]), 'Used 1 tool');
+});
+
 test('the step under way is said as what it is doing', async () => {
   const { doingLine } = await import('../src/nebula/transcript.ts');
   const s = (tool, target = '') => ({ tool, target, ok: null });
@@ -47,6 +57,7 @@ test('the step under way is said as what it is doing', async () => {
   assert.equal(doingLine(s('Bash', 'npm test\nmore')), 'Running npm test');
   assert.equal(doingLine(s('Grep', 'foo')), 'Looking through files');
   assert.equal(doingLine(s('mcp__pencil__execute')), 'Using execute');
+  assert.equal(doingLine(s('Artifact', 'delete https://claude.ai/artifact/x')), 'Deleting an artifact');
 });
 
 test('working lines skip the cd and shorten mcp names', async () => {
