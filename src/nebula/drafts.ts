@@ -68,7 +68,7 @@ export interface Named {
 }
 
 const NAMED = /(?:^|(?<=\s))(?:'((?:[^']|'\\'')*)'|(\/[^\s'"`]+))(?=\s|$)/g;
-const PICTURE = /\.(?:png|jpe?g|gif|webp|svg|avif|heic|bmp)$/i;
+const PICTURE = /\.(?:png|jpe?g|gif|webp|svg|avif|bmp)$/i;
 
 /** The pictures `text` names by absolute path, each once, in order: what
  *  the reply box shows as attached, and a sent message shows under it. */

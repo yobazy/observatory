@@ -310,9 +310,9 @@ export function Md({ text, className = "" }: { text: string; className?: string 
   return <div ref={el} className={`md-doc rd-md ${className}`} dangerouslySetInnerHTML={{ __html: html }} onClick={openLink} />;
 }
 
-/** The images a reply names, shown in it; a click opens them all in the
- *  preview, that one in front, for ← and → to step through. */
-function Pictures({ paths, from, pair = null }: { paths: string[]; from: string; pair?: [string, string] | null }) {
+/** Those of `paths` that are there to show: the preview serves a file
+ *  once it's been described. */
+function useShowable(paths: string[]): string[] {
   const [ready, setReady] = useState<string[]>([]);
   useEffect(() => {
     let live = true;
@@ -323,6 +323,13 @@ function Pictures({ paths, from, pair = null }: { paths: string[]; from: string;
       live = false;
     };
   }, [paths.join("\n")]);
+  return ready;
+}
+
+/** The images a reply names, shown in it; a click opens them all in the
+ *  preview, that one in front, for ← and → to step through. */
+function Pictures({ paths, from, pair = null }: { paths: string[]; from: string; pair?: [string, string] | null }) {
+  const ready = useShowable(paths);
   if (!ready.length) return null;
   // Before and after side by side, at the same size, to compare.
   if (pair && pair.every((p) => ready.includes(p)))
@@ -352,7 +359,9 @@ function Pictures({ paths, from, pair = null }: { paths: string[]; from: string;
 /** The pictures your reply names, shown over the box as attached: a drop
  *  or the Files list puts their paths in it. × takes one out. */
 function Attached({ draft, from, onRemove }: { draft: string; from: string; onRemove: (token: string) => void }) {
-  const pics = picturesIn(draft);
+  const named = picturesIn(draft);
+  const ready = useShowable(named.map((p) => p.path));
+  const pics = named.filter((p) => ready.includes(p.path));
   if (!pics.length) return null;
   return (
     <div className="rd-attached" aria-label="Attached pictures">
@@ -1461,6 +1470,7 @@ export function Reader({
                 {outbox && !landed && (
                   <div className="rd-you is-sending">
                     {outbox.text}
+                    <Pictures paths={picturesIn(outbox.text).map((p) => p.path)} from={agent.id} />
                     <span className="rd-queued-bar" role="status">
                       <span>
                         {!outbox.sent
