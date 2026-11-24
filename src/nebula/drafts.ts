@@ -84,8 +84,11 @@ export function picturesIn(text: string): Named[] {
   return out;
 }
 
-/** `text` without `token`, and the space it leaves. */
+/** `text` without `token`, and the space it leaves; the rest untouched. */
 export function withoutToken(text: string, token: string): string {
   const esc = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return text.replace(new RegExp(`(^|\\s)${esc}(?=\\s|$)`), "$1").replace(/ {2,}/g, " ").replace(/^ | $/g, "");
+  // One space between what was either side of it, none at either end.
+  return text.replace(new RegExp(`(^|\\s)${esc}(?:( )|(?=\\s|$))`), (_, before: string, after?: string) =>
+    after || before !== " " ? before : "",
+  );
 }

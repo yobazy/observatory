@@ -67,4 +67,8 @@ test('taking a picture out of a reply leaves the rest as it was', () => {
   assert.equal(withoutToken("look '/a/S 1.png' and more", "'/a/S 1.png'"), 'look and more');
   assert.equal(withoutToken("'/a/S 1.png'", "'/a/S 1.png'"), '');
   assert.equal(withoutToken('/a/b.png\nwhy', '/a/b.png'), '\nwhy');
+  assert.equal(withoutToken('see /a/b.png', '/a/b.png'), 'see');
+  assert.equal(withoutToken('/a/b.png then', '/a/b.png'), 'then');
+  // Spacing elsewhere in the reply stays as you typed it.
+  assert.equal(withoutToken('see /a/b.png\n  - one  two', '/a/b.png'), 'see\n  - one  two');
 });
