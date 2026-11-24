@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addToDraft, draftFor, fileTarget, keepDraft, onDraftAdded, withPath } from '../src/nebula/drafts.ts';
+import { addToDraft, draftFor, fileTarget, keepDraft, onDraftAdded, picturesIn, withPath, withoutToken } from '../src/nebula/drafts.ts';
 
 test('a path goes at the end of what you wrote, once', () => {
   assert.equal(withPath('', '/r/a.html'), '/r/a.html');
@@ -50,4 +50,25 @@ test('a file added from outside the box lands in the draft and says so', () => {
   assert.deepEqual(heard, ['a1']);
   keepDraft('a1', '');
   assert.equal(draftFor('a1'), '');
+});
+
+test('the pictures a reply names, quoted for a shell or bare, each once', () => {
+  const text = "look '/a/Screenshot 2026-11-24 at 3.16.40 PM.png' and /b/c.JPG /b/c.JPG, /x/notes.md '/d/it'\\''s.png'";
+  assert.deepEqual(picturesIn(text), [
+    { path: '/a/Screenshot 2026-11-24 at 3.16.40 PM.png', token: "'/a/Screenshot 2026-11-24 at 3.16.40 PM.png'" },
+    { path: '/b/c.JPG', token: '/b/c.JPG' },
+    { path: "/d/it's.png", token: "'/d/it'\\''s.png'" },
+  ]);
+  // Not a path of its own: inside a word, or relative.
+  assert.deepEqual(picturesIn('src/a.png and x/b/c.png'), []);
+});
+
+test('taking a picture out of a reply leaves the rest as it was', () => {
+  assert.equal(withoutToken("look '/a/S 1.png' and more", "'/a/S 1.png'"), 'look and more');
+  assert.equal(withoutToken("'/a/S 1.png'", "'/a/S 1.png'"), '');
+  assert.equal(withoutToken('/a/b.png\nwhy', '/a/b.png'), '\nwhy');
+  assert.equal(withoutToken('see /a/b.png', '/a/b.png'), 'see');
+  assert.equal(withoutToken('/a/b.png then', '/a/b.png'), 'then');
+  // Spacing elsewhere in the reply stays as you typed it.
+  assert.equal(withoutToken('see /a/b.png\n  - one  two', '/a/b.png'), 'see\n  - one  two');
 });

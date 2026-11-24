@@ -25,7 +25,7 @@ import { RUNNING_LABEL, endRun, isRunning, runningCommand } from "../nebula/shel
 import { fitTables } from "../nebula/tablecols";
 import { markRead, readPlan, readTo } from "../nebula/readmark";
 import { baseName, describe, openPreview, previewUrl } from "../nebula/preview";
-import { draftFor, keepDraft, onDraftAdded } from "../nebula/drafts";
+import { draftFor, keepDraft, onDraftAdded, picturesIn, withoutToken } from "../nebula/drafts";
 import { useWaiting } from "../nebula/decisions";
 import { rubOut, unsentLine } from "../nebula/typed";
 import { harnessLabel, relativeTime, statusLabel } from "../nebula/status";
@@ -310,9 +310,9 @@ export function Md({ text, className = "" }: { text: string; className?: string 
   return <div ref={el} className={`md-doc rd-md ${className}`} dangerouslySetInnerHTML={{ __html: html }} onClick={openLink} />;
 }
 
-/** The images a reply names, shown in it; a click opens them all in the
- *  preview, that one in front, for ← and → to step through. */
-function Pictures({ paths, from, pair = null }: { paths: string[]; from: string; pair?: [string, string] | null }) {
+/** Those of `paths` that are there to show: the preview serves a file
+ *  once it's been described. */
+function useShowable(paths: string[]): string[] {
   const [ready, setReady] = useState<string[]>([]);
   useEffect(() => {
     let live = true;
@@ -323,6 +323,13 @@ function Pictures({ paths, from, pair = null }: { paths: string[]; from: string;
       live = false;
     };
   }, [paths.join("\n")]);
+  return ready;
+}
+
+/** The images a reply names, shown in it; a click opens them all in the
+ *  preview, that one in front, for ← and → to step through. */
+function Pictures({ paths, from, pair = null }: { paths: string[]; from: string; pair?: [string, string] | null }) {
+  const ready = useShowable(paths);
   if (!ready.length) return null;
   // Before and after side by side, at the same size, to compare.
   if (pair && pair.every((p) => ready.includes(p)))
@@ -344,6 +351,29 @@ function Pictures({ paths, from, pair = null }: { paths: string[]; from: string;
         <button key={p} className="rd-pic" onClick={() => void openPreview(ready, from, p)} title={`Open ${p}`}>
           <img src={previewUrl(p)} alt="" onError={(e) => (e.currentTarget.closest(".rd-pic") as HTMLElement).remove()} />
         </button>
+      ))}
+    </div>
+  );
+}
+
+/** The pictures your reply names, shown over the box as attached: a drop
+ *  or the Files list puts their paths in it. × takes one out. */
+function Attached({ draft, from, onRemove }: { draft: string; from: string; onRemove: (token: string) => void }) {
+  const named = picturesIn(draft);
+  const ready = useShowable(named.map((p) => p.path));
+  const pics = named.filter((p) => ready.includes(p.path));
+  if (!pics.length) return null;
+  return (
+    <div className="rd-attached" aria-label="Attached pictures">
+      {pics.map((p) => (
+        <span key={p.path} className="rd-attached-pic">
+          <button className="rd-pic" onClick={() => void openPreview(pics.map((x) => x.path), from, p.path)} title={`Open ${p.path}`}>
+            <img src={previewUrl(p.path)} alt={baseName(p.path)} />
+          </button>
+          <button className="rd-attached-x" onClick={() => onRemove(p.token)} aria-label={`Take ${baseName(p.path)} out of the reply`}>
+            ×
+          </button>
+        </span>
       ))}
     </div>
   );
@@ -1376,6 +1406,7 @@ export function Reader({
                   e.kind === "you" ? (
                     <div key={e.n} data-n={e.n} className={`rd-you${fresh(e) && e.n !== landedN ? " is-new" : ""}`}>
                       {e.text}
+                      <Pictures paths={picturesIn(e.text).map((p) => p.path)} from={agent.id} />
                     </div>
                   ) : e.kind === "claude" ? (
                     <Revealed
@@ -1439,6 +1470,7 @@ export function Reader({
                 {outbox && !landed && (
                   <div className="rd-you is-sending">
                     {outbox.text}
+                    <Pictures paths={picturesIn(outbox.text).map((p) => p.path)} from={agent.id} />
                     <span className="rd-queued-bar" role="status">
                       <span>
                         {!outbox.sent
@@ -1621,6 +1653,14 @@ export function Reader({
                   </button>
                 </span>
               )}
+              <Attached
+                draft={draft}
+                from={agent.id}
+                onRemove={(token) => {
+                  setDraft(withoutToken(draft, token));
+                  box.current?.focus();
+                }}
+              />
               <textarea
                 ref={box}
                 rows={2}

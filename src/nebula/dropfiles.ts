@@ -1,9 +1,11 @@
 // Files dropped on a terminal: their paths typed into the session, quoted
-// for a shell, the way dropping onto Terminal.app does. Claude Code turns a
+// for a shell, the way dropping onto Terminal.app does. Dropped on a
+// thread's Read view, they go in its reply box instead. Claude Code turns a
 // dropped image path into an attachment. Tauri hands the webview the drop
 // (with real paths) as its own event, not as an HTML drop.
 import { useEffect } from "react";
 import { isPreview, sendInput } from "./client";
+import { addToDraft, picturesIn } from "./drafts";
 import { flash, getState } from "./store";
 import type { SessionRef } from "./types";
 
@@ -33,6 +35,36 @@ function setOver(key: string | null) {
   });
 }
 
+/** Files dropped at (`x`, `y`) in the window: their paths go to the
+ *  session there. */
+export function dropFiles(x: number, y: number, paths: string[]) {
+  const at = sessionAt(x, y);
+  if (!at || !paths.length) return;
+  // A control character in a name could end the paste early and run
+  // the rest as input: refuse rather than guess at quoting it.
+  if (paths.some((path) => /[\x00-\x1f\x7f]/.test(path))) {
+    flash("A dropped file's name has a control character in it, so it wasn't added");
+    return;
+  }
+  const files = paths.length === 1 ? (picturesIn(shellQuote(paths[0])).length ? "a picture" : "a file") : `${paths.length} files`;
+  // On a thread's Read view, into the reply you're writing there, where you
+  // can see it and say why; its terminal is hidden behind.
+  if ("Agent" in at && document.elementFromPoint(x, y)?.closest(".reader")) {
+    addToDraft(at.Agent, paths.map(shellQuote).join(" "));
+    flash(`Added ${files} to your reply`);
+    return;
+  }
+  const text = paths.map(shellQuote).join(" ") + " ";
+  // Into an agent, a bracketed paste, so its CLI takes it as pasted
+  // text (Claude Code attaches a pasted image path). A shell gets it
+  // typed: a program that never turned bracketed paste on would show
+  // the markers as text.
+  const data = "Agent" in at ? `\x1b[200~${text}\x1b[201~` : text;
+  void sendInput(at, data)
+    .then(() => flash(`Added ${files} to ${nameOf(at)}`))
+    .catch((err) => flash(String(err)));
+}
+
 /** Mount once: highlights the terminal a drag of files is over, and types
  *  their paths into its session on drop. */
 export function useFileDrop() {
@@ -50,22 +82,7 @@ export function useFileDrop() {
         const key = at ? ("Agent" in at ? `a:${at.Agent}` : `t:${at.Terminal}`) : null;
         if (p.type === "enter" || p.type === "over") return setOver(key);
         setOver(null);
-        if (p.type !== "drop" || !at || !p.paths.length) return;
-        // A control character in a name could end the paste early and run
-        // the rest as input: refuse rather than guess at quoting it.
-        if (p.paths.some((path) => /[\x00-\x1f\x7f]/.test(path))) {
-          flash("A dropped file's name has a control character in it, so it wasn't added");
-          return;
-        }
-        const text = p.paths.map(shellQuote).join(" ") + " ";
-        // Into an agent, a bracketed paste, so its CLI takes it as pasted
-        // text (Claude Code attaches a pasted image path). A shell gets it
-        // typed: a program that never turned bracketed paste on would show
-        // the markers as text.
-        const data = "Agent" in at ? `\x1b[200~${text}\x1b[201~` : text;
-        void sendInput(at, data)
-          .then(() => flash(`Added ${p.paths.length === 1 ? "a file" : `${p.paths.length} files`} to ${nameOf(at)}`))
-          .catch((err) => flash(String(err)));
+        if (p.type === "drop") dropFiles(p.position.x, p.position.y, p.paths);
       });
       if (cancelled) off();
       else unlisten = off;

@@ -58,3 +58,37 @@ export function fileTarget(on: {
   if (on.alive && !on.waiting) return "terminal";
   return on.canRead ? "draft" : "nowhere";
 }
+
+/** A file a draft names: its path, and the text that names it there (the
+ *  path, or the path single-quoted for a shell, as a drop or the Files list
+ *  puts it in). */
+export interface Named {
+  path: string;
+  token: string;
+}
+
+const NAMED = /(?:^|(?<=\s))(?:'((?:[^']|'\\'')*)'|(\/[^\s'"`]+))(?=\s|$)/g;
+const PICTURE = /\.(?:png|jpe?g|gif|webp|svg|avif|bmp)$/i;
+
+/** The pictures `text` names by absolute path, each once, in order: what
+ *  the reply box shows as attached, and a sent message shows under it. */
+export function picturesIn(text: string): Named[] {
+  const seen = new Set<string>();
+  const out: Named[] = [];
+  for (const m of text.matchAll(NAMED)) {
+    const path = m[1] !== undefined ? m[1].replace(/'\\''/g, "'") : m[2];
+    if (!path.startsWith("/") || !PICTURE.test(path) || seen.has(path)) continue;
+    seen.add(path);
+    out.push({ path, token: m[0] });
+  }
+  return out;
+}
+
+/** `text` without `token`, and the space it leaves; the rest untouched. */
+export function withoutToken(text: string, token: string): string {
+  const esc = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // One space between what was either side of it, none at either end.
+  return text.replace(new RegExp(`(^|\\s)${esc}(?:( )|(?=\\s|$))`), (_, before: string, after?: string) =>
+    after || before !== " " ? before : "",
+  );
+}
