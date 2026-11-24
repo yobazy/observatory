@@ -4477,6 +4477,14 @@ td.task-last {
   color: var(--st-running);
   cursor: default;
 }
+.rd-you .rd-pics {
+  justify-content: flex-end;
+  margin-top: 8px;
+  white-space: normal;
+}
+.rd-you .rd-pic img {
+  max-height: 160px;
+}
 .rd-you {
   align-self: flex-end;
   max-width: 80%;
@@ -5060,6 +5068,38 @@ td.task-last {
   bottom: 26px;
   border-radius: 11px;
   padding: 5px 13px;
+}
+/* Pictures your reply carries: a row of thumbnails over the box. */
+.rd-attached {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  animation: fade 120ms ease-out;
+}
+.rd-attached-pic {
+  position: relative;
+}
+.rd-attached .rd-pic img {
+  height: 64px;
+  width: auto;
+  max-width: 160px;
+  object-fit: cover;
+}
+.rd-attached-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
 }
 /* Send & next: under the box at its right, naming where it goes. */
 .rd-compose:has(> .rd-sendnext) {
