@@ -11,6 +11,7 @@ Start the app with `scripts/sandbox.sh up` (or `app`), then:
   scripts/drive select "Fix login"     open a thread, by name or id
   scripts/drive pane read              read the thread, or `terminal`
   scripts/drive open /abs/file ...     open files in the preview
+  scripts/drive drop /abs/file ...     drop files on the open thread, as from Finder
   scripts/drive click "Follow up"      click a control by its label or text
   scripts/drive click Open --nth 1     the second of several that match
   scripts/drive menu "demo-api"        right-click it, for its menu (--nth too)
@@ -91,6 +92,7 @@ def parser():
     sub.add_parser("select").add_argument("thread")
     sub.add_parser("pane").add_argument("mode", choices=["read", "terminal"])
     sub.add_parser("open").add_argument("paths", nargs="+")
+    sub.add_parser("drop").add_argument("paths", nargs="+")
     for name in ("click", "menu"):
         c = sub.add_parser(name)
         c.add_argument("text")
@@ -132,6 +134,8 @@ def do(a, shots=None, counter=None):
         return call({"cmd": "pane", "mode": a.mode})
     if a.cmd == "open":
         return call({"cmd": "open", "paths": [str(Path(x).expanduser().resolve()) for x in a.paths]})
+    if a.cmd == "drop":
+        return call({"cmd": "drop", "paths": [str(Path(x).expanduser().resolve()) for x in a.paths]})
     if a.cmd in ("click", "menu"):
         req = {"cmd": a.cmd, "text": a.text}
         if a.nth is not None:

@@ -100,6 +100,20 @@ async function run(req: Req): Promise<unknown> {
       const preview = getState().preview;
       return preview ? preview.files.map((f) => ({ path: f.path, kind: f.kind })) : [];
     }
+    case "drop": {
+      const paths = req.paths;
+      if (!Array.isArray(paths) || !paths.length || !paths.every((p) => typeof p === "string" && p.startsWith("/"))) {
+        throw new Error("drop needs \"paths\", absolute paths");
+      }
+      // Where Finder would let go of them: the middle of the open thread.
+      const pane = [...document.querySelectorAll(".column-terminal [data-drop-session]")].find(visible);
+      if (!pane) throw new Error("no thread is open to drop on");
+      const r = pane.getBoundingClientRect();
+      const { dropFiles } = await import("./dropfiles");
+      dropFiles(r.left + r.width / 2, r.top + r.height / 2, paths as string[]);
+      await frames(4);
+      return paths;
+    }
     case "click":
     case "menu": {
       const all = [...document.querySelectorAll(CONTROLS)].filter(visible);

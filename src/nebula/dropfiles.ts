@@ -33,6 +33,28 @@ function setOver(key: string | null) {
   });
 }
 
+/** Files dropped at (`x`, `y`) in the window: their paths go to the
+ *  session there. */
+export function dropFiles(x: number, y: number, paths: string[]) {
+  const at = sessionAt(x, y);
+  if (!at || !paths.length) return;
+  // A control character in a name could end the paste early and run
+  // the rest as input: refuse rather than guess at quoting it.
+  if (paths.some((path) => /[\x00-\x1f\x7f]/.test(path))) {
+    flash("A dropped file's name has a control character in it, so it wasn't added");
+    return;
+  }
+  const text = paths.map(shellQuote).join(" ") + " ";
+  // Into an agent, a bracketed paste, so its CLI takes it as pasted
+  // text (Claude Code attaches a pasted image path). A shell gets it
+  // typed: a program that never turned bracketed paste on would show
+  // the markers as text.
+  const data = "Agent" in at ? `\x1b[200~${text}\x1b[201~` : text;
+  void sendInput(at, data)
+    .then(() => flash(`Added ${paths.length === 1 ? "a file" : `${paths.length} files`} to ${nameOf(at)}`))
+    .catch((err) => flash(String(err)));
+}
+
 /** Mount once: highlights the terminal a drag of files is over, and types
  *  their paths into its session on drop. */
 export function useFileDrop() {
@@ -50,22 +72,7 @@ export function useFileDrop() {
         const key = at ? ("Agent" in at ? `a:${at.Agent}` : `t:${at.Terminal}`) : null;
         if (p.type === "enter" || p.type === "over") return setOver(key);
         setOver(null);
-        if (p.type !== "drop" || !at || !p.paths.length) return;
-        // A control character in a name could end the paste early and run
-        // the rest as input: refuse rather than guess at quoting it.
-        if (p.paths.some((path) => /[\x00-\x1f\x7f]/.test(path))) {
-          flash("A dropped file's name has a control character in it, so it wasn't added");
-          return;
-        }
-        const text = p.paths.map(shellQuote).join(" ") + " ";
-        // Into an agent, a bracketed paste, so its CLI takes it as pasted
-        // text (Claude Code attaches a pasted image path). A shell gets it
-        // typed: a program that never turned bracketed paste on would show
-        // the markers as text.
-        const data = "Agent" in at ? `\x1b[200~${text}\x1b[201~` : text;
-        void sendInput(at, data)
-          .then(() => flash(`Added ${p.paths.length === 1 ? "a file" : `${p.paths.length} files`} to ${nameOf(at)}`))
-          .catch((err) => flash(String(err)));
+        if (p.type === "drop") dropFiles(p.position.x, p.position.y, p.paths);
       });
       if (cancelled) off();
       else unlisten = off;
