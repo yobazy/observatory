@@ -56,7 +56,10 @@ const checks = {
     const now = ms(input.now);
     const ended = input.turnEndedAt === undefined ? null : ms(input.turnEndedAt);
     if ('held' in expect) assert.equal(heldAtPrompt(agent, ended, sends.lastSent, now), expect.held, 'held at its prompt');
-    if ('hold' in expect) assert.equal(holdNext(agent, sends, input.onScreen, now), expect.hold, "the queue runner's hold");
+    // A batch's next step (afterAgents) is held without the log's turn ending,
+    // a reply you queued with it.
+    if ('hold' in expect) assert.equal(holdNext(agent, sends, input.onScreen, now), expect.hold, "the queue runner's hold on a batch step");
+    if ('holdReply' in expect) assert.equal(holdNext(agent, sends, input.onScreen, now, ended), expect.holdReply, "the queue runner's hold on a reply");
     if ('canSendNow' in expect) {
       assert.equal(canSendQueued(agent, ended, sends, now), expect.canSendNow, 'Send now');
       // A reply from the box goes straight in rather than queueing.

@@ -2,9 +2,10 @@
 // typed in as soon as it does ("then run the tests", "then commit"). The
 // daemon has no queue of its own, so this app is what sends them: kept in
 // localStorage across launches, and sent only while the app is open.
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect } from "react";
 import { createAgent, defaultKind, followUp, takerFor } from "./actions";
-import { onAgentStatus, readSettings } from "./client";
+import { isPreview, onAgentStatus, readSettings } from "./client";
 import { trackedCommand } from "./command";
 import * as gate from "./queuegate";
 import { endRun, startRun } from "./shellruns";
@@ -16,6 +17,10 @@ export interface Queued {
   id: string;
   text: string;
   at: number;
+  /** Held until its subagents finish too, not just its turn: for a batch's
+   *  next step. Anything you write goes in when the turn ends, as the
+   *  terminal takes it, background agents or not. */
+  afterAgents?: true;
 }
 
 const KEY = "observatory.queue";
@@ -67,6 +72,25 @@ const sends = (agentId: string): gate.Sends => ({
   lastTyped: lastTyped.get(agentId),
 });
 
+/** When a thread's log last said its turn ended, from the latest read of it
+ *  (heldAtPrompt). Reading the log is cheap: Rust keeps each one open and
+ *  reads on from where it was. */
+async function turnEndedOf(a: Agent): Promise<number | null> {
+  if (!a.session_id) return null;
+  try {
+    const t = isPreview()
+      ? (await import("./mock")).mockTranscript(getState(), a.id)
+      : await invoke<{ turnEndedAt?: number | null } | null>("thread_transcript", {
+          session: a.session_id,
+          from: Number.MAX_SAFE_INTEGER,
+          kind: a.kind,
+        });
+    return t?.turnEndedAt ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Called on what goes into an agent's terminal from its view: a queued
  *  prompt waits rather than land in the middle of what you're typing. */
 export function noteTyped(agentId: string, data = "") {
@@ -103,17 +127,23 @@ async function type(agent: Agent, text: string, select: boolean, stay = false) {
 export async function enqueue(
   agent: Agent,
   text: string,
-  opts: { stay?: boolean; turnEndedAt?: number | null } = {},
+  opts: { stay?: boolean; turnEndedAt?: number | null; afterAgents?: boolean } = {},
 ): Promise<"sent" | "queued"> {
+  const was = getState().agents[agent.id] ?? agent;
+  // Not handed the log's turn ending (Decisions, the palette, menus): read
+  // it, so a reply to a thread held for its subagents goes straight in.
+  const ended =
+    opts.turnEndedAt !== undefined || opts.afterAgents || was.status !== "running" ? opts.turnEndedAt : await turnEndedOf(was);
   const s = getState();
   const now = s.agents[agent.id] ?? agent;
   const ahead = s.queue[agent.id] ?? [];
-  const reading = gate.reads(now, opts.turnEndedAt, sends(now.id));
+  const reading = !opts.afterAgents && gate.reads(now, ended, sends(now.id));
   if (!ahead.length && (reading || gate.readyForNext(now, sends(now.id)))) {
     await type(now, text, !opts.stay, opts.stay);
     return "sent";
   }
-  write(agent.id, [...ahead, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text, at: Date.now() }]);
+  const item: Queued = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text, at: Date.now() };
+  write(agent.id, [...ahead, opts.afterAgents ? { ...item, afterAgents: true } : item]);
   return "queued";
 }
 
@@ -183,10 +213,19 @@ function onScreen(agentId: string): boolean {
   return !!sel && "Agent" in sel && sel.Agent === agentId;
 }
 
+/** The log's turn ending, for the queue's next prompt to `a`: undefined
+ *  (wait for the subagents too) for one marked afterAgents, or while it
+ *  isn't running and there's nothing to read. */
+async function endingFor(a: Agent, next: Queued): Promise<number | null | undefined> {
+  return next.afterAgents || a.status !== "running" ? undefined : await turnEndedOf(a);
+}
+
 async function sendNext(agentId: string) {
   const first = getState().agents[agentId];
   const [next] = getState().queue[agentId] ?? [];
-  if (!next || !first || gate.holdNext(first, sends(agentId), onScreen(agentId))) return;
+  if (!next || !first) return;
+  const ended = await endingFor(first, next);
+  if (gate.holdNext(first, sends(agentId), onScreen(agentId), Date.now(), ended)) return;
   sending.set(agentId, Date.now());
   try {
     // Let the CLI settle back to its prompt before typing into it.
@@ -194,10 +233,12 @@ async function sendNext(agentId: string) {
   } finally {
     sending.delete(agentId);
   }
+  const ending = await endingFor(getState().agents[agentId] ?? first, next);
   const now = getState().agents[agentId];
   const [still, ...rest] = getState().queue[agentId] ?? [];
   // It started another turn meanwhile, or the item was removed.
-  if (!now || !gate.readyForNext(now, sends(agentId)) || still?.id !== next.id) return;
+  if (!now || still?.id !== next.id) return;
+  if (!gate.readyForNext(now, sends(agentId)) && !(ending !== undefined && gate.reads(now, ending, sends(agentId)))) return;
   sentAt.set(next.id, Date.now());
   write(agentId, rest);
   try {
