@@ -258,6 +258,25 @@ export function setProjectPriority(repo: string, priority: Priority | null) {
   });
 }
 
+/** Whether a thread is marked as one you're still working on. Archiving it
+ *  puts the mark away with it. */
+export function isActive(s: State, agent: Agent): boolean {
+  return !agent.archived && s.prefs.activeThreads?.[agent.id] !== undefined;
+}
+
+/** Mark a thread as one you're still working on (A), or clear the mark, and say which. */
+export async function toggleActive(agent: Agent) {
+  const on = !isActive(getState(), agent);
+  const saved = await save((prefs) => {
+    const activeThreads = { ...prefs.activeThreads };
+    if (on) activeThreads[agent.id] = Date.now();
+    else delete activeThreads[agent.id];
+    return { ...prefs, activeThreads };
+  });
+  if (!saved) return;
+  flash(on ? `Marked ${agent.name} active` : `${agent.name} is no longer marked active`);
+}
+
 export function isFollowUp(s: State, agentId: string): boolean {
   return s.prefs.followUps?.[agentId] !== undefined;
 }

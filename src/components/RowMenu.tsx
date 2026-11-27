@@ -11,7 +11,7 @@ import { ContextMenu, type MenuItem } from "./Menu";
 import { openLink, RunSetupDialog } from "./Run";
 import { openReview } from "../nebula/diff";
 import { ConfirmDialog, TextDialog, type ConfirmDialogSpec, type TextDialogSpec } from "./Dialogs";
-import { isFollowUp, isPinned, moveTask, setTaskPriority, toggleFlag, unpinAll, unpinTask } from "../nebula/organize";
+import { isActive, isFollowUp, isPinned, moveTask, setTaskPriority, toggleActive, toggleFlag, unpinAll, unpinTask } from "../nebula/organize";
 import { priorityLabel } from "../nebula/priority";
 import { PriorityDialog, TaskColorDialog, ThreadTagsDialog } from "./Organize";
 import { moveThread } from "../nebula/moveThread";
@@ -143,7 +143,13 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
     };
     const pins = (s.prefs.pinnedTasks?.[a.worktree_id] ?? []).filter((id) => s.agents[id] && !s.agents[id].archived);
     const arrange: MenuItem[] = [
-      followUp,
+      {
+        label: isActive(s, a) ? "Clear active mark" : "Mark active",
+        keys: "⇧⌘A",
+        separated: true,
+        run: () => void attempt(toggleActive(a)),
+      },
+      { ...followUp, separated: false },
       isPinned(s, a)
         ? { label: "Unpin", run: () => void attempt(unpinTask(a)) }
         : { label: "Pin to top", run: () => void attempt(moveTask(a, 0)) },
