@@ -318,6 +318,20 @@ export function withoutProject(s: State, id: string): Partial<State> {
   };
 }
 
+/** The state with a removed worktree gone, and its tasks and shells: like a
+ *  project, the daemon drops them in the same delete but only says the
+ *  worktree went. Kept, they'd linger with no project (a reviewer spawned in
+ *  a PR's worktree, still in "While you were away" after the PR merged). */
+export function withoutWorktree(s: State, id: string): Partial<State> {
+  const worktrees = { ...s.worktrees };
+  delete worktrees[id];
+  const agents = Object.fromEntries(Object.entries(s.agents).filter(([, a]) => a.worktree_id !== id));
+  const terminals = Object.fromEntries(Object.entries(s.terminals).filter(([, t]) => t.worktree_id !== id));
+  const sel = s.selectedSession;
+  const kept = !sel || ("Agent" in sel ? sel.Agent in agents : sel.Terminal in terminals);
+  return { worktrees, agents, terminals, selectedSession: kept ? sel : null };
+}
+
 // ---- derived views ----
 
 /** Projects by priority, and within one, in the order dragged into

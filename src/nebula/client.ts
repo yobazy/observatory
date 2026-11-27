@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { byId, fromDaemon, getState, setState, withoutProject } from "./store";
+import { byId, fromDaemon, getState, setState, withoutProject, withoutWorktree } from "./store";
 import { onStatusChanged, updateBadge } from "./notify";
 import type {
   Agent,
@@ -480,7 +480,7 @@ function handle(event: ServerEvent) {
       return next;
     };
     if ("Project" in id) setState((s) => withoutProject(s, id.Project));
-    else if ("Worktree" in id) setState((s) => ({ worktrees: drop(s.worktrees, id.Worktree) }));
+    else if ("Worktree" in id) setState((s) => withoutWorktree(s, id.Worktree));
     else if ("Agent" in id)
       setState((s) => ({
         agents: drop(s.agents, id.Agent),
