@@ -40,7 +40,7 @@ import { termFont, zoomed } from "./nebula/termfont";
 import { useRunWatch, useServingWatch } from "./nebula/runs";
 import { useLimitWatch } from "./nebula/limits";
 import { useStallWatch } from "./nebula/stallWatch";
-import { useAutoFollowUps } from "./nebula/organize";
+import { toggleActive, useAutoFollowUps } from "./nebula/organize";
 import { useProjectSessions } from "./nebula/focus";
 import { useRecentTracking } from "./nebula/recent";
 import { useProjectLogos } from "./nebula/icons";
@@ -286,7 +286,7 @@ export default function App() {
   ].filter(Boolean) as { label: string; run: () => void }[];
   const revealLeft = hideProjects && hideTasks ? 80 : 10;
 
-  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I writes an idea down, ⇧⌘I shows them all; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J walks the triage queue (or the sessions waiting on you), ⌥⌘J shows every decision waiting; ⌘[ goes back to the thread open before this one.
+  // ⌘K opens the palette; ⌘N starts a task; ⇧⌘N opens Dispatch; ⌘I writes an idea down, ⇧⌘I shows them all; ⌘O adds a project; ⌘U shows usage; ⌥⌘U what's running; ⌘, settings; ⌘+/⌘−/⌘0 size the terminal's text; ⌘J walks the triage queue (or the sessions waiting on you), ⌥⌘J shows every decision waiting; ⌘[ goes back to the thread open before this one; ⇧⌘A marks the open thread active, or clears the mark.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -332,6 +332,12 @@ export default function App() {
         const size = zoomed(prefs, e.key === "0" ? 0 : e.key === "-" ? -1 : 1);
         if (size !== termFont(prefs).size) void savePrefs({ ...prefs, terminalFontSize: size });
         flash(`Terminal text ${size} pt`, 1200);
+      } else if (e.code === "KeyA" && e.shiftKey && !e.altKey) {
+        const sel = getState().selectedSession;
+        const agent = sel && "Agent" in sel ? getState().agents[sel.Agent] : undefined;
+        if (!agent || agent.archived) return;
+        e.preventDefault();
+        void toggleActive(agent);
       } else if (e.key === "[") {
         e.preventDefault();
         previousThread();

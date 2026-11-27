@@ -145,7 +145,7 @@ export function useRowMenu(onDuplicate: (worktree: string, seed: Seed) => void) 
     const arrange: MenuItem[] = [
       {
         label: isActive(s, a) ? "Clear active mark" : "Mark active",
-        keys: "A",
+        keys: "⇧⌘A",
         separated: true,
         run: () => void attempt(toggleActive(a)),
       },

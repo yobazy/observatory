@@ -25,6 +25,7 @@ import type { Agent } from "../nebula/types";
 import { homeCard } from "../nebula/cards";
 import { afterClosing, recentThreads } from "../nebula/recentThreads";
 import { cleanTag } from "../nebula/folders";
+import { isActive, toggleActive } from "../nebula/organize";
 import { carriedTags, threadAnswersTag, threadTagsOf } from "../nebula/threadtags";
 
 export interface PaletteContext {
@@ -108,6 +109,7 @@ function build(s: State, ctx: PaletteContext): Item[] {
           },
         }),
     );
+    act("active", isActive(s, agent) ? `Clear the active mark on ${agent.name}` : `Mark ${agent.name} active`, () => void toggleActive(agent), "⇧⌘A");
     act("restart", `Restart ${agent.name}`, () => void request("RestartAgent", { id: agent.id }).catch((e) => flash(errText(e))));
     act("archive", `Archive ${agent.name}`, () => {
       void request("ArchiveAgent", { id: agent.id }).catch((e) => flash(errText(e)));
