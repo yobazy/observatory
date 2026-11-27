@@ -94,6 +94,9 @@ export interface DesktopPrefs extends TermFontPrefs, FolderPrefs, PriorityPrefs 
   /** Colors picked for a project's thread tags, by repo path, then tag:
    *  a PROJECT_COLORS name. */
   threadTagColors?: Record<string, Record<string, string>>;
+  /** Threads marked as the ones you're still working on, by agent id: when
+   *  they were marked (ms). Highlighted in the task list until cleared. */
+  activeThreads?: Record<string, number>;
   /** Tasks marked to come back to, by agent id: when they were marked (ms). */
   followUps?: Record<string, number>;
   /** Which end of the Follow up list comes first; newest when unset, since

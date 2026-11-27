@@ -38,6 +38,7 @@ export function pruned(s: PruneState, prefs: DesktopPrefs): DesktopPrefs {
     taskColors: keep(prefs.taskColors),
     taskPriorities: keep(prefs.taskPriorities),
     threadTags: keep(prefs.threadTags),
+    activeThreads: keep(prefs.activeThreads),
     followUps: keep(prefs.followUps),
     autoFollowUps: keep(prefs.autoFollowUps),
   };

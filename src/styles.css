@@ -10945,3 +10945,42 @@ button.board-main:hover .board-title {
     box-shadow: 0 0 0 4px color-mix(in oklab, var(--st-running) 30%, transparent);
   }
 }
+
+/* ---------- a thread marked active ---------- */
+
+/* Threads you're still working on (A, or Mark active from the menu) carry a
+   cyan tint and a bar down their left edge: a hue no status, selection or
+   pick uses, so they stand out while you hop between threads. Kept after
+   the colored rows so a colored thread shows its bar too. */
+:root {
+  --active-mark: hsl(188 66% 62%);
+}
+:root[data-mode="light"] {
+  --active-mark: hsl(188 80% 32%);
+}
+.row.is-active {
+  background: color-mix(in srgb, var(--active-mark) 13%, transparent);
+  box-shadow: inset 3px 0 0 var(--active-mark);
+}
+.row.is-active:hover {
+  background: color-mix(in srgb, var(--active-mark) 19%, transparent);
+}
+.row.is-active.is-selected,
+:root[data-mode="light"] .row.is-active.is-selected {
+  background: color-mix(in srgb, var(--active-mark) 24%, var(--raised));
+  box-shadow: inset 3px 0 0 var(--active-mark);
+}
+.row.is-active.is-picked {
+  box-shadow: inset 3px 0 0 var(--active-mark), inset 0 0 0 2px var(--accent);
+}
+:root .row.has-color.is-active {
+  background: var(--fill);
+  box-shadow: inset 4px 0 0 var(--active-mark);
+}
+:root .row.has-color.is-active:hover {
+  background: var(--fill-hover);
+}
+:root .row.has-color.is-active.is-selected {
+  background: var(--fill-on);
+  box-shadow: inset 4px 0 0 var(--active-mark), inset 0 0 0 2px var(--fill-ring);
+}

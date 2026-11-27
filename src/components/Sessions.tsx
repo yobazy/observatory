@@ -31,7 +31,7 @@ import { PanelGlyph } from "./Sidebar";
 import { ProjectIcon, useProjectColorStyle } from "./ProjectIcon";
 import { locateProject } from "../nebula/relocate";
 import { sameSession, type Agent, type SessionRef, type TerminalTab, type Worktree } from "../nebula/types";
-import { cyclePriority, isFollowUp, isPinned, moveTask, toggleFlag } from "../nebula/organize";
+import { cyclePriority, isActive, isFollowUp, isPinned, moveTask, toggleActive, toggleFlag } from "../nebula/organize";
 import { FlagGlyph, PinGlyph, PriorityMark, TagChip, TagListDialog, TagMarks, ThreadTagsDialog, useTaskColorStyle } from "./Organize";
 import { chipFor, hasTerms, searchTerms, tagCounts, tagList, threadShows, toggleChip } from "../nebula/threadtags";
 import { tagProjectNow } from "../nebula/taggingRunner";
@@ -812,6 +812,7 @@ function AgentRow({
   const detail = prompt || [agent.model, agent.effort].filter(Boolean).join(", ");
   const pinned = !agent.archived && isPinned(state, agent);
   const flagged = isFollowUp(state, agent.id);
+  const active = isActive(state, agent);
   const priority = agent.archived ? undefined : state.prefs.taskPriorities?.[agent.id];
   const colorStyle = useTaskColorStyle(agent);
   const picks = useContext(PicksContext);
@@ -821,25 +822,29 @@ function AgentRow({
   const warm = agent.archived ? 0 : warmth(agent.status, agent.status_changed_at, Date.now());
   return (
     <button
-      className={`row row-${agent.status}${warm ? ` warm-${warm}` : ""}${selected ? " is-selected" : ""}${isPicked ? " is-picked" : ""}${agent.unseen ? " is-unseen" : ""}${colorStyle ? " has-color" : ""}`}
+      className={`row row-${agent.status}${warm ? ` warm-${warm}` : ""}${selected ? " is-selected" : ""}${isPicked ? " is-picked" : ""}${agent.unseen ? " is-unseen" : ""}${active ? " is-active" : ""}${colorStyle ? " has-color" : ""}`}
       data-agent={agent.id}
       style={colorStyle}
       onClick={(e) => picks?.click(e, agent.id) || setState({ selectedSession: { Agent: agent.id } })}
       onContextMenu={(e) => onMenu(e, { Agent: agent })}
       aria-pressed={picks?.ids.size ? isPicked : undefined}
       onKeyDown={(e) => {
-        // F flags the task to come back to, or clears the flag; P steps its priority.
+        // F flags the task to come back to, or clears the flag; A marks it
+        // active (still working on it); P steps its priority.
         const bare = e.target === e.currentTarget && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey;
         if (bare && e.key === "f") {
           e.preventDefault();
           void toggleFlag(agent);
+        } else if (bare && e.key === "a" && !agent.archived) {
+          e.preventDefault();
+          void toggleActive(agent);
         } else if (bare && e.key === "p" && !agent.archived) {
           e.preventDefault();
           void cyclePriority(agent);
         } else onKeyDown?.(e);
       }}
       aria-current={selected ? "true" : undefined}
-      aria-keyshortcuts={agent.archived ? "F" : "F P Alt+ArrowUp Alt+ArrowDown"}
+      aria-keyshortcuts={agent.archived ? "F" : "F A P Alt+ArrowUp Alt+ArrowDown"}
     >
       <span
         className={`sdot has-plate dot-${agent.status}${agent.unseen ? " is-unseen" : ""}`}
@@ -884,6 +889,7 @@ function AgentRow({
         )}
         {relativeTime(agent.status_changed_at)}
       </span>
+      {active && <span className="sr-only">, marked active</span>}
     </button>
   );
 }
